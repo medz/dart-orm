@@ -3,12 +3,8 @@ import 'package:meta/meta_meta.dart';
 /// Define model annotation
 @Target({.classType})
 class Model {
-  const Model();
-}
+  final String? name;
+  final bool ignore;
 
-/// Custom model table name annotation
-@Target({.classType})
-class Table {
-  final String name;
-  const Table(this.name);
+  const Model({this.name, this.ignore = false});
 }
