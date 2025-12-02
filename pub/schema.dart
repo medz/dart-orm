@@ -1,14 +1,14 @@
 import 'package:orm/sqlite.dart';
 
 @Fragment()
-abstract interface class Timestamps {
-  abstract DateTime createdAt;
-  abstract DateTime updatedAt;
+class Timestamps {
+  external DateTime createdAt;
+  external DateTime updatedAt;
 }
 
 @Model()
-abstract interface class User implements Timestamps {
+class User implements Timestamps {
   @ID()
-  abstract String id;
-  abstract String name;
+  external String id;
+  external String name;
 }
