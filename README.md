@@ -1,4 +1,7 @@
-# Prisma Client Dart
+# Dart ORM
+
+> [!IMPORTANT]
+>  December 2, 2025: I've decided to restart this project! Please check out 👉 "[Dartorm New Beginning!](https://github.com/medz/dart-orm/issues/479)"
 
 > ⚠️ **IMPORTANT NOTICE**: Development of Prisma Dart Client has been suspended until after June 2025 due to Prisma's architectural changes from Rust to TypeScript. Current versions will continue to work with existing Prisma versions but will not be updated to support Prisma v7 and beyond until after the suspension period. For more details, please see the [official announcement](https://github.com/medz/prisma-dart/issues/471).
 
