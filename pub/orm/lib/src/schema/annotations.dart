@@ -2,23 +2,13 @@ import 'package:meta/meta_meta.dart';
 
 /// Model fragment
 /// ```
-/// @Fragment()
+/// @fragment()
 /// class Timestamps {
 ///   external DateTime createdAt;
 ///   external DateTime updatedAt;
 /// }
 /// ```
-@Target({.classType})
-class _Fragment {
-  const _Fragment();
-}
-
 const fragment = _Fragment();
-
-@Target({.getter, .field})
-class _Ignore {
-  const _Ignore();
-}
 
 /// Ignore annotation for model fields.
 ///
@@ -30,6 +20,16 @@ class _Ignore {
 /// }
 /// ```
 const ignore = _Ignore();
+
+@Target({.classType})
+class _Fragment {
+  const _Fragment();
+}
+
+@Target({.getter, .field})
+class _Ignore {
+  const _Ignore();
+}
 
 @Target({.classType})
 class Model {
