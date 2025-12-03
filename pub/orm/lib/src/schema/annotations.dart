@@ -31,9 +31,21 @@ class _Ignore {
   const _Ignore();
 }
 
+/// Model annotation
+///
+/// ```dart
+/// @Model()
+/// class User {
+///   @ID()
+///   external int id;
+/// }
+/// ```
 @Target({.classType})
 class Model {
+  /// The name of the model.
   final String? name;
+
+  /// Ignore the model.
   final bool ignore;
 
   const Model({this.name, this.ignore = false});
