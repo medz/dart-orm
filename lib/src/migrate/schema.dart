@@ -100,6 +100,9 @@ String _createTable(TableSchema table, SqlDialect dialect, {String? name}) {
 
 String _columnDefinition(Column<Object?> c, SqlDialect dialect) {
   final b = StringBuffer('${_quote(c.name)} ${_columnStorageType(c, dialect)}');
+  if (dialect == SqlDialect.sqlite && c.codec.sqlType == 'decimal') {
+    b.write(' COLLATE "orm_decimal_v1"');
+  }
   if (c.generated) {
     b.write(
       dialect == SqlDialect.sqlite
@@ -140,25 +143,27 @@ String _foreignKey(ForeignKey key) {
       '(${key.targetColumns.map(_quote).join(', ')}) ON DELETE ${key.onDelete}';
 }
 
-String _storageType(String type, SqlDialect dialect) => switch ((
-  dialect,
-  type,
-)) {
-  (SqlDialect.sqlite, 'integer') => 'INTEGER',
-  (SqlDialect.sqlite, 'bigint' || 'text' || 'timestamp' || 'json') => 'TEXT',
-  (SqlDialect.sqlite, 'boolean') => 'INTEGER',
-  (SqlDialect.sqlite, 'real') => 'REAL',
-  (SqlDialect.sqlite, 'blob') => 'BLOB',
-  (SqlDialect.postgres, 'integer') => 'BIGINT',
-  (SqlDialect.postgres, 'bigint') => 'NUMERIC',
-  (SqlDialect.postgres, 'text') => 'TEXT',
-  (SqlDialect.postgres, 'real') => 'DOUBLE PRECISION',
-  (SqlDialect.postgres, 'boolean') => 'BOOLEAN',
-  (SqlDialect.postgres, 'timestamp') => 'TIMESTAMPTZ',
-  (SqlDialect.postgres, 'json') => 'JSONB',
-  (SqlDialect.postgres, 'blob') => 'BYTEA',
-  _ => throw OrmException('SCHEMA.TYPE', 'No $dialect mapping for $type.'),
-};
+String _storageType(String type, SqlDialect dialect) =>
+    switch ((dialect, type)) {
+      (SqlDialect.sqlite, 'integer') => 'INTEGER',
+      (
+        SqlDialect.sqlite,
+        'bigint' || 'text' || 'timestamp' || 'json' || 'decimal',
+      ) =>
+        'TEXT',
+      (SqlDialect.sqlite, 'boolean') => 'INTEGER',
+      (SqlDialect.sqlite, 'real') => 'REAL',
+      (SqlDialect.sqlite, 'blob') => 'BLOB',
+      (SqlDialect.postgres, 'integer') => 'BIGINT',
+      (SqlDialect.postgres, 'bigint' || 'decimal') => 'NUMERIC',
+      (SqlDialect.postgres, 'text') => 'TEXT',
+      (SqlDialect.postgres, 'real') => 'DOUBLE PRECISION',
+      (SqlDialect.postgres, 'boolean') => 'BOOLEAN',
+      (SqlDialect.postgres, 'timestamp') => 'TIMESTAMPTZ',
+      (SqlDialect.postgres, 'json') => 'JSONB',
+      (SqlDialect.postgres, 'blob') => 'BYTEA',
+      _ => throw OrmException('SCHEMA.TYPE', 'No $dialect mapping for $type.'),
+    };
 
 String _columnStorageType(Column<Object?> column, SqlDialect dialect) =>
     dialect == SqlDialect.postgres && column.codec.sqlType == 'integer'
@@ -186,6 +191,7 @@ final class ColumnInfo {
   final String? defaultSql;
   final bool generated;
   final int? integerBits;
+  final String? collation;
   const ColumnInfo({
     required this.name,
     required this.storageType,
@@ -193,6 +199,7 @@ final class ColumnInfo {
     this.defaultSql,
     this.generated = false,
     this.integerBits,
+    this.collation,
   });
 }
 
@@ -214,12 +221,18 @@ Future<List<ColumnInfo>> inspectColumns(
         [table],
       ),
     );
-    final checks = _sqliteChecks(ddl.rows.firstOrNull?.first as String? ?? '');
+    final sql = ddl.rows.firstOrNull?.first as String? ?? '';
+    final checks = _sqliteChecks(sql);
+    final collations = {
+      for (final c in _sqliteColumnCollations(sql))
+        _sqliteName(c.column): c.collation,
+    };
     return [
       for (final row in rows.rows)
         ColumnInfo(
           name: row[1] as String,
           storageType: (row[2] as String).toUpperCase(),
+          collation: collations[_sqliteName(row[1] as String)] ?? 'BINARY',
           nullable: row[3] == 0 && !(row[5] != 0 && rowidPrimaryKey),
           defaultSql: row[4] as String?,
           generated: (row[6] as int) > 0,
@@ -289,6 +302,10 @@ Future<List<String>> verifyColumns(
       if (column.nullable != expected.nullable) {
         differences.add('$path nullability differs');
       }
+      if (db.dialect == SqlDialect.sqlite &&
+          !_matchesCollation(expected, column)) {
+        differences.add('$path collation differs');
+      }
       if (expected.codec.sqlType == 'integer' &&
           (column.integerBits ?? 64) != (expected.integerBits ?? 64)) {
         differences.add('$path integer width differs');
@@ -300,3 +317,7 @@ Future<List<String>> verifyColumns(
   }
   return differences;
 }
+
+bool _matchesCollation(Column<Object?> expected, ColumnInfo actual) =>
+    (actual.collation ?? 'BINARY').toLowerCase() ==
+    (expected.codec.sqlType == 'decimal' ? 'orm_decimal_v1' : 'binary');

@@ -19,6 +19,7 @@ final class Capabilities {
   final bool windowFunctions;
   final bool streaming;
   final bool cancellation;
+  final bool exactDecimal;
   const Capabilities({
     required this.dialect,
     required this.maxParameters,
@@ -26,6 +27,7 @@ final class Capabilities {
     this.windowFunctions = true,
     this.streaming = false,
     this.cancellation = false,
+    this.exactDecimal = false,
   });
 }
 

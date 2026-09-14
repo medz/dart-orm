@@ -1,0 +1,59 @@
+part of '../orm.dart';
+
+// Attach collation to every decimal expression, including computed projections,
+// CTE references and UNION outputs. Native PostgreSQL NUMERIC needs no wrapper.
+final class _DecimalNode(final _Node child) extends _Node {
+  @override
+  String write(_Writer w) {
+    if (!w.exactDecimal) {
+      throw const OrmException(
+        'CAPABILITY.DECIMAL',
+        'This driver does not provide exact decimal SQL.',
+      );
+    }
+    final sql = child.write(w);
+    return w.dialect == SqlDialect.sqlite
+        ? '($sql COLLATE "orm_decimal_v1")'
+        : sql;
+  }
+}
+
+_Node _unwrapDecimal(_Node node) => node is _DecimalNode ? node.child : node;
+
+final class _DecimalArithmetic(
+  final _Node left,
+  final String op,
+  final _Node right,
+) extends _Node {
+  @override
+  String write(_Writer w) {
+    final a = left.write(w), b = right.write(w);
+    if (w.dialect == SqlDialect.postgres) return '($a $op $b)';
+    final name = switch (op) {
+      '+' => 'add',
+      '-' => 'sub',
+      '*' => 'mul',
+      _ => throw StateError('Invalid decimal operation'),
+    };
+    return 'orm_decimal_${name}_v1($a, $b)';
+  }
+}
+
+extension DecimalExpression<T extends Decimal?> on Expr<T> {
+  Expr<T> plus(Decimal n) => _arithmetic('+', value(n, Codecs.decimal));
+  Expr<T> minus(Decimal n) => _arithmetic('-', value(n, Codecs.decimal));
+  Expr<T> times(Decimal n) => _arithmetic('*', value(n, Codecs.decimal));
+  Expr<Decimal?> plusExpression(Expr<Decimal?> other) => _binary('+', other);
+  Expr<Decimal?> minusExpression(Expr<Decimal?> other) => _binary('-', other);
+  Expr<Decimal?> timesExpression(Expr<Decimal?> other) => _binary('*', other);
+  Expr<T> _arithmetic(String op, Expr<Decimal> other) =>
+      Expr._(_DecimalArithmetic(_node, op, other._node), codec);
+  Expr<Decimal?> _binary(String op, Expr<Decimal?> other) => Expr._(
+    _DecimalArithmetic(_node, op, other._node),
+    Codecs.decimal.nullable(),
+  );
+  Expr<Decimal?> sum({bool distinct = false}) => Expr._(
+    _Function('SUM', [_node], decimal: true, distinct: distinct),
+    Codecs.decimal.nullable(),
+  );
+}

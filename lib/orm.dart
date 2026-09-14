@@ -7,6 +7,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 part 'src/codec.dart';
+part 'src/decimal.dart';
+part 'src/decimal_sql.dart';
 part 'src/sql.dart';
 part 'src/selection.dart';
 part 'src/table.dart';

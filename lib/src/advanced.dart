@@ -155,6 +155,8 @@ bool _aggregate(_Node node) => switch (node) {
 };
 bool _window(_Node node) => node is _WindowNode || _children(node).any(_window);
 List<_Node> _children(_Node node) => switch (node) {
+  _DecimalNode(:final child) => [child],
+  _DecimalArithmetic(:final left, :final right) => [left, right],
   _Binary(:final left, :final right) => [left, right],
   _Unary(:final child) => [child],
   _Function(:final arguments) => arguments,
@@ -249,6 +251,13 @@ bool _outerNullable(_Node node, Set<TableRef> optional) => switch (node) {
 bool _sameSqlNode(_Node a, _Node b) {
   if (identical(a, b)) return true;
   return switch ((a, b)) {
+    (_DecimalNode(child: final ac), _DecimalNode(child: final bc)) =>
+      _sameSqlNode(ac, bc),
+    (
+      _DecimalArithmetic(left: final al, op: final ao, right: final ar),
+      _DecimalArithmetic(left: final bl, op: final bo, right: final br),
+    ) =>
+      ao == bo && _sameSqlNode(al, bl) && _sameSqlNode(ar, br),
     (
       _ColumnNode(table: final at, name: final an),
       _ColumnNode(table: final bt, name: final bn),
@@ -260,10 +269,21 @@ bool _sameSqlNode(_Node a, _Node b) {
     ) =>
       av == bv && at == bt,
     (
-      _Function(name: final an, arguments: final aa, distinct: final ad),
-      _Function(name: final bn, arguments: final ba, distinct: final bd),
+      _Function(
+        name: final an,
+        arguments: final aa,
+        distinct: final ad,
+        decimal: final ax,
+      ),
+      _Function(
+        name: final bn,
+        arguments: final ba,
+        distinct: final bd,
+        decimal: final bx,
+      ),
     ) =>
       an == bn &&
+          ax == bx &&
           ad == bd &&
           aa.length == ba.length &&
           aa.indexed.every((e) => _sameSqlNode(e.$2, ba[e.$1])),

@@ -82,7 +82,15 @@ final class _ReadTables {
   final Set<TableSchema> tables = Set.identity();
   void query(Query<Object?, Fields> query) {
     final (plan, _) = query._plan();
-    query._write(_Writer(query.database.dialect, {}, reads: this), plan);
+    query._write(
+      _Writer(
+        query.database.dialect,
+        {},
+        reads: this,
+        exactDecimal: query.database.capabilities.exactDecimal,
+      ),
+      plan,
+    );
     for (final binding in plan.relations) {
       binding.collectReads(query.database, this);
     }

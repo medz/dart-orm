@@ -65,7 +65,15 @@ Future<TableInfo> inspectTable(Database<Backend> db, String table) async {
       );
       final definition = sql.rows.firstOrNull?.first as String? ?? '';
       if (row[4] == 1 ||
-          keys.any((r) => r[2] == null || r[3] != 0 || r[4] != 'BINARY')) {
+          keys.any(
+            (r) =>
+                r[2] == null ||
+                r[3] != 0 ||
+                (r[4] as String).toLowerCase() !=
+                    (columns.firstWhere((c) => c.name == r[2]).collation ??
+                            'BINARY')
+                        .toLowerCase(),
+          )) {
         unmanaged.add(CatalogObject('index', name, definition));
         continue;
       }
@@ -125,7 +133,12 @@ Future<TableInfo> inspectTable(Database<Backend> db, String table) async {
     );
     final sql = ddl.rows.firstOrNull?.first as String?;
     if (sql != null &&
-        _sqlWords(_withoutIntegerChecks(sql, columns)).any(
+        _sqlWords(
+          _withoutDecimalCollations(
+            _withoutIntegerChecks(sql, columns),
+            columns,
+          ),
+        ).any(
           {
             'CHECK',
             'DEFERRABLE',
@@ -294,12 +307,16 @@ Future<SchemaVerification> verifySchema(
       if (found.nullable != column.nullable) {
         differences.add('$path nullability differs');
       }
+      if (db.dialect == SqlDialect.sqlite &&
+          !_matchesCollation(column, found)) {
+        differences.add('$path collation differs');
+      }
       if (column.codec.sqlType == 'integer' &&
           (found.integerBits ?? 64) != (column.integerBits ?? 64)) {
         differences.add('$path integer width differs');
       }
-      if (_normalizeDefault(found.defaultSql) !=
-          _normalizeDefault(column.defaultSql)) {
+      if (_columnDefault(found.defaultSql, column) !=
+          _columnDefault(column.defaultSql, column)) {
         differences.add('$path default differs');
       }
       if (db.dialect == SqlDialect.postgres &&
@@ -338,6 +355,19 @@ Future<SchemaVerification> verifySchema(
     List.unmodifiable(differences),
     List.unmodifiable(unmanaged),
   );
+}
+
+String? _columnDefault(String? value, Column<Object?> column) {
+  final normalized = _normalizeDefault(value);
+  if (normalized == null || column.codec.sqlType != 'decimal') {
+    return normalized;
+  }
+  // PostgreSQL removes the quotes from a NUMERIC literal. Compare finite
+  // literals by value, leaving arbitrary SQL expressions unchanged.
+  final literal = normalized.startsWith("'") && normalized.endsWith("'")
+      ? normalized.substring(1, normalized.length - 1)
+      : normalized;
+  return Decimal.tryParse(literal)?.toString() ?? normalized;
 }
 
 String? _normalizeDefault(String? value) {

@@ -255,6 +255,7 @@ final class _SchemaReader(
       if (!{
         'integer',
         'bigint',
+        'decimal',
         'real',
         'text',
         'boolean',
@@ -275,6 +276,7 @@ final class _SchemaReader(
           !{
             'dart:core',
             'dart:typed_data',
+            'package:orm/orm.dart',
           }.contains(type.element.library.uri.toString())) {
         _fail(field, 'This type needs an explicit @UseCodec.');
       }
@@ -285,6 +287,7 @@ final class _SchemaReader(
         'bool' => ('boolean', 'boolean'),
         'DateTime' => ('timestamp', 'dateTime'),
         'BigInt' => ('bigint', 'bigint'),
+        'Decimal' => ('decimal', 'decimal'),
         'Uint8List' => ('blob', 'bytes'),
         _ => throw GenerationException(
           'Unsupported field type $type; declare @UseCodec.',

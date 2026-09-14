@@ -41,6 +41,8 @@ This file records verified delivery, not planned capabilities presented as worki
 - Import preserves supported defaults, identities, composite/unique keys, indexes and named inverse relations; unsupported structures have explicit issues.
 - Signed 16/32/64-bit integer column metadata, native PostgreSQL types and verified SQLite range constraints, independent of value/aggregate codecs.
 - Width-aware generation, catalog import, immutable snapshots, rename/type migrations, identity sequences and historical backfills.
+- Finite exact Decimal values, typed SQL arithmetic, numeric SQLite collation and native PostgreSQL NUMERIC, including keys, relations, aggregates and windows.
+- Decimal generation/import, catalog drift checks, reviewed conversion migrations and exact historical backfill keys.
 - Read-only application startup version checks with explicit compatibility ranges, full history validation and recovery-state rejection.
 - Unmodeled constraints, expression/partial indexes, triggers and policies are reported separately.
 - Reviewable migration diffs, explicit renames/conversions, destructive-change gates and checksum chains.
@@ -86,7 +88,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 506 checks with native SQLite
+Static analysis is clean. The complete suite passes 535 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -212,8 +214,8 @@ reject existing output files, preserve missing SQLite files and retain blocking
 issues in review reports. The generator no longer emits invalid empty patch
 parameters for models containing only generated fields. Physical import currently
 uses the exact supported storage mappings documented in `docs/importing.md`;
-NUMERIC is not guessed to contain only integers, and broader native types remain
-part of the active goal.
+Unconstrained NUMERIC now imports as finite Decimal; it is never guessed to contain
+only integers. Broader native types remain part of the active goal.
 
 Twenty integer-width checks cover native signed boundaries, nullable/defaulted
 columns, exact native 64-bit values, wider aggregate results, mixed-width UNIONs,
@@ -228,19 +230,37 @@ for deterministic source and snapshot output. `test/support/integers/native.dart
 compiles and runs as a macOS AOT executable, verifying boundaries, wider sums,
 relations, overflow rejection and catalog checks. No browser numeric claim is added.
 
+Twenty-nine exact-decimal checks cover canonical values, scientific input,
+finite range limits, signed rounding and independent integer arithmetic, plus
+both databases' typed writes/defaults/patches, comparisons, IN, sorting, distinct
+values, transported cursors, computed CTEs, UNIONs and streaming. Exact sums,
+nullable aggregates, grouping and windows are verified, including a SQLite moving
+frame and intermediate overflow that cancels before a valid final result. A
+numeric key lookup retains SQLite index use; this is a query-plan check, not a
+throughput benchmark. Equivalent numeric spellings match joined/batched relations
+and reject duplicate unique keys. Catalog import/generation, quoted and Unicode
+column collations, default equivalence, historical backfill keys and conversion
+migration rollback run against actual databases. Unsupported drivers reject typed
+decimal SQL before execution. `test/support/decimals/native.dart` compiles and runs
+as a macOS AOT executable, verifying exact values, sorting, aggregate/window
+functions, normalized relation keys and catalog checks. Invalid external SQLite
+text and PostgreSQL special numeric values fail typed decoding; no finite-decimal
+CHECK constraint or cross-client SQLite function installation is claimed. SQL
+rounding/division, constrained precision/scale and browser acceptance remain open.
+
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
 - Broader unmanaged-object catalog coverage.
 - Named SQL query generation.
-- Exact-decimal query semantics and further native type coverage.
+- Decimal precision/scale declarations, explicit SQL division/rounded averages and further native type coverage.
 - Further backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
 - User documentation, performance measurements and complete acceptance review.
 
 To-one projections join by default when declared keys prove uniqueness; otherwise
 they batch and check cardinality. Collections use explicit parameter-aware batches.
-`verifyColumns` checks column names/types/nullability only. `verifySchema` additionally compares defaults,
+`verifyColumns` checks column names/types/nullability, integer widths and SQLite collations. `verifySchema` additionally compares defaults,
 keys and simple indexes; its `unmanaged` objects require separate review.
 Ordinary migration batches are atomic. Explicit backfills use durable per-step
 checkpoints and short data transactions on both databases. General recoverable
@@ -253,7 +273,7 @@ regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CL
 workflows, 37 streaming/execution checks, 28 relation strategy checks and one
 negative compilation suite covering 19 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows and 20 integer-width checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks and 29 exact-decimal checks.
 
 ## Environment
 

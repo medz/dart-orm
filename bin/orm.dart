@@ -284,6 +284,7 @@ Future<void> main(List<String> arguments) async {
                   'default': c.defaultSql,
                   'generated': c.generated,
                   if (c.integerBits != null) 'integerBits': c.integerBits,
+                  if (c.collation != null) 'collation': c.collation,
                 },
             ],
             'primaryKey': info.primaryKey,

@@ -51,6 +51,7 @@ final class SchemaSnapshot {
     final codec = switch (json['type']) {
       'integer' => Codecs.integer,
       'bigint' => Codecs.bigint,
+      'decimal' => Codecs.decimal,
       'text' => Codecs.text,
       'real' => Codecs.real,
       'boolean' => Codecs.boolean,

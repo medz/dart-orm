@@ -1,0 +1,52 @@
+import 'package:orm/migrate.dart';
+import 'package:orm/sqlite.dart';
+
+import 'schema.orm.dart';
+
+Future<void> main() async {
+  final db = await sqlite(const SqliteOptions.memory());
+  try {
+    await Migrator(db).apply([Migration.create('0001_decimal', appSchema)]);
+    final exact = Decimal.parse('9007199254740993.1234567890123456789');
+    await db.entries.create(amount: exact, bucket: 'a');
+    await db.entries.create(
+      amount: Decimal.parse('.0000000000000000001'),
+      bucket: 'a',
+    );
+    if (await db.entries.select((e) => e.amount.sum()).single() !=
+        Decimal.parse('9007199254740993.123456789012345679')) {
+      throw StateError('Exact sum lost precision');
+    }
+    final sorted = await db.entries.orderBy((e) => [e.amount.asc()]).get();
+    if (sorted.last.amount != exact) throw StateError('Decimal order differs');
+    await db.rates.create(id: Decimal.parse('2'), label: 'two');
+    await db.execute(
+      SqlCommand("INSERT INTO allocations (rate_id) VALUES ('2.000')"),
+    );
+    final children = await db.rates
+        .select((r) => r.allocations.select((a) => a.rateId).many())
+        .single();
+    if (children.single != Decimal.parse('2')) {
+      throw StateError('Decimal relation keys differ');
+    }
+    final window = await db.entries
+        .orderBy((e) => [e.id.asc()])
+        .select(
+          (e) =>
+              e.amount.sum().over(orderBy: [e.id.asc()], frame: .rowsToCurrent),
+        )
+        .get();
+    if (window.last != Decimal.parse('9007199254740993.123456789012345679')) {
+      throw StateError('Window sum differs');
+    }
+    final verification = await verifySchema(db, SchemaSnapshot(appSchema));
+    if (!verification.matches || verification.unmanaged.isNotEmpty) {
+      throw StateError('Decimal catalog differs');
+    }
+    print(
+      'Native AOT: exact decimals, numeric ordering, aggregate/window functions, canonical relation keys and catalog verification passed.',
+    );
+  } finally {
+    await db.close();
+  }
+}

@@ -151,7 +151,11 @@ class Query<R, F extends Fields> {
   }
 
   SqlCommand _compile(_SelectionPlan plan) {
-    final w = _Writer(database.dialect, {});
+    final w = _Writer(
+      database.dialect,
+      {},
+      exactDecimal: database.capabilities.exactDecimal,
+    );
     return SqlCommand(_write(w, plan), w.parameters);
   }
 
@@ -238,7 +242,7 @@ class Query<R, F extends Fields> {
         final ref = join.alias.fields.table;
         final alias = w.aliases[ref]!;
         visible[ref] = alias;
-        final check = _Writer(w.dialect, visible)
+        final check = _Writer(w.dialect, visible, exactDecimal: w.exactDecimal)
           ..leftJoins.addAll(w.leftJoins.where(visible.containsKey));
         join.on._node.write(check);
         final table = w.quote(ref.schema.name);

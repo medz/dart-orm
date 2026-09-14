@@ -167,6 +167,7 @@ final class PostgresDriver implements Driver<Postgres> {
     maxParameters: 65535,
     streaming: true,
     cancellation: _cancelConnection != null,
+    exactDecimal: true,
   );
   @override
   Future<R> run<R>(Future<R> Function(SqlConnection) action) async {

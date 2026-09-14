@@ -12,6 +12,7 @@ export 'orm.dart';
 
 part 'src/sqlite/worker.dart';
 part 'src/sqlite/native.dart';
+part 'src/sqlite/decimal.dart';
 
 enum SqliteJournal { wal, delete, memory }
 
@@ -80,6 +81,7 @@ final class SqliteDriver implements Driver<Sqlite> {
         maxParameters: maxParameters,
         streaming: true,
         cancellation: worker.supportsCancellation,
+        exactDecimal: true,
       ),
     );
   }

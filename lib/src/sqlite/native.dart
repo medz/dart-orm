@@ -42,6 +42,7 @@ void _sqliteMain((SendPort, SqliteOptions) init) async {
           ? native.OpenMode.readOnly
           : native.OpenMode.readWriteCreate,
     );
+    _registerDecimals(db);
     db.execute('PRAGMA foreign_keys = ON');
     if (db.select('PRAGMA foreign_keys').single.values.single != 1) {
       throw const OrmException(

@@ -117,7 +117,7 @@ extension KeysetQuery<R, F extends Fields> on Query<R, F> {
     }
     final names = <String>{};
     for (final term in order) {
-      final node = term.expression._node;
+      final node = _unwrapDecimal(term.expression._node);
       if (node is! _ColumnNode ||
           node.table != _state.source ||
           !names.add(node.name)) {
@@ -159,7 +159,7 @@ extension KeysetQuery<R, F extends Fields> on Query<R, F> {
   List<Object?> _cursorShape(List<OrderTerm> order) => [
     for (final o in order)
       [
-        (o.expression._node as _ColumnNode).name,
+        (_unwrapDecimal(o.expression._node) as _ColumnNode).name,
         o.expression.codec.sqlType,
         o.expression.codec.acceptsNull,
         o.descending,

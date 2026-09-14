@@ -244,7 +244,7 @@ Future<ImportedSchema> _importCatalog(
     }
     for (final column in info.columns) {
       final path = '$name.${column.name}';
-      if (_importType(column.storageType, db.dialect) == null) {
+      if (_importType(column, db.dialect) == null) {
         issues.add(
           SchemaImportIssue(
             'IMPORT.TYPE',
@@ -305,22 +305,27 @@ Future<ImportedSchema> _importCatalog(
 
 // Match physical types exactly. In particular, NUMERIC does not prove BigInt,
 // and SQLite TEXT does not prove an application DateTime, enum, or JSON codec.
-(String, String?)? _importType(String storage, SqlDialect dialect) => switch ((
-  dialect,
-  storage,
-)) {
-  (SqlDialect.sqlite, 'INTEGER') ||
-  (SqlDialect.postgres, 'SMALLINT' || 'INTEGER' || 'BIGINT') => ('int', null),
-  (_, 'TEXT') => ('String', null),
-  (SqlDialect.sqlite, 'REAL') ||
-  (SqlDialect.postgres, 'DOUBLE PRECISION') => ('double', null),
-  (SqlDialect.sqlite, 'BLOB') ||
-  (SqlDialect.postgres, 'BYTEA') => ('Uint8List', null),
-  (SqlDialect.postgres, 'BOOLEAN') => ('bool', null),
-  (SqlDialect.postgres, 'TIMESTAMPTZ') => ('DateTime', null),
-  (SqlDialect.postgres, 'JSONB') => ('SqlJson', 'Codecs.jsonDocument'),
-  _ => null,
-};
+(String, String?)? _importType(ColumnInfo column, SqlDialect dialect) =>
+    switch ((dialect, column.storageType)) {
+      (SqlDialect.sqlite, 'TEXT')
+          when column.collation?.toLowerCase() == 'orm_decimal_v1' =>
+        ('Decimal', null),
+      (SqlDialect.postgres, 'NUMERIC') => ('Decimal', null),
+      (SqlDialect.sqlite, 'INTEGER') ||
+      (
+        SqlDialect.postgres,
+        'SMALLINT' || 'INTEGER' || 'BIGINT',
+      ) => ('int', null),
+      (_, 'TEXT') => ('String', null),
+      (SqlDialect.sqlite, 'REAL') ||
+      (SqlDialect.postgres, 'DOUBLE PRECISION') => ('double', null),
+      (SqlDialect.sqlite, 'BLOB') ||
+      (SqlDialect.postgres, 'BYTEA') => ('Uint8List', null),
+      (SqlDialect.postgres, 'BOOLEAN') => ('bool', null),
+      (SqlDialect.postgres, 'TIMESTAMPTZ') => ('DateTime', null),
+      (SqlDialect.postgres, 'JSONB') => ('SqlJson', 'Codecs.jsonDocument'),
+      _ => null,
+    };
 
 String _importQuote(String name) => '"${name.replaceAll('"', '""')}"';
 String _importCap(String name) => name[0].toUpperCase() + name.substring(1);
@@ -361,6 +366,7 @@ final class _ImportNames {
     'BigInt',
     'Uint8List',
     'SqlJson',
+    'Decimal',
     'entity',
     'Id',
     'Unique',
@@ -441,9 +447,7 @@ ImportedSchema _importDeclarations(
     '// Imported catalog draft. Review the import report before baselining.\n\n',
   )..writeln("import 'package:orm/schema.dart';");
   if (infos.values.any(
-    (t) => t.columns.any(
-      (c) => _importType(c.storageType, dialect)?.$1 == 'Uint8List',
-    ),
+    (t) => t.columns.any((c) => _importType(c, dialect)?.$1 == 'Uint8List'),
   )) {
     b.writeln("import 'dart:typed_data';");
   }
@@ -451,7 +455,7 @@ ImportedSchema _importDeclarations(
     final entity = entities[info.name]!;
     b.writeln('\ntypedef ${_importCap(entity)}Row = ({');
     for (final c in info.columns) {
-      final type = _importType(c.storageType, dialect)!;
+      final type = _importType(c, dialect)!;
       b.writeln('@ColumnName(${_literal(c.name)})');
       if (c.integerBits != null && c.integerBits != 64) {
         b.writeln('@IntegerBits(${c.integerBits})');
@@ -519,17 +523,13 @@ ImportedSchema _importDeclarations(
           key.columns.asMap().entries.any(
             (entry) =>
                 _importType(
-                  info.columns
-                      .singleWhere((c) => c.name == entry.value)
-                      .storageType,
+                  info.columns.singleWhere((c) => c.name == entry.value),
                   dialect,
                 )?.$1 !=
                 _importType(
-                  target.columns
-                      .singleWhere(
-                        (c) => c.name == key.targetColumns[entry.key],
-                      )
-                      .storageType,
+                  target.columns.singleWhere(
+                    (c) => c.name == key.targetColumns[entry.key],
+                  ),
                   dialect,
                 )?.$1,
           ) ||

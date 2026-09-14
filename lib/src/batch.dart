@@ -19,7 +19,9 @@ final class BatchInsert<F extends Fields> {
     var chunk = <List<Assignment>>[];
     List<String>? shape;
     var parameters = 0;
-    final extra = _Writer(database.dialect, {_state.source: 't0'});
+    final extra = _Writer(database.dialect, {
+      _state.source: 't0',
+    }, exactDecimal: database.capabilities.exactDecimal);
     if (selection != null) {
       for (final column in selection.columns) {
         column._node.write(extra);
@@ -45,7 +47,9 @@ final class BatchInsert<F extends Fields> {
     for (final row in _rows) {
       final actual = row.where((a) => a._value != null).toList();
       final columns = [for (final a in actual) a.field.definition.name];
-      final writer = _Writer(database.dialect, {_state.source: 't0'});
+      final writer = _Writer(database.dialect, {
+        _state.source: 't0',
+      }, exactDecimal: database.capabilities.exactDecimal);
       for (final a in actual) {
         a._value!.write(writer);
       }

@@ -265,7 +265,7 @@ Future<void> main() async {
           ),
         );
         await db.execute(
-          SqlCommand('CREATE TABLE decimals (amount NUMERIC NOT NULL)'),
+          SqlCommand('CREATE TABLE decimals (amount NUMERIC(12, 3) NOT NULL)'),
         );
         await db.execute(
           SqlCommand(

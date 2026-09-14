@@ -277,7 +277,10 @@ final class _TypedRelationBinding<R, F extends Fields>(
     final keys = <_RelationKey>{};
     final parentKeys = [
       for (final row in parents)
-        _RelationKey([for (final i in parentIndices) row[i]]),
+        _RelationKey([
+          for (var i = 0; i < parentIndices.length; i++)
+            _relationValue(relation._parent[i], row[parentIndices[i]]),
+        ]),
     ];
     for (final key in parentKeys) {
       if (!key.values.contains(null)) keys.add(key);
@@ -318,7 +321,10 @@ final class _TypedRelationBinding<R, F extends Fields>(
         options: options,
       );
       for (final row in rows) {
-        final key = _RelationKey([for (final i in childIndices) row[i]]);
+        final key = _RelationKey([
+          for (var i = 0; i < childIndices.length; i++)
+            _relationValue(relation._child[i], row[childIndices[i]]),
+        ]);
         (grouped[key] ??= []).add(decode(row));
       }
     }
@@ -333,7 +339,11 @@ final class _TypedRelationBinding<R, F extends Fields>(
     List<_RelationKey> keys,
   ) {
     final state = relation._state;
-    final w = _Writer(db.dialect, {});
+    final w = _Writer(
+      db.dialect,
+      {},
+      exactDecimal: db.capabilities.exactDecimal,
+    );
     Expr<bool?> predicate = Expr._(
       _RelationKeys(relation._child, keys),
       Codecs.boolean,
@@ -447,3 +457,8 @@ final class _RelationKey(final List<Object?> values) {
     return true;
   }
 }
+
+Object? _relationValue(Expr<Object?> key, Object? value) =>
+    value != null && key.codec.sqlType == 'decimal'
+    ? Codecs.decimal.decode(value).toString()
+    : value;

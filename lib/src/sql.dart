@@ -39,7 +39,7 @@ final class _Parameter(final Object? value, {final String? sqlType})
     if (sqlType == null || w.dialect == SqlDialect.sqlite) return parameter;
     final type = switch (sqlType) {
       'integer' => 'BIGINT',
-      'bigint' => 'NUMERIC',
+      'bigint' || 'decimal' => 'NUMERIC',
       'text' => 'TEXT',
       'real' => 'DOUBLE PRECISION',
       'boolean' => 'BOOLEAN',
@@ -75,10 +75,11 @@ final class _Function(
   final String name,
   final List<_Node> arguments, {
   final bool distinct = false,
+  final bool decimal = false,
 }) extends _Node {
   @override
   String write(_Writer w) =>
-      '$name(${distinct ? 'DISTINCT ' : ''}'
+      '${decimal && w.dialect == SqlDialect.sqlite ? 'orm_decimal_${name.toLowerCase()}_v1' : name}(${distinct ? 'DISTINCT ' : ''}'
       '${arguments.map((e) => e.write(w)).join(', ')})';
 }
 
@@ -111,8 +112,9 @@ final class _Writer {
   final List<Object?> parameters = [];
   final Set<TableRef> leftJoins = {};
   final _ReadTables? reads;
+  final bool exactDecimal;
   bool unqualified = false;
-  _Writer(this.dialect, this.aliases, {this.reads});
+  _Writer(this.dialect, this.aliases, {this.reads, this.exactDecimal = false});
   String quote(String name) => '"${name.replaceAll('"', '""')}"';
   String parameter(Object? value) {
     parameters.add(switch ((dialect, value)) {
@@ -129,7 +131,10 @@ final class _Writer {
 class Expr<T> extends Selection<T> {
   final _Node _node;
   final Codec<T> codec;
-  Expr._(this._node, this.codec);
+  Expr._(_Node node, this.codec)
+    : _node = codec.sqlType == 'decimal' && node is! _DecimalNode
+          ? _DecimalNode(node)
+          : node;
 
   Expr<bool?> eq(T value) => value == null
       ? Expr._(
@@ -176,7 +181,8 @@ class Expr<T> extends Selection<T> {
     List<OrderTerm> orderBy = const [],
     WindowFrame? frame,
   }) {
-    if (_node is! _Function || !_aggregate(_node)) {
+    final function = _unwrapDecimal(_node);
+    if (function is! _Function || !_aggregate(function)) {
       throw const OrmException(
         'QUERY.WINDOW',
         'over() applies to an aggregate expression.',
@@ -184,7 +190,7 @@ class Expr<T> extends Selection<T> {
     }
     return Expr._(
       _WindowNode(
-        _node,
+        function,
         List.unmodifiable(partitionBy),
         List.unmodifiable(orderBy),
         frame,

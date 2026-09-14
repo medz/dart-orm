@@ -46,6 +46,21 @@ final class Codec<T> {
 }
 
 abstract final class Codecs {
+  static const decimal = Codec<Decimal>(
+    'decimal',
+    _decodeDecimal,
+    _encodeDecimal,
+  );
+  static Decimal _decodeDecimal(Object? value) => switch (value) {
+    String() => Decimal.parse(value),
+    int() => Decimal.fromBigInt(BigInt.from(value)),
+    BigInt() => Decimal.fromBigInt(value),
+    _ => throw const FormatException(
+      'Exact decimal storage requires text or an integer.',
+    ),
+  };
+  static String _encodeDecimal(Decimal value) => value.toString();
+
   /// Enum storage labels are explicit and independent of declaration ordinals.
   static Codec<E> enumeration<E extends Enum>(Map<E, String> labels) {
     final encode = Map<E, String>.unmodifiable(labels);

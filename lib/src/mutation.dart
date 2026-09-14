@@ -137,7 +137,9 @@ final class Mutation<F extends Fields> {
         'Mutations accept a table and WHERE; select keys for paginated mutations.',
       );
     }
-    final w = _Writer(database.dialect, {_state.source: 't0'});
+    final w = _Writer(database.dialect, {
+      _state.source: 't0',
+    }, exactDecimal: database.capabilities.exactDecimal);
     void validate(List<Assignment> assignments) {
       final names = <String>{};
       for (final a in assignments) {

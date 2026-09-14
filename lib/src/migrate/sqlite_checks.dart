@@ -3,6 +3,17 @@ part of '../../migrate.dart';
 typedef _SqliteToken = ({String text, int start, int end});
 typedef _SqliteCheck = ({String signature, int start, int end});
 
+bool _sqliteWord(int c) =>
+    c >= 128 ||
+    c >= 48 && c <= 57 ||
+    c >= 65 && c <= 90 ||
+    c >= 97 && c <= 122 ||
+    c == 95 ||
+    c == 36;
+String _sqliteName(String name) => String.fromCharCodes(
+  name.codeUnits.map((c) => c >= 65 && c <= 90 ? c + 32 : c),
+);
+
 // Recognize only the range expressions emitted by this ORM, without mistaking
 // quoted defaults/comments for constraints. This is not a general SQL parser.
 List<_SqliteToken> _sqliteTokens(String sql) {
@@ -42,12 +53,17 @@ List<_SqliteToken> _sqliteTokens(String sql) {
         value.write(sql[i++]);
       }
       text = '${first == "'" ? 's' : 'i'}:${value.toString()}';
-    } else if (RegExp(r'[a-zA-Z0-9_]').hasMatch(first)) {
+    } else if (_sqliteWord(sql.codeUnitAt(i))) {
       i++;
-      while (i < sql.length && RegExp(r'[a-zA-Z0-9_]').hasMatch(sql[i])) {
+      while (i < sql.length && _sqliteWord(sql.codeUnitAt(i))) {
         i++;
       }
-      text = sql.substring(start, i).toUpperCase();
+      text = String.fromCharCodes(
+        sql
+            .substring(start, i)
+            .codeUnits
+            .map((c) => c >= 97 && c <= 122 ? c - 32 : c),
+      );
     } else {
       text = sql[i++];
     }
@@ -101,6 +117,80 @@ String _withoutIntegerChecks(String sql, List<ColumnInfo> columns) {
     if (!known.contains(check.signature)) continue;
     result.write(sql.substring(start, check.start));
     start = check.end;
+  }
+  return (result..write(sql.substring(start))).toString();
+}
+
+typedef _SqliteCollation = ({
+  String column,
+  String collation,
+  int start,
+  int end,
+});
+
+// Only column-level clauses at the CREATE TABLE body's outer depth. COLLATE
+// inside CHECK/default expressions and table/index constraints is not erased.
+List<_SqliteCollation> _sqliteColumnCollations(String sql) {
+  final tokens = _sqliteTokens(sql), result = <_SqliteCollation>[];
+  var depth = 0;
+  String? column;
+  var beginning = false;
+  String identifier(String token) =>
+      token.startsWith('i:') || token.startsWith('s:')
+      ? token.substring(2)
+      : token;
+  for (var i = 0; i < tokens.length; i++) {
+    final token = tokens[i];
+    if (token.text == '(') {
+      depth++;
+      if (depth == 1) beginning = true;
+    } else if (token.text == ')') {
+      depth--;
+    } else if (depth == 1 && token.text == ',') {
+      beginning = true;
+      column = null;
+    } else if (depth == 1 && beginning) {
+      column =
+          {
+            'CONSTRAINT',
+            'PRIMARY',
+            'UNIQUE',
+            'CHECK',
+            'FOREIGN',
+          }.contains(token.text)
+          ? null
+          : identifier(token.text);
+      beginning = false;
+    } else if (depth == 1 &&
+        column != null &&
+        token.text == 'COLLATE' &&
+        i + 1 < tokens.length) {
+      final next = tokens[++i];
+      result.add((
+        column: column,
+        collation: identifier(next.text),
+        start: token.start,
+        end: next.end,
+      ));
+    }
+  }
+  return result;
+}
+
+String _withoutDecimalCollations(String sql, List<ColumnInfo> columns) {
+  final names = {
+    for (final c in columns.where((c) => c.storageType == 'TEXT'))
+      _sqliteName(c.name),
+  };
+  final result = StringBuffer();
+  var start = 0;
+  for (final c in _sqliteColumnCollations(sql)) {
+    if (!names.contains(_sqliteName(c.column)) ||
+        c.collation.toLowerCase() != 'orm_decimal_v1') {
+      continue;
+    }
+    result.write(sql.substring(start, c.start));
+    start = c.end;
   }
   return (result..write(sql.substring(start))).toString();
 }

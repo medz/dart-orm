@@ -138,6 +138,7 @@ key support; use scalar IDs for relationships.
 | --- | --- | --- | --- |
 | `integer` | `int` | `INTEGER` | `BIGINT` |
 | `bigint` | `BigInt` | `TEXT` | `NUMERIC` |
+| `decimal` | `Decimal` | collated `TEXT` | `NUMERIC` |
 | `real` | `double` | `REAL` | `DOUBLE PRECISION` |
 | `text` | `String`, enums | `TEXT` | `TEXT` |
 | `boolean` | `bool` | `INTEGER` | `BOOLEAN` |
@@ -221,3 +222,11 @@ catalog verification. Generator tests reject mismatched codecs and preserve
 nullable aliases. Negative compilation tests use the actual generated APIs.
 `test/support/codecs/native.dart` also compiles and runs as a native macOS AOT
 program. These checks do not establish browser support.
+
+## Exact decimals
+
+Use `Decimal` for finite base-ten values, including money. Generated fields use
+`Codecs.decimal` without an annotation. See [exact decimals](decimals.md) for
+construction, arithmetic, numeric keys, SQLite storage requirements and current
+limits. `BigInt` storage does not provide these fractional or SQLite numeric
+ordering semantics.

@@ -3,7 +3,7 @@
 library;
 
 import 'orm.dart' show Codec;
-export 'orm.dart' show Codec, Codecs, SqlJson;
+export 'orm.dart' show Codec, Codecs, SqlJson, Decimal, DecimalRounding;
 
 /// A public const codec reference. Generation reads its type and storage tag;
 /// it never executes the application's encode/decode functions.
