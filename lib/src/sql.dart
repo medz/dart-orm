@@ -29,9 +29,30 @@ final class _ColumnNode(final TableRef table, final String name) extends _Node {
   }
 }
 
-final class _Parameter(final Object? value) extends _Node {
+final class _Parameter(final Object? value, {final String? sqlType})
+    extends _Node {
   @override
-  String write(_Writer w) => w.parameter(value);
+  String write(_Writer w) {
+    final parameter = w.parameter(value);
+    // A standalone SELECT parameter has no column context in PostgreSQL and
+    // otherwise resolves to text, including inside a UNION operand.
+    if (sqlType == null || w.dialect == SqlDialect.sqlite) return parameter;
+    final type = switch (sqlType) {
+      'integer' => 'BIGINT',
+      'bigint' => 'NUMERIC',
+      'text' => 'TEXT',
+      'real' => 'DOUBLE PRECISION',
+      'boolean' => 'BOOLEAN',
+      'timestamp' => 'TIMESTAMPTZ',
+      'json' => 'JSONB',
+      'blob' => 'BYTEA',
+      _ => throw OrmException(
+        'QUERY.PARAMETER_TYPE',
+        'No PostgreSQL parameter type for $sqlType.',
+      ),
+    };
+    return 'CAST($parameter AS $type)';
+  }
 }
 
 final class _Binary(final _Node left, final String op, final _Node right)
@@ -189,7 +210,7 @@ class Expr<T> extends Selection<T> {
 }
 
 Expr<T> value<T>(T value, Codec<T> codec) =>
-    Expr._(_Parameter(codec.encode(value)), codec);
+    Expr._(_Parameter(codec.encode(value), sqlType: codec.sqlType), codec);
 
 /// [parts] are trusted SQL, [values] are expressions. Never put user input in parts.
 Expr<T> sql<T>(List<String> parts, List<Expr<Object?>> values, Codec<T> codec) {

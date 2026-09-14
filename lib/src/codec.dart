@@ -10,24 +10,32 @@ final class SqlJson {
 /// Storage and Dart values meet only at this boundary.
 final class Codec<T> {
   final String sqlType;
+  // Nullable wrappers share a comparison identity, while remaining distinct
+  // from a codec whose own decoder handles SQL NULL.
+  final Object? _identity;
+  Object get _storageIdentity => _identity ?? this;
   final T Function(Object? value) _decode;
   final Object? Function(T value) _encode;
 
-  const Codec(this.sqlType, this._decode, this._encode);
+  const Codec(this.sqlType, this._decode, this._encode) : _identity = null;
+  Codec._nullable(this.sqlType, this._decode, this._encode, this._identity);
   const Codec.text(this._decode, String Function(T value) encode)
-    : sqlType = 'text',
+    : _identity = null,
+      sqlType = 'text',
       _encode = encode;
   const Codec.integer(this._decode, int Function(T value) encode)
-    : sqlType = 'integer',
+    : _identity = null,
+      sqlType = 'integer',
       _encode = encode;
   T decode(Object? value) => _decode(value);
   Object? encode(T value) => _encode(value);
   bool get acceptsNull => null is T;
 
-  Codec<T?> nullable() => Codec(
+  Codec<T?> nullable() => Codec._nullable(
     sqlType,
     (value) => value == null ? null : decode(value),
     (value) => value == null ? null : encode(value),
+    _identity ?? (this, #nullable),
   );
 
   Codec<R> map<R>(R Function(T) from, T Function(R) to) => Codec(
@@ -61,7 +69,13 @@ abstract final class Codecs {
     );
   }
 
-  static final integer = Codec<int>('integer', (v) => v as int, (v) => v);
+  // PostgreSQL SUM(BIGINT) returns NUMERIC text. Parse exactly and reject
+  // overflow instead of rounding through double.
+  static final integer = Codec<int>(
+    'integer',
+    (v) => v is int ? v : int.parse(v as String),
+    (v) => v,
+  );
   static final bigint = Codec<BigInt>(
     'bigint',
     (v) => v is BigInt ? v : BigInt.parse(v.toString()),
@@ -69,7 +83,7 @@ abstract final class Codecs {
   );
   static final real = Codec<double>(
     'real',
-    (v) => (v as num).toDouble(),
+    (v) => v is String ? double.parse(v) : (v as num).toDouble(),
     (v) => v,
   );
   static final text = Codec<String>('text', (v) => v as String, (v) => v);

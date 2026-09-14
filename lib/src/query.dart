@@ -11,6 +11,7 @@ final class _QueryState {
   final bool distinct;
   final List<_Join> joins;
   final List<_CteDefinition> ctes;
+  final _UnionSource? union;
   const _QueryState(
     this.source, {
     this.predicate,
@@ -22,6 +23,7 @@ final class _QueryState {
     this.distinct = false,
     this.joins = const [],
     this.ctes = const [],
+    this.union,
   });
   _QueryState copy({
     Expr<bool?>? predicate,
@@ -44,6 +46,7 @@ final class _QueryState {
     distinct: distinct ?? this.distinct,
     joins: joins ?? this.joins,
     ctes: ctes ?? this.ctes,
+    union: union,
   );
 }
 
@@ -80,6 +83,11 @@ class Query<R, F extends Fields> {
   Query<R, F> distinct() => _copy(_state.copy(distinct: true));
   Query<S, F> select<S>(Selection<S> Function(F) selection) =>
       Query._(database, _fields, _state, selection(_fields));
+
+  /// Maps decoded rows in Dart. This does not create SQL columns or change
+  /// database DISTINCT/UNION semantics; compose SQL set operations first.
+  Query<S, F> map<S>(S Function(R) mapper) =>
+      Query._(database, _fields, _state, _selection.map(mapper));
 
   Query<R, F> join<S, G extends Fields>(
     TableAlias<S, G> alias, {
@@ -130,8 +138,8 @@ class Query<R, F extends Fields> {
       Expr._(_Subquery(this, exists: true), Codecs.boolean);
   Cte<R, F> asCte(String name) => Cte._(this, name);
 
-  (_SelectionPlan, _Decoder<R>) _plan() {
-    final plan = _SelectionPlan();
+  (_SelectionPlan, _Decoder<R>) _plan({bool deduplicate = true}) {
+    final plan = _SelectionPlan(deduplicate: deduplicate);
     final decode = _selection._bind(plan);
     if (plan.columns.isEmpty) {
       throw const OrmException(
@@ -149,7 +157,8 @@ class Query<R, F extends Fields> {
 
   String _write(_Writer w, _SelectionPlan plan, {bool aliasColumns = false}) {
     final joins = [..._state.joins, ...plan.joins];
-    if (!_state.ctes.any((cte) => cte.name == _state.source.schema.name)) {
+    if (_state.union == null &&
+        !_state.ctes.any((cte) => cte.name == _state.source.schema.name)) {
       w.reads?.tables.add(_state.source.schema);
     }
     for (final join in joins) {
@@ -222,7 +231,7 @@ class Query<R, F extends Fields> {
         ].join(', '),
       );
       buffer.write(
-        ' FROM ${w.quote(_state.source.schema.name)} AS ${w.quote(rootAlias)}',
+        ' FROM ${_state.union == null ? w.quote(_state.source.schema.name) : '(${_state.union!.write(w)})'} AS ${w.quote(rootAlias)}',
       );
       final visible = {...saved, _state.source: rootAlias};
       for (final join in joins) {

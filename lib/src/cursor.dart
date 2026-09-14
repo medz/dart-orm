@@ -108,6 +108,7 @@ extension KeysetQuery<R, F extends Fields> on Query<R, F> {
         _state.group.isNotEmpty ||
         _state.distinct ||
         _state.offset != null ||
+        _state.union != null ||
         _state.ctes.isNotEmpty) {
       throw const OrmException(
         'QUERY.CURSOR',

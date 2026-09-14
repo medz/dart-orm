@@ -254,7 +254,11 @@ bool _sameSqlNode(_Node a, _Node b) {
       _ColumnNode(table: final bt, name: final bn),
     ) =>
       at == bt && an == bn,
-    (_Parameter(value: final av), _Parameter(value: final bv)) => av == bv,
+    (
+      _Parameter(value: final av, sqlType: final at),
+      _Parameter(value: final bv, sqlType: final bt),
+    ) =>
+      av == bv && at == bt,
     (
       _Function(name: final an, arguments: final aa, distinct: final ad),
       _Function(name: final bn, arguments: final ba, distinct: final bd),

@@ -48,6 +48,18 @@ Future<void> main() async {
     if (rows.length != 3 || rows.last != 'aot2@example.com') {
       throw StateError('Cursor decoding failed');
     }
+    final combined = db.users
+        .select((u) => (u.id, u.email).row)
+        .unionAll(db.posts.select((p) => (p.id, p.title).row))
+        .orderBy(
+          (u) => [u.ref((u) => u.id).asc(), u.ref((u) => u.email).asc()],
+        );
+    final List<(int, String)> combinedRows = await combined
+        .stream(batchSize: 2)
+        .toList();
+    if (combinedRows.length != 6 || combinedRows.first != (1, 'AOT')) {
+      throw StateError('UNION Record decoding failed');
+    }
     final token = CancellationToken();
     final timer = Timer(const Duration(milliseconds: 40), token.cancel);
     try {
@@ -82,7 +94,7 @@ Future<void> main() async {
     }
     await changes.cancel();
     print(
-      'Native AOT: joined projections, cursor demand, native cancellation, recovery and committed query watches passed.',
+      'Native AOT: joined projections, typed UNION records, cursor demand, native cancellation, recovery and committed query watches passed.',
     );
   } finally {
     await db.close();

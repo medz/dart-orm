@@ -20,3 +20,4 @@ part 'src/advanced.dart';
 part 'src/cte.dart';
 part 'src/cursor.dart';
 part 'src/watch.dart';
+part 'src/union.dart';

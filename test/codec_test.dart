@@ -3,6 +3,22 @@ import 'package:test/test.dart';
 
 void main() {
   test(
+    'numeric aggregate text decodes without integer rounding or overflow',
+    () {
+      expect(Codecs.integer.decode('9223372036854775807'), 9223372036854775807);
+      expect(
+        Codecs.integer.decode('-9223372036854775808'),
+        -9223372036854775808,
+      );
+      expect(
+        () => Codecs.integer.decode('9223372036854775808'),
+        throwsFormatException,
+      );
+      expect(() => Codecs.integer.decode('1.5'), throwsFormatException);
+      expect(Codecs.real.decode('1.25'), 1.25);
+    },
+  );
+  test(
     'erased codecs keep checked argument types without function getter casts',
     () {
       final List<Codec<Object?>> codecs = [
@@ -32,9 +48,9 @@ void main() {
     () {
       expect(Codecs.json.decode('"string"'), 'string');
       expect(Codecs.json.decode(const SqlJson('string')), 'string');
-    expect(Codecs.jsonDocument.nullable().decode(null), isNull);
-    expect(() => Codecs.jsonDocument.decode(null), throwsFormatException);
-    expect(Codecs.jsonDocument.decode('null').value, isNull);
+      expect(Codecs.jsonDocument.nullable().decode(null), isNull);
+      expect(() => Codecs.jsonDocument.decode(null), throwsFormatException);
+      expect(Codecs.jsonDocument.decode('null').value, isNull);
       expect(
         Codecs.jsonDocument.nullable().decode(const SqlJson(null))!.value,
         isNull,

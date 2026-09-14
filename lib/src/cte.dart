@@ -17,7 +17,9 @@ final class Cte<R, F extends Fields> implements _CteDefinition {
 
   factory Cte._(Query<R, F> source, String name) {
     if (name.isEmpty) throw ArgumentError('CTE name cannot be empty.');
-    final (plan, decode) = source._plan();
+    final (plan, decode) = source._plan(
+      deduplicate: _sqlRowShape(source._selection) == null,
+    );
     if (plan.relations.isNotEmpty) {
       throw const OrmException(
         'QUERY.CTE',
@@ -56,7 +58,7 @@ final class Cte<R, F extends Fields> implements _CteDefinition {
       (fields) => _ReboundSelection(_decode, [
         for (var i = 0; i < _plan.columns.length; i++)
           Expr._(_ColumnNode(fields.table, 'c$i'), _plan.columns[i].codec),
-      ]),
+      ], source: _source._selection),
     );
   }
 
@@ -108,8 +110,9 @@ final class CteFields<F extends Fields> extends Fields {
 
 final class _ReboundSelection<R>(
   final _Decoder<R> decode,
-  final List<Expr<Object?>> columns,
-) extends Selection<R> {
+  final List<Expr<Object?>> columns, {
+  final Selection<Object?>? source,
+}) extends Selection<R> {
   @override
   _Decoder<R> _bind(_SelectionPlan plan) {
     final indices = [for (final column in columns) plan.column(column)];

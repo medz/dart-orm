@@ -24,6 +24,9 @@ This file records verified delivery, not planned capabilities presented as worki
 - Batch inserts with parameter-aware chunks, optional field shapes, returning and all-chunk rollback.
 - Explicit alias joins/self joins, guarded outer-join projections, scalar/IN/EXISTS subqueries.
 - SQL window expressions and pre-execution aggregate/grouping placement checks.
+- SQL UNION/UNION ALL with typed 2–6-field SQL records, scalar operands and post-query mapping.
+- Positional column/codec/nullability validation, scoped branch clauses, CTE exports, streams and set subscriptions.
+- PostgreSQL typed standalone parameter projections and exact integer aggregate decoding.
 - CTEs with typed references to exported SQL expressions, mapped row decoding and nullable exports.
 - Keyset pagination with unique tie breakers, mixed directions, explicit null ordering and versioned cursor transport.
 - Actual generated-API negative type tests and checked codec calls after generic type erasure.
@@ -70,7 +73,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 265 checks with native SQLite
+Static analysis is clean. The complete suite passes 298 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -117,9 +120,18 @@ environment metadata. On the recorded Apple M3 Max run, single-field watch edits
 took 0.52/0.65/2.17 seconds. These are single observations with warm SDK/pub caches,
 not latency percentiles, IDE completion measurements or runtime SQL benchmarks.
 
+Thirty-two set-query checks cover both backends, including repeated positional
+columns, nested set association, operand-local CTE names/order/limits, final DTO
+mapping, outer-join nullability, shared domain codecs, all built-in constant types,
+SQL NULL versus JSON null, scalar subqueries, native streams and committed changes
+from either operand. Negative compilation includes mismatched scalar and Record
+operand types. The native macOS AOT integration also verifies typed UNION Record
+streaming. Whole generated entity/Dart-mapped projections must explicitly select
+SQL `.row` fields before UNION; arbitrary mapper equivalence is never inferred.
+
 ## Still required for the goal
 
-- Union; advanced-query capability and edge-case review.
+- Advanced-query capability and edge-case review.
 - Resumable long backfills, application schema-version gates and broader unmanaged-object catalog coverage.
 - Existing-database declaration import and named SQL query generation.
 - Configurable integer widths, exact-decimal query semantics and further native type coverage.
@@ -136,12 +148,12 @@ use durable per-step checkpoints; SQLite rejects that autocommit mode. These are
 implementation stages, not a reduction of the active goal.
 
 The full suite includes 52 shared SQLite/PostgreSQL query checks, 20 generated
-client/migration integration checks, 20 source generation checks, four codec
+client/migration integration checks, 20 source generation checks, five codec
 regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CLI
 workflows, 37 streaming/execution checks, 28 relation strategy checks and one
-negative compilation suite covering 16 invalid API uses, plus 18 domain-codec
+negative compilation suite covering 19 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow.
+build_runner process workflow, plus 32 real-database set-query checks.
 
 ## Environment
 

@@ -69,5 +69,10 @@ Transactions merge notifications; rollbacks do not notify. See
 [query subscriptions](docs/watch.md) for relation dependencies, pause/cancellation,
 and explicit notifications for raw SQL or external writers.
 
+Combine scalar or `.row` projections with `union`/`unionAll`, then map the
+result to a Record or DTO. Sets support typed exported columns, CTEs, streaming
+and subscriptions. See [queries and SQL sets](docs/queries.md) for scope,
+nullability and codec requirements.
+
 Set `ORM_TEST_POSTGRES` to a **disposable** local PostgreSQL database to include
 PostgreSQL integration tests. The tests create and drop their own test tables.

@@ -125,6 +125,7 @@ final class Mutation<F extends Fields> {
     }
     if (_state.limit != null ||
         _state.joins.isNotEmpty ||
+        _state.union != null ||
         _state.ctes.isNotEmpty ||
         _state.offset != null ||
         _state.order.isNotEmpty ||

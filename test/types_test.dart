@@ -35,6 +35,10 @@ void wrong(Database<Sqlite> db) {
   final Stream<List<int>> wrongWatch = db.users.select((u) => u.email).watch();
   db.users.watch(reads: ['users']);
   print(wrongWatch);
+  db.users.select((u) => u.id).union(db.users.select((u) => u.email));
+  db.users.select((u) => (u.id, u.email).row).union(db.users.select((u) => (u.email, u.id).row));
+  final Future<List<(String, int)>> wrongUnion = db.users.select((u) => (u.id, u.email).row).union(db.users.select((u) => (u.id, u.email).row)).get();
+  print(wrongUnion);
 }
 ''');
       final contexts = AnalysisContextCollection(includedPaths: [file.path]);
@@ -48,7 +52,7 @@ void wrong(Database<Sqlite> db) {
         final errors = result.diagnostics
             .where((e) => e.severity.name.toLowerCase() == 'error')
             .toList();
-        expect(errors.length, greaterThanOrEqualTo(16));
+        expect(errors.length, greaterThanOrEqualTo(19));
         expect(
           errors.every(
             (e) =>
@@ -74,6 +78,9 @@ void wrong(Database<Sqlite> db) {
           20,
           21,
           22,
+          24,
+          25,
+          26,
         ]) {
           expect(
             errors.any(

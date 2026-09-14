@@ -9,17 +9,24 @@ abstract class Selection<T> {
 }
 
 final class _SelectionPlan {
+  final bool deduplicate;
+  _SelectionPlan({this.deduplicate = true});
   final List<Expr<Object?>> columns = [];
   final List<_RelationBinding> relations = [];
   final List<_Join> joins = [];
   final List<Expr<Object?>> required = [];
   int optionalDepth = 0;
   final Map<_Node, int> _indices = {};
-  int column(Expr<Object?> expression) =>
-      _indices.putIfAbsent(expression._node, () {
-        columns.add(expression);
-        return columns.length - 1;
-      });
+  int column(Expr<Object?> expression) {
+    if (!deduplicate) {
+      columns.add(expression);
+      return columns.length - 1;
+    }
+    return _indices.putIfAbsent(expression._node, () {
+      columns.add(expression);
+      return columns.length - 1;
+    });
+  }
 }
 
 final class _Mapped<T, R>(final Selection<T> source, final R Function(T) mapper)
