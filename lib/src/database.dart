@@ -179,9 +179,19 @@ class Database<B extends Backend> {
     }
   }
 
-  Future<R> _run<R>(Future<R> Function(SqlConnection) action) {
+  Future<R> _run<R>(
+    Future<R> Function(SqlConnection) action, {
+    AcquisitionOptions acquire = const AcquisitionOptions(),
+  }) {
     _checkActive();
+    acquire.check();
     final connection = _connection;
+    if (connection == null &&
+        (acquire.timeout != null || acquire.cancellation != null)) {
+      final wait = _ConnectionWait(driver, action, acquire);
+      _track(wait.drained);
+      return wait.result;
+    }
     final result = connection != null
         ? Future.sync(() => action(connection))
         : driver.run(action);
@@ -189,9 +199,13 @@ class Database<B extends Backend> {
       (_) {},
       onError: (Object _, StackTrace _) {},
     );
+    _track(done);
+    return result;
+  }
+
+  void _track(Future<void> done) {
     _pending.add(done);
     unawaited(done.then((_) => _pending.remove(done)));
-    return result;
   }
 
   Future<SqlResult> _execute(
@@ -263,7 +277,10 @@ class Database<B extends Backend> {
     }
     final tables = List<TableSchema>.unmodifiable(changedTables);
     if (tables.isEmpty) {
-      return _run((c) => _execute(c, command, options: options));
+      return _run(
+        (c) => _execute(c, command, options: options),
+        acquire: options._acquisition,
+      );
     }
     return _run((c) async {
       final result = await _execute(c, command, options: options);
@@ -271,12 +288,15 @@ class Database<B extends Backend> {
         _recordChanges(tables, cascade: cascade);
       }
       return result;
-    });
+    }, acquire: options._acquisition);
   }
 
   /// Retains one connection across transactions and session-scoped operations.
   /// The borrowed view expires when the callback returns.
-  Future<R> session<R>(Future<R> Function(Database<B> session) action) {
+  Future<R> session<R>(
+    Future<R> Function(Database<B> session) action, {
+    AcquisitionOptions acquire = const AcquisitionOptions(),
+  }) {
     if (_connection != null) {
       throw const OrmException(
         'SESSION.NESTED',
@@ -307,7 +327,7 @@ class Database<B extends Backend> {
         await session._stopStreams();
         await Future.wait(session._pending.toList());
       }
-    });
+    }, acquire: acquire);
   }
 
   /// Discards a leased connection after its state can no longer be recovered.
@@ -326,6 +346,7 @@ class Database<B extends Backend> {
   Future<R> transaction<R>(
     Future<R> Function(Database<B> tx) action, {
     TransactionOptions<B>? options,
+    AcquisitionOptions acquire = const AcquisitionOptions(),
   }) {
     if (inTransaction) {
       throw const OrmException(
@@ -386,7 +407,7 @@ class Database<B extends Backend> {
       } finally {
         if (_connection != null) _childActive = false;
       }
-    });
+    }, acquire: acquire);
   }
 
   Future<R> savepoint<R>(Future<R> Function(Database<B> tx) action) {

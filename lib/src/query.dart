@@ -287,23 +287,25 @@ class Query<R, F extends Fields> {
 
   SqlCommand compile() => _compile(_plan().$1);
 
-  Future<List<R>> get({ExecutionOptions options = const ExecutionOptions()}) =>
-      database._run((connection) async {
-        final (plan, decode) = _plan();
-        final result = await database._execute(
-          connection,
-          _compile(plan),
-          options: options,
-        );
-        final rows = await _expandRelations(
-          database,
-          connection,
-          plan,
-          result.rows,
-          options: options,
-        );
-        return [for (final row in rows) decode(row)];
-      });
+  Future<List<R>> get({ExecutionOptions options = const ExecutionOptions()}) {
+    options.check();
+    return database._run((connection) async {
+      final (plan, decode) = _plan();
+      final result = await database._execute(
+        connection,
+        _compile(plan),
+        options: options,
+      );
+      final rows = await _expandRelations(
+        database,
+        connection,
+        plan,
+        result.rows,
+        options: options,
+      );
+      return [for (final row in rows) decode(row)];
+    }, acquire: options._acquisition);
+  }
 
   Future<R?> first({
     ExecutionOptions options = const ExecutionOptions(),

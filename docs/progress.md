@@ -44,6 +44,8 @@ This file records verified delivery, not planned capabilities presented as worki
 - Shared migration/baseline session locks use bounded try-lock polling without retaining waiting snapshots.
 - Database cursors with demand-driven batches, per-batch relation loading and scoped stream cleanup.
 - Real SQLite native interruption and PostgreSQL control-connection cancellation with awaited cleanup.
+- Cancellable, bounded connection acquisition with monotonic entry checks and safe late-lease draining.
+- Independent PostgreSQL pool/connection deadlines, with acquisition settings propagated through queries, mutations, batches, streams and watches.
 - Per-statement deadlines, poisoned-transaction protection and atomic cancellation between batch chunks.
 - Explicit cancellation capabilities, borrowed-pool ownership and failed-control connection disposal.
 - To-one JOIN strategy using declared uniqueness, with explicit join/batch choices and cardinality checks.
@@ -73,7 +75,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 298 checks with native SQLite
+Static analysis is clean. The complete suite passes 322 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -129,13 +131,23 @@ operand types. The native macOS AOT integration also verifies typed UNION Record
 streaming. Whole generated entity/Dart-mapped projections must explicitly select
 SQL `.row` fields before UNION; arbitrary mapper equivalence is never inferred.
 
+Connection acquisition is verified with twenty shared SQLite/PostgreSQL checks,
+three additional PostgreSQL checks (initialization, connection versus queue limits,
+and native pool timeout classification), and a controlled event-loop starvation
+regression using the native SQLite driver. Timed-out mutations, batch transactions,
+sessions and queries never execute after their late leases arrive. Stream
+cancellation, watch recovery, pool PID reuse, resource draining and application
+error propagation are checked. macOS AOT also verifies that an expired queued
+write never runs after the held lease is released. These acquisition controls do
+not yet implement transaction-wide execution deadlines or automatic retries.
+
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
 - Resumable long backfills, application schema-version gates and broader unmanaged-object catalog coverage.
 - Existing-database declaration import and named SQL query generation.
 - Configurable integer widths, exact-decimal query semantics and further native type coverage.
-- Connection acquisition and total transaction deadlines, retry classification and further backend capability coverage.
+- Total transaction deadlines, retry classification and further backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
 - User documentation, performance measurements and complete acceptance review.
 
@@ -153,7 +165,7 @@ regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CL
 workflows, 37 streaming/execution checks, 28 relation strategy checks and one
 negative compilation suite covering 19 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks.
 
 ## Environment
 

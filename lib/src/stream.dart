@@ -131,61 +131,69 @@ extension _DatabaseStreaming on Database<Backend> {
         requestStop();
       });
       try {
-        await _run((connection) async {
-          final ownsTransaction = !inTransaction;
-          SqlCursor? cursor;
-          var complete = false, began = false;
-          try {
-            if (stopped) return;
-            if (ownsTransaction) {
-              await _execute(
-                connection,
-                SqlCommand(
-                  dialect == SqlDialect.postgres ? 'BEGIN READ ONLY' : 'BEGIN',
-                ),
-              );
-              began = true;
-            }
-            cursor = await observe(
-              .cursorOpen,
-              () => connection.openCursor(command, options: execution),
-            );
-            while (!stopped) {
-              await waitForDemand();
-              if (stopped) break;
-              final batch = await observe(
-                .cursorFetch,
-                () => cursor!.fetch(batchSize, options: execution),
-              );
-              if (stopped) break;
-              final rows = await decode(connection, batch.rows, execution);
-              for (final row in rows) {
-                await waitForDemand();
-                if (stopped) break;
-                controller.add(row);
-              }
-              if (batch.rows.length < batchSize) {
-                complete = !stopped;
-                break;
-              }
-            }
-          } finally {
+        await _run(
+          (connection) async {
+            final ownsTransaction = !inTransaction;
+            SqlCursor? cursor;
+            var complete = false, began = false;
             try {
-              if (cursor != null) await observe(.cursorClose, cursor.close);
-              if (began) {
+              if (stopped) return;
+              if (ownsTransaction) {
                 await _execute(
                   connection,
-                  SqlCommand(complete ? 'COMMIT' : 'ROLLBACK'),
+                  SqlCommand(
+                    dialect == SqlDialect.postgres
+                        ? 'BEGIN READ ONLY'
+                        : 'BEGIN',
+                  ),
                 );
+                began = true;
               }
-            } catch (e) {
-              cleanupFailure = e;
-              if (inTransaction) _active = false;
-              await connection.invalidate();
-              rethrow;
+              cursor = await observe(
+                .cursorOpen,
+                () => connection.openCursor(command, options: execution),
+              );
+              while (!stopped) {
+                await waitForDemand();
+                if (stopped) break;
+                final batch = await observe(
+                  .cursorFetch,
+                  () => cursor!.fetch(batchSize, options: execution),
+                );
+                if (stopped) break;
+                final rows = await decode(connection, batch.rows, execution);
+                for (final row in rows) {
+                  await waitForDemand();
+                  if (stopped) break;
+                  controller.add(row);
+                }
+                if (batch.rows.length < batchSize) {
+                  complete = !stopped;
+                  break;
+                }
+              }
+            } finally {
+              try {
+                if (cursor != null) await observe(.cursorClose, cursor.close);
+                if (began) {
+                  await _execute(
+                    connection,
+                    SqlCommand(complete ? 'COMMIT' : 'ROLLBACK'),
+                  );
+                }
+              } catch (e) {
+                cleanupFailure = e;
+                if (inTransaction) _active = false;
+                await connection.invalidate();
+                rethrow;
+              }
             }
-          }
-        });
+          },
+          acquire: AcquisitionOptions(
+            timeout: options.acquireTimeout,
+            cancellation: cancellation,
+          ),
+        );
       } catch (error, stack) {
         if (!stopped) controller.addError(error, stack);
       } finally {

@@ -48,6 +48,67 @@ An escaping active stream is stopped and the callback fails with
 active cursors before releasing its driver. A leased connection executes one
 statement at a time; overlapping statements fail with `SESSION.BUSY`.
 
+## Connection acquisition
+
+```dart
+final options = ExecutionOptions(
+  acquireTimeout: const Duration(seconds: 1),
+  timeout: const Duration(seconds: 5),
+  cancellation: token,
+);
+final rows = await db.users.select((u) => u.email).get(options: options);
+
+await db.transaction((tx) async {
+  await tx.users.create(email: 'within-a-lease@example.com');
+}, acquire: const AcquisitionOptions(timeout: Duration(seconds: 2)));
+
+await db.session((session) async {
+  // This session already owns its connection.
+}, acquire: AcquisitionOptions(
+  timeout: const Duration(seconds: 2),
+  cancellation: acquisitionToken,
+));
+```
+
+`ExecutionOptions.acquireTimeout` spans waiting for the driver to supply a
+connection, including connection establishment and initialization. It ends before
+SQL starts. The same query cancellation token covers both waiting and statement
+execution. Stream and watch options propagate this acquisition bound; batch
+inserts apply it before opening their transaction. An existing leased session
+needs no further acquisition.
+
+`AcquisitionOptions` is the corresponding session/transaction entry setting.
+Its cancellation token affects acquisition only: after the callback begins it
+does not interrupt that callback or its statements. It is not a transaction
+execution deadline. Non-positive timeouts and already-cancelled requests are
+rejected before queuing.
+
+A [Dart Future timeout](https://api.dart.dev/dart-async/Future/timeout.html) does
+not cancel its source computation. Expired acquisitions report `CONNECTION.TIMEOUT`; requested cancellation reports
+`OPERATION.CANCELLED`. The ORM does not merely abandon a Future: a late driver
+lease is returned without entering the query, mutation or transaction callback.
+A monotonic clock also checks the deadline at entry, so a delayed Dart Timer
+cannot allow expired work to start. The underlying pool can retain its reservation
+until it grants a lease or fails; the ORM does not pretend that it can remove an
+entry from a driver queue that exposes no removal API. `Database.close()` waits
+for these reservations to drain. A caller holding a session must still release it.
+
+PostgreSQL has separate driver settings:
+
+| Setting | Default | Scope |
+| --- | --- | --- |
+| `PostgresOptions.connectTimeout` | 10 seconds | Establishing a new connection |
+| `PostgresOptions.poolTimeout` | 30 seconds | Native driver's pool queue waits |
+| `PostgresOptions.queryTimeout` | 30 seconds | Each SQL statement |
+| `ExecutionOptions.acquireTimeout` | unset | Entire acquisition for this operation |
+
+The per-operation bound can shorten acquisition; it does not enlarge the native
+pool limit. Borrowed pools retain their owner's connection and queue settings.
+Driver timeouts before callback entry are classified as `CONNECTION.TIMEOUT`;
+a `TimeoutException` thrown by application code after entry is preserved.
+SQLite's `busyTimeout` controls database lock waits, not its ORM lease queue.
+Neither backend's connection settings substitute for a total transaction deadline.
+
 ## Cancellation and statement deadlines
 
 ```dart
@@ -69,8 +130,10 @@ options; use the underlying insert/update builder for explicit options.
 
 `timeout` applies to each SQL statement or cursor fetch. It excludes time spent
 waiting for a connection and consuming already fetched rows. It is not a total
-transaction deadline. Queued operations check cancellation when they acquire a
-connection; immediate removal from the acquisition queue is not implemented.
+transaction deadline. Use `acquireTimeout` for the separate acquisition phase.
+Cancellation while acquiring a connection now completes promptly and prevents
+the SQL callback from ever entering, including when the driver grants a lease
+later. Cancellation of an executing statement still awaits database cleanup.
 
 A token is a sticky request, not proof that a write was rolled back. Always await
 the operation's result: a completed statement may win the cancellation race and

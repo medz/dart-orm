@@ -60,6 +60,28 @@ Future<void> main() async {
     if (combinedRows.length != 6 || combinedRows.first != (1, 'AOT')) {
       throw StateError('UNION Record decoding failed');
     }
+    final acquired = Completer<void>(), release = Completer<void>();
+    final held = db.session((session) async {
+      acquired.complete();
+      await release.future;
+    });
+    await acquired.future;
+    try {
+      await db.users
+          .insert((u) => [u.email.set('must-not-execute@example.com')])
+          .execute(
+            options: const ExecutionOptions(
+              acquireTimeout: Duration(milliseconds: 40),
+            ),
+          );
+      throw StateError('Connection acquisition should time out');
+    } on OrmException catch (error) {
+      if (error.code != 'CONNECTION.TIMEOUT') rethrow;
+    } finally {
+      release.complete();
+      await held;
+    }
+    if (await db.users.count() != 5) throw StateError('Abandoned SQL executed');
     final token = CancellationToken();
     final timer = Timer(const Duration(milliseconds: 40), token.cancel);
     try {
@@ -94,7 +116,7 @@ Future<void> main() async {
     }
     await changes.cancel();
     print(
-      'Native AOT: joined projections, typed UNION records, cursor demand, native cancellation, recovery and committed query watches passed.',
+      'Native AOT: joined projections, typed UNION records, acquisition deadlines, cursor demand, native cancellation, recovery and committed query watches passed.',
     );
   } finally {
     await db.close();

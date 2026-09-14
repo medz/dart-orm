@@ -104,7 +104,7 @@ final class BatchInsert<F extends Fields> {
 
     return database.inTransaction
         ? execute(database)
-        : database.transaction(execute);
+        : database.transaction(execute, acquire: options._acquisition);
   }
 
   Future<int> execute({

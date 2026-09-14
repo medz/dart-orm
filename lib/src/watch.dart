@@ -191,6 +191,7 @@ final class _QueryWatch<R, F extends Fields> {
         final rows = await query.get(
           options: ExecutionOptions(
             timeout: options.timeout,
+            acquireTimeout: options.acquireTimeout,
             cancellation: cancellation,
           ),
         );

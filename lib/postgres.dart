@@ -15,6 +15,9 @@ final class PostgresOptions {
   final PostgresTls tls;
   final int maxConnections;
   final Duration connectTimeout;
+
+  /// Driver pool queue limit; separate from opening a new connection.
+  final Duration poolTimeout;
   final Duration queryTimeout;
   final String applicationName;
   final String? schema;
@@ -23,6 +26,7 @@ final class PostgresOptions {
     this.tls = PostgresTls.verifyFull,
     this.maxConnections = 8,
     this.connectTimeout = const Duration(seconds: 10),
+    this.poolTimeout = const Duration(seconds: 30),
     this.queryTimeout = const Duration(seconds: 30),
     this.applicationName = 'dart-orm',
     this.schema,
@@ -35,12 +39,14 @@ final class PostgresDriver implements Driver<Postgres> {
   final Future<pg.Connection> Function()? _cancelConnection;
   final Expando<int> _backendIds = Expando();
   final Duration? _queryTimeout;
+  final Duration? _connectTimeout;
   bool _closed = false;
 
   PostgresDriver(PostgresOptions options)
     : _pool = _createPool(options),
       _ownsPool = true,
       _queryTimeout = options.queryTimeout,
+      _connectTimeout = options.connectTimeout,
       _cancelConnection = (() => _openControl(options));
   PostgresDriver.borrow(
     pg.Pool<void> pool, {
@@ -48,6 +54,7 @@ final class PostgresDriver implements Driver<Postgres> {
     this._queryTimeout,
   }) : _pool = pool,
        _ownsPool = false,
+       _connectTimeout = null,
        _cancelConnection = cancellationConnection;
 
   static Future<pg.Connection> _openControl(PostgresOptions options) {
@@ -88,6 +95,7 @@ final class PostgresDriver implements Driver<Postgres> {
       throw ArgumentError('Provide a PostgreSQL URL and a positive pool size.');
     }
     if (options.queryTimeout <= Duration.zero ||
+        options.poolTimeout <= Duration.zero ||
         options.connectTimeout <= Duration.zero) {
       throw ArgumentError('PostgreSQL timeouts must be positive.');
     }
@@ -113,7 +121,7 @@ final class PostgresDriver implements Driver<Postgres> {
       ],
       settings: pg.PoolSettings(
         maxConnectionCount: options.maxConnections,
-        connectTimeout: options.connectTimeout,
+        connectTimeout: options.poolTimeout,
         queryTimeout: null,
         applicationName: options.applicationName,
         timeZone: 'UTC',
@@ -146,20 +154,36 @@ final class PostgresDriver implements Driver<Postgres> {
     cancellation: _cancelConnection != null,
   );
   @override
-  Future<R> run<R>(Future<R> Function(SqlConnection) action) {
+  Future<R> run<R>(Future<R> Function(SqlConnection) action) async {
     if (_closed) {
       throw const OrmException('DRIVER.CLOSED', 'PostgreSQL driver is closed.');
     }
-    return _pool.withConnection(
-      (connection) => action(
-        _PostgresConnection(
-          connection,
-          _cancelConnection,
-          _backendIds,
-          _queryTimeout,
-        ),
-      ),
-    );
+    var acquired = false;
+    try {
+      return await _pool.withConnection(
+        (connection) {
+          acquired = true;
+          return action(
+            _PostgresConnection(
+              connection,
+              _cancelConnection,
+              _backendIds,
+              _queryTimeout,
+            ),
+          );
+        },
+        settings: _connectTimeout == null
+            ? null
+            : pg.ConnectionSettings(connectTimeout: _connectTimeout),
+      );
+    } on TimeoutException catch (error) {
+      if (acquired) rethrow;
+      throw OrmException(
+        'CONNECTION.TIMEOUT',
+        'PostgreSQL connection acquisition timed out.',
+        cause: error,
+      );
+    }
   }
 
   @override
