@@ -10,6 +10,8 @@ part 'src/sql.dart';
 part 'src/selection.dart';
 part 'src/table.dart';
 part 'src/database.dart';
+part 'src/execution.dart';
+part 'src/stream.dart';
 part 'src/query.dart';
 part 'src/mutation.dart';
 part 'src/relation.dart';

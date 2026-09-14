@@ -1,6 +1,8 @@
 /// PostgreSQL connection pooling with backend-specific configuration.
 library;
 
+import 'dart:async';
+
 import 'package:postgres/postgres.dart' as pg;
 
 import 'orm.dart';
@@ -30,12 +32,52 @@ final class PostgresOptions {
 final class PostgresDriver implements Driver<Postgres> {
   final pg.Pool<void> _pool;
   final bool _ownsPool;
+  final Future<pg.Connection> Function()? _cancelConnection;
+  final Expando<int> _backendIds = Expando();
+  final Duration? _queryTimeout;
   bool _closed = false;
 
   PostgresDriver(PostgresOptions options)
     : _pool = _createPool(options),
-      _ownsPool = true;
-  PostgresDriver.borrow(pg.Pool<void> pool) : _pool = pool, _ownsPool = false;
+      _ownsPool = true,
+      _queryTimeout = options.queryTimeout,
+      _cancelConnection = (() => _openControl(options));
+  PostgresDriver.borrow(
+    pg.Pool<void> pool, {
+    Future<pg.Connection> Function()? cancellationConnection,
+    this._queryTimeout,
+  }) : _pool = pool,
+       _ownsPool = false,
+       _cancelConnection = cancellationConnection;
+
+  static Future<pg.Connection> _openControl(PostgresOptions options) {
+    final url = options.url, colon = options.url.userInfo.indexOf(':');
+    return pg.Connection.open(
+      pg.Endpoint(
+        host: url.host,
+        port: url.hasPort ? url.port : 5432,
+        database: url.pathSegments.single,
+        username: url.userInfo.isEmpty
+            ? null
+            : Uri.decodeComponent(
+                colon < 0 ? url.userInfo : url.userInfo.substring(0, colon),
+              ),
+        password: colon < 0
+            ? null
+            : Uri.decodeComponent(url.userInfo.substring(colon + 1)),
+      ),
+      settings: pg.ConnectionSettings(
+        connectTimeout: options.connectTimeout,
+        queryTimeout: const Duration(seconds: 5),
+        sslMode: switch (options.tls) {
+          PostgresTls.verifyFull => pg.SslMode.verifyFull,
+          PostgresTls.require => pg.SslMode.require,
+          PostgresTls.disable => pg.SslMode.disable,
+        },
+        applicationName: '${options.applicationName}/cancel',
+      ),
+    );
+  }
 
   static pg.Pool<void> _createPool(PostgresOptions options) {
     final url = options.url;
@@ -44,6 +86,10 @@ final class PostgresDriver implements Driver<Postgres> {
         url.pathSegments.length != 1 ||
         options.maxConnections < 1) {
       throw ArgumentError('Provide a PostgreSQL URL and a positive pool size.');
+    }
+    if (options.queryTimeout <= Duration.zero ||
+        options.connectTimeout <= Duration.zero) {
+      throw ArgumentError('PostgreSQL timeouts must be positive.');
     }
     if (url.hasQuery || url.hasFragment) {
       throw ArgumentError(
@@ -68,7 +114,7 @@ final class PostgresDriver implements Driver<Postgres> {
       settings: pg.PoolSettings(
         maxConnectionCount: options.maxConnections,
         connectTimeout: options.connectTimeout,
-        queryTimeout: options.queryTimeout,
+        queryTimeout: null,
         applicationName: options.applicationName,
         timeZone: 'UTC',
         onOpen: options.schema == null
@@ -93,15 +139,26 @@ final class PostgresDriver implements Driver<Postgres> {
   }
 
   @override
-  Capabilities get capabilities =>
-      const Capabilities(dialect: SqlDialect.postgres, maxParameters: 65535);
+  Capabilities get capabilities => Capabilities(
+    dialect: SqlDialect.postgres,
+    maxParameters: 65535,
+    streaming: true,
+    cancellation: _cancelConnection != null,
+  );
   @override
   Future<R> run<R>(Future<R> Function(SqlConnection) action) {
     if (_closed) {
       throw const OrmException('DRIVER.CLOSED', 'PostgreSQL driver is closed.');
     }
     return _pool.withConnection(
-      (connection) => action(_PostgresConnection(connection)),
+      (connection) => action(
+        _PostgresConnection(
+          connection,
+          _cancelConnection,
+          _backendIds,
+          _queryTimeout,
+        ),
+      ),
     );
   }
 
@@ -113,26 +170,196 @@ final class PostgresDriver implements Driver<Postgres> {
   }
 }
 
-final class _PostgresConnection(final pg.Connection connection)
-    implements SqlConnection {
-  @override
-  Future<SqlResult> execute(SqlCommand command) async {
-    final result = await connection.execute(
+final class _PostgresConnection implements SqlConnection {
+  final pg.Connection connection;
+  final Future<pg.Connection> Function()? _control;
+  final Expando<int> _backendIds;
+  final Duration? _queryTimeout;
+  bool _busy = false;
+  int _cursorId = 0;
+  _PostgresConnection(
+    this.connection,
+    this._control,
+    this._backendIds,
+    this._queryTimeout,
+  );
+
+  // ResultStream is buffered only for this bounded statement. Its subscription
+  // has no hidden timeout task that could cancel a later statement. We own and
+  // await cancellation below, including connection-control cleanup.
+  Future<SqlResult> _query(SqlCommand command) async {
+    final statement = await connection.prepare(
       pg.Sql(
         command.sql,
         types: List.filled(command.parameters.length, pg.Type.unspecified),
       ),
-      parameters: command.parameters,
     );
-    return SqlResult(
-      result,
-      columns: [for (final c in result.schema.columns) c.columnName ?? ''],
-      affectedRows: result.affectedRows,
+    try {
+      final rows = <pg.ResultRow>[];
+      final subscription = statement.bind(command.parameters).listen(rows.add);
+      try {
+        await subscription.asFuture<void>();
+        return SqlResult(
+          rows,
+          columns: [
+            for (final c in (await subscription.schema).columns)
+              c.columnName ?? '',
+          ],
+          affectedRows: await subscription.affectedRows,
+        );
+      } finally {
+        await subscription.cancel();
+      }
+    } finally {
+      await statement.dispose();
+    }
+  }
+
+  @override
+  Future<SqlResult> execute(
+    SqlCommand command, {
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
+    options.check();
+    if (_busy) {
+      throw const OrmException(
+        'SESSION.BUSY',
+        'Await the active statement before using this connection again.',
+      );
+    }
+    final timeout = options.timeout ?? _queryTimeout;
+    if (timeout != null && timeout <= Duration.zero) {
+      throw ArgumentError.value(timeout, 'timeout');
+    }
+    if ((options.cancellation != null || timeout != null) && _control == null) {
+      throw const OrmException(
+        'CAPABILITY.CANCEL',
+        'A borrowed PostgreSQL pool needs a cancellation connection factory.',
+      );
+    }
+    _busy = true;
+    Future<void>? cancelling;
+    var completed = false, timedOut = false;
+    Timer? deadline;
+    void Function()? unsubscribe;
+    try {
+      if (options.cancellation != null || timeout != null) {
+        final pid = _backendIds[connection.info] ??=
+            (await _query(SqlCommand('SELECT pg_backend_pid()')))
+                    .rows
+                    .single
+                    .single
+                as int;
+        options.check();
+        void cancel() {
+          if (completed || cancelling != null) return;
+          cancelling = () async {
+            try {
+              final control = await _control!();
+              try {
+                if (!completed) {
+                  final result = await control.execute(
+                    pg.Sql(
+                      r'SELECT pg_cancel_backend($1)',
+                      types: [pg.Type.integer],
+                    ),
+                    parameters: [pid],
+                  );
+                  if (result.single.single != true && !completed) {
+                    await connection.close(force: true);
+                  }
+                }
+              } finally {
+                await control.close(force: true);
+              }
+            } catch (_) {
+              await connection.close(force: true);
+              rethrow;
+            }
+          }();
+          // Observe failures immediately; the operation awaits cleanup below.
+          unawaited(cancelling!.catchError((Object _) {}));
+        }
+
+        unsubscribe = options.cancellation?.listen(cancel);
+        if (timeout != null) {
+          deadline = Timer(timeout, () {
+            timedOut = true;
+            cancel();
+          });
+        }
+      }
+      return await _query(command);
+    } on pg.ServerException catch (error) {
+      if (error.code == '57014' &&
+          (timedOut || options.cancellation?.isCancelled == true)) {
+        throw OrmException(
+          timedOut ? 'OPERATION.TIMEOUT' : 'OPERATION.CANCELLED',
+          'PostgreSQL stopped the statement.',
+          cause: error,
+        );
+      }
+      rethrow;
+    } finally {
+      completed = true;
+      deadline?.cancel();
+      unsubscribe?.call();
+      try {
+        await cancelling;
+      } finally {
+        _busy = false;
+      }
+    }
+  }
+
+  @override
+  Future<SqlCursor> openCursor(
+    SqlCommand command, {
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
+    final name = 'orm_cursor_${_cursorId++}';
+    await execute(
+      SqlCommand(
+        'DECLARE "$name" NO SCROLL CURSOR FOR ${command.sql}',
+        command.parameters,
+      ),
+      options: options,
     );
+    return _PostgresCursor(this, name);
   }
 
   @override
   Future<void> invalidate() => connection.close(force: true);
+}
+
+final class _PostgresCursor(
+  final _PostgresConnection connection,
+  final String name,
+) implements SqlCursor {
+  bool _closed = false;
+  @override
+  Future<SqlResult> fetch(
+    int count, {
+    ExecutionOptions options = const ExecutionOptions(),
+  }) {
+    if (_closed) throw const OrmException('CURSOR.CLOSED', 'Cursor has ended.');
+    if (count < 1) throw ArgumentError.value(count, 'count');
+    return connection.execute(
+      SqlCommand('FETCH FORWARD $count FROM "$name"'),
+      options: options,
+    );
+  }
+
+  @override
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    try {
+      await connection.execute(SqlCommand('CLOSE "$name"'));
+    } on pg.ServerException catch (e) {
+      if (e.code != '25P02' && e.code != '34000') rethrow;
+    }
+  }
 }
 
 Database<Postgres> postgres(

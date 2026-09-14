@@ -39,6 +39,10 @@ This file records verified delivery, not planned capabilities presented as worki
 - PostgreSQL recoverable autocommit steps with boolean pre/postconditions and immutable attempt checksums.
 - Durable per-step progress, exact concurrent-index state checks, explicit INVALID-index repair and CLI visibility.
 - Shared migration/baseline session locks use bounded try-lock polling without retaining waiting snapshots.
+- Database cursors with demand-driven batches, per-batch relation loading and scoped stream cleanup.
+- Real SQLite native interruption and PostgreSQL control-connection cancellation with awaited cleanup.
+- Per-statement deadlines, poisoned-transaction protection and atomic cancellation between batch chunks.
+- Explicit cancellation capabilities, borrowed-pool ownership and failed-control connection disposal.
 
 ## Delivery sequence
 
@@ -55,7 +59,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 117 checks with native SQLite
+Static analysis is clean. The complete suite passes 154 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -67,6 +71,12 @@ at durable SQL/commit boundaries, INVALID indexes, lock deadlines and concurrent
 runners; committed work is not replayed on resume.
 `dart run example/main.dart` runs successfully against a real in-memory SQLite DB.
 The generated SQLite example also compiles and runs as a native macOS AOT executable.
+Thirty-seven streaming/execution checks cover native cursor fetches, pause/resume,
+early exit, relation loading, deadlines, cancelled writes, failed control connections
+and delayed cancellation races. A batch-cancellation regression was first reproduced
+as a partial commit and now verifies rollback on both databases.
+`test/support/native_execution.dart` additionally compiles and runs as a macOS AOT
+executable, verifying cursor consumption, `sqlite3_interrupt` and subsequent SQL.
 
 ## Still required for the goal
 
@@ -74,8 +84,8 @@ The generated SQLite example also compiles and runs as a native macOS AOT execut
 - Composite-key relation batching acceptance and join-based to-one loading.
 - Resumable long backfills, application schema-version gates and broader unmanaged-object catalog coverage.
 - Existing-database declaration import and named SQL query generation.
-- Build integration; custom codec/schema authoring.
-- Cancellation, retry classification, genuine streaming and backend capability coverage.
+- Build integration; custom codec/schema authoring; committed-change query subscriptions.
+- Connection acquisition and total transaction deadlines, retry classification and further backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
 - User documentation, performance measurements and complete acceptance review.
 
@@ -89,7 +99,7 @@ implementation stages, not a reduction of the active goal.
 The full suite includes 52 shared SQLite/PostgreSQL query checks, 20 generated
 client/migration integration checks, seven source generation checks, two codec
 regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CLI
-workflows and one
+workflows, 37 streaming/execution checks and one
 negative compilation suite covering seven invalid API uses.
 
 ## Environment

@@ -258,27 +258,37 @@ class Query<R, F extends Fields> {
 
   SqlCommand compile() => _compile(_plan().$1);
 
-  Future<List<R>> get() => database._run((connection) async {
-    final (plan, decode) = _plan();
-    final result = await database._execute(connection, _compile(plan));
-    final rows = await _expandRelations(
-      database,
-      connection,
-      plan,
-      result.rows,
-    );
-    return [for (final row in rows) decode(row)];
-  });
+  Future<List<R>> get({ExecutionOptions options = const ExecutionOptions()}) =>
+      database._run((connection) async {
+        final (plan, decode) = _plan();
+        final result = await database._execute(
+          connection,
+          _compile(plan),
+          options: options,
+        );
+        final rows = await _expandRelations(
+          database,
+          connection,
+          plan,
+          result.rows,
+          options: options,
+        );
+        return [for (final row in rows) decode(row)];
+      });
 
-  Future<R?> first() async {
-    final rows = await take(_state.limit == 0 ? 0 : 1).get();
+  Future<R?> first({
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
+    final rows = await take(_state.limit == 0 ? 0 : 1).get(options: options);
     return rows.isEmpty ? null : rows.first;
   }
 
-  Future<R> single() async {
+  Future<R> single({
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
     final rows = await take(
       _state.limit == null || _state.limit! > 2 ? 2 : _state.limit!,
-    ).get();
+    ).get(options: options);
     if (rows.length != 1) {
       throw OrmException(
         'QUERY.CARDINALITY',
@@ -288,21 +298,27 @@ class Query<R, F extends Fields> {
     return rows.single;
   }
 
-  Future<int> count() async {
+  Future<int> count({
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
     final inner = compile();
     final result = await database.execute(
       SqlCommand(
         'SELECT COUNT(*) FROM (${inner.sql}) AS "orm_count"',
         inner.parameters,
       ),
+      options: options,
     );
     return Codecs.integer.decode(result.rows.single.single);
   }
 
-  Future<bool> exists() async {
+  Future<bool> exists({
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
     final inner = take(_state.limit == 0 ? 0 : 1).compile();
     final result = await database.execute(
       SqlCommand('SELECT EXISTS (${inner.sql})', inner.parameters),
+      options: options,
     );
     return Codecs.boolean.decode(result.rows.single.single);
   }
@@ -348,6 +364,11 @@ class TableSet<R, F extends Fields> extends Query<R, F> {
   ) => BatchInsert._(database, _fields, _state, [
     for (final row in rows) List<Assignment>.unmodifiable(values(_fields, row)),
   ]);
-  Future<R> createRow(List<Assignment> Function(F) assignments) =>
-      insert(assignments).returning(definition.selectRow).single();
+  Future<R> createRow(
+    List<Assignment> Function(F) assignments, {
+    ExecutionOptions options = const ExecutionOptions(),
+  }) =>
+      insert(assignments)
+          .returning(definition.selectRow)
+          .single(options: options);
 }

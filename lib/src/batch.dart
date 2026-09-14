@@ -71,16 +71,27 @@ final class BatchInsert<F extends Fields> {
   }
 
   List<SqlCommand> compile() => _compile();
-  Future<SqlResult> _run([_SelectionPlan? selection]) async {
+  Future<SqlResult> _run({
+    _SelectionPlan? selection,
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
+    options.check();
     final commands = _compile(selection);
     if (commands.isEmpty) return const SqlResult([]);
     Future<SqlResult> execute(Database<Backend> db) async {
       var count = 0;
       final rows = <List<Object?>>[];
-      for (final command in commands) {
-        final result = await db.execute(command);
-        count += result.affectedRows;
-        rows.addAll(result.rows);
+      try {
+        for (final command in commands) {
+          final result = await db.execute(command, options: options);
+          count += result.affectedRows;
+          rows.addAll(result.rows);
+        }
+      } catch (_) {
+        // Cancellation can happen between statements, after earlier chunks
+        // succeeded. Catching it must not allow a partial batch to commit.
+        if (db.inTransaction) db._statementFailed = true;
+        rethrow;
       }
       return SqlResult(rows, affectedRows: count);
     }
@@ -90,7 +101,9 @@ final class BatchInsert<F extends Fields> {
         : database.transaction(execute);
   }
 
-  Future<int> execute() async => (await _run()).affectedRows;
+  Future<int> execute({
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async => (await _run(options: options)).affectedRows;
   BatchReturning<R> returning<R>(Selection<R> Function(F) selection) =>
       BatchReturning._(this, selection(_fields));
 }
@@ -99,10 +112,12 @@ final class BatchReturning<R> {
   final BatchInsert<Fields> _batch;
   final Selection<R> _selection;
   BatchReturning._(this._batch, this._selection);
-  Future<List<R>> get() async {
+  Future<List<R>> get({
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
     final plan = _SelectionPlan();
     final decode = _selection._bind(plan);
-    final result = await _batch._run(plan);
+    final result = await _batch._run(selection: plan, options: options);
     return [for (final row in result.rows) decode(row)];
   }
 }

@@ -44,5 +44,10 @@ Migrations should be saved, reviewed and committed before use in persistent
 environments. See [migration workflows](docs/migrations.md) for diffs, renames,
 rebuilds and existing-database baselines. The in-memory example builds an initial migration directly for clarity.
 
+Use `query.stream(batchSize: 128)` with `await for` to read through a database
+cursor. Reads and mutations accept `ExecutionOptions` for statement deadlines and
+cancellation. See [streaming and execution](docs/execution.md) for connection
+lifetime, batch sizing and backend behavior.
+
 Set `ORM_TEST_POSTGRES` to a **disposable** local PostgreSQL database to include
 PostgreSQL integration tests. The tests create and drop their own test tables.

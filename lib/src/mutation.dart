@@ -249,8 +249,10 @@ final class Mutation<F extends Fields> {
   }
 
   SqlCommand compile() => _compile();
-  Future<int> execute() async =>
-      (await database.execute(compile())).affectedRows;
+  Future<int> execute({
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async =>
+      (await database.execute(compile(), options: options)).affectedRows;
   Returning<R> returning<R>(Selection<R> Function(F) selection) =>
       Returning._(this, selection(_fields));
 }
@@ -259,15 +261,22 @@ final class Returning<R> {
   final Mutation<Fields> _mutation;
   final Selection<R> _selection;
   Returning._(this._mutation, this._selection);
-  Future<List<R>> get() async {
+  Future<List<R>> get({
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
     final plan = _SelectionPlan();
     final decode = _selection._bind(plan);
-    final result = await _mutation.database.execute(_mutation._compile(plan));
+    final result = await _mutation.database.execute(
+      _mutation._compile(plan),
+      options: options,
+    );
     return [for (final row in result.rows) decode(row)];
   }
 
-  Future<R> single() async {
-    final result = await get();
+  Future<R> single({
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
+    final result = await get(options: options);
     if (result.length != 1) {
       throw OrmException(
         'QUERY.CARDINALITY',
@@ -277,7 +286,9 @@ final class Returning<R> {
     return result.single;
   }
 
-  Future<R?> first() async => (await get()).firstOrNull;
+  Future<R?> first({
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async => (await get(options: options)).firstOrNull;
 }
 
 final class _Conflict(

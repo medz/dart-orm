@@ -17,11 +17,15 @@ final class Capabilities {
   final int maxParameters;
   final bool returning;
   final bool windowFunctions;
+  final bool streaming;
+  final bool cancellation;
   const Capabilities({
     required this.dialect,
     required this.maxParameters,
     this.returning = true,
     this.windowFunctions = true,
+    this.streaming = false,
+    this.cancellation = false,
   });
 }
 
@@ -33,7 +37,14 @@ final class SqlResult {
 }
 
 abstract interface class SqlConnection {
-  Future<SqlResult> execute(SqlCommand command);
+  Future<SqlResult> execute(
+    SqlCommand command, {
+    ExecutionOptions options = const ExecutionOptions(),
+  });
+  Future<SqlCursor> openCursor(
+    SqlCommand command, {
+    ExecutionOptions options = const ExecutionOptions(),
+  });
 
   /// Permanently discard a connection whose protocol or transaction is uncertain.
   Future<void> invalidate();
@@ -77,13 +88,17 @@ final class SqliteTransaction extends TransactionOptions<Sqlite> {
   String get _begin => 'BEGIN ${mode.name.toUpperCase()}';
 }
 
+enum QueryOperation { execute, cursorOpen, cursorFetch, cursorClose }
+
 final class QueryEvent {
+  final QueryOperation operation;
   final String sql;
   final int parameterCount;
   final Duration elapsed;
   final int? rowCount;
   final Object? error;
   const QueryEvent({
+    this.operation = QueryOperation.execute,
     required this.sql,
     required this.parameterCount,
     required this.elapsed,
@@ -100,6 +115,9 @@ class Database<B extends Backend> {
   final SqlConnection? _connection;
   final bool _transaction;
   final Set<Future<void>> _pending = {};
+  final Set<Future<void> Function()> _streams = {};
+  Future<void> _stopStreams() =>
+      Future.wait(_streams.toList().map((stop) => stop()));
   bool _active = true;
   bool _childActive = false;
   bool _statementFailed = false;
@@ -151,8 +169,17 @@ class Database<B extends Backend> {
 
   Future<SqlResult> _execute(
     SqlConnection connection,
-    SqlCommand command,
-  ) async {
+    SqlCommand command, {
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
+    options.check();
+    if ((options.cancellation != null || options.timeout != null) &&
+        !capabilities.cancellation) {
+      throw const OrmException(
+        'CAPABILITY.CANCEL',
+        'This driver cannot cancel a running statement.',
+      );
+    }
     if (command.parameters.length > capabilities.maxParameters) {
       throw const OrmException(
         'QUERY.PARAMETERS',
@@ -163,7 +190,7 @@ class Database<B extends Backend> {
     SqlResult? result;
     Object? error;
     try {
-      return result = await connection.execute(command);
+      return result = await connection.execute(command, options: options);
     } catch (e) {
       error = e;
       if (inTransaction) _statementFailed = true;
@@ -185,8 +212,20 @@ class Database<B extends Backend> {
     }
   }
 
-  Future<SqlResult> execute(SqlCommand command) =>
-      _run((c) => _execute(c, command));
+  Future<SqlResult> execute(
+    SqlCommand command, {
+    ExecutionOptions options = const ExecutionOptions(),
+  }) {
+    options.check();
+    if ((options.cancellation != null || options.timeout != null) &&
+        !capabilities.cancellation) {
+      throw const OrmException(
+        'CAPABILITY.CANCEL',
+        'This driver cannot cancel a running statement.',
+      );
+    }
+    return _run((c) => _execute(c, command, options: options));
+  }
 
   /// Retains one connection across transactions and session-scoped operations.
   /// The borrowed view expires when the callback returns.
@@ -208,6 +247,7 @@ class Database<B extends Backend> {
         final result = await action(session);
         session._active = false;
         if (session._pending.isNotEmpty) {
+          await session._stopStreams();
           await Future.wait(session._pending.toList());
           throw const OrmException(
             'SESSION.UNAWAITED',
@@ -217,6 +257,7 @@ class Database<B extends Backend> {
         return result;
       } finally {
         session._active = false;
+        await session._stopStreams();
         await Future.wait(session._pending.toList());
       }
     });
@@ -255,6 +296,7 @@ class Database<B extends Backend> {
           final result = await action(tx);
           tx._active = false;
           if (tx._pending.isNotEmpty || tx._childActive) {
+            await tx._stopStreams();
             await Future.wait(tx._pending.toList());
             throw const OrmException(
               'TRANSACTION.UNAWAITED',
@@ -272,6 +314,7 @@ class Database<B extends Backend> {
           return result;
         } catch (error, stack) {
           tx._active = false;
+          await tx._stopStreams();
           await Future.wait(tx._pending.toList());
           try {
             await _execute(connection, SqlCommand('ROLLBACK'));
@@ -311,6 +354,7 @@ class Database<B extends Backend> {
         final result = await action(child);
         child._active = false;
         if (child._pending.isNotEmpty || child._childActive) {
+          await child._stopStreams();
           await Future.wait(child._pending.toList());
           throw const OrmException(
             'TRANSACTION.UNAWAITED',
@@ -327,6 +371,7 @@ class Database<B extends Backend> {
         return result;
       } catch (error, stack) {
         child._active = false;
+        await child._stopStreams();
         await Future.wait(child._pending.toList());
         try {
           await _execute(connection, SqlCommand('ROLLBACK TO SAVEPOINT $name'));
@@ -352,7 +397,11 @@ class Database<B extends Backend> {
     }
     if (!_active) return;
     _active = false;
-    await Future.wait(_pending.toList());
-    await driver.close();
+    try {
+      await _stopStreams();
+    } finally {
+      await Future.wait(_pending.toList());
+      await driver.close();
+    }
   }
 }

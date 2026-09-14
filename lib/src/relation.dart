@@ -149,8 +149,9 @@ abstract class _RelationBinding {
   Future<List<Object?>> load(
     Database<Backend> db,
     SqlConnection connection,
-    List<List<Object?>> parents,
-  );
+    List<List<Object?>> parents, {
+    ExecutionOptions options = const ExecutionOptions(),
+  });
 }
 
 final class _TypedRelationBinding<R, F extends Fields>(
@@ -161,8 +162,9 @@ final class _TypedRelationBinding<R, F extends Fields>(
   Future<List<Object?>> load(
     Database<Backend> db,
     SqlConnection connection,
-    List<List<Object?>> parents,
-  ) async {
+    List<List<Object?>> parents, {
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
     final keys = <_RelationKey>{};
     final parentKeys = [
       for (final row in parents)
@@ -197,8 +199,15 @@ final class _TypedRelationBinding<R, F extends Fields>(
       final result = await db._execute(
         connection,
         _compile(db, plan, all.sublist(offset, end)),
+        options: options,
       );
-      final rows = await _expandRelations(db, connection, plan, result.rows);
+      final rows = await _expandRelations(
+        db,
+        connection,
+        plan,
+        result.rows,
+        options: options,
+      );
       for (final row in rows) {
         final key = _RelationKey([for (final i in childIndices) row[i]]);
         (grouped[key] ??= []).add(decode(row));
@@ -268,8 +277,7 @@ final class _TypedRelationBinding<R, F extends Fields>(
       }
       query += ' ORDER BY "orm_rank"';
     } else if (order.isNotEmpty) {
-      query +=
-          ' ORDER BY ${order.map((o) => o._write(w)).join(', ')}';
+      query += ' ORDER BY ${order.map((o) => o._write(w)).join(', ')}';
     }
     return SqlCommand(query, w.parameters);
   }
@@ -279,15 +287,21 @@ Future<List<List<Object?>>> _expandRelations(
   Database<Backend> db,
   SqlConnection connection,
   _SelectionPlan plan,
-  List<List<Object?>> source,
-) async {
+  List<List<Object?>> source, {
+  ExecutionOptions options = const ExecutionOptions(),
+}) async {
   if (plan.relations.isEmpty || source.isEmpty) return source;
   final rows = [
     for (final row in source)
       [...row, ...List<Object?>.filled(plan.relations.length, null)],
   ];
   for (var i = 0; i < plan.relations.length; i++) {
-    final values = await plan.relations[i].load(db, connection, rows);
+    final values = await plan.relations[i].load(
+      db,
+      connection,
+      rows,
+      options: options,
+    );
     for (var row = 0; row < rows.length; row++) {
       rows[row][plan.columns.length + i] = values[row];
     }
