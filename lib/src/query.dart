@@ -202,7 +202,14 @@ class TableSet<R, F extends Fields> extends Query<R, F> {
     _state,
     _MutationKind.insert,
     assignments(_fields),
+    createFields: definition.createFields,
   );
+  BatchInsert<F> insertMany<T>(
+    Iterable<T> rows,
+    List<Assignment> Function(F, T) values,
+  ) => BatchInsert._(database, _fields, _state, [
+    for (final row in rows) List<Assignment>.unmodifiable(values(_fields, row)),
+  ]);
   Future<R> createRow(List<Assignment> Function(F) assignments) =>
       insert(assignments).returning(definition.selectRow).single();
 }

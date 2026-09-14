@@ -200,6 +200,119 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
       expect(() => db.table(users).get(), throwsA(isA<OrmException>()));
     });
 
+    test(
+      'native upsert updates atomically using existing and incoming values',
+      () async {
+        final initial = await create('same');
+        final score = await db
+            .table(users)
+            .insert((u) => [u.email.set('same'), u.score.set(5)])
+            .onConflictUpdate(
+              target: (u) => [u.email],
+              set: (existing, incoming) => [
+                existing.score.setExpression(incoming.score.plus(1)),
+              ],
+            )
+            .returning((u) => u.score)
+            .single();
+        expect(score, 6);
+        expect((await db.table(users).single()).id, initial.id);
+        final skipped = await db
+            .table(users)
+            .insert((u) => [u.email.set('same')])
+            .onConflictDoNothing(target: (u) => [u.email])
+            .returning((u) => u.id)
+            .first();
+        expect(skipped, null);
+        expect(await db.table(users).count(), 1);
+        expect(
+          () => db
+              .table(users)
+              .insert((u) => [u.email.set('x')])
+              .onConflictUpdate(
+                target: (u) => [u.score],
+                set: (a, b) => [a.score.set(1)],
+              ),
+          throwsA(isA<OrmException>()),
+        );
+      },
+    );
+
+    test(
+      'bulk inserts split at parameter limits and opt into returning',
+      () async {
+        final events = <QueryEvent>[];
+        final limited = Database(
+          _LimitedDriver(db.driver, 5),
+          onQuery: events.add,
+        );
+        final batch = limited
+            .table(users)
+            .insertMany(
+              List.generate(7, (i) => i),
+              (u, i) => [u.email.set('bulk$i'), u.score.set(i)],
+            );
+        expect(batch.compile().length, 4);
+        expect(batch.compile().every((c) => c.parameters.length <= 5), true);
+        final scores = await batch.returning((u) => u.score).get();
+        expect(scores, unorderedEquals(List.generate(7, (i) => i)));
+        expect(events.where((e) => e.sql.startsWith('INSERT')).length, 4);
+        expect(events.where((e) => e.sql == 'BEGIN').length, 1);
+        expect(await db.table(users).count(), 7);
+      },
+    );
+
+    test('a failed later bulk chunk rolls back all previous chunks', () async {
+      final limited = Database(_LimitedDriver(db.driver, 2));
+      final batch = limited.table(users).insertMany([
+        'one',
+        'two',
+        'three',
+        'one',
+      ], (u, email) => [u.email.set(email)]);
+      expect(batch.compile().length, 2);
+      await expectLater(batch.execute(), throwsA(anything));
+      expect(await db.table(users).count(), 0);
+      await db.transaction((tx) async {
+        expect(
+          await tx.table(users).insertMany([
+            'a',
+            'b',
+          ], (u, email) => [u.email.set(email)]).execute(),
+          2,
+        );
+      });
+      expect(await db.table(users).count(), 2);
+    });
+
+    test(
+      'bulk optional field shapes preserve defaults and explicit null',
+      () async {
+        final count = await db.table(users).insertMany(
+          [false, true],
+          (u, explicit) => [
+            u.email.set(explicit ? 'set' : 'default'),
+            if (explicit) u.score.set(10),
+            u.nickname.set(null),
+          ],
+        ).execute();
+        expect(count, 2);
+        expect(
+          await db
+              .table(users)
+              .orderBy((u) => [u.score.asc()])
+              .select((u) => u.score)
+              .get(),
+          [0, 10],
+        );
+        final empty = db
+            .table(users)
+            .insertMany(<String>[], (u, email) => [u.email.set(email)]);
+        expect(empty.compile(), isEmpty);
+        expect(await empty.execute(), 0);
+      },
+    );
+
     group('relations', () {
       setUp(() async {
         await db.execute(
@@ -378,4 +491,16 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
       );
     });
   });
+}
+
+final class _LimitedDriver(final Driver<Backend> inner, final int limit)
+    implements Driver<Backend> {
+  @override
+  Capabilities get capabilities =>
+      Capabilities(dialect: inner.capabilities.dialect, maxParameters: limit);
+  @override
+  Future<R> run<R>(Future<R> Function(SqlConnection) action) =>
+      inner.run(action);
+  @override
+  Future<void> close() async {}
 }

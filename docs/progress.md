@@ -20,6 +20,8 @@ This file records verified delivery, not planned capabilities presented as worki
 - Dialect DDL, cyclic PostgreSQL FK creation, immutable migration checksums and atomic history.
 - Concurrent migration serialization, read-only planning, column inspection and column drift checks.
 - Runnable generated-client example with migrations, transactions and relationship selection.
+- Atomic upsert with declared unique targets and typed existing/incoming field expressions.
+- Batch inserts with parameter-aware chunks, optional field shapes, returning and all-chunk rollback.
 
 ## Delivery sequence
 
@@ -44,7 +46,7 @@ transactions, migration rollback/history and the generated application client.
 
 ## Still required for the goal
 
-- Batch writes, upsert, advanced joins/subqueries/CTE/window/union and keyset pagination.
+- Advanced joins/subqueries/CTE/window/union and keyset pagination.
 - Aggregation legality checks, composite-key relation batching acceptance and join-based to-one loading.
 - Migration diff/rename/rebuild, baseline, full constraint/index drift and nontransactional recovery.
 - Complete migration CLI and build integration; custom codec/schema authoring.
@@ -56,6 +58,10 @@ Current to-one relation projections use batching, not joins. `verifyColumns` che
 column names/types/nullability only and is deliberately not named full schema verification.
 The migration runner currently accepts transactional migrations only. These are
 implementation stages, not a reduction of the active goal.
+
+The mutation additions pass 36 shared SQLite/PostgreSQL integration checks in
+`database_test.dart` (eight more than the previous relation suite). Full analysis
+and the expanded complete suite are required before the next milestone closes.
 
 ## Environment
 

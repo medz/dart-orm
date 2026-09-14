@@ -14,13 +14,100 @@ final class Mutation<F extends Fields> {
   final _QueryState _state;
   final _MutationKind _kind;
   final List<Assignment> _assignments;
+  final F Function(TableRef)? _createFields;
+  final _Conflict? _conflict;
+  final List<List<Assignment>>? _rows;
   Mutation._(
     this.database,
     this._fields,
     this._state,
     this._kind,
+    List<Assignment> assignments, {
+    this._createFields,
+    this._conflict,
+    this._rows,
+  }) : _assignments = List.unmodifiable(assignments);
+
+  Mutation<F> onConflictDoNothing({List<Field<Object?>> Function(F)? target}) =>
+      _withConflict(target == null ? [] : target(_fields), const [], null);
+
+  Mutation<F> onConflictUpdate({
+    required List<Field<Object?>> Function(F) target,
+    required List<Assignment> Function(F existing, F incoming) set,
+  }) {
+    if (_createFields == null) {
+      throw const OrmException(
+        'MUTATION.CONFLICT',
+        'Upsert applies to an insert.',
+      );
+    }
+    final incoming = _createFields(TableRef(_state.source.schema));
+    final assignments = set(_fields, incoming);
+    if (assignments.isEmpty) {
+      throw const OrmException(
+        'MUTATION.EMPTY',
+        'Conflict update needs assignments.',
+      );
+    }
+    return _withConflict(target(_fields), assignments, incoming.table);
+  }
+
+  Mutation<F> _withConflict(
+    List<Field<Object?>> target,
     List<Assignment> assignments,
-  ) : _assignments = List.unmodifiable(assignments);
+    TableRef? incoming,
+  ) {
+    if (_kind != _MutationKind.insert) {
+      throw const OrmException(
+        'MUTATION.CONFLICT',
+        'Upsert applies to an insert.',
+      );
+    }
+    final schema = _state.source.schema;
+    final names = [for (final field in target) field.definition.name];
+    if (names.isEmpty && assignments.isNotEmpty) {
+      throw const OrmException(
+        'MUTATION.CONFLICT',
+        'Conflict update requires a unique key target.',
+      );
+    }
+    if (target.any((f) => f.table != _state.source)) {
+      throw const OrmException(
+        'QUERY.SCOPE',
+        'Conflict target belongs to another table.',
+      );
+    }
+    final keys = [
+      schema.primaryKey,
+      ...schema.uniqueKeys,
+      for (final i in schema.indexes)
+        if (i.unique) i.columns,
+    ];
+    if ((names.isNotEmpty || assignments.isNotEmpty) &&
+        !keys.any(
+          (k) =>
+              k.length == names.length &&
+              k.indexed.every((entry) => entry.$2 == names[entry.$1]),
+        )) {
+      throw const OrmException(
+        'MUTATION.CONFLICT',
+        'Conflict target must be a declared unique key.',
+      );
+    }
+    return Mutation._(
+      database,
+      _fields,
+      _state,
+      _kind,
+      _assignments,
+      createFields: _createFields,
+      conflict: _Conflict(
+        List.unmodifiable(names),
+        List.unmodifiable(assignments),
+        incoming,
+      ),
+    );
+  }
 
   SqlCommand _compile([_SelectionPlan? selection]) {
     if (selection != null && selection.relations.isNotEmpty) {
@@ -41,21 +128,37 @@ final class Mutation<F extends Fields> {
       );
     }
     final w = _Writer(database.dialect, {_state.source: 't0'});
-    final names = <String>{};
-    for (final a in _assignments) {
-      if (a.field.table != _state.source) {
-        throw const OrmException(
-          'QUERY.SCOPE',
-          'Assignment belongs to another table.',
-        );
-      }
-      if (!names.add(a.field.definition.name)) {
-        throw const OrmException(
-          'MUTATION.DUPLICATE',
-          'A column can be assigned only once.',
-        );
+    void validate(List<Assignment> assignments) {
+      final names = <String>{};
+      for (final a in assignments) {
+        if (a._value == null &&
+            !a.field.definition.generated &&
+            a.field.definition.defaultSql == null) {
+          throw const OrmException(
+            'MUTATION.DEFAULT',
+            'Column has no declared database default.',
+          );
+        }
+        if (a.field.table != _state.source) {
+          throw const OrmException(
+            'QUERY.SCOPE',
+            'Assignment belongs to another table.',
+          );
+        }
+        if (!names.add(a.field.definition.name)) {
+          throw const OrmException(
+            'MUTATION.DUPLICATE',
+            'A column can be assigned only once.',
+          );
+        }
       }
     }
+
+    validate(_assignments);
+    for (final row in _rows ?? <List<Assignment>>[]) {
+      validate(row);
+    }
+    if (_conflict case final conflict?) validate(conflict.assignments);
     String assigned(Assignment a) {
       if (a._value case final expression?) return expression.write(w);
       if (a.field.definition.defaultSql == null) {
@@ -85,7 +188,10 @@ final class Mutation<F extends Fields> {
           b.write(
             ' (${values.map((a) => w.quote(a.field.definition.name)).join(', ')})',
           );
-          b.write(' VALUES (${values.map(assigned).join(', ')})');
+          final rows = _rows ?? [_assignments];
+          b.write(
+            ' VALUES ${rows.map((row) => '(${row.where((a) => a._value != null).map(assigned).join(', ')})').join(', ')}',
+          );
         }
       case _MutationKind.update:
         if (_assignments.isEmpty) {
@@ -102,6 +208,21 @@ final class Mutation<F extends Fields> {
     }
     if (_state.predicate case final predicate?) {
       b.write(' WHERE ${predicate._node.write(w)}');
+    }
+    if (_conflict case final conflict?) {
+      b.write(' ON CONFLICT');
+      if (conflict.target.isNotEmpty) {
+        b.write(' (${conflict.target.map(w.quote).join(', ')})');
+      }
+      if (conflict.assignments.isEmpty) {
+        b.write(' DO NOTHING');
+      } else {
+        w.aliases[conflict.incoming!] = 'excluded';
+        b.write(
+          ' DO UPDATE SET ${conflict.assignments.map((a) => '${w.quote(a.field.definition.name)} = ${assigned(a)}').join(', ')}',
+        );
+        w.aliases.remove(conflict.incoming);
+      }
     }
     if (selection != null) {
       if (!database.capabilities.returning) {
@@ -146,4 +267,12 @@ final class Returning<R> {
     }
     return result.single;
   }
+
+  Future<R?> first() async => (await get()).firstOrNull;
 }
+
+final class _Conflict(
+  final List<String> target,
+  final List<Assignment> assignments,
+  final TableRef? incoming,
+);
