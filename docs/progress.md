@@ -13,6 +13,13 @@ This file records verified delivery, not planned capabilities presented as worki
 - Native SQLite worker with verified foreign keys, journal mode and parameter limit.
 - PostgreSQL driver with a single pool owner, TLS settings and explicit borrowed pools.
 - Transaction lifecycle, rollback, savepoints, pending work checks and query observation.
+- Analyzer-based record generator, scalar annotations, composite keys, indexes and FK validation.
+- Generated table accessors, named create parameters, byId, typed patches and schema snapshots.
+- Batched and nested relation projections, per-parent SQL window pagination, optional/required relations.
+- Correlated relation any/none/every/count; UNKNOWN fails every, and empty sets satisfy it.
+- Dialect DDL, cyclic PostgreSQL FK creation, immutable migration checksums and atomic history.
+- Concurrent migration serialization, read-only planning, column inspection and column drift checks.
+- Runnable generated-client example with migrations, transactions and relationship selection.
 
 ## Delivery sequence
 
@@ -29,11 +36,26 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-The first execution slice passes static analysis and 18 integration checks against
-native SQLite and a disposable PostgreSQL 18.4 instance. Coverage includes CRUD,
-projection, SQL injection-shaped input, pagination, rollback/savepoint recovery,
-unawaited work, escaped sessions and closing during active work. The table metadata
-in these tests is hand-written; generation and relationships are not implemented yet.
+Static analysis is clean. The complete suite passes 49 checks with native SQLite
+and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
+composite-key source validation, projections, relations, per-parent pagination,
+transactions, migration rollback/history and the generated application client.
+`dart run example/main.dart` runs successfully against a real in-memory SQLite DB.
+
+## Still required for the goal
+
+- Batch writes, upsert, advanced joins/subqueries/CTE/window/union and keyset pagination.
+- Aggregation legality checks, composite-key relation batching acceptance and join-based to-one loading.
+- Migration diff/rename/rebuild, baseline, full constraint/index drift and nontransactional recovery.
+- Complete migration CLI and build integration; custom codec/schema authoring.
+- Cancellation, retry classification, genuine streaming and backend capability coverage.
+- Browser worker/persistence adapter and real browser verification; native Flutter/AOT checks.
+- User documentation, performance measurements and complete acceptance review.
+
+Current to-one relation projections use batching, not joins. `verifyColumns` checks
+column names/types/nullability only and is deliberately not named full schema verification.
+The migration runner currently accepts transactional migrations only. These are
+implementation stages, not a reduction of the active goal.
 
 ## Environment
 

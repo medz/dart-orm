@@ -23,6 +23,12 @@ final class Mutation<F extends Fields> {
   ) : _assignments = List.unmodifiable(assignments);
 
   SqlCommand _compile([_SelectionPlan? selection]) {
+    if (selection != null && selection.relations.isNotEmpty) {
+      throw const OrmException(
+        'MUTATION.RELATION',
+        'RETURNING selects scalar fields; query relations after the mutation.',
+      );
+    }
     if (_state.limit != null ||
         _state.offset != null ||
         _state.order.isNotEmpty ||
@@ -37,29 +43,33 @@ final class Mutation<F extends Fields> {
     final w = _Writer(database.dialect, {_state.source: 't0'});
     final names = <String>{};
     for (final a in _assignments) {
-      if (a.field.table != _state.source)
+      if (a.field.table != _state.source) {
         throw const OrmException(
           'QUERY.SCOPE',
           'Assignment belongs to another table.',
         );
-      if (!names.add(a.field.definition.name))
+      }
+      if (!names.add(a.field.definition.name)) {
         throw const OrmException(
           'MUTATION.DUPLICATE',
           'A column can be assigned only once.',
         );
+      }
     }
     String assigned(Assignment a) {
       if (a._value case final expression?) return expression.write(w);
-      if (a.field.definition.defaultSql == null)
+      if (a.field.definition.defaultSql == null) {
         throw const OrmException(
           'MUTATION.DEFAULT',
           'Column has no declared database default.',
         );
-      if (database.dialect == SqlDialect.sqlite)
+      }
+      if (database.dialect == SqlDialect.sqlite) {
         throw const OrmException(
           'CAPABILITY.DEFAULT',
           'SQLite does not support SET column = DEFAULT.',
         );
+      }
       return 'DEFAULT';
     }
 
@@ -78,25 +88,28 @@ final class Mutation<F extends Fields> {
           b.write(' VALUES (${values.map(assigned).join(', ')})');
         }
       case _MutationKind.update:
-        if (_assignments.isEmpty)
+        if (_assignments.isEmpty) {
           throw const OrmException(
             'MUTATION.EMPTY',
             'Update needs an assignment.',
           );
+        }
         b.write(
           'UPDATE $table SET ${_assignments.map((a) => '${w.quote(a.field.definition.name)} = ${assigned(a)}').join(', ')}',
         );
       case _MutationKind.delete:
         b.write('DELETE FROM $table');
     }
-    if (_state.predicate case final predicate?)
+    if (_state.predicate case final predicate?) {
       b.write(' WHERE ${predicate._node.write(w)}');
+    }
     if (selection != null) {
-      if (!database.capabilities.returning)
+      if (!database.capabilities.returning) {
         throw const OrmException(
           'CAPABILITY.RETURNING',
           'Driver does not support RETURNING.',
         );
+      }
       w.unqualified = database.dialect == SqlDialect.sqlite;
       b.write(
         ' RETURNING ${selection.columns.map((e) => e._node.write(w)).join(', ')}',
@@ -125,11 +138,12 @@ final class Returning<R> {
 
   Future<R> single() async {
     final result = await get();
-    if (result.length != 1)
+    if (result.length != 1) {
       throw OrmException(
         'QUERY.CARDINALITY',
         'Expected one returned row, received ${result.length}.',
       );
+    }
     return result.single;
   }
 }

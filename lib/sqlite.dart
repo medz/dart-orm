@@ -43,8 +43,9 @@ final class SqliteDriver implements Driver<Sqlite> {
   SqliteDriver._(this._worker, this.capabilities);
 
   static Future<SqliteDriver> open(SqliteOptions options) async {
-    if (options.path.isEmpty || options.busyTimeout.isNegative)
+    if (options.path.isEmpty || options.busyTimeout.isNegative) {
       throw ArgumentError('Invalid SQLite options.');
+    }
     final worker = _SqliteWorker();
     final (port, maxParameters, version) = await worker.open(options);
     worker.port = port;
@@ -63,8 +64,9 @@ final class SqliteDriver implements Driver<Sqlite> {
 
   @override
   Future<R> run<R>(Future<R> Function(SqlConnection) action) {
-    if (_closed)
+    if (_closed) {
       throw const OrmException('DRIVER.CLOSED', 'SQLite driver is closed.');
+    }
     // Queue the whole lease so another caller cannot enter an active transaction.
     final result = _tail.then((_) => action(_worker));
     _tail = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
@@ -130,8 +132,9 @@ final class _SqliteWorker implements SqlConnection {
 
   @override
   Future<SqlResult> execute(SqlCommand command) {
-    if (_stopped)
+    if (_stopped) {
       throw const OrmException('DRIVER.CLOSED', 'SQLite worker is closed.');
+    }
     final id = ++_id;
     final result = Completer<SqlResult>();
     _pending[id] = result;
@@ -186,8 +189,9 @@ void _sqliteMain((SendPort, SqliteOptions) init) async {
     var maxParameters = 999;
     for (final row in db.select('PRAGMA compile_options')) {
       final option = row.values.single as String;
-      if (option.startsWith('MAX_VARIABLE_NUMBER='))
+      if (option.startsWith('MAX_VARIABLE_NUMBER=')) {
         maxParameters = int.parse(option.split('=').last);
+      }
     }
     response.send([
       0,

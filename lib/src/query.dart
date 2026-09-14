@@ -76,11 +76,12 @@ class Query<R, F extends Fields> {
   (_SelectionPlan, _Decoder<R>) _plan() {
     final plan = _SelectionPlan();
     final decode = _selection._bind(plan);
-    if (plan.columns.isEmpty)
+    if (plan.columns.isEmpty) {
       throw const OrmException(
         'QUERY.EMPTY_SELECTION',
         'Select at least one field.',
       );
+    }
     return (plan, decode);
   }
 
@@ -89,23 +90,29 @@ class Query<R, F extends Fields> {
     final buffer = StringBuffer('SELECT ${_state.distinct ? 'DISTINCT ' : ''}');
     buffer.write(plan.columns.map((e) => e._node.write(w)).join(', '));
     buffer.write(' FROM ${w.quote(_state.source.schema.name)} AS "t0"');
-    if (_state.predicate case final predicate?)
+    if (_state.predicate case final predicate?) {
       buffer.write(' WHERE ${predicate._node.write(w)}');
-    if (_state.group.isNotEmpty)
+    }
+    if (_state.group.isNotEmpty) {
       buffer.write(
         ' GROUP BY ${_state.group.map((e) => e._node.write(w)).join(', ')}',
       );
-    if (_state.having case final having?)
+    }
+    if (_state.having case final having?) {
       buffer.write(' HAVING ${having._node.write(w)}');
-    if (_state.order.isNotEmpty)
+    }
+    if (_state.order.isNotEmpty) {
       buffer.write(
         ' ORDER BY ${_state.order.map((o) => '${o.expression._node.write(w)} ${o.descending ? 'DESC' : 'ASC'}').join(', ')}',
       );
-    if (_state.limit case final limit?)
+    }
+    if (_state.limit case final limit?) {
       buffer.write(' LIMIT ${w.parameter(limit)}');
+    }
     if (_state.offset case final offset?) {
-      if (_state.limit == null && database.dialect == SqlDialect.sqlite)
+      if (_state.limit == null && database.dialect == SqlDialect.sqlite) {
         buffer.write(' LIMIT -1');
+      }
       buffer.write(' OFFSET ${w.parameter(offset)}');
     }
     return SqlCommand(buffer.toString(), w.parameters);
@@ -116,7 +123,13 @@ class Query<R, F extends Fields> {
   Future<List<R>> get() => database._run((connection) async {
     final (plan, decode) = _plan();
     final result = await database._execute(connection, _compile(plan));
-    return [for (final row in result.rows) decode(row)];
+    final rows = await _expandRelations(
+      database,
+      connection,
+      plan,
+      result.rows,
+    );
+    return [for (final row in rows) decode(row)];
   });
 
   Future<R?> first() async {
@@ -128,11 +141,12 @@ class Query<R, F extends Fields> {
     final rows = await take(
       _state.limit == null || _state.limit! > 2 ? 2 : _state.limit!,
     ).get();
-    if (rows.length != 1)
+    if (rows.length != 1) {
       throw OrmException(
         'QUERY.CARDINALITY',
         'Expected one row, received ${rows.length}.',
       );
+    }
     return rows.single;
   }
 
@@ -168,10 +182,12 @@ class Query<R, F extends Fields> {
 
 class TableSet<R, F extends Fields> extends Query<R, F> {
   final Table<R, F> definition;
-  factory TableSet(Database<Backend> database, Table<R, F> definition) {
-    final fields = definition.createFields(TableRef(definition.schema));
-    return TableSet._(database, definition, fields);
-  }
+  TableSet(Database<Backend> database, Table<R, F> definition)
+    : this._(
+        database,
+        definition,
+        definition.createFields(TableRef(definition.schema)),
+      );
   TableSet._(Database<Backend> database, this.definition, F fields)
     : super._(
         database,

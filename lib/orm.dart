@@ -12,3 +12,4 @@ part 'src/table.dart';
 part 'src/database.dart';
 part 'src/query.dart';
 part 'src/mutation.dart';
+part 'src/relation.dart';

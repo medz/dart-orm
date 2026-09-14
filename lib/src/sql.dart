@@ -97,7 +97,9 @@ final class _Writer {
       (SqlDialect.sqlite, DateTime v) => v.toUtc().toIso8601String(),
       _ => value,
     });
-    return dialect == SqlDialect.postgres ? '\$${parameters.length}' : '?';
+    return dialect == SqlDialect.postgres
+        ? '\$${parameters.length}'
+        : '?${parameters.length}';
   }
 }
 

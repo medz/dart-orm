@@ -15,6 +15,7 @@ final class PostgresOptions {
   final Duration connectTimeout;
   final Duration queryTimeout;
   final String applicationName;
+  final String? schema;
   const PostgresOptions({
     required this.url,
     this.tls = PostgresTls.verifyFull,
@@ -22,6 +23,7 @@ final class PostgresOptions {
     this.connectTimeout = const Duration(seconds: 10),
     this.queryTimeout = const Duration(seconds: 30),
     this.applicationName = 'dart-orm',
+    this.schema,
   });
 }
 
@@ -69,6 +71,18 @@ final class PostgresDriver implements Driver<Postgres> {
         queryTimeout: options.queryTimeout,
         applicationName: options.applicationName,
         timeZone: 'UTC',
+        onOpen: options.schema == null
+            ? null
+            : (connection) async {
+                final schema = '"${options.schema!.replaceAll('"', '""')}"';
+                await connection.execute(
+                  pg.Sql(
+                    r"SELECT pg_catalog.set_config('search_path', $1, false)",
+                    types: [pg.Type.text],
+                  ),
+                  parameters: [schema],
+                );
+              },
         sslMode: switch (options.tls) {
           PostgresTls.verifyFull => pg.SslMode.verifyFull,
           PostgresTls.require => pg.SslMode.require,
@@ -83,8 +97,9 @@ final class PostgresDriver implements Driver<Postgres> {
       const Capabilities(dialect: SqlDialect.postgres, maxParameters: 65535);
   @override
   Future<R> run<R>(Future<R> Function(SqlConnection) action) {
-    if (_closed)
+    if (_closed) {
       throw const OrmException('DRIVER.CLOSED', 'PostgreSQL driver is closed.');
+    }
     return _pool.withConnection(
       (connection) => action(_PostgresConnection(connection)),
     );

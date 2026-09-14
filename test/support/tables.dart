@@ -21,7 +21,42 @@ final class UserFields extends Fields {
   late final nickname = column(userNickname);
   late final score = column(userScore);
   UserFields(super.table);
+  Relation<Post, PostFields> get posts =>
+      Relation(postsTable, parent: [id], child: (p) => [p.authorId]);
 }
+
+typedef Post = ({int id, int authorId, String title, String? tag});
+final postId = Column('id', Codecs.integer, generated: true);
+final postAuthorId = Column('author_id', Codecs.integer);
+final postTitle = Column('title', Codecs.text);
+final postTag = Column('tag', Codecs.text.nullable(), nullable: true);
+final postsSchema = TableSchema(
+  'posts',
+  columns: [postId, postAuthorId, postTitle, postTag],
+  primaryKey: ['id'],
+  foreignKeys: [
+    const ForeignKey(['author_id'], 'users', ['id']),
+  ],
+);
+
+final class PostFields extends Fields {
+  late final id = column(postId);
+  late final authorId = column(postAuthorId);
+  late final title = column(postTitle);
+  late final tag = column(postTag);
+  PostFields(super.table);
+  Relation<User, UserFields> get author =>
+      Relation(users, parent: [authorId], child: (u) => [u.id]);
+}
+
+final postsTable = Table<Post, PostFields>(
+  postsSchema,
+  PostFields.new,
+  (p) => (p.id, p.authorId, p.title, p.tag).map(
+    (id, authorId, title, tag) =>
+        (id: id, authorId: authorId, title: title, tag: tag),
+  ),
+);
 
 final users = Table<User, UserFields>(
   usersSchema,

@@ -114,13 +114,15 @@ class Database<B extends Backend> {
       TableSet(this, table);
 
   void _checkActive() {
-    if (!_active)
+    if (!_active) {
       throw const OrmException('SESSION.CLOSED', 'Database session has ended.');
-    if (_childActive)
+    }
+    if (_childActive) {
       throw const OrmException(
         'SESSION.SAVEPOINT',
         'Use the active savepoint session.',
       );
+    }
   }
 
   Future<R> _run<R>(Future<R> Function(SqlConnection) action) {
@@ -233,11 +235,12 @@ class Database<B extends Backend> {
   }
 
   Future<R> savepoint<R>(Future<R> Function(Database<B> tx) action) {
-    if (!inTransaction)
+    if (!inTransaction) {
       throw const OrmException(
         'TRANSACTION.REQUIRED',
         'Savepoints need a transaction.',
       );
+    }
     return _run((connection) async {
       _childActive = true;
       final name = 'orm_sp_${_savepointId++}';
@@ -280,11 +283,12 @@ class Database<B extends Backend> {
   }
 
   Future<void> close() async {
-    if (inTransaction)
+    if (inTransaction) {
       throw const OrmException(
         'SESSION.BORROWED',
         'A transaction cannot close its driver.',
       );
+    }
     if (!_active) return;
     _active = false;
     await Future.wait(_pending.toList());
