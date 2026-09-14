@@ -110,6 +110,13 @@ final class Mutation<F extends Fields> {
   }
 
   SqlCommand _compile([_SelectionPlan? selection]) {
+    if (selection != null &&
+        selection.columns.any((e) => _aggregate(e._node) || _window(e._node))) {
+      throw const OrmException(
+        'MUTATION.RETURNING',
+        'RETURNING cannot contain aggregate or window functions.',
+      );
+    }
     if (selection != null && selection.relations.isNotEmpty) {
       throw const OrmException(
         'MUTATION.RELATION',
@@ -117,6 +124,8 @@ final class Mutation<F extends Fields> {
       );
     }
     if (_state.limit != null ||
+        _state.joins.isNotEmpty ||
+        _state.ctes.isNotEmpty ||
         _state.offset != null ||
         _state.order.isNotEmpty ||
         _state.group.isNotEmpty ||

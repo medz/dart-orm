@@ -93,6 +93,7 @@ final class Table<R, F extends Fields> {
   final F Function(TableRef) createFields;
   final Selection<R> Function(F) selectRow;
   const Table(this.schema, this.createFields, this.selectRow);
+  TableAlias<R, F> alias() => TableAlias._(this);
 }
 
 sealed class Change<T> {

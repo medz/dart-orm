@@ -7,6 +7,7 @@ final class Codec<T> {
   final Object? Function(T value) encode;
 
   const Codec(this.sqlType, this.decode, this.encode);
+  bool get acceptsNull => null is T;
 
   Codec<T?> nullable() => Codec(
     sqlType,

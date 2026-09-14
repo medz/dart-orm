@@ -88,6 +88,7 @@ final class _Writer {
   final SqlDialect dialect;
   final Map<TableRef, String> aliases;
   final List<Object?> parameters = [];
+  final Set<TableRef> leftJoins = {};
   bool unqualified = false;
   _Writer(this.dialect, this.aliases);
   String quote(String name) => '"${name.replaceAll('"', '""')}"';
@@ -135,6 +136,41 @@ class Expr<T> extends Selection<T> {
     _In(_node, [for (final value in values) _Parameter(codec.encode(value))]),
     Codecs.boolean.nullable(),
   );
+  Expr<bool?> isInQuery<F extends Fields>(Query<T, F> query) {
+    if (query._selection is! Expr<T>) {
+      throw const OrmException(
+        'QUERY.SCALAR',
+        'IN subqueries select one SQL expression.',
+      );
+    }
+    return Expr._(
+      _Binary(_node, 'IN', _Subquery(query)),
+      Codecs.boolean.nullable(),
+    );
+  }
+
+  Expr<T> over({
+    List<Expr<Object?>> partitionBy = const [],
+    List<OrderTerm> orderBy = const [],
+    WindowFrame? frame,
+  }) {
+    if (_node is! _Function || !_aggregate(_node)) {
+      throw const OrmException(
+        'QUERY.WINDOW',
+        'over() applies to an aggregate expression.',
+      );
+    }
+    return Expr._(
+      _WindowNode(
+        _node,
+        List.unmodifiable(partitionBy),
+        List.unmodifiable(orderBy),
+        frame,
+      ),
+      codec,
+    );
+  }
+
   OrderTerm asc() => OrderTerm._(this, false);
   OrderTerm desc() => OrderTerm._(this, true);
   Expr<int> count({bool distinct = false}) =>
@@ -143,6 +179,7 @@ class Expr<T> extends Selection<T> {
   Expr<T?> max() => Expr._(_Function('MAX', [_node]), codec.nullable());
   @override
   _Decoder<T> _bind(_SelectionPlan plan) {
+    if (plan.optionalDepth == 0 && !codec.acceptsNull) plan.required.add(this);
     final index = plan.column(this);
     return (row) => codec.decode(row[index]);
   }

@@ -11,6 +11,8 @@ abstract class Selection<T> {
 final class _SelectionPlan {
   final List<Expr<Object?>> columns = [];
   final List<_RelationBinding> relations = [];
+  final List<Expr<Object?>> required = [];
+  int optionalDepth = 0;
   final Map<_Node, int> _indices = {};
   int column(Expr<Object?> expression) =>
       _indices.putIfAbsent(expression._node, () {

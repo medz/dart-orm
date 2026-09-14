@@ -6,6 +6,7 @@ import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
 import 'support/tables.dart';
+import 'support/advanced.dart';
 
 void main() {
   runDatabaseTests('sqlite', () => sqlite(const SqliteOptions.memory()));
@@ -314,6 +315,7 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
     );
 
     group('relations', () {
+      advancedScenarios(() => db);
       setUp(() async {
         await db.execute(
           SqlCommand(

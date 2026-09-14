@@ -14,3 +14,5 @@ part 'src/query.dart';
 part 'src/mutation.dart';
 part 'src/relation.dart';
 part 'src/batch.dart';
+part 'src/advanced.dart';
+part 'src/cte.dart';

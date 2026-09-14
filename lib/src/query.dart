@@ -9,6 +9,8 @@ final class _QueryState {
   final int? limit;
   final int? offset;
   final bool distinct;
+  final List<_Join> joins;
+  final List<_CteDefinition> ctes;
   const _QueryState(
     this.source, {
     this.predicate,
@@ -18,6 +20,8 @@ final class _QueryState {
     this.limit,
     this.offset,
     this.distinct = false,
+    this.joins = const [],
+    this.ctes = const [],
   });
   _QueryState copy({
     Expr<bool?>? predicate,
@@ -27,6 +31,8 @@ final class _QueryState {
     int? limit,
     int? offset,
     bool? distinct,
+    List<_Join>? joins,
+    List<_CteDefinition>? ctes,
   }) => _QueryState(
     source,
     predicate: predicate ?? this.predicate,
@@ -36,6 +42,8 @@ final class _QueryState {
     limit: limit ?? this.limit,
     offset: offset ?? this.offset,
     distinct: distinct ?? this.distinct,
+    joins: joins ?? this.joins,
+    ctes: ctes ?? this.ctes,
   );
 }
 
@@ -73,6 +81,55 @@ class Query<R, F extends Fields> {
   Query<S, F> select<S>(Selection<S> Function(F) selection) =>
       Query._(database, _fields, _state, selection(_fields));
 
+  Query<R, F> join<S, G extends Fields>(
+    TableAlias<S, G> alias, {
+    required Expr<bool?> Function(F, G) on,
+  }) => _join(alias, on(_fields, alias.fields), false);
+  Query<R, F> leftJoin<S, G extends Fields>(
+    TableAlias<S, G> alias, {
+    required Expr<bool?> Function(F, G) on,
+  }) => _join(alias, on(_fields, alias.fields), true);
+  Query<R, F> _join(
+    TableAlias<Object?, Fields> alias,
+    Expr<bool?> on,
+    bool left,
+  ) {
+    if (alias.fields.table == _state.source ||
+        _state.joins.any((j) => j.alias.fields.table == alias.fields.table)) {
+      throw const OrmException(
+        'QUERY.ALIAS',
+        'Create a fresh alias for each table occurrence.',
+      );
+    }
+    return _copy(
+      _state.copy(
+        joins: List.unmodifiable([..._state.joins, _Join(alias, on, left)]),
+      ),
+    );
+  }
+
+  Expr<R?> scalar() {
+    final selection = _selection;
+    if (selection is! Expr<R>) {
+      throw const OrmException(
+        'QUERY.SCALAR',
+        'A scalar subquery selects one SQL expression.',
+      );
+    }
+    if (_state.limit != 1 &&
+        !(_state.group.isEmpty && _aggregate(selection._node))) {
+      throw const OrmException(
+        'QUERY.SCALAR',
+        'Use take(1) or an ungrouped aggregate for a scalar subquery.',
+      );
+    }
+    return Expr._(_Subquery(this), selection.codec.nullable());
+  }
+
+  Expr<bool> existsExpression() =>
+      Expr._(_Subquery(this, exists: true), Codecs.boolean);
+  Cte<R, F> asCte(String name) => Cte._(this, name);
+
   (_SelectionPlan, _Decoder<R>) _plan() {
     final plan = _SelectionPlan();
     final decode = _selection._bind(plan);
@@ -86,36 +143,117 @@ class Query<R, F extends Fields> {
   }
 
   SqlCommand _compile(_SelectionPlan plan) {
-    final w = _Writer(database.dialect, {_state.source: 't0'});
-    final buffer = StringBuffer('SELECT ${_state.distinct ? 'DISTINCT ' : ''}');
-    buffer.write(plan.columns.map((e) => e._node.write(w)).join(', '));
-    buffer.write(' FROM ${w.quote(_state.source.schema.name)} AS "t0"');
-    if (_state.predicate case final predicate?) {
-      buffer.write(' WHERE ${predicate._node.write(w)}');
-    }
-    if (_state.group.isNotEmpty) {
-      buffer.write(
-        ' GROUP BY ${_state.group.map((e) => e._node.write(w)).join(', ')}',
+    final w = _Writer(database.dialect, {});
+    return SqlCommand(_write(w, plan), w.parameters);
+  }
+
+  String _write(_Writer w, _SelectionPlan plan) {
+    if (w.dialect != database.dialect) {
+      throw const OrmException(
+        'QUERY.DIALECT',
+        'A statement cannot mix SQL dialects.',
       );
     }
-    if (_state.having case final having?) {
-      buffer.write(' HAVING ${having._node.write(w)}');
-    }
-    if (_state.order.isNotEmpty) {
-      buffer.write(
-        ' ORDER BY ${_state.order.map((o) => '${o.expression._node.write(w)} ${o.descending ? 'DESC' : 'ASC'}').join(', ')}',
+    if (!database.capabilities.windowFunctions &&
+        [
+          ...plan.columns.map((e) => e._node),
+          ..._state.order.map((o) => o.expression._node),
+        ].any(_window)) {
+      throw const OrmException(
+        'CAPABILITY.WINDOW',
+        'This driver does not support window functions.',
       );
     }
-    if (_state.limit case final limit?) {
-      buffer.write(' LIMIT ${w.parameter(limit)}');
+    _validateGrouping(_state, plan);
+    final saved = Map<TableRef, String>.of(w.aliases);
+    final markers = Set<TableRef>.of(w.leftJoins);
+    if (w.aliases.containsKey(_state.source)) {
+      throw const OrmException(
+        'QUERY.ALIAS',
+        'A nested query needs a fresh source occurrence.',
+      );
     }
-    if (_state.offset case final offset?) {
-      if (_state.limit == null && database.dialect == SqlDialect.sqlite) {
-        buffer.write(' LIMIT -1');
+    w.aliases[_state.source] = 't${w.aliases.length}';
+    final rootAlias = w.aliases[_state.source]!;
+    for (final join in _state.joins) {
+      w.aliases[join.alias.fields.table] = 't${w.aliases.length}';
+      if (join.left) w.leftJoins.add(join.alias.fields.table);
+    }
+    try {
+      final buffer = StringBuffer();
+      final ctes = <String, _CteDefinition>{};
+      for (final cte in [
+        ..._state.ctes,
+        for (final join in _state.joins) ?join.alias._cte,
+      ]) {
+        if (ctes.containsKey(cte.name) && !identical(ctes[cte.name], cte)) {
+          throw const OrmException(
+            'QUERY.CTE',
+            'Different CTEs cannot use the same name in one scope.',
+          );
+        }
+        ctes[cte.name] = cte;
       }
-      buffer.write(' OFFSET ${w.parameter(offset)}');
+      if (ctes.isNotEmpty) {
+        buffer.write(
+          'WITH ${ctes.values.map((c) => c._writeDefinition(w)).join(', ')} ',
+        );
+      }
+      buffer.write('SELECT ${_state.distinct ? 'DISTINCT ' : ''}');
+      buffer.write(plan.columns.map((e) => e._node.write(w)).join(', '));
+      buffer.write(
+        ' FROM ${w.quote(_state.source.schema.name)} AS ${w.quote(rootAlias)}',
+      );
+      final visible = {...saved, _state.source: rootAlias};
+      for (final join in _state.joins) {
+        final ref = join.alias.fields.table;
+        final alias = w.aliases[ref]!;
+        visible[ref] = alias;
+        final check = _Writer(w.dialect, visible)
+          ..leftJoins.addAll(w.leftJoins.where(visible.containsKey));
+        join.on._node.write(check);
+        final table = w.quote(ref.schema.name);
+        final source = join.left
+            ? '(SELECT *, 1 AS ${w.quote(join.alias._marker)} FROM $table)'
+            : table;
+        buffer.write(
+          ' ${join.left ? 'LEFT JOIN' : 'JOIN'} $source AS ${w.quote(alias)} ON ${join.on._node.write(w)}',
+        );
+      }
+      if (_state.predicate case final predicate?) {
+        buffer.write(' WHERE ${predicate._node.write(w)}');
+      }
+      if (_state.group.isNotEmpty) {
+        buffer.write(
+          ' GROUP BY ${_state.group.map((e) => e._node.write(w)).join(', ')}',
+        );
+      }
+      if (_state.having case final having?) {
+        buffer.write(' HAVING ${having._node.write(w)}');
+      }
+      if (_state.order.isNotEmpty) {
+        buffer.write(
+          ' ORDER BY ${_state.order.map((o) => '${o.expression._node.write(w)} ${o.descending ? 'DESC' : 'ASC'}').join(', ')}',
+        );
+      }
+      if (_state.limit case final limit?) {
+        buffer.write(' LIMIT ${w.parameter(limit)}');
+      }
+      if (_state.offset case final offset?) {
+        if (_state.limit == null && database.dialect == SqlDialect.sqlite) {
+          buffer.write(' LIMIT -1');
+        }
+        buffer.write(' OFFSET ${w.parameter(offset)}');
+      }
+      return buffer.toString();
+    } finally {
+      w.aliases
+        ..clear()
+        ..addAll(saved);
+      w.leftJoins
+        ..clear()
+        ..addAll(markers);
     }
-    return SqlCommand(buffer.toString(), w.parameters);
   }
 
   SqlCommand compile() => _compile(_plan().$1);
