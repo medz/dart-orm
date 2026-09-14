@@ -93,7 +93,7 @@ final class Migration {
         entry.key.name: [for (final step in entry.value) step.toJson()],
     },
   };
-  String get checksum => _hash(toJson());
+  late final String checksum = _hash(toJson());
 }
 
 final class MigrationStatus {
@@ -259,9 +259,21 @@ final class Migrator {
     );
   }
 
-  /// Transactional batches are atomic. CheckedSql explicitly opts a migration
-  /// into durable per-step checkpoints with recoverable autocommit SQL.
-  Future<List<String>> apply(List<Migration> migrations) async {
+  /// Applies pending migrations, returning the IDs completed by this call.
+  /// Ordinary migration batches are atomic. [CheckedSql] and [Backfill] opt
+  /// their containing migration into durable per-step recovery.
+  ///
+  /// [maxBackfillBatches] bounds nonempty data batches across this invocation.
+  /// Reaching the limit returns normally with unfinished migrations still
+  /// pending; completion verification can require a subsequent call.
+  Future<List<String>> apply(
+    List<Migration> migrations, {
+    int? maxBackfillBatches,
+  }) async {
+    if (maxBackfillBatches != null && maxBackfillBatches < 1) {
+      throw ArgumentError.value(maxBackfillBatches, 'maxBackfillBatches');
+    }
+    migrations = List.unmodifiable(migrations);
     if (database.inTransaction) {
       throw const OrmException(
         'MIGRATION.SESSION',
@@ -270,95 +282,34 @@ final class Migrator {
     }
     validateMigrations(migrations, dialect: database.dialect);
     Future<List<String>> run(Database<Backend> session) async {
-      if (session.dialect == SqlDialect.postgres &&
-          migrations.any(
-            (m) => m.steps[SqlDialect.postgres]!.any((s) => s is CheckedSql),
-          )) {
-        return _applyRecoverable(session, migrations);
-      }
-      final rebuild =
-          database.dialect == SqlDialect.sqlite &&
-          migrations.any(
-            (m) => m.steps[SqlDialect.sqlite]!.any(
-              (s) => s is RebuildTable || s is DropTable,
-            ),
-          );
-      int? foreignKeys;
-      if (rebuild) {
-        foreignKeys =
-            (await session.execute(SqlCommand('PRAGMA foreign_keys')))
-                    .rows
-                    .single
-                    .single
-                as int;
-      }
-      try {
-        if (rebuild) {
-          await session.execute(SqlCommand('PRAGMA foreign_keys = OFF'));
-          if ((await session.execute(SqlCommand('PRAGMA foreign_keys')))
-                  .rows
-                  .single
-                  .single !=
-              0) {
-            throw const OrmException(
-              'MIGRATION.SESSION',
-              'Foreign keys must be disabled before the rebuild transaction.',
-            );
-          }
-        }
-        return await session.transaction(
-          (tx) async {
-            await tx.execute(
-              SqlCommand(
-                'CREATE TABLE IF NOT EXISTS "_orm_migrations" (id TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)',
-              ),
-            );
-            final pending = await Migrator(tx).plan(migrations);
-            for (final migration in pending) {
-              for (final step in migration.steps[tx.dialect]!) {
-                await _executeStep(tx, step);
-              }
-              await _recordMigration(tx, migration);
-            }
-            if (rebuild &&
-                (await tx.execute(SqlCommand('PRAGMA foreign_key_check')))
-                    .rows
-                    .isNotEmpty) {
-              throw const OrmException(
-                'MIGRATION.FOREIGN_KEY',
-                'Rebuilt schema contains foreign key violations.',
+      if (migrations.any(
+        (m) => m.steps[session.dialect]!.any(
+          (s) => s is CheckedSql || s is Backfill,
+        ),
+      )) {
+        return session.dialect == SqlDialect.sqlite
+            ? _applyRecoverableSqlite(
+                session,
+                migrations,
+                _BackfillBudget(maxBackfillBatches),
+              )
+            : _applyRecoverable(
+                session,
+                migrations,
+                _BackfillBudget(maxBackfillBatches),
               );
-            }
-            return [for (final migration in pending) migration.id];
-          },
-          options: session.dialect == SqlDialect.sqlite
-              ? const SqliteTransaction(mode: .immediate)
-              : const PostgresTransaction(),
-        );
-      } finally {
-        if (foreignKeys != null) {
-          try {
-            await session.execute(
-              SqlCommand(
-                'PRAGMA foreign_keys = ${foreignKeys == 1 ? 'ON' : 'OFF'}',
-              ),
-            );
-            if ((await session.execute(SqlCommand('PRAGMA foreign_keys')))
-                    .rows
-                    .single
-                    .single !=
-                foreignKeys) {
-              throw const OrmException(
-                'MIGRATION.SESSION',
-                'Failed to restore SQLite foreign keys.',
-              );
-            }
-          } catch (_) {
-            await session.discard();
-            rethrow;
-          }
-        }
       }
+      return _migrationTransaction(session, (tx) async {
+        await tx.execute(SqlCommand(_historyDdl));
+        final pending = await Migrator(tx).plan(migrations);
+        for (final migration in pending) {
+          for (final step in migration.steps[tx.dialect]!) {
+            await _executeStep(tx, step);
+          }
+          await _recordMigration(tx, migration);
+        }
+        return [for (final migration in pending) migration.id];
+      }, rebuild: _needsRebuild(migrations, session.dialect));
     }
 
     return _migrationSession(database, lockTimeout, run);
@@ -416,6 +367,7 @@ void validateMigrations(
       );
     }
     for (final step in steps) {
+      if (step is Backfill) continue;
       if (step is CheckedSql) {
         if (dialect != SqlDialect.postgres) {
           throw const OrmException(

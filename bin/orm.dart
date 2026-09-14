@@ -13,6 +13,7 @@ const _usage = '''Usage: dart run orm <command>
     [--renames renames.json] [--using conversions.json] [--allow-destructive]
   migration check [--dir migrations] [--dialect sqlite|postgres]
   migrate plan|apply [--dir migrations] <database>
+    apply: [--max-backfill-batches count]
   migrate status <database>
   db inspect --table name <database>
   db verify --schema snapshot.json <database>
@@ -59,13 +60,23 @@ Future<void> main(List<String> arguments) async {
         'allow-destructive',
       },
       'migration check' => {'dir', 'dialect'},
-      'migrate plan' || 'migrate apply' || 'db baseline' => {...common, 'dir'},
+      'migrate apply' => {...common, 'dir', 'max-backfill-batches'},
+      'migrate plan' || 'db baseline' => {...common, 'dir'},
       'migrate status' => common,
       'db verify' => {...common, 'schema'},
       'db inspect' => {...common, 'table'},
       _ => throw FormatException('Unknown command: $command'),
     };
     final (positionals, options) = _parse(arguments.skip(2).toList(), flags);
+    final maxBatches = options['max-backfill-batches'] == null
+        ? null
+        : int.tryParse(options['max-backfill-batches']!);
+    if (options.containsKey('max-backfill-batches') &&
+        (maxBatches == null || maxBatches < 1)) {
+      throw const FormatException(
+        '--max-backfill-batches must be a positive integer.',
+      );
+    }
     if (positionals.length != (command == 'migration create' ? 1 : 0)) {
       throw const FormatException('Unexpected positional arguments.');
     }
@@ -174,7 +185,9 @@ Future<void> main(List<String> arguments) async {
           final pending = await migrator.plan(migrations);
           _print({
             'atomic': !pending.any(
-              (m) => m.steps[db.dialect]!.any((s) => s is CheckedSql),
+              (m) => m.steps[db.dialect]!.any(
+                (s) => s is CheckedSql || s is Backfill,
+              ),
             ),
             'progress': (await migrator.progress())
                 .map((p) => p.toJson())
@@ -189,7 +202,15 @@ Future<void> main(List<String> arguments) async {
             ],
           });
         case 'migrate apply':
-          _print({'applied': await migrator.apply(migrations)});
+          final applied = await migrator.apply(
+            migrations,
+            maxBackfillBatches: maxBatches,
+          );
+          _print({
+            'applied': applied,
+            if (maxBatches != null)
+              'complete': (await migrator.plan(migrations)).isEmpty,
+          });
         case 'migrate status':
           _print({
             'progress': (await migrator.progress())

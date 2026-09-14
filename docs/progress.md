@@ -46,6 +46,8 @@ This file records verified delivery, not planned capabilities presented as worki
 - Explicit SQLite read-only connections; CLI read operations never create a missing database.
 - PostgreSQL recoverable autocommit steps with boolean pre/postconditions and immutable attempt checksums.
 - Durable per-step progress, exact concurrent-index state checks, explicit INVALID-index repair and CLI visibility.
+- Historical-schema backfills on both databases with bounded primary-key batches, atomic data/cursor commits and completion proofs.
+- Shared batch budgets, lossless composite cursors, competing-runner recovery and committed subscription notifications.
 - Shared migration/baseline session locks use bounded try-lock polling without retaining waiting snapshots.
 - Database cursors with demand-driven batches, per-batch relation loading and scoped stream cleanup.
 - Real SQLite native interruption and PostgreSQL control-connection cancellation with awaited cleanup.
@@ -80,7 +82,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 411 checks with native SQLite
+Static analysis is clean. The complete suite passes 467 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -174,10 +176,28 @@ The caller's history list is frozen before asynchronous reads. A read-only SQLit
 file accepts a compatible version without applying migrations. The native macOS
 AOT execution fixture also checks accepted and rejected schema versions.
 
+Fifty-six backfill checks cover both databases: bounded pause/resume, unchanged
+historical JSON/checksums, atomic cursor/data rollback, failed completion proofs,
+compatible and incompatible concurrent writes, competing runners and lost COMMIT
+acknowledgements. Four actual child-process exits at data-write and commit boundaries
+verify that committed chunks are retained and uncommitted chunks are repeated only
+after rollback. Native integer, bigint, text, finite real, boolean, timestamp and
+binary keys survive resume, including composite keys under a reduced parameter
+limit. Additional checks cover ordinary migration grouping, SQLite rebuild/FK
+restoration, old checkpoint-table upgrades, invalid cursors, temporary-object
+shadowing, PostgreSQL row security and inherited duplicate keys. Independent CLI
+processes inspect plans, pause, report progress and finish backfills on both
+databases. Committed chunks notify typed subscriptions, and completion probes
+reject floating-point truthiness. `test/support/native_backfill.dart` compiles and
+runs as a macOS AOT executable, verifying historical declarations, bounded runs,
+concurrent SQLite workers and the application startup version gate. The existing
+native execution acceptance fixture also passes after this change. These are
+correctness checks, not backfill throughput or online availability measurements.
+
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
-- Resumable long backfills and broader unmanaged-object catalog coverage.
+- Broader unmanaged-object catalog coverage.
 - Existing-database declaration import and named SQL query generation.
 - Configurable integer widths, exact-decimal query semantics and further native type coverage.
 - Further backend capability coverage.
@@ -188,8 +208,9 @@ To-one projections join by default when declared keys prove uniqueness; otherwis
 they batch and check cardinality. Collections use explicit parameter-aware batches.
 `verifyColumns` checks column names/types/nullability only. `verifySchema` additionally compares defaults,
 keys and simple indexes; its `unmanaged` objects require separate review.
-Transactional migration batches are atomic. PostgreSQL mixed migrations explicitly
-use durable per-step checkpoints; SQLite rejects that autocommit mode. These are
+Ordinary migration batches are atomic. Explicit backfills use durable per-step
+checkpoints and short data transactions on both databases. General recoverable
+autocommit SQL remains PostgreSQL-only; SQLite rejects `CheckedSql`. These are
 implementation stages, not a reduction of the active goal.
 
 The full suite includes 52 shared SQLite/PostgreSQL query checks, 20 generated
@@ -198,7 +219,7 @@ regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CL
 workflows, 37 streaming/execution checks, 28 relation strategy checks and one
 negative compilation suite covering 19 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks and 19 application-version checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks and 56 backfill checks.
 
 ## Environment
 

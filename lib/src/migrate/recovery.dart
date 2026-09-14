@@ -65,14 +65,16 @@ final class MigrationProgress {
   final MigrationStepState state;
   final String phase;
   final String? failure;
+  final BackfillProgress? backfill;
   const MigrationProgress(
     this.id,
     this.checksum,
     this.step,
     this.state,
     this.phase,
-    this.failure,
-  );
+    this.failure, {
+    this.backfill,
+  });
   Map<String, Object?> toJson() => {
     'id': id,
     'checksum': checksum,
@@ -80,28 +82,49 @@ final class MigrationProgress {
     'state': state.name,
     'phase': phase,
     if (failure != null) 'failure': failure,
+    if (backfill != null) 'backfill': backfill!.toJson(),
   };
 }
 
 Future<List<MigrationProgress>> _progress(Database<Backend> db) async {
-  if (db.dialect != SqlDialect.postgres ||
-      !await _hasMigrationTable(db, '_orm_migration_steps')) {
+  if (!await _hasMigrationTable(db, '_orm_migration_steps')) {
     return [];
   }
   final result = await db.execute(
     SqlCommand(
-      'SELECT migration_id, checksum, step, state, phase, failure FROM "_orm_migration_steps" ORDER BY migration_id, step',
+      'SELECT * FROM "_orm_migration_steps" ORDER BY migration_id, step',
     ),
   );
+  final fields = [
+    for (final name in [
+      'migration_id',
+      'checksum',
+      'step',
+      'state',
+      'phase',
+      'failure',
+    ])
+      result.columns.indexOf(name),
+  ];
+  if (fields.any((i) => i < 0)) {
+    throw const OrmException(
+      'MIGRATION.HISTORY',
+      'Migration checkpoint table is missing required columns.',
+    );
+  }
+  final data = result.columns.indexOf('backfill');
   return [
     for (final row in result.rows)
       MigrationProgress(
-        row[0] as String,
-        row[1] as String,
-        row[2] as int,
-        MigrationStepState.values.byName(row[3] as String),
-        row[4] as String,
-        row[5] as String?,
+        row[fields[0]] as String,
+        row[fields[1]] as String,
+        row[fields[2]] as int,
+        MigrationStepState.values.byName(row[fields[3]] as String),
+        row[fields[4]] as String,
+        row[fields[5]] as String?,
+        backfill: data < 0 || row[data] == null
+            ? null
+            : BackfillProgress._read(jsonDecode(row[data] as String)),
       ),
   ];
 }
@@ -132,6 +155,27 @@ void _validateProgress(
       throw const OrmException(
         'MIGRATION.HISTORY',
         'Migration checkpoint does not match the next pending migration.',
+      );
+    }
+    if (row.backfill != null &&
+        migration.steps[dialect]![row.step] is! Backfill) {
+      throw const OrmException(
+        'MIGRATION.HISTORY',
+        'Backfill cursor belongs to a different step kind.',
+      );
+    }
+    final step = migration.steps[dialect]![row.step];
+    if (step is Backfill &&
+        ((row.state == .complete && row.backfill == null) ||
+            row.backfill?.upperKey != null &&
+                row.backfill!.upperKey!.length !=
+                    step.table.primaryKey.length ||
+            row.backfill?.lastKey != null &&
+                row.backfill!.lastKey!.length !=
+                    step.table.primaryKey.length)) {
+      throw const OrmException(
+        'MIGRATION.HISTORY',
+        'Backfill checkpoint does not match its primary key or completion state.',
       );
     }
     (grouped[row.id] ??= []).add(row);
@@ -248,22 +292,16 @@ Future<R> _withMigrationLock<R>(
 Future<List<String>> _applyRecoverable(
   Database<Backend> session,
   List<Migration> migrations,
+  _BackfillBudget budget,
 ) async {
   final pending = await Migrator(session).plan(migrations);
   if (pending.isEmpty) return [];
-  await session.transaction((tx) async {
-    await tx.execute(SqlCommand(_historyDdl));
-    await tx.execute(
-      SqlCommand('''CREATE TABLE IF NOT EXISTS "_orm_migration_steps" (
- migration_id TEXT NOT NULL, checksum TEXT NOT NULL, step INTEGER NOT NULL,
- state TEXT NOT NULL, phase TEXT NOT NULL, failure TEXT,
- PRIMARY KEY(migration_id, step))'''),
-    );
-  });
+  await session.transaction(_recoveryTables);
   final progress = {
     for (final p in await _progress(session)) (p.id, p.step): p,
   };
   final atomic = <Migration>[];
+  final completed = <String>[];
   Future<void> flush() async {
     if (atomic.isEmpty) return;
     await session.transaction((tx) async {
@@ -274,12 +312,13 @@ Future<List<String>> _applyRecoverable(
         await _recordMigration(tx, migration);
       }
     });
+    completed.addAll(atomic.map((m) => m.id));
     atomic.clear();
   }
 
   for (final migration in pending) {
     final steps = migration.steps[SqlDialect.postgres]!;
-    if (!steps.any((s) => s is CheckedSql)) {
+    if (!steps.any((s) => s is CheckedSql || s is Backfill)) {
       atomic.add(migration);
       continue;
     }
@@ -287,10 +326,25 @@ Future<List<String>> _applyRecoverable(
     for (var i = 0; i < steps.length; i++) {
       if (progress[(migration.id, i)]?.state == .complete) continue;
       final step = steps[i];
-      var phase = step is CheckedSql ? 'inspect' : 'execute';
+      var phase = step is CheckedSql || step is Backfill
+          ? 'inspect'
+          : 'execute';
       try {
         await _checkpoint(session, migration, i, .running, phase);
-        if (step is CheckedSql) {
+        if (step is Backfill) {
+          await _verifyBackfill(session, step);
+          while (!await session.transaction(
+            (tx) async => _backfillChunk(
+              tx,
+              migration,
+              i,
+              step,
+              await _savedBackfill(tx, migration.id, i),
+              budget,
+              (value) => phase = value,
+            ),
+          )) {}
+        } else if (step is CheckedSql) {
           if (!await _probe(session, step.doneWhen)) {
             if (!await _probe(session, step.readyWhen)) {
               throw const OrmException(
@@ -319,6 +373,7 @@ Future<List<String>> _applyRecoverable(
           });
         }
       } catch (error, stack) {
+        if (error is _BackfillPaused) return completed;
         try {
           // Never overwrite a completion record after an uncertain commit.
           await _checkpoint(
@@ -345,22 +400,222 @@ Future<List<String>> _applyRecoverable(
       }
     }
     await session.transaction((tx) => _recordMigration(tx, migration));
+    completed.add(migration.id);
   }
   await flush();
-  return pending.map((m) => m.id).toList();
+  return completed;
+}
+
+bool _needsRebuild(List<Migration> migrations, SqlDialect dialect) =>
+    dialect == SqlDialect.sqlite &&
+    migrations.any(
+      (m) => m.steps[dialect]!.any((s) => s is RebuildTable || s is DropTable),
+    );
+
+Future<R> _migrationTransaction<R>(
+  Database<Backend> session,
+  Future<R> Function(Database<Backend>) action, {
+  bool rebuild = false,
+}) async {
+  int? foreignKeys;
+  try {
+    if (rebuild) {
+      foreignKeys =
+          (await session.execute(SqlCommand('PRAGMA foreign_keys')))
+                  .rows
+                  .single
+                  .single
+              as int;
+      await session.execute(SqlCommand('PRAGMA foreign_keys = OFF'));
+      if ((await session.execute(SqlCommand('PRAGMA foreign_keys')))
+              .rows
+              .single
+              .single !=
+          0) {
+        throw const OrmException(
+          'MIGRATION.SESSION',
+          'Foreign keys must be disabled before a rebuild transaction.',
+        );
+      }
+    }
+    return await session.transaction(
+      (tx) async {
+        final result = await action(tx);
+        if (rebuild &&
+            (await tx.execute(SqlCommand('PRAGMA foreign_key_check')))
+                .rows
+                .isNotEmpty) {
+          throw const OrmException(
+            'MIGRATION.FOREIGN_KEY',
+            'Rebuilt schema contains foreign key violations.',
+          );
+        }
+        return result;
+      },
+      options: session.dialect == SqlDialect.sqlite
+          ? const SqliteTransaction(mode: .immediate)
+          : const PostgresTransaction(),
+    );
+  } finally {
+    if (foreignKeys != null) {
+      try {
+        await session.execute(
+          SqlCommand(
+            'PRAGMA foreign_keys = ${foreignKeys == 1 ? 'ON' : 'OFF'}',
+          ),
+        );
+        if ((await session.execute(SqlCommand('PRAGMA foreign_keys')))
+                .rows
+                .single
+                .single !=
+            foreignKeys) {
+          throw const OrmException(
+            'MIGRATION.SESSION',
+            'Failed to restore SQLite foreign keys.',
+          );
+        }
+      } catch (_) {
+        await session.discard();
+        rethrow;
+      }
+    }
+  }
+}
+
+/// SQLite serializes each chunk using BEGIN IMMEDIATE. Re-read durable history
+/// inside that lock, so other workers may contribute chunks without replaying any.
+Future<List<String>> _applyRecoverableSqlite(
+  Database<Backend> session,
+  List<Migration> migrations,
+  _BackfillBudget budget,
+) async {
+  await _migrationTransaction(session, (tx) async {
+    await Migrator(tx).plan(migrations);
+    await _recoveryTables(tx);
+  });
+  final atomic = <Migration>[], completed = <String>[];
+  Future<void> flush() async {
+    if (atomic.isEmpty) return;
+    final applied = await _migrationTransaction(session, (tx) async {
+      final pending = (await Migrator(tx).plan(migrations))
+          .map((m) => m.id)
+          .toSet();
+      final applied = <String>[];
+      for (final migration in atomic) {
+        if (!pending.contains(migration.id)) continue;
+        for (final step in migration.steps[SqlDialect.sqlite]!) {
+          await _executeStep(tx, step);
+        }
+        await _recordMigration(tx, migration);
+        applied.add(migration.id);
+      }
+      return applied;
+    }, rebuild: _needsRebuild(atomic, SqlDialect.sqlite));
+    completed.addAll(applied);
+    atomic.clear();
+  }
+
+  for (final migration in migrations) {
+    final steps = migration.steps[SqlDialect.sqlite]!;
+    if (!steps.any((s) => s is Backfill)) {
+      atomic.add(migration);
+      continue;
+    }
+    await flush();
+    for (var i = 0; i < steps.length; i++) {
+      final step = steps[i];
+      var verified = false, phase = 'inspect';
+      try {
+        while (!await _migrationTransaction(session, (tx) async {
+          final pending = await Migrator(tx).plan(migrations);
+          if (!pending.any((m) => m.id == migration.id)) return true;
+          final current = (await _progress(tx))
+              .where((p) => p.id == migration.id && p.step == i)
+              .firstOrNull;
+          if (current?.state == .complete) return true;
+          if (current == null) {
+            await _checkpoint(tx, migration, i, .running, 'inspect');
+            return false;
+          }
+          if (step is Backfill) {
+            if (!verified) {
+              phase = 'inspect';
+              await _verifyBackfill(tx, step);
+              verified = true;
+            }
+            return _backfillChunk(
+              tx,
+              migration,
+              i,
+              step,
+              current.backfill,
+              budget,
+              (value) => phase = value,
+            );
+          }
+          phase = 'execute';
+          await _executeStep(tx, step);
+          phase = 'record';
+          await _checkpoint(tx, migration, i, .complete, 'complete');
+          return true;
+        }, rebuild: step is RebuildTable || step is DropTable)) {}
+      } catch (error, stack) {
+        if (error is _BackfillPaused) return completed;
+        try {
+          await _migrationTransaction(
+            session,
+            (tx) => _checkpoint(
+              tx,
+              migration,
+              i,
+              .failed,
+              phase,
+              failure: error is OrmException
+                  ? error.code
+                  : error.runtimeType.toString(),
+            ),
+          );
+        } catch (_) {
+          /* An existing durable checkpoint remains resumable. */
+        }
+        Error.throwWithStackTrace(
+          OrmException(
+            'MIGRATION.STEP',
+            '${migration.id} step $i failed during $phase. Inspect migration progress before retrying.',
+            cause: error,
+          ),
+          stack,
+        );
+      }
+    }
+    final recorded = await _migrationTransaction(session, (tx) async {
+      if (!(await Migrator(tx).plan(migrations))
+          .any((m) => m.id == migration.id)) {
+        return false;
+      }
+      await _recordMigration(tx, migration);
+      return true;
+    });
+    if (recorded) completed.add(migration.id);
+  }
+  await flush();
+  return completed;
 }
 
 Future<bool> _probe(Database<Backend> db, String sql) async {
   final result = await db.execute(SqlCommand(sql));
   if (result.rows.length != 1 ||
       result.rows.single.length != 1 ||
-      result.rows.single.single is! bool) {
+      !(result.rows.single.single is bool ||
+          db.dialect == SqlDialect.sqlite &&
+              result.rows.single.single is int &&
+              {0, 1}.contains(result.rows.single.single))) {
     throw const OrmException(
       'MIGRATION.PROBE',
       'A recovery condition must return exactly one boolean.',
     );
   }
-  return result.rows.single.single as bool;
+  return result.rows.single.single == true || result.rows.single.single == 1;
 }
 
 Future<void> _checkpoint(
@@ -370,32 +625,96 @@ Future<void> _checkpoint(
   MigrationStepState state,
   String phase, {
   String? failure,
+  BackfillProgress? backfill,
 }) async {
   await db.execute(
     SqlCommand(
-      r'''
-INSERT INTO "_orm_migration_steps" (migration_id, checksum, step, state, phase, failure)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (migration_id, step) DO UPDATE SET state = EXCLUDED.state, phase = EXCLUDED.phase, failure = EXCLUDED.failure
+      '''
+INSERT INTO "_orm_migration_steps" (migration_id, checksum, step, state, phase, failure, backfill)
+VALUES (${[for (var i = 1; i <= 7; i++) _mark(db.dialect, i)].join(', ')})
+ON CONFLICT (migration_id, step) DO UPDATE SET state = EXCLUDED.state, phase = EXCLUDED.phase, failure = EXCLUDED.failure,
+backfill = coalesce(EXCLUDED.backfill, "_orm_migration_steps".backfill)
 WHERE "_orm_migration_steps".state <> 'complete' ''',
-      [migration.id, migration.checksum, step, state.name, phase, failure],
+      [
+        migration.id,
+        migration.checksum,
+        step,
+        state.name,
+        phase,
+        failure,
+        backfill == null ? null : jsonEncode(backfill.toJson()),
+      ],
     ),
   );
 }
 
+Future<void> _recoveryTables(Database<Backend> tx) async {
+  await tx.execute(SqlCommand(_historyDdl));
+  await tx.execute(
+    SqlCommand('''CREATE TABLE IF NOT EXISTS "_orm_migration_steps" (
+ migration_id TEXT NOT NULL, checksum TEXT NOT NULL, step INTEGER NOT NULL,
+ state TEXT NOT NULL, phase TEXT NOT NULL, failure TEXT, backfill TEXT,
+ PRIMARY KEY(migration_id, step))'''),
+  );
+  final shape = await tx.execute(
+    SqlCommand('SELECT * FROM "_orm_migration_steps" LIMIT 0'),
+  );
+  if (!shape.columns.contains('backfill')) {
+    await tx.execute(
+      SqlCommand('ALTER TABLE "_orm_migration_steps" ADD COLUMN backfill TEXT'),
+    );
+  }
+}
+
+Future<BackfillProgress?> _savedBackfill(
+  Database<Backend> tx,
+  String id,
+  int step,
+) async {
+  final row = await tx.execute(
+    SqlCommand(
+      'SELECT backfill FROM "_orm_migration_steps" WHERE migration_id = ${_mark(tx.dialect, 1)} AND step = ${_mark(tx.dialect, 2)}',
+      [id, step],
+    ),
+  );
+  final data = row.rows.single.single;
+  return data == null
+      ? null
+      : BackfillProgress._read(jsonDecode(data as String));
+}
+
 const _historyDdl =
     'CREATE TABLE IF NOT EXISTS "_orm_migrations" (id TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)';
-Future<bool> _hasMigrationTable(
-  Database<Backend> db,
-  String table,
-) async => (await db.execute(
-  db.dialect == SqlDialect.sqlite
-      ? SqlCommand(
-          "SELECT name FROM sqlite_schema WHERE type = 'table' AND name = ?1",
-          [table],
-        )
-      : SqlCommand(
-          r"SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = current_schema() AND tablename = $1",
-          [table],
-        ),
-)).rows.isNotEmpty;
+Future<bool> _hasMigrationTable(Database<Backend> db, String table) async {
+  if (db.dialect == SqlDialect.sqlite) {
+    final rows = await db.execute(
+      SqlCommand(
+        "SELECT name, CASE WHEN type = 'table' THEN 0 ELSE 2 END FROM main.sqlite_schema WHERE name = ?1 COLLATE NOCASE UNION ALL SELECT name, 1 FROM sqlite_temp_schema WHERE name = ?1 COLLATE NOCASE",
+        [table],
+      ),
+    );
+    if (rows.rows.any((r) => r[1] != 0)) {
+      throw const OrmException(
+        'MIGRATION.SESSION',
+        'A temporary or non-table object shadows durable migration metadata.',
+      );
+    }
+    return rows.rows.isNotEmpty;
+  }
+  final rows = await db.execute(
+    SqlCommand(
+      r'''SELECT
+ EXISTS(SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = current_schema() AND tablename::text = $1),
+ coalesce((SELECT n.nspname = current_schema() AND c.relkind IN ('r', 'p') FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE c.oid = to_regclass(quote_ident($1))), true)''',
+      [table],
+    ),
+  );
+  if (rows.rows.single[1] != true) {
+    throw const OrmException(
+      'MIGRATION.SESSION',
+      'Another schema shadows durable migration metadata.',
+    );
+  }
+  return rows.rows.single[0] == true;
+}

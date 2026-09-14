@@ -12,6 +12,13 @@ sealed class MigrationStep {
           readyWhen: json['readyWhen'] as String,
           doneWhen: json['doneWhen'] as String,
         ),
+        'backfill' => Backfill(
+          SchemaSnapshot._readTable(json['table'] as Map<String, Object?>),
+          set: (json['set'] as Map<String, Object?>).cast<String, String>(),
+          where: json['where'] as String,
+          doneWhen: json['doneWhen'] as String,
+          batchSize: json['batchSize'] as int,
+        ),
         'dropTable' => DropTable(json['table'] as String),
         'rebuild' => RebuildTable(
           SchemaSnapshot._readTable(json['before'] as Map<String, Object?>),
@@ -83,10 +90,10 @@ final class DropConstraint extends MigrationStep {
 
 Future<void> _executeStep(Database<Backend> db, MigrationStep step) async {
   switch (step) {
-    case CheckedSql():
+    case CheckedSql() || Backfill():
       throw const OrmException(
         'MIGRATION.TRANSACTION',
-        'Checked SQL requires the recovery runner outside a transaction.',
+        'This step requires the recovery runner.',
       );
     case ExecuteSql():
       await db.execute(SqlCommand(step.sql));

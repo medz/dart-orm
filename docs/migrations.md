@@ -75,7 +75,7 @@ final appliedIds = await Migrator(db).apply(migrations);
 final verification = await verifySchema(db, target);
 ```
 
-`apply` runs a pending batch without `CheckedSql` in one transaction. A failed copy, required
+`apply` runs a pending batch without `CheckedSql` or `Backfill` in one transaction. A failed copy, required
 column, unique constraint, or foreign key rolls back earlier steps and history
 records from that invocation. PostgreSQL uses a dedicated connection and a session advisory lock scoped to the
 current database/schema; SQLite obtains an immediate write transaction. PostgreSQL
@@ -140,6 +140,12 @@ rejected downgrade does not delete or rebuild tables.
   sequence. Identity changes require a manual migration.
 - Type changes require SQL conversion expressions for each dialect. Expressions
   are trusted migration code and use column names after declared renames.
+
+For long data transformations, use a reviewed [resumable backfill](backfills.md).
+It carries a historical table definition, commits bounded batches with their
+primary-key cursors, supports bounded runs, and verifies completion. Both SQLite
+and PostgreSQL support it; general `CheckedSql` autocommit operations still require
+PostgreSQL.
 
 ```dart
 final change = Migration.diff(

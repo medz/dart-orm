@@ -14,6 +14,7 @@ part 'src/migrate/catalog.dart';
 part 'src/migrate/step.dart';
 part 'src/migrate/diff.dart';
 part 'src/migrate/recovery.dart';
+part 'src/migrate/backfill.dart';
 
 String _quote(String identifier) => '"${identifier.replaceAll('"', '""')}"';
 
