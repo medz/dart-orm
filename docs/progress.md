@@ -49,6 +49,9 @@ This file records verified delivery, not planned capabilities presented as worki
 - Constant schema codecs retain custom classes, extension IDs, nullable aliases and nested generic/record types.
 - Portable enum text labels, generation-time codec matching and stable imports for separately declared domain types.
 - JSON scalar decoding and explicit SQL-null/document-null distinction across SQLite and PostgreSQL.
+- Typed query subscriptions with commit/savepoint boundaries, relevant-table filtering and declared FK delete effects.
+- Dependency discovery across joins, subqueries, CTEs and batch relations; explicit raw/external-write notifications.
+- Paused subscription coalescing, stale-read suppression, active-query cancellation and driver-wide subscription cleanup.
 
 ## Delivery sequence
 
@@ -65,7 +68,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 215 checks with native SQLite
+Static analysis is clean. The complete suite passes 256 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -83,7 +86,7 @@ and delayed cancellation races. A batch-cancellation regression was first reprod
 as a partial commit and now verifies rollback on both databases.
 `test/support/native_execution.dart` additionally compiles and runs as a macOS AOT
 executable, verifying joined records, nullable required values, absent relations,
-cursor consumption, `sqlite3_interrupt` and subsequent SQL.
+cursor consumption, `sqlite3_interrupt`, subsequent SQL and committed query subscriptions.
 The relationship fixture is generated from a record schema with nullable composite
 foreign keys and self-relations. It verifies 1200-key batches, key deduplication,
 per-parent windows, nested JOINs, whole-row absence and root pagination on both
@@ -91,18 +94,24 @@ backends. Generator checks compare committed client code and schema snapshots.
 The domain-type fixture adds 18 real-database checks for extension IDs, custom
 classes, enums, structured JSON, nullable document presence, relations, batches,
 upsert, cursors and schema catalogs. JSON string scalars are decoded without a
-second parse; SQL NULL and JSON null are separately represented. A final required
-JSON-null guard is also verified by the 22 codec/domain checks after the full
-suite. Generator checks cover moved outputs, colliding domain names, nullable
+second parse; SQL NULL and JSON null are separately represented, and required JSON
+documents reject SQL NULL. Generator checks cover moved outputs, colliding domain names, nullable
 aliases and invalid annotations. `test/support/codecs/native.dart` passes as a
 macOS AOT program with domain values, relations and streamed cursors.
+Forty-one subscription checks cover both backends, including independent SQLite
+workers and PostgreSQL connections, transactional notification merging, savepoint
+rollback, zero-row writes, multi-level cascade/SET NULL effects, joined CTEs and
+batch relations. They also verify paused-listener cleanup, native cancellation,
+read/invalidation races and re-reading after a real PostgreSQL commit whose
+acknowledgement is deliberately lost. Subscriptions add no browser/Flutter
+acceptance claim.
 
 ## Still required for the goal
 
 - Union; advanced-query capability and edge-case review.
 - Resumable long backfills, application schema-version gates and broader unmanaged-object catalog coverage.
 - Existing-database declaration import and named SQL query generation.
-- Build integration; committed-change query subscriptions.
+- Build integration.
 - Configurable integer widths, exact-decimal query semantics and further native type coverage.
 - Connection acquisition and total transaction deadlines, retry classification and further backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
@@ -120,8 +129,8 @@ The full suite includes 52 shared SQLite/PostgreSQL query checks, 20 generated
 client/migration integration checks, 20 source generation checks, four codec
 regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CLI
 workflows, 37 streaming/execution checks, 28 relation strategy checks and one
-negative compilation suite covering 14 invalid API uses, plus 18 domain-codec
-integration checks.
+negative compilation suite covering 16 invalid API uses, plus 18 domain-codec
+integration checks and 41 subscription checks.
 
 ## Environment
 

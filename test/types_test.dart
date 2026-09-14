@@ -32,6 +32,9 @@ void wrong(Database<Sqlite> db) {
   db.people.select((p) => p.email.eq('wrong'));
   db.people.byId(const PersonId(1)).patch(tags: const Change.set([1]));
   db.people.byId(const PersonId(1)).patch(details: const Change.set('raw-json'));
+  final Stream<List<int>> wrongWatch = db.users.select((u) => u.email).watch();
+  db.users.watch(reads: ['users']);
+  print(wrongWatch);
 }
 ''');
       final contexts = AnalysisContextCollection(includedPaths: [file.path]);
@@ -45,7 +48,7 @@ void wrong(Database<Sqlite> db) {
         final errors = result.diagnostics
             .where((e) => e.severity.name.toLowerCase() == 'error')
             .toList();
-        expect(errors.length, greaterThanOrEqualTo(14));
+        expect(errors.length, greaterThanOrEqualTo(16));
         expect(
           errors.every(
             (e) =>
@@ -69,6 +72,8 @@ void wrong(Database<Sqlite> db) {
           18,
           19,
           20,
+          21,
+          22,
         ]) {
           expect(
             errors.any(

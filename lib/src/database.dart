@@ -122,6 +122,8 @@ class Database<B extends Backend> {
   bool _childActive = false;
   bool _statementFailed = false;
   int _savepointId = 0;
+  late final _ChangeHub _changes = _changeHubs[driver] ??= _ChangeHub();
+  final Map<String, bool> _pendingChanges = {};
 
   Database(this.driver, {this.onQuery})
     : _connection = null,
@@ -139,6 +141,31 @@ class Database<B extends Backend> {
 
   TableSet<R, F> table<R, F extends Fields>(Table<R, F> table) =>
       TableSet(this, table);
+
+  /// Register declared FK effects for query invalidation. Generated accessors
+  /// register their schema once; hand-authored clients can do the same here.
+  void registerSchema(Iterable<TableSchema> tables) =>
+      _changes.register(tables);
+
+  /// Explicit notification for raw SQL, triggers or externally committed work.
+  /// Inside a transaction this is deferred until its successful commit.
+  void invalidate(Iterable<TableSchema> tables) {
+    _checkActive();
+    _recordChanges(tables, cascade: true);
+  }
+
+  void _recordChanges(Iterable<TableSchema> tables, {required bool cascade}) {
+    final changes = <String, bool>{};
+    for (final table in tables) {
+      _changes.registerTable(table);
+      changes[table.name] = cascade;
+    }
+    if (inTransaction) {
+      _mergeChanges(_pendingChanges, changes);
+    } else {
+      _changes.publish(changes);
+    }
+  }
 
   void _checkActive() {
     if (!_active) {
@@ -215,6 +242,16 @@ class Database<B extends Backend> {
   Future<SqlResult> execute(
     SqlCommand command, {
     ExecutionOptions options = const ExecutionOptions(),
+    Iterable<TableSchema> changedTables = const [],
+  }) =>
+      _executeCommand(command, options: options, changedTables: changedTables);
+
+  Future<SqlResult> _executeCommand(
+    SqlCommand command, {
+    ExecutionOptions options = const ExecutionOptions(),
+    Iterable<TableSchema> changedTables = const [],
+    bool affectedOnly = false,
+    bool cascade = true,
   }) {
     options.check();
     if ((options.cancellation != null || options.timeout != null) &&
@@ -224,7 +261,17 @@ class Database<B extends Backend> {
         'This driver cannot cancel a running statement.',
       );
     }
-    return _run((c) => _execute(c, command, options: options));
+    final tables = List<TableSchema>.unmodifiable(changedTables);
+    if (tables.isEmpty) {
+      return _run((c) => _execute(c, command, options: options));
+    }
+    return _run((c) async {
+      final result = await _execute(c, command, options: options);
+      if (!affectedOnly || result.affectedRows > 0) {
+        _recordChanges(tables, cascade: cascade);
+      }
+      return result;
+    });
   }
 
   /// Retains one connection across transactions and session-scoped operations.
@@ -311,6 +358,7 @@ class Database<B extends Backend> {
           }
           committing = true;
           await _execute(connection, SqlCommand('COMMIT'));
+          _changes.publish(tx._pendingChanges);
           return result;
         } catch (error, stack) {
           tx._active = false;
@@ -322,6 +370,9 @@ class Database<B extends Backend> {
             await connection.invalidate();
           }
           if (committing) {
+            // The server may have committed before the acknowledgement failed.
+            // Re-read affected queries rather than promising a rollback.
+            _changes.publish(tx._pendingChanges);
             throw OrmException(
               'TRANSACTION.COMMIT',
               'Commit failed; do not retry without checking its outcome.',
@@ -368,6 +419,7 @@ class Database<B extends Backend> {
           );
         }
         await _execute(connection, SqlCommand('RELEASE SAVEPOINT $name'));
+        _mergeChanges(_pendingChanges, child._pendingChanges);
         return result;
       } catch (error, stack) {
         child._active = false;
@@ -398,6 +450,7 @@ class Database<B extends Backend> {
     if (!_active) return;
     _active = false;
     try {
+      await _changes.stop();
       await _stopStreams();
     } finally {
       await Future.wait(_pending.toList());

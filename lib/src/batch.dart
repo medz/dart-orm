@@ -83,7 +83,13 @@ final class BatchInsert<F extends Fields> {
       final rows = <List<Object?>>[];
       try {
         for (final command in commands) {
-          final result = await db.execute(command, options: options);
+          final result = await db._executeCommand(
+            command,
+            options: options,
+            changedTables: [_state.source.schema],
+            affectedOnly: true,
+            cascade: false,
+          );
           count += result.affectedRows;
           rows.addAll(result.rows);
         }

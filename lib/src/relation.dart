@@ -207,6 +207,7 @@ final class _RelationSubquery(
       );
     }
     final source = relation._state.source;
+    w.reads?.tables.add(source.schema);
     final previous = w.aliases[source];
     final alias = 't${w.aliases.length}';
     w.aliases[source] = alias;
@@ -248,6 +249,7 @@ final class _RelationSelection<R, F extends Fields>(
 }
 
 abstract class _RelationBinding {
+  void collectReads(Database<Backend> db, _ReadTables reads);
   Future<List<Object?>> load(
     Database<Backend> db,
     SqlConnection connection,
@@ -260,6 +262,11 @@ final class _TypedRelationBinding<R, F extends Fields>(
   final Relation<R, F> relation,
   final List<int> parentIndices,
 ) extends _RelationBinding {
+  @override
+  void collectReads(Database<Backend> db, _ReadTables reads) => reads.query(
+    Query._(db, relation._fields, relation._state, relation._selection),
+  );
+
   @override
   Future<List<Object?>> load(
     Database<Backend> db,

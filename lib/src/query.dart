@@ -149,6 +149,14 @@ class Query<R, F extends Fields> {
 
   String _write(_Writer w, _SelectionPlan plan, {bool aliasColumns = false}) {
     final joins = [..._state.joins, ...plan.joins];
+    if (!_state.ctes.any((cte) => cte.name == _state.source.schema.name)) {
+      w.reads?.tables.add(_state.source.schema);
+    }
+    for (final join in joins) {
+      if (join.alias._cte == null) {
+        w.reads?.tables.add(join.alias.fields.table.schema);
+      }
+    }
     if (w.dialect != database.dialect) {
       throw const OrmException(
         'QUERY.DIALECT',

@@ -135,7 +135,9 @@ final peopleTable = Table<models.Person, PeopleFields>(
 );
 
 final class PeopleTableSet extends TableSet<models.Person, PeopleFields> {
-  PeopleTableSet(Database<Backend> db) : super(db, peopleTable);
+  PeopleTableSet(Database<Backend> db) : super(db, peopleTable) {
+    db.registerSchema(appSchema);
+  }
   Future<models.Person> create({
     Change<types0.PersonId> id = const Change.keep(),
     required types0.Email email,
@@ -232,7 +234,9 @@ final notesTable = Table<models.Note, NotesFields>(
 );
 
 final class NotesTableSet extends TableSet<models.Note, NotesFields> {
-  NotesTableSet(Database<Backend> db) : super(db, notesTable);
+  NotesTableSet(Database<Backend> db) : super(db, notesTable) {
+    db.registerSchema(appSchema);
+  }
   Future<models.Note> create({
     Change<int> id = const Change.keep(),
     required types0.PersonId ownerId,

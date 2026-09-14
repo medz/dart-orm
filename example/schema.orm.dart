@@ -60,7 +60,9 @@ final usersTable = Table<models.User, UsersFields>(
 );
 
 final class UsersTableSet extends TableSet<models.User, UsersFields> {
-  UsersTableSet(Database<Backend> db) : super(db, usersTable);
+  UsersTableSet(Database<Backend> db) : super(db, usersTable) {
+    db.registerSchema(appSchema);
+  }
   Future<models.User> create({
     Change<int> id = const Change.keep(),
     required String email,
@@ -152,7 +154,9 @@ final postsTable = Table<models.Post, PostsFields>(
 );
 
 final class PostsTableSet extends TableSet<models.Post, PostsFields> {
-  PostsTableSet(Database<Backend> db) : super(db, postsTable);
+  PostsTableSet(Database<Backend> db) : super(db, postsTable) {
+    db.registerSchema(appSchema);
+  }
   Future<models.Post> create({
     Change<int> id = const Change.keep(),
     required int authorId,

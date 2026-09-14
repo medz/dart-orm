@@ -110,7 +110,9 @@ final accountsTable = Table<models.Account, AccountsFields>(
 );
 
 final class AccountsTableSet extends TableSet<models.Account, AccountsFields> {
-  AccountsTableSet(Database<Backend> db) : super(db, accountsTable);
+  AccountsTableSet(Database<Backend> db) : super(db, accountsTable) {
+    db.registerSchema(appSchema);
+  }
   Future<models.Account> create({
     required int tenant,
     required int id,
@@ -256,7 +258,9 @@ final eventsTable = Table<models.Event, EventsFields>(
 );
 
 final class EventsTableSet extends TableSet<models.Event, EventsFields> {
-  EventsTableSet(Database<Backend> db) : super(db, eventsTable);
+  EventsTableSet(Database<Backend> db) : super(db, eventsTable) {
+    db.registerSchema(appSchema);
+  }
   Future<models.Event> create({
     required int id,
     int? tenant,

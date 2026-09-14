@@ -251,8 +251,13 @@ final class Mutation<F extends Fields> {
   SqlCommand compile() => _compile();
   Future<int> execute({
     ExecutionOptions options = const ExecutionOptions(),
-  }) async =>
-      (await database.execute(compile(), options: options)).affectedRows;
+  }) async => (await database._executeCommand(
+    compile(),
+    options: options,
+    changedTables: [_state.source.schema],
+    affectedOnly: true,
+    cascade: _kind == _MutationKind.delete,
+  )).affectedRows;
   Returning<R> returning<R>(Selection<R> Function(F) selection) =>
       Returning._(this, selection(_fields));
 }
@@ -266,9 +271,12 @@ final class Returning<R> {
   }) async {
     final plan = _SelectionPlan();
     final decode = _selection._bind(plan);
-    final result = await _mutation.database.execute(
+    final result = await _mutation.database._executeCommand(
       _mutation._compile(plan),
       options: options,
+      changedTables: [_mutation._state.source.schema],
+      affectedOnly: true,
+      cascade: _mutation._kind == _MutationKind.delete,
     );
     return [for (final row in result.rows) decode(row)];
   }

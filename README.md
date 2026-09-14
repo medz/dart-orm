@@ -59,5 +59,10 @@ APIs. Declare public const codecs with `@UseCodec`; use `@EnumValue` for stable
 stored labels. See [types and JSON](docs/types.md) for codec validation, nullable
 values and the distinction between SQL NULL and JSON null.
 
+Use `query.watch()` for typed snapshots after relevant committed writes.
+Transactions merge notifications; rollbacks do not notify. See
+[query subscriptions](docs/watch.md) for relation dependencies, pause/cancellation,
+and explicit notifications for raw SQL or external writers.
+
 Set `ORM_TEST_POSTGRES` to a **disposable** local PostgreSQL database to include
 PostgreSQL integration tests. The tests create and drop their own test tables.

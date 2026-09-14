@@ -47,7 +47,7 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
     );
     b.writeln(
       'final class ${entity.setType} extends TableSet<${entity.rowType}, ${entity.fieldsType}> {'
-      '${entity.setType}(Database<Backend> db) : super(db, ${entity.name}Table);',
+      '${entity.setType}(Database<Backend> db) : super(db, ${entity.name}Table) { db.registerSchema(appSchema); }',
     );
     final parameters = <String>[];
     final assignments = <String>[];

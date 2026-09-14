@@ -89,8 +89,9 @@ final class _Writer {
   final Map<TableRef, String> aliases;
   final List<Object?> parameters = [];
   final Set<TableRef> leftJoins = {};
+  final _ReadTables? reads;
   bool unqualified = false;
-  _Writer(this.dialect, this.aliases);
+  _Writer(this.dialect, this.aliases, {this.reads});
   String quote(String name) => '"${name.replaceAll('"', '""')}"';
   String parameter(Object? value) {
     parameters.add(switch ((dialect, value)) {

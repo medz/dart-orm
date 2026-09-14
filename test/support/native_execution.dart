@@ -68,8 +68,21 @@ Future<void> main() async {
     if (await db.users.count() != 5) {
       throw StateError('Connection recovery failed');
     }
+    final changes = StreamIterator(db.users.select((u) => u.email).watch());
+    if (!await changes.moveNext() || changes.current.length != 5) {
+      throw StateError('Initial watch snapshot failed');
+    }
+    final changed = changes.moveNext();
+    await db.transaction((tx) async {
+      await tx.users.create(email: 'watch1@example.com');
+      await tx.users.create(email: 'watch2@example.com');
+    });
+    if (!await changed || changes.current.length != 7) {
+      throw StateError('Committed watch snapshot failed');
+    }
+    await changes.cancel();
     print(
-      'Native AOT: joined projections, cursor demand, sqlite3_interrupt and connection recovery passed.',
+      'Native AOT: joined projections, cursor demand, native cancellation, recovery and committed query watches passed.',
     );
   } finally {
     await db.close();
