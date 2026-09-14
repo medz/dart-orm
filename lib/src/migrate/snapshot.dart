@@ -69,6 +69,7 @@ final class SchemaSnapshot {
       nullable: nullable,
       generated: json['generated'] as bool,
       defaultSql: json['default'] as String?,
+      integerBits: json['integerBits'] as int?,
     );
   }
 
@@ -91,6 +92,8 @@ Map<String, Object?> _columnJson(Column<Object?> column) => {
   'nullable': column.nullable,
   'generated': column.generated,
   if (column.defaultSql != null) 'default': column.defaultSql,
+  if (column.integerBits != null && column.integerBits != 64)
+    'integerBits': column.integerBits,
 };
 Map<String, Object?> _indexJson(IndexSchema index) => {
   'name': index.name,

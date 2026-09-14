@@ -125,7 +125,7 @@ Future<TableInfo> inspectTable(Database<Backend> db, String table) async {
     );
     final sql = ddl.rows.firstOrNull?.first as String?;
     if (sql != null &&
-        _sqlWords(sql).any(
+        _sqlWords(_withoutIntegerChecks(sql, columns)).any(
           {
             'CHECK',
             'DEFERRABLE',
@@ -133,6 +133,7 @@ Future<TableInfo> inspectTable(Database<Backend> db, String table) async {
             'STRICT',
             'WITHOUT',
             'AUTOINCREMENT',
+            'CONFLICT',
           }.contains,
         )) {
       unmanaged.add(CatalogObject('table options', table, sql));
@@ -287,11 +288,15 @@ Future<SchemaVerification> verifySchema(
         differences.add('$path is missing');
         continue;
       }
-      if (found.storageType != _storageType(column.codec.sqlType, db.dialect)) {
+      if (found.storageType != _columnStorageType(column, db.dialect)) {
         differences.add('$path type differs');
       }
       if (found.nullable != column.nullable) {
         differences.add('$path nullability differs');
+      }
+      if (column.codec.sqlType == 'integer' &&
+          (found.integerBits ?? 64) != (column.integerBits ?? 64)) {
+        differences.add('$path integer width differs');
       }
       if (_normalizeDefault(found.defaultSql) !=
           _normalizeDefault(column.defaultSql)) {

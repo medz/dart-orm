@@ -15,6 +15,7 @@ part 'src/migrate/step.dart';
 part 'src/migrate/diff.dart';
 part 'src/migrate/recovery.dart';
 part 'src/migrate/backfill.dart';
+part 'src/migrate/sqlite_checks.dart';
 
 String _quote(String identifier) => '"${identifier.replaceAll('"', '""')}"';
 

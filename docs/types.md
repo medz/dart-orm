@@ -153,9 +153,64 @@ normal reviewed migration diff/conversion workflow.
 
 Storage semantics still belong to each database. In particular, SQLite `bigint`
 text retains exact digits but does not provide numeric text ordering/arithmetic.
-Configurable native integer widths, precise-decimal query semantics, native enum
-types and browser numeric boundaries remain pending. Do not substitute `double`
+Precise-decimal query semantics, native enum types and browser numeric boundaries
+remain pending. Do not substitute `double`
 for exact decimal data.
+
+## Signed integer column widths
+
+```dart
+typedef Counter = ({
+  @Id.generated() @IntegerBits(32) int id,
+  @IntegerBits(16) int small,
+  @IntegerBits(32) int? optional,
+  int total,
+});
+final counters = entity<Counter>();
+```
+
+`@IntegerBits` accepts 16, 32 or 64 on fields with integer storage, including
+integer-backed domain codecs. Omitting it means 64. For manual tables, pass
+`integerBits: 16` to `Column`. Explicit 64 and the default have the same serialized
+schema and produce no migration difference.
+
+Width belongs to the column metadata. It does not replace the `int` value codec
+or constrain an aggregate to its source column's range. PostgreSQL SUM over
+SMALLINT/INTEGER produces BIGINT; the generated API decodes wider results normally.
+Other arithmetic and overflow follow the database's native rules. See PostgreSQL's
+[numeric types](https://www.postgresql.org/docs/current/datatype-numeric.html) and
+[aggregate return types](https://www.postgresql.org/docs/current/functions-aggregate.html).
+
+| Width | PostgreSQL | SQLite column constraint |
+|---|---|---|
+| 16 | SMALLINT | integer storage value between -32768 and 32767 |
+| 32 | INTEGER | integer storage value between -2147483648 and 2147483647 |
+| 64/default | BIGINT | normal INTEGER storage |
+
+SQLite still uses its native variable-sized integer representation, not a forced
+two- or four-byte layout. For 16/32, DDL adds a CHECK which permits NULL when the
+column is nullable and otherwise requires an integer within the signed range.
+Default 64 retains ordinary SQLite INTEGER affinity. ORM writes use Dart `int`;
+SQLite's affinity and raw SQL rules are documented in
+[its datatype reference](https://www.sqlite.org/datatype3.html).
+
+Catalog inspection recognizes the emitted SQLite range checks while ignoring
+quoted defaults and comments. It does not claim to prove equivalence of arbitrary
+handwritten CHECK expressions; those remain unmanaged. Column checks and full
+schema verification both compare the inferred width. Catalog import emits
+`@IntegerBits` for PostgreSQL SMALLINT/INTEGER and recognized SQLite range checks.
+
+Width changes are type changes in migration history. Supply reviewed conversion
+expressions for both dialects, even for widening. PostgreSQL alters the native
+type; SQLite rebuilds the table with the new constraint. Data outside a narrowed
+range fails and rolls back the migration/history together. Physical column renames
+retain the width. Changing an identity column's width preserves generation and, on PostgreSQL,
+the associated sequence type. Backfills use their saved width metadata when
+verifying the historical schema.
+
+Native JIT and AOT checks include integer values beyond JavaScript's exact-number
+range. They do not establish browser-safe 64-bit transport. Browser numeric
+boundaries remain a separate acceptance requirement.
 
 ## Verification
 

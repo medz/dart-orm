@@ -266,7 +266,7 @@ Future<ImportedSchema> _importCatalog(
         if (db.dialect == SqlDialect.postgres &&
             modes[column.name]![1] == 'd' &&
             modes[column.name]![2] == '' &&
-            column.storageType == 'BIGINT' &&
+            {'SMALLINT', 'INTEGER', 'BIGINT'}.contains(column.storageType) &&
             !column.nullable &&
             _same(info.primaryKey, [column.name])) {
           identities.add(column.name);
@@ -305,20 +305,22 @@ Future<ImportedSchema> _importCatalog(
 
 // Match physical types exactly. In particular, NUMERIC does not prove BigInt,
 // and SQLite TEXT does not prove an application DateTime, enum, or JSON codec.
-(String, String?)? _importType(String storage, SqlDialect dialect) =>
-    switch ((dialect, storage)) {
-      (SqlDialect.sqlite, 'INTEGER') ||
-      (SqlDialect.postgres, 'BIGINT') => ('int', null),
-      (_, 'TEXT') => ('String', null),
-      (SqlDialect.sqlite, 'REAL') ||
-      (SqlDialect.postgres, 'DOUBLE PRECISION') => ('double', null),
-      (SqlDialect.sqlite, 'BLOB') ||
-      (SqlDialect.postgres, 'BYTEA') => ('Uint8List', null),
-      (SqlDialect.postgres, 'BOOLEAN') => ('bool', null),
-      (SqlDialect.postgres, 'TIMESTAMPTZ') => ('DateTime', null),
-      (SqlDialect.postgres, 'JSONB') => ('SqlJson', 'Codecs.jsonDocument'),
-      _ => null,
-    };
+(String, String?)? _importType(String storage, SqlDialect dialect) => switch ((
+  dialect,
+  storage,
+)) {
+  (SqlDialect.sqlite, 'INTEGER') ||
+  (SqlDialect.postgres, 'SMALLINT' || 'INTEGER' || 'BIGINT') => ('int', null),
+  (_, 'TEXT') => ('String', null),
+  (SqlDialect.sqlite, 'REAL') ||
+  (SqlDialect.postgres, 'DOUBLE PRECISION') => ('double', null),
+  (SqlDialect.sqlite, 'BLOB') ||
+  (SqlDialect.postgres, 'BYTEA') => ('Uint8List', null),
+  (SqlDialect.postgres, 'BOOLEAN') => ('bool', null),
+  (SqlDialect.postgres, 'TIMESTAMPTZ') => ('DateTime', null),
+  (SqlDialect.postgres, 'JSONB') => ('SqlJson', 'Codecs.jsonDocument'),
+  _ => null,
+};
 
 String _importQuote(String name) => '"${name.replaceAll('"', '""')}"';
 String _importCap(String name) => name[0].toUpperCase() + name.substring(1);
@@ -451,6 +453,9 @@ ImportedSchema _importDeclarations(
     for (final c in info.columns) {
       final type = _importType(c.storageType, dialect)!;
       b.writeln('@ColumnName(${_literal(c.name)})');
+      if (c.integerBits != null && c.integerBits != 64) {
+        b.writeln('@IntegerBits(${c.integerBits})');
+      }
       if (generated[info.name]!.contains(c.name)) b.writeln('@Id.generated()');
       if (c.defaultSql != null) {
         b.writeln('@Default.sql(${_literal(c.defaultSql!)})');

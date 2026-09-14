@@ -76,7 +76,7 @@ rows or a column name.
 
 | SQLite | PostgreSQL | Draft Dart type |
 |---|---|---|
-| INTEGER | BIGINT | int |
+| INTEGER | SMALLINT / INTEGER / BIGINT | int, with width metadata where needed |
 | TEXT | TEXT | String |
 | REAL | DOUBLE PRECISION | double |
 | BLOB | BYTEA | Uint8List |
@@ -87,16 +87,21 @@ rows or a column name.
 Nullability is preserved. SQLite TEXT may contain timestamps, enums, bigints or
 JSON, and INTEGER may hold application booleans. Add reviewed codecs when needed;
 the catalog does not establish those meanings. PostgreSQL NUMERIC may contain
-fractions, so importing it as BigInt would be incorrect. NUMERIC, narrower integers,
+fractions, so importing it as BigInt would be incorrect. NUMERIC,
 varchar, arrays, domains and other native types currently require explicit support
 instead of a lossy guessed mapping.
 
-SQLite rowid integer primary keys and PostgreSQL BY DEFAULT BIGINT primary-key
+SQLite rowid integer primary keys and PostgreSQL BY DEFAULT integer primary-key
 identities get `@Id.generated()`. ALWAYS identities, generated expressions,
 non-primary identities and nullable primary keys require explicit write semantics
 and are currently blocking. Sequence defaults such as a BIGSERIAL default retain
 their catalog SQL; import does not convert them to identities or reset sequences.
 Review their dependencies before baselining.
+
+PostgreSQL SMALLINT/INTEGER columns and SQLite INTEGER columns with recognized
+ORM range checks retain their `@IntegerBits(16)` or `@IntegerBits(32)` declaration.
+See [integer widths](types.md#signed-integer-column-widths) for range enforcement,
+aggregation and migration behavior.
 
 SQLite import requires 3.37 or later to distinguish ordinary, virtual and shadow
 tables using [table_list](https://www.sqlite.org/pragma.html#pragma_table_list).

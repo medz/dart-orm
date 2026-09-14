@@ -11,6 +11,7 @@ final class _Field {
   final bool generated;
   final bool unique;
   final String? defaultSql;
+  final int? integerBits;
   const _Field({
     required this.name,
     required this.column,
@@ -22,6 +23,7 @@ final class _Field {
     this.generated = false,
     this.unique = false,
     this.defaultSql,
+    this.integerBits,
   });
   Map<String, Object?> snapshot() => {
     'name': column,
@@ -29,6 +31,7 @@ final class _Field {
     'nullable': nullable,
     'generated': generated,
     if (defaultSql != null) 'default': defaultSql,
+    if (integerBits != null && integerBits != 64) 'integerBits': integerBits,
   };
 }
 

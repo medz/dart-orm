@@ -11,6 +11,14 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
     }
     final columns = <String>{};
     for (final column in table.columns) {
+      if (column.integerBits != null &&
+          (column.codec.sqlType != 'integer' ||
+              !{16, 32, 64}.contains(column.integerBits))) {
+        throw const OrmException(
+          'SCHEMA.INTEGER_BITS',
+          'Integer width must be 16, 32 or 64 on an integer column.',
+        );
+      }
       if (!columns.add(column.name)) {
         throw const OrmException('SCHEMA.DUPLICATE', 'Duplicate column name.');
       }
@@ -91,9 +99,7 @@ String _createTable(TableSchema table, SqlDialect dialect, {String? name}) {
 }
 
 String _columnDefinition(Column<Object?> c, SqlDialect dialect) {
-  final b = StringBuffer(
-    '${_quote(c.name)} ${_storageType(c.codec.sqlType, dialect)}',
-  );
+  final b = StringBuffer('${_quote(c.name)} ${_columnStorageType(c, dialect)}');
   if (c.generated) {
     b.write(
       dialect == SqlDialect.sqlite
@@ -103,6 +109,11 @@ String _columnDefinition(Column<Object?> c, SqlDialect dialect) {
   }
   if (!c.nullable) b.write(' NOT NULL');
   if (c.defaultSql case final value?) b.write(' DEFAULT ($value)');
+  if (dialect == SqlDialect.sqlite &&
+      c.integerBits != null &&
+      c.integerBits != 64) {
+    b.write(' CHECK (${_integerCheck(c.name, c.integerBits!)})');
+  }
   return b.toString();
 }
 
@@ -149,6 +160,24 @@ String _storageType(String type, SqlDialect dialect) => switch ((
   _ => throw OrmException('SCHEMA.TYPE', 'No $dialect mapping for $type.'),
 };
 
+String _columnStorageType(Column<Object?> column, SqlDialect dialect) =>
+    dialect == SqlDialect.postgres && column.codec.sqlType == 'integer'
+    ? switch (column.integerBits ?? 64) {
+        16 => 'SMALLINT',
+        32 => 'INTEGER',
+        _ => 'BIGINT',
+      }
+    : _storageType(column.codec.sqlType, dialect);
+
+bool _sameStorage(Column<Object?> a, Column<Object?> b) =>
+    a.codec.sqlType == b.codec.sqlType &&
+    (a.integerBits ?? 64) == (b.integerBits ?? 64);
+
+String _integerCheck(String name, int bits) {
+  final column = _quote(name), max = bits == 16 ? 32767 : 2147483647;
+  return "$column IS NULL OR (typeof($column) = 'integer' AND $column BETWEEN ${-max - 1} AND $max)";
+}
+
 /// Actual catalog columns, rather than a claimed migration version.
 final class ColumnInfo {
   final String name;
@@ -156,12 +185,14 @@ final class ColumnInfo {
   final bool nullable;
   final String? defaultSql;
   final bool generated;
+  final int? integerBits;
   const ColumnInfo({
     required this.name,
     required this.storageType,
     required this.nullable,
     this.defaultSql,
     this.generated = false,
+    this.integerBits,
   });
 }
 
@@ -177,6 +208,13 @@ Future<List<ColumnInfo>> inspectColumns(
       SqlCommand('PRAGMA index_list(${_quote(table)})'),
     );
     final rowidPrimaryKey = !indexes.rows.any((r) => r[3] == 'pk');
+    final ddl = await db.execute(
+      SqlCommand(
+        "SELECT sql FROM main.sqlite_schema WHERE type = 'table' AND name = ?1",
+        [table],
+      ),
+    );
+    final checks = _sqliteChecks(ddl.rows.firstOrNull?.first as String? ?? '');
     return [
       for (final row in rows.rows)
         ColumnInfo(
@@ -185,6 +223,9 @@ Future<List<ColumnInfo>> inspectColumns(
           nullable: row[3] == 0 && !(row[5] != 0 && rowidPrimaryKey),
           defaultSql: row[4] as String?,
           generated: (row[6] as int) > 0,
+          integerBits: (row[2] as String).toUpperCase() == 'INTEGER'
+              ? _sqliteIntegerBits(row[1] as String, checks)
+              : null,
         ),
     ];
   }
@@ -214,6 +255,12 @@ ORDER BY a.attnum''',
         nullable: row[2] as bool,
         defaultSql: row[3] as String?,
         generated: row[4] as bool,
+        integerBits: switch ((row[1] as String).toUpperCase()) {
+          'SMALLINT' => 16,
+          'INTEGER' => 32,
+          'BIGINT' => 64,
+          _ => null,
+        },
       ),
   ];
 }
@@ -236,12 +283,15 @@ Future<List<String>> verifyColumns(
         differences.add('$path is missing');
         continue;
       }
-      if (column.storageType !=
-          _storageType(expected.codec.sqlType, db.dialect)) {
+      if (column.storageType != _columnStorageType(expected, db.dialect)) {
         differences.add('$path type is ${column.storageType}');
       }
       if (column.nullable != expected.nullable) {
         differences.add('$path nullability differs');
+      }
+      if (expected.codec.sqlType == 'integer' &&
+          (column.integerBits ?? 64) != (expected.integerBits ?? 64)) {
+        differences.add('$path integer width differs');
       }
     }
     for (final extra in actual.keys) {

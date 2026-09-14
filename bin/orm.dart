@@ -283,6 +283,7 @@ Future<void> main(List<String> arguments) async {
                   'nullable': c.nullable,
                   'default': c.defaultSql,
                   'generated': c.generated,
+                  if (c.integerBits != null) 'integerBits': c.integerBits,
                 },
             ],
             'primaryKey': info.primaryKey,

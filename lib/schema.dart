@@ -38,6 +38,12 @@ final class Default {
   const Default.sql(this.expression);
 }
 
+/// Signed integer column storage. SQL expression results retain the int codec.
+final class IntegerBits {
+  final int value;
+  const IntegerBits(this.value);
+}
+
 enum ReferentialAction { restrict, cascade, setNull, setDefault, noAction }
 
 Entity<M> entity<M>({String? table}) => Entity<M>(table);

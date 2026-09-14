@@ -1,0 +1,85 @@
+{
+  "format": 1,
+  "tables": [
+    {
+      "name": "samples",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": true,
+          "integerBits": 32
+        },
+        {
+          "name": "small",
+          "type": "integer",
+          "nullable": false,
+          "generated": false,
+          "integerBits": 16
+        },
+        {
+          "name": "medium",
+          "type": "integer",
+          "nullable": false,
+          "generated": false,
+          "integerBits": 32
+        },
+        {
+          "name": "large",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "optional",
+          "type": "integer",
+          "nullable": true,
+          "generated": false,
+          "integerBits": 16
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [],
+      "foreignKeys": []
+    },
+    {
+      "name": "owners",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "sample_id",
+          "type": "integer",
+          "nullable": false,
+          "generated": false,
+          "integerBits": 32
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [],
+      "foreignKeys": [
+        {
+          "columns": [
+            "sample_id"
+          ],
+          "target": "samples",
+          "targetColumns": [
+            "id"
+          ],
+          "onDelete": "RESTRICT"
+        }
+      ]
+    }
+  ]
+}

@@ -196,6 +196,7 @@ final class _SchemaReader(
     }
     var id = false, generated = false, unique = false;
     String? column, defaultSql;
+    int? integerBits;
     Annotation? custom;
     for (final annotation in field.metadata) {
       final value = annotation.elementAnnotation?.computeConstantValue();
@@ -215,6 +216,11 @@ final class _SchemaReader(
           column = value!.getField('name')!.toStringValue();
         case 'Default':
           defaultSql = value!.getField('expression')!.toStringValue();
+        case 'IntegerBits':
+          if (integerBits != null) {
+            _fail(annotation, 'IntegerBits may only appear once.');
+          }
+          integerBits = value!.getField('value')!.toIntValue();
         case 'UseCodec':
           if (custom != null) {
             _fail(annotation, 'UseCodec may only appear once.');
@@ -287,6 +293,13 @@ final class _SchemaReader(
       storage = mapping.$1;
       codec = 'Codecs.${mapping.$2}${nullable ? '.nullable()' : ''}';
     }
+    if (integerBits != null &&
+        (storage != 'integer' || !{16, 32, 64}.contains(integerBits))) {
+      _fail(
+        field,
+        'IntegerBits requires integer storage and a width of 16, 32 or 64.',
+      );
+    }
     return _Field(
       name: name,
       column: column ?? _snake(name),
@@ -298,6 +311,7 @@ final class _SchemaReader(
       generated: generated,
       unique: unique,
       defaultSql: defaultSql,
+      integerBits: integerBits,
     );
   }
 

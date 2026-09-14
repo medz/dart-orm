@@ -87,6 +87,7 @@ Migration _diff(
               nullable: c.nullable,
               generated: c.generated,
               defaultSql: c.defaultSql,
+              integerBits: c.integerBits,
             ),
         ],
         primaryKey: table.primaryKey
@@ -151,7 +152,7 @@ Migration _diff(
           '$name.${c.name} identity changes require a manual migration.',
         );
       }
-      if (prior != null && prior.codec.sqlType != c.codec.sqlType) {
+      if (prior != null && !_sameStorage(prior, c)) {
         for (final dialect in SqlDialect.values) {
           if (using[dialect]?[name]?[c.name] == null) {
             throw OrmException(
@@ -174,7 +175,7 @@ Migration _diff(
             .firstOrNull;
         if (old == null ||
             next == null ||
-            old.codec.sqlType == next.codec.sqlType ||
+            _sameStorage(old, next) ||
             entry.value.trim().isEmpty) {
           throw OrmException(
             'MIGRATION.CAST',
@@ -210,9 +211,8 @@ Migration _diff(
         return a == null ||
             b == null ||
             a.columns.any(
-              (c) => b.columns.any(
-                (n) => c.name == n.name && c.codec.sqlType != n.codec.sqlType,
-              ),
+              (c) =>
+                  b.columns.any((n) => c.name == n.name && !_sameStorage(c, n)),
             );
       }
 
@@ -338,14 +338,14 @@ Migration _diff(
         final a = oldColumns[column]!, b = newColumns[column]!;
         final prefix =
             'ALTER TABLE ${_quote(name)} ALTER COLUMN ${_quote(column)}';
-        final typeChanged = a.codec.sqlType != b.codec.sqlType;
+        final typeChanged = !_sameStorage(a, b);
         if (typeChanged && a.defaultSql != null) {
           steps.add(ExecuteSql('$prefix DROP DEFAULT'));
         }
         if (typeChanged) {
           steps.add(
             ExecuteSql(
-              '$prefix TYPE ${_storageType(b.codec.sqlType, dialect)} USING (${using[dialect]![name]![column]})',
+              '$prefix TYPE ${_columnStorageType(b, dialect)} USING (${using[dialect]![name]![column]})',
             ),
           );
         }

@@ -13,12 +13,17 @@ final class Column<T> {
   final bool nullable;
   final bool generated;
   final String? defaultSql;
+
+  /// Signed integer storage width (16, 32 or 64). The default is 64.
+  /// This describes the column, not the result width of SQL arithmetic.
+  final int? integerBits;
   const Column(
     this.name,
     this.codec, {
     this.nullable = false,
     this.generated = false,
     this.defaultSql,
+    this.integerBits,
   });
 }
 
