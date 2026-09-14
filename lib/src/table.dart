@@ -61,8 +61,23 @@ final class TableSchema {
        uniqueKeys = List.unmodifiable(
          uniqueKeys.map(List<String>.unmodifiable),
        ),
-       foreignKeys = List.unmodifiable(foreignKeys),
-       indexes = List.unmodifiable(indexes);
+       foreignKeys = List.unmodifiable([
+         for (final key in foreignKeys)
+           ForeignKey(
+             List.unmodifiable(key.columns),
+             key.target,
+             List.unmodifiable(key.targetColumns),
+             onDelete: key.onDelete,
+           ),
+       ]),
+       indexes = List.unmodifiable([
+         for (final index in indexes)
+           IndexSchema(
+             index.name,
+             List.unmodifiable(index.columns),
+             unique: index.unique,
+           ),
+       ]);
 }
 
 abstract class Fields {

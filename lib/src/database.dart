@@ -98,17 +98,25 @@ class Database<B extends Backend> {
   final Driver<B> driver;
   final void Function(QueryEvent)? onQuery;
   final SqlConnection? _connection;
+  final bool _transaction;
   final Set<Future<void>> _pending = {};
   bool _active = true;
   bool _childActive = false;
   bool _statementFailed = false;
   int _savepointId = 0;
 
-  Database(this.driver, {this.onQuery}) : _connection = null;
-  Database._(this.driver, this._connection, this.onQuery);
+  Database(this.driver, {this.onQuery})
+    : _connection = null,
+      _transaction = false;
+  Database._(
+    this.driver,
+    this._connection,
+    this.onQuery, {
+    this._transaction = true,
+  });
   Capabilities get capabilities => driver.capabilities;
   SqlDialect get dialect => capabilities.dialect;
-  bool get inTransaction => _connection != null;
+  bool get inTransaction => _transaction;
 
   TableSet<R, F> table<R, F extends Fields>(Table<R, F> table) =>
       TableSet(this, table);
@@ -120,7 +128,7 @@ class Database<B extends Backend> {
     if (_childActive) {
       throw const OrmException(
         'SESSION.SAVEPOINT',
-        'Use the active savepoint session.',
+        'Use the active nested session.',
       );
     }
   }
@@ -179,6 +187,53 @@ class Database<B extends Backend> {
   Future<SqlResult> execute(SqlCommand command) =>
       _run((c) => _execute(c, command));
 
+  /// Retains one connection across transactions and session-scoped operations.
+  /// The borrowed view expires when the callback returns.
+  Future<R> session<R>(Future<R> Function(Database<B> session) action) {
+    if (_connection != null) {
+      throw const OrmException(
+        'SESSION.NESTED',
+        'This session already owns a connection lease.',
+      );
+    }
+    return _run((connection) async {
+      final session = Database<B>._(
+        driver,
+        connection,
+        onQuery,
+        transaction: false,
+      );
+      try {
+        final result = await action(session);
+        session._active = false;
+        if (session._pending.isNotEmpty) {
+          await Future.wait(session._pending.toList());
+          throw const OrmException(
+            'SESSION.UNAWAITED',
+            'Await all work before releasing a session.',
+          );
+        }
+        return result;
+      } finally {
+        session._active = false;
+        await Future.wait(session._pending.toList());
+      }
+    });
+  }
+
+  /// Discards a leased connection after its state can no longer be recovered.
+  Future<void> discard() async {
+    final connection = _connection;
+    if (connection == null) {
+      throw const OrmException(
+        'SESSION.REQUIRED',
+        'Discard requires a leased session.',
+      );
+    }
+    _active = false;
+    await connection.invalidate();
+  }
+
   Future<R> transaction<R>(
     Future<R> Function(Database<B> tx) action, {
     TransactionOptions<B>? options,
@@ -190,46 +245,51 @@ class Database<B extends Backend> {
       );
     }
     return _run((connection) async {
-      await _execute(connection, SqlCommand(options?._begin ?? 'BEGIN'));
-      final tx = Database<B>._(driver, connection, onQuery);
-      var committing = false;
+      if (_connection != null) _childActive = true;
       try {
-        final result = await action(tx);
-        tx._active = false;
-        if (tx._pending.isNotEmpty || tx._childActive) {
-          await Future.wait(tx._pending.toList());
-          throw const OrmException(
-            'TRANSACTION.UNAWAITED',
-            'Await every operation before leaving the transaction.',
-          );
-        }
-        if (tx._statementFailed) {
-          throw const OrmException(
-            'TRANSACTION.FAILED',
-            'A statement failed. Use a savepoint for recoverable errors.',
-          );
-        }
-        committing = true;
-        await _execute(connection, SqlCommand('COMMIT'));
-        return result;
-      } catch (error, stack) {
-        tx._active = false;
-        await Future.wait(tx._pending.toList());
+        await _execute(connection, SqlCommand(options?._begin ?? 'BEGIN'));
+        final tx = Database<B>._(driver, connection, onQuery);
+        var committing = false;
         try {
-          await _execute(connection, SqlCommand('ROLLBACK'));
-        } catch (_) {
-          await connection.invalidate();
+          final result = await action(tx);
+          tx._active = false;
+          if (tx._pending.isNotEmpty || tx._childActive) {
+            await Future.wait(tx._pending.toList());
+            throw const OrmException(
+              'TRANSACTION.UNAWAITED',
+              'Await every operation before leaving the transaction.',
+            );
+          }
+          if (tx._statementFailed) {
+            throw const OrmException(
+              'TRANSACTION.FAILED',
+              'A statement failed. Use a savepoint for recoverable errors.',
+            );
+          }
+          committing = true;
+          await _execute(connection, SqlCommand('COMMIT'));
+          return result;
+        } catch (error, stack) {
+          tx._active = false;
+          await Future.wait(tx._pending.toList());
+          try {
+            await _execute(connection, SqlCommand('ROLLBACK'));
+          } catch (_) {
+            await connection.invalidate();
+          }
+          if (committing) {
+            throw OrmException(
+              'TRANSACTION.COMMIT',
+              'Commit failed; do not retry without checking its outcome.',
+              cause: error,
+            );
+          }
+          Error.throwWithStackTrace(error, stack);
+        } finally {
+          tx._active = false;
         }
-        if (committing) {
-          throw OrmException(
-            'TRANSACTION.COMMIT',
-            'Commit failed; do not retry without checking its outcome.',
-            cause: error,
-          );
-        }
-        Error.throwWithStackTrace(error, stack);
       } finally {
-        tx._active = false;
+        if (_connection != null) _childActive = false;
       }
     });
   }
@@ -283,10 +343,10 @@ class Database<B extends Backend> {
   }
 
   Future<void> close() async {
-    if (inTransaction) {
+    if (_connection != null) {
       throw const OrmException(
         'SESSION.BORROWED',
-        'A transaction cannot close its driver.',
+        'A borrowed session cannot close its driver.',
       );
     }
     if (!_active) return;

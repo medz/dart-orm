@@ -3,12 +3,18 @@ part of '../../migrate.dart';
 final class Migration {
   final String id;
   final Map<SqlDialect, List<String>> statements;
-  Migration(this.id, Map<SqlDialect, List<String>> statements)
-    : statements = Map.unmodifiable(
-        statements.map(
-          (key, value) => MapEntry(key, List<String>.unmodifiable(value)),
-        ),
-      ) {
+  final SchemaSnapshot? snapshot;
+  final String? previous;
+  Migration(
+    this.id,
+    Map<SqlDialect, List<String>> statements, {
+    this.snapshot,
+    this.previous,
+  }) : statements = Map.unmodifiable(
+         statements.map(
+           (key, value) => MapEntry(key, List<String>.unmodifiable(value)),
+         ),
+       ) {
     if (!RegExp(r'^[0-9]+_[a-z][a-z0-9_]*$').hasMatch(id)) {
       throw ArgumentError(
         'Migration IDs use a numeric prefix and lowercase name.',
@@ -21,7 +27,7 @@ final class Migration {
           dialect: [
             for (final command in createSchema(schema, dialect)) command.sql,
           ],
-      });
+      }, snapshot: SchemaSnapshot(schema));
   factory Migration.fromJson(Map<String, Object?> json) {
     if (json['format'] != 1) {
       throw const OrmException(
@@ -30,15 +36,24 @@ final class Migration {
       );
     }
     final sql = json['sql'] as Map<String, Object?>;
-    return Migration(json['id'] as String, {
-      for (final entry in sql.entries)
-        SqlDialect.values.byName(entry.key): (entry.value as List<Object?>)
-            .cast<String>(),
-    });
+    return Migration(
+      json['id'] as String,
+      {
+        for (final entry in sql.entries)
+          SqlDialect.values.byName(entry.key): (entry.value as List<Object?>)
+              .cast<String>(),
+      },
+      snapshot: json['snapshot'] == null
+          ? null
+          : SchemaSnapshot.fromJson(json['snapshot'] as Map<String, Object?>),
+      previous: json['previous'] as String?,
+    );
   }
   Map<String, Object?> toJson() => {
     'format': 1,
     'id': id,
+    if (snapshot != null) 'snapshot': snapshot!.toJson(),
+    if (previous != null) 'previous': previous,
     'sql': {
       for (final entry in statements.entries) entry.key.name: entry.value,
     },
@@ -55,6 +70,63 @@ final class MigrationStatus {
 final class Migrator {
   final Database<Backend> database;
   const Migrator(this.database);
+
+  /// Registers a verified existing database without replaying creation SQL.
+  Future<SchemaVerification> baseline(
+    List<Migration> migrations, {
+    required SchemaSnapshot expected,
+  }) async {
+    _validate(migrations);
+    if (database.inTransaction) {
+      throw const OrmException(
+        'MIGRATION.SESSION',
+        'Baseline requires an outer session.',
+      );
+    }
+    if (migrations.isEmpty ||
+        migrations.last.snapshot?.checksum != expected.checksum) {
+      throw const OrmException(
+        'MIGRATION.BASELINE',
+        'The final migration must carry the expected baseline snapshot.',
+      );
+    }
+    return database.transaction(
+      (tx) async {
+        if (tx.dialect == SqlDialect.postgres) {
+          await tx.execute(
+            SqlCommand(
+              'SELECT pg_advisory_xact_lock(182983479, hashtext(current_schema()))',
+            ),
+          );
+        }
+        if ((await Migrator(tx).history()).isNotEmpty) {
+          throw const OrmException(
+            'MIGRATION.BASELINE',
+            'Migration history already exists.',
+          );
+        }
+        final verification = await verifySchema(tx, expected);
+        if (!verification.matches) {
+          throw OrmException(
+            'MIGRATION.DRIFT',
+            verification.differences.join('\n'),
+          );
+        }
+        await tx.execute(
+          SqlCommand(
+            'CREATE TABLE IF NOT EXISTS "_orm_migrations" (id TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)',
+          ),
+        );
+        for (final migration in migrations) {
+          await _recordMigration(tx, migration);
+        }
+        return verification;
+      },
+      options: database.dialect == SqlDialect.sqlite
+          ? const SqliteTransaction(mode: .immediate)
+          : const PostgresTransaction(),
+    );
+  }
 
   Future<List<MigrationStatus>> history() async {
     final exists = database.dialect == SqlDialect.sqlite
@@ -125,19 +197,7 @@ final class Migrator {
           for (final statement in migration.statements[database.dialect]!) {
             await tx.execute(SqlCommand(statement));
           }
-          final placeholders = database.dialect == SqlDialect.sqlite
-              ? '?1, ?2, ?3'
-              : '\$1, \$2, \$3';
-          await tx.execute(
-            SqlCommand(
-              'INSERT INTO "_orm_migrations" (id, checksum, applied_at) VALUES ($placeholders)',
-              [
-                migration.id,
-                migration.checksum,
-                DateTime.now().toUtc().toIso8601String(),
-              ],
-            ),
-          );
+          await _recordMigration(tx, migration);
         }
         return [for (final migration in pending) migration.id];
       },
@@ -149,6 +209,7 @@ final class Migrator {
 
   void _validate(List<Migration> migrations) {
     String? last;
+    String? previousChecksum;
     for (final migration in migrations) {
       if (last != null && last.compareTo(migration.id) >= 0) {
         throw const OrmException(
@@ -157,6 +218,14 @@ final class Migrator {
         );
       }
       last = migration.id;
+      if (migration.previous != null &&
+          migration.previous != previousChecksum) {
+        throw const OrmException(
+          'MIGRATION.CHAIN',
+          'Migration previous-checksum chain is broken.',
+        );
+      }
+      previousChecksum = migration.checksum;
       final statements = migration.statements[database.dialect];
       if (statements == null) {
         throw OrmException(
@@ -196,6 +265,19 @@ final class Migrator {
     }
   }
 }
+
+Future<void> _recordMigration(Database<Backend> db, Migration migration) => db
+    .execute(
+      SqlCommand(
+        'INSERT INTO "_orm_migrations" (id, checksum, applied_at) VALUES (${db.dialect == SqlDialect.sqlite ? '?1, ?2, ?3' : '\$1, \$2, \$3'})',
+        [
+          migration.id,
+          migration.checksum,
+          DateTime.now().toUtc().toIso8601String(),
+        ],
+      ),
+    )
+    .then((_) {});
 
 // Only classifies transaction control. The database remains the SQL parser.
 List<String> _sqlWords(String sql) {

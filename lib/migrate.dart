@@ -9,6 +9,8 @@ import 'orm.dart';
 
 part 'src/migrate/schema.dart';
 part 'src/migrate/history.dart';
+part 'src/migrate/snapshot.dart';
+part 'src/migrate/catalog.dart';
 
 String _quote(String identifier) => '"${identifier.replaceAll('"', '""')}"';
 

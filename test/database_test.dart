@@ -202,6 +202,27 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
     });
 
     test(
+      'leased sessions retain one connection across transactions and expire',
+      () async {
+        late Database<Backend> escaped;
+        await db.session((session) async {
+          escaped = session;
+          expect(session.inTransaction, false);
+          await session.transaction((tx) async {
+            expect(tx.inTransaction, true);
+            expect(
+              () => session.table(users).get(),
+              throwsA(isA<OrmException>()),
+            );
+            await tx.table(users).createRow((u) => [u.email.set('leased')]);
+          });
+          expect(await session.table(users).count(), 1);
+        });
+        expect(() => escaped.table(users).get(), throwsA(isA<OrmException>()));
+      },
+    );
+
+    test(
       'native upsert updates atomically using existing and incoming values',
       () async {
         final initial = await create('same');

@@ -27,6 +27,10 @@ This file records verified delivery, not planned capabilities presented as worki
 - CTEs with typed references to exported SQL expressions, mapped row decoding and nullable exports.
 - Keyset pagination with unique tie breakers, mixed directions, explicit null ordering and versioned cursor transport.
 - Actual generated-API negative type tests and checked codec calls after generic type erasure.
+- Connection leases spanning transactions, with scoped lifetime and explicit discard.
+- Portable schema snapshots; catalog checks for columns, defaults, keys and simple indexes.
+- Existing-database baselines verify declared schema facts before recording immutable history.
+- Unmodeled constraints, expression/partial indexes, triggers and policies are reported separately.
 
 ## Delivery sequence
 
@@ -43,28 +47,30 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 74 checks with native SQLite
+Static analysis is clean. The complete suite passes 82 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
 `dart run example/main.dart` runs successfully against a real in-memory SQLite DB.
+The generated SQLite example also compiles and runs as a native macOS AOT executable.
 
 ## Still required for the goal
 
 - Union; advanced-query capability and edge-case review.
 - Composite-key relation batching acceptance and join-based to-one loading.
-- Migration diff/rename/rebuild, baseline, full constraint/index drift and nontransactional recovery.
+- Migration diff/rename/rebuild and nontransactional recovery; broader unmanaged-object catalog coverage.
 - Complete migration CLI and build integration; custom codec/schema authoring.
 - Cancellation, retry classification, genuine streaming and backend capability coverage.
-- Browser worker/persistence adapter and real browser verification; native Flutter/AOT checks.
+- Browser worker/persistence adapter and real browser verification; native Flutter checks.
 - User documentation, performance measurements and complete acceptance review.
 
 Current to-one relation projections use batching, not joins. `verifyColumns` checks
-column names/types/nullability only and is deliberately not named full schema verification.
+column names/types/nullability only. `verifySchema` additionally compares defaults,
+keys and simple indexes; its `unmanaged` objects require separate review.
 The migration runner currently accepts transactional migrations only. These are
 implementation stages, not a reduction of the active goal.
 
-The full suite includes 50 shared SQLite/PostgreSQL query checks, 14 generated
+The full suite includes 52 shared SQLite/PostgreSQL query checks, 20 generated
 client/migration integration checks, seven source generation checks, two codec
 regressions and one negative compilation suite covering seven invalid API uses.
 

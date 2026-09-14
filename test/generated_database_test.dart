@@ -91,6 +91,64 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
       expect((await Migrator(db).history()).single.checksum, initial.checksum);
     });
 
+    test('snapshot round trip and full managed catalog comparison', () async {
+      final snapshot = SchemaSnapshot.fromJson(
+        SchemaSnapshot(appSchema).toJson(),
+      );
+      await Migrator(db).apply([initial]);
+      final verification = await verifySchema(db, snapshot);
+      expect(verification.differences, isEmpty);
+      expect(verification.unmanaged, isEmpty);
+      await db.execute(SqlCommand('DROP INDEX author_timeline'));
+      expect(
+        (await verifySchema(db, snapshot)).differences,
+        contains('posts indexes differs'),
+      );
+    });
+
+    test('baseline preserves existing rows and verifies keys before recording history', () async {
+      for (final statement in createSchema(appSchema, db.dialect)) {
+        await db.execute(statement);
+      }
+      final user = await db.users.create(email: 'already-exists');
+      final verification = await Migrator(db)
+          .baseline([initial], expected: SchemaSnapshot(appSchema));
+      expect(verification.matches, true);
+      expect((await db.users.byId(user.id).single()).email, 'already-exists');
+      expect(await Migrator(db).plan([initial]), isEmpty);
+      await expectLater(
+        Migrator(db).baseline([initial], expected: SchemaSnapshot(appSchema)),
+        throwsA(isA<OrmException>()),
+      );
+    });
+
+    test(
+      'full verification sees defaults and additional unique constraints',
+      () async {
+        await Migrator(db).apply([initial]);
+        await db.execute(
+          SqlCommand(
+            'CREATE UNIQUE INDEX unexpected_unique ON users(nickname)',
+          ),
+        );
+        final changed = SchemaSnapshot([
+          TableSchema(
+            'users',
+            columns: [
+              ...usersSchema.columns.where((c) => c.name != 'score'),
+              Column('score', Codecs.integer, defaultSql: '1'),
+            ],
+            primaryKey: usersSchema.primaryKey,
+            uniqueKeys: usersSchema.uniqueKeys,
+          ),
+          postsSchema,
+        ]);
+        final differences = (await verifySchema(db, changed)).differences;
+        expect(differences, contains('users.score default differs'));
+        expect(differences, contains('users indexes differs'));
+      },
+    );
+
     test('history tampering and missing applied migrations fail', () async {
       await Migrator(db).apply([initial]);
       final changed = Migration(initial.id, {
