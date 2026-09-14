@@ -31,6 +31,9 @@ This file records verified delivery, not planned capabilities presented as worki
 - Portable schema snapshots; catalog checks for columns, defaults, keys and simple indexes.
 - Existing-database baselines verify declared schema facts before recording immutable history.
 - Unmodeled constraints, expression/partial indexes, triggers and policies are reported separately.
+- Reviewable migration diffs, explicit renames/conversions, destructive-change gates and checksum chains.
+- SQLite atomic copy/rebuild with preserved dependency SQL, foreign-key validation and state restoration.
+- PostgreSQL constraint changes resolve actual catalog names, including baselined schemas.
 
 ## Delivery sequence
 
@@ -47,10 +50,11 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 82 checks with native SQLite
+Static analysis is clean. The complete suite passes 100 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
+An additional SQLite catalog regression verifies nullable non-rowid primary keys.
 `dart run example/main.dart` runs successfully against a real in-memory SQLite DB.
 The generated SQLite example also compiles and runs as a native macOS AOT executable.
 
@@ -58,7 +62,7 @@ The generated SQLite example also compiles and runs as a native macOS AOT execut
 
 - Union; advanced-query capability and edge-case review.
 - Composite-key relation batching acceptance and join-based to-one loading.
-- Migration diff/rename/rebuild and nontransactional recovery; broader unmanaged-object catalog coverage.
+- Nontransactional migration recovery; broader unmanaged-object catalog coverage.
 - Complete migration CLI and build integration; custom codec/schema authoring.
 - Cancellation, retry classification, genuine streaming and backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
@@ -72,7 +76,8 @@ implementation stages, not a reduction of the active goal.
 
 The full suite includes 52 shared SQLite/PostgreSQL query checks, 20 generated
 client/migration integration checks, seven source generation checks, two codec
-regressions and one negative compilation suite covering seven invalid API uses.
+regressions, 18 migration evolution checks and one negative compilation suite
+covering seven invalid API uses, plus the focused SQLite primary-key regression.
 
 ## Environment
 

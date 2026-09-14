@@ -117,6 +117,7 @@ class Database<B extends Backend> {
   Capabilities get capabilities => driver.capabilities;
   SqlDialect get dialect => capabilities.dialect;
   bool get inTransaction => _transaction;
+  bool get inSession => _connection != null;
 
   TableSet<R, F> table<R, F extends Fields>(Table<R, F> table) =>
       TableSet(this, table);

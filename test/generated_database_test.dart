@@ -151,9 +151,9 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
 
     test('history tampering and missing applied migrations fail', () async {
       await Migrator(db).apply([initial]);
-      final changed = Migration(initial.id, {
+      final changed = Migration.steps(initial.id, {
         for (final dialect in SqlDialect.values)
-          dialect: [...initial.statements[dialect]!, 'SELECT 1'],
+          dialect: [...initial.steps[dialect]!, ExecuteSql('SELECT 1')],
       });
       await expectLater(
         Migrator(db).plan([changed]),

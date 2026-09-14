@@ -2,17 +2,32 @@ part of '../../migrate.dart';
 
 final class Migration {
   final String id;
-  final Map<SqlDialect, List<String>> statements;
+  final Map<SqlDialect, List<MigrationStep>> steps;
   final SchemaSnapshot? snapshot;
   final String? previous;
   Migration(
-    this.id,
+    String id,
     Map<SqlDialect, List<String>> statements, {
+    SchemaSnapshot? snapshot,
+    String? previous,
+  }) : this.steps(
+         id,
+         {
+           for (final entry in statements.entries)
+             entry.key: entry.value.map(ExecuteSql.new).toList(),
+         },
+         snapshot: snapshot,
+         previous: previous,
+       );
+  Migration.steps(
+    this.id,
+    Map<SqlDialect, List<MigrationStep>> steps, {
     this.snapshot,
     this.previous,
-  }) : statements = Map.unmodifiable(
-         statements.map(
-           (key, value) => MapEntry(key, List<String>.unmodifiable(value)),
+  }) : steps = Map.unmodifiable(
+         steps.map(
+           (key, value) =>
+               MapEntry(key, List<MigrationStep>.unmodifiable(value)),
          ),
        ) {
     if (!RegExp(r'^[0-9]+_[a-z][a-z0-9_]*$').hasMatch(id)) {
@@ -28,20 +43,39 @@ final class Migration {
             for (final command in createSchema(schema, dialect)) command.sql,
           ],
       }, snapshot: SchemaSnapshot(schema));
+  factory Migration.diff(
+    String id, {
+    required SchemaSnapshot from,
+    required SchemaSnapshot to,
+    SchemaRenames renames = const SchemaRenames(),
+    String? previous,
+    bool allowDestructive = false,
+    Map<SqlDialect, Map<String, Map<String, String>>> using = const {},
+  }) => _diff(
+    id,
+    from: from,
+    to: to,
+    renames: renames,
+    previous: previous,
+    allowDestructive: allowDestructive,
+    using: using,
+  );
   factory Migration.fromJson(Map<String, Object?> json) {
-    if (json['format'] != 1) {
+    if (json['format'] != 2) {
       throw const OrmException(
         'MIGRATION.FORMAT',
         'Unsupported migration format.',
       );
     }
-    final sql = json['sql'] as Map<String, Object?>;
-    return Migration(
+    final steps = json['steps'] as Map<String, Object?>;
+    return Migration.steps(
       json['id'] as String,
       {
-        for (final entry in sql.entries)
-          SqlDialect.values.byName(entry.key): (entry.value as List<Object?>)
-              .cast<String>(),
+        for (final entry in steps.entries)
+          SqlDialect.values.byName(entry.key): [
+            for (final step in entry.value as List<Object?>)
+              MigrationStep.fromJson(step as Map<String, Object?>),
+          ],
       },
       snapshot: json['snapshot'] == null
           ? null
@@ -50,12 +84,13 @@ final class Migration {
     );
   }
   Map<String, Object?> toJson() => {
-    'format': 1,
+    'format': 2,
     'id': id,
     if (snapshot != null) 'snapshot': snapshot!.toJson(),
     if (previous != null) 'previous': previous,
-    'sql': {
-      for (final entry in statements.entries) entry.key.name: entry.value,
+    'steps': {
+      for (final entry in steps.entries)
+        entry.key.name: [for (final step in entry.value) step.toJson()],
     },
   };
   String get checksum => _hash(toJson());
@@ -177,34 +212,100 @@ final class Migrator {
       );
     }
     _validate(migrations);
-    return database.transaction(
-      (tx) async {
-        if (database.dialect == SqlDialect.postgres) {
-          await tx.execute(
-            SqlCommand(
-              'SELECT pg_advisory_xact_lock(182983479, hashtext(current_schema()))',
+    Future<List<String>> run(Database<Backend> session) async {
+      final rebuild =
+          database.dialect == SqlDialect.sqlite &&
+          migrations.any(
+            (m) => m.steps[SqlDialect.sqlite]!.any(
+              (s) => s is RebuildTable || s is DropTable,
             ),
           );
-        }
-        await tx.execute(
-          SqlCommand(
-            'CREATE TABLE IF NOT EXISTS "_orm_migrations" '
-            '(id TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)',
-          ),
-        );
-        final pending = await Migrator(tx).plan(migrations);
-        for (final migration in pending) {
-          for (final statement in migration.statements[database.dialect]!) {
-            await tx.execute(SqlCommand(statement));
+      int? foreignKeys;
+      if (rebuild) {
+        foreignKeys =
+            (await session.execute(SqlCommand('PRAGMA foreign_keys')))
+                    .rows
+                    .single
+                    .single
+                as int;
+      }
+      try {
+        if (rebuild) {
+          await session.execute(SqlCommand('PRAGMA foreign_keys = OFF'));
+          if ((await session.execute(SqlCommand('PRAGMA foreign_keys')))
+                  .rows
+                  .single
+                  .single !=
+              0) {
+            throw const OrmException(
+              'MIGRATION.SESSION',
+              'Foreign keys must be disabled before the rebuild transaction.',
+            );
           }
-          await _recordMigration(tx, migration);
         }
-        return [for (final migration in pending) migration.id];
-      },
-      options: database.dialect == SqlDialect.sqlite
-          ? const SqliteTransaction(mode: SqliteTransactionMode.immediate)
-          : const PostgresTransaction(),
-    );
+        return await session.transaction(
+          (tx) async {
+            if (tx.dialect == SqlDialect.postgres) {
+              await tx.execute(
+                SqlCommand(
+                  'SELECT pg_advisory_xact_lock(182983479, hashtext(current_schema()))',
+                ),
+              );
+            }
+            await tx.execute(
+              SqlCommand(
+                'CREATE TABLE IF NOT EXISTS "_orm_migrations" (id TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)',
+              ),
+            );
+            final pending = await Migrator(tx).plan(migrations);
+            for (final migration in pending) {
+              for (final step in migration.steps[tx.dialect]!) {
+                await _executeStep(tx, step);
+              }
+              await _recordMigration(tx, migration);
+            }
+            if (rebuild &&
+                (await tx.execute(SqlCommand('PRAGMA foreign_key_check')))
+                    .rows
+                    .isNotEmpty) {
+              throw const OrmException(
+                'MIGRATION.FOREIGN_KEY',
+                'Rebuilt schema contains foreign key violations.',
+              );
+            }
+            return [for (final migration in pending) migration.id];
+          },
+          options: session.dialect == SqlDialect.sqlite
+              ? const SqliteTransaction(mode: .immediate)
+              : const PostgresTransaction(),
+        );
+      } finally {
+        if (foreignKeys != null) {
+          try {
+            await session.execute(
+              SqlCommand(
+                'PRAGMA foreign_keys = ${foreignKeys == 1 ? 'ON' : 'OFF'}',
+              ),
+            );
+            if ((await session.execute(SqlCommand('PRAGMA foreign_keys')))
+                    .rows
+                    .single
+                    .single !=
+                foreignKeys) {
+              throw const OrmException(
+                'MIGRATION.SESSION',
+                'Failed to restore SQLite foreign keys.',
+              );
+            }
+          } catch (_) {
+            await session.discard();
+            rethrow;
+          }
+        }
+      }
+    }
+
+    return database.inSession ? run(database) : database.session(run);
   }
 
   void _validate(List<Migration> migrations) {
@@ -226,14 +327,34 @@ final class Migrator {
         );
       }
       previousChecksum = migration.checksum;
-      final statements = migration.statements[database.dialect];
-      if (statements == null) {
+      final steps = migration.steps[database.dialect];
+      if (steps == null) {
         throw OrmException(
           'MIGRATION.TARGET',
           '${migration.id} has no SQL for ${database.dialect.name}.',
         );
       }
-      for (final sql in statements) {
+      for (final step in steps) {
+        if (step is DropTable) continue;
+        if (step is RebuildTable) {
+          if (database.dialect != SqlDialect.sqlite) {
+            throw const OrmException(
+              'MIGRATION.TARGET',
+              'Table rebuilds are SQLite operations.',
+            );
+          }
+          continue;
+        }
+        if (step is DropConstraint) {
+          if (database.dialect != SqlDialect.postgres) {
+            throw const OrmException(
+              'MIGRATION.TARGET',
+              'Constraint resolution is a PostgreSQL operation.',
+            );
+          }
+          continue;
+        }
+        final sql = (step as ExecuteSql).sql;
         // Transaction control belongs to the runner. Nontransactional operations
         // require a separate recoverable execution mode, not silent autocommit.
         final words = _sqlWords(sql);

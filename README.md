@@ -41,7 +41,8 @@ await db.close();
 For PostgreSQL, use `postgres(PostgresOptions(url: url))`; TLS certificate
 verification is the default. Each backend has its own transaction options.
 Migrations should be saved, reviewed and committed before use in persistent
-environments. The in-memory example builds an initial migration directly for clarity.
+environments. See [migration workflows](docs/migrations.md) for diffs, renames,
+rebuilds and existing-database baselines. The in-memory example builds an initial migration directly for clarity.
 
 Set `ORM_TEST_POSTGRES` to a **disposable** local PostgreSQL database to include
 PostgreSQL integration tests. The tests create and drop their own test tables.

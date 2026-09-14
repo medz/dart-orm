@@ -11,6 +11,8 @@ part 'src/migrate/schema.dart';
 part 'src/migrate/history.dart';
 part 'src/migrate/snapshot.dart';
 part 'src/migrate/catalog.dart';
+part 'src/migrate/step.dart';
+part 'src/migrate/diff.dart';
 
 String _quote(String identifier) => '"${identifier.replaceAll('"', '""')}"';
 
@@ -23,3 +25,11 @@ Object? _canonical(Object? value) => switch (value) {
 };
 String _hash(Object? value) =>
     sha256.convert(utf8.encode(jsonEncode(_canonical(value)))).toString();
+
+Object? _freezeJson(Object? value) => switch (value) {
+  Map<String, Object?> map => Map<String, Object?>.unmodifiable({
+    for (final entry in map.entries) entry.key: _freezeJson(entry.value),
+  }),
+  List<Object?> list => List<Object?>.unmodifiable(list.map(_freezeJson)),
+  _ => value,
+};
