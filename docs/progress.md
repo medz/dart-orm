@@ -46,6 +46,9 @@ This file records verified delivery, not planned capabilities presented as worki
 - To-one JOIN strategy using declared uniqueness, with explicit join/batch choices and cardinality checks.
 - Composite-key batch execution, tuple matching, parameter accounting and nested JOIN/window combinations.
 - Joined optional/required projections preserve row presence, nullable values, CTE exports and cursor decoding.
+- Constant schema codecs retain custom classes, extension IDs, nullable aliases and nested generic/record types.
+- Portable enum text labels, generation-time codec matching and stable imports for separately declared domain types.
+- JSON scalar decoding and explicit SQL-null/document-null distinction across SQLite and PostgreSQL.
 
 ## Delivery sequence
 
@@ -62,7 +65,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 182 checks with native SQLite
+Static analysis is clean. The complete suite passes 215 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -85,13 +88,22 @@ The relationship fixture is generated from a record schema with nullable composi
 foreign keys and self-relations. It verifies 1200-key batches, key deduplication,
 per-parent windows, nested JOINs, whole-row absence and root pagination on both
 backends. Generator checks compare committed client code and schema snapshots.
+The domain-type fixture adds 18 real-database checks for extension IDs, custom
+classes, enums, structured JSON, nullable document presence, relations, batches,
+upsert, cursors and schema catalogs. JSON string scalars are decoded without a
+second parse; SQL NULL and JSON null are separately represented. A final required
+JSON-null guard is also verified by the 22 codec/domain checks after the full
+suite. Generator checks cover moved outputs, colliding domain names, nullable
+aliases and invalid annotations. `test/support/codecs/native.dart` passes as a
+macOS AOT program with domain values, relations and streamed cursors.
 
 ## Still required for the goal
 
 - Union; advanced-query capability and edge-case review.
 - Resumable long backfills, application schema-version gates and broader unmanaged-object catalog coverage.
 - Existing-database declaration import and named SQL query generation.
-- Build integration; custom codec/schema authoring; committed-change query subscriptions.
+- Build integration; committed-change query subscriptions.
+- Configurable integer widths, exact-decimal query semantics and further native type coverage.
 - Connection acquisition and total transaction deadlines, retry classification and further backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
 - User documentation, performance measurements and complete acceptance review.
@@ -105,10 +117,11 @@ use durable per-step checkpoints; SQLite rejects that autocommit mode. These are
 implementation stages, not a reduction of the active goal.
 
 The full suite includes 52 shared SQLite/PostgreSQL query checks, 20 generated
-client/migration integration checks, seven source generation checks, two codec
+client/migration integration checks, 20 source generation checks, four codec
 regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CLI
 workflows, 37 streaming/execution checks, 28 relation strategy checks and one
-negative compilation suite covering seven invalid API uses.
+negative compilation suite covering 14 invalid API uses, plus 18 domain-codec
+integration checks.
 
 ## Environment
 

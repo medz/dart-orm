@@ -199,12 +199,29 @@ final class _PostgresConnection implements SqlConnection {
       final subscription = statement.bind(command.parameters).listen(rows.add);
       try {
         await subscription.asFuture<void>();
+        final schema = await subscription.schema;
+        final jsonColumns = {
+          for (final (index, column) in schema.columns.indexed)
+            if (column.typeOid == pg.Type.json.oid ||
+                column.typeOid == pg.Type.jsonb.oid)
+              index,
+        };
+        // The driver parses JSON strings and JSON null into ordinary Dart values.
+        // Retain their distinction from SQL text and SQL NULL without reserializing.
+        final List<List<Object?>> values = jsonColumns.isEmpty
+            ? rows
+            : [
+                for (final row in rows)
+                  [
+                    for (var i = 0; i < row.length; i++)
+                      jsonColumns.contains(i) && !row.isSqlNull(i)
+                          ? SqlJson(row[i])
+                          : row[i],
+                  ],
+              ];
         return SqlResult(
-          rows,
-          columns: [
-            for (final c in (await subscription.schema).columns)
-              c.columnName ?? '',
-          ],
+          values,
+          columns: [for (final c in schema.columns) c.columnName ?? ''],
           affectedRows: await subscription.affectedRows,
         );
       } finally {

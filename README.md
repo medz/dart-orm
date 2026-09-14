@@ -54,5 +54,10 @@ load in parameter-aware batches. Both support typed nested selections. See
 [relationship strategies](docs/relations.md) for composite keys, per-parent
 pagination and explicit `.join`/`.batch` choices.
 
+Domain IDs, custom classes, record values and enums retain their types in generated
+APIs. Declare public const codecs with `@UseCodec`; use `@EnumValue` for stable
+stored labels. See [types and JSON](docs/types.md) for codec validation, nullable
+values and the distinction between SQL NULL and JSON null.
+
 Set `ORM_TEST_POSTGRES` to a **disposable** local PostgreSQL database to include
 PostgreSQL integration tests. The tests create and drop their own test tables.

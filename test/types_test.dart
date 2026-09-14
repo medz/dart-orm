@@ -14,6 +14,8 @@ void main() {
       await file.writeAsString('''
 import 'package:orm/orm.dart';
 import '../../example/schema.orm.dart';
+import '../../test/support/codecs/schema.orm.dart';
+import '../../test/support/codecs/types.dart';
 void wrong(Database<Sqlite> db) {
   db.users.create(email: 1);
   db.users.byId('wrong');
@@ -23,6 +25,13 @@ void wrong(Database<Sqlite> db) {
   final Query<int, UsersFields> bad = db.users.select((u) => u.email);
   db.users.seekAfter((u) => [u.id.cursor('wrong')]);
   print(bad);
+  db.people.byId(1);
+  db.people.byId(const PersonId(1)).patch(email: const Change.set('wrong'));
+  db.people.byId(const PersonId(1)).patch(membership: const Change.set('active'));
+  db.people.select((p) => p.id.eq(1));
+  db.people.select((p) => p.email.eq('wrong'));
+  db.people.byId(const PersonId(1)).patch(tags: const Change.set([1]));
+  db.people.byId(const PersonId(1)).patch(details: const Change.set('raw-json'));
 }
 ''');
       final contexts = AnalysisContextCollection(includedPaths: [file.path]);
@@ -36,15 +45,31 @@ void wrong(Database<Sqlite> db) {
         final errors = result.diagnostics
             .where((e) => e.severity.name.toLowerCase() == 'error')
             .toList();
-        expect(errors.length, greaterThanOrEqualTo(7));
+        expect(errors.length, greaterThanOrEqualTo(14));
         expect(
           errors.every(
-          (e) => !e.diagnosticCode.lowerCaseName.contains('uri_does_not_exist'),
+            (e) =>
+                !e.diagnosticCode.lowerCaseName.contains('uri_does_not_exist'),
           ),
           true,
           reason: errors.join('\n'),
         );
-        for (final line in [4, 5, 6, 7, 8, 9, 10]) {
+        for (final line in [
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+        ]) {
           expect(
             errors.any(
               (e) => result.lineInfo.getLocation(e.offset).lineNumber == line,

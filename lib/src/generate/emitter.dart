@@ -1,11 +1,14 @@
 part of '../../generate.dart';
 
-String _emit(List<_Entity> schema, String import) {
+String _emit(List<_Entity> schema, String import, _DartNames names) {
   final b = StringBuffer('// GENERATED CODE - DO NOT MODIFY BY HAND.\n\n')
     ..writeln("import 'package:orm/orm.dart';")
     ..writeln("import ${_literal(import)} as models;");
-  if (schema.any((e) => e.fields.any((f) => f.storage == 'blob'))) {
+  if (names.typedData) {
     b.writeln("import 'dart:typed_data';");
+  }
+  for (final (uri, prefix) in names.imports) {
+    b.writeln('import ${_literal(uri)} as $prefix;');
   }
   b.writeln('');
   for (final entity in schema) {

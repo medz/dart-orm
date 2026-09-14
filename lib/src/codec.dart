@@ -1,5 +1,12 @@
 part of '../orm.dart';
 
+/// A non-SQL-null JSON document. Its value may itself be JSON null.
+/// Drivers use this envelope for parsed JSON, including JSON string scalars.
+final class SqlJson {
+  final Object? value;
+  const SqlJson(this.value);
+}
+
 /// Storage and Dart values meet only at this boundary.
 final class Codec<T> {
   final String sqlType;
@@ -7,6 +14,12 @@ final class Codec<T> {
   final Object? Function(T value) _encode;
 
   const Codec(this.sqlType, this._decode, this._encode);
+  const Codec.text(this._decode, String Function(T value) encode)
+    : sqlType = 'text',
+      _encode = encode;
+  const Codec.integer(this._decode, int Function(T value) encode)
+    : sqlType = 'integer',
+      _encode = encode;
   T decode(Object? value) => _decode(value);
   Object? encode(T value) => _encode(value);
   bool get acceptsNull => null is T;
@@ -25,6 +38,29 @@ final class Codec<T> {
 }
 
 abstract final class Codecs {
+  /// Enum storage labels are explicit and independent of declaration ordinals.
+  static Codec<E> enumeration<E extends Enum>(Map<E, String> labels) {
+    final encode = Map<E, String>.unmodifiable(labels);
+    final decode = {for (final entry in encode.entries) entry.value: entry.key};
+    if (encode.isEmpty || decode.length != encode.length) {
+      throw ArgumentError('Enum mappings must contain unique storage labels.');
+    }
+    return Codec<E>(
+      'text',
+      (value) {
+        if (decode[value] case final result?) return result;
+        throw const OrmException('CODEC.ENUM', 'Unknown stored enum value.');
+      },
+      (value) {
+        if (encode[value] case final result?) return result;
+        throw const OrmException(
+          'CODEC.ENUM',
+          'Enum value has no storage label.',
+        );
+      },
+    );
+  }
+
   static final integer = Codec<int>('integer', (v) => v as int, (v) => v);
   static final bigint = Codec<BigInt>(
     'bigint',
@@ -56,11 +92,23 @@ abstract final class Codecs {
     (v) => v as Uint8List,
     (v) => v,
   );
-  static final json = Codec<Object?>(
+  static const json = Codec<Object?>('json', _decodeJson, jsonEncode);
+  static const jsonDocument = Codec<SqlJson>(
     'json',
-    (v) => v is String ? jsonDecode(v) : v,
-    jsonEncode,
+    _jsonDocument,
+    _encodeDocument,
   );
+  static Object? _decodeJson(Object? value) => switch (value) {
+    SqlJson() => value.value,
+    String() => jsonDecode(value),
+    _ => value,
+  };
+  static SqlJson _jsonDocument(Object? value) => switch (value) {
+    null => throw const FormatException('SQL NULL is not a JSON document.'),
+    SqlJson() => value,
+    _ => SqlJson(_decodeJson(value)),
+  };
+  static String _encodeDocument(SqlJson value) => jsonEncode(value.value);
 }
 
 final class OrmException implements Exception {

@@ -2,6 +2,22 @@
 /// never called with synthetic row values.
 library;
 
+import 'orm.dart' show Codec;
+export 'orm.dart' show Codec, Codecs, SqlJson;
+
+/// A public const codec reference. Generation reads its type and storage tag;
+/// it never executes the application's encode/decode functions.
+final class UseCodec<T> {
+  final Codec<T> codec;
+  const UseCodec(this.codec);
+}
+
+/// Stable database text for an enum constant, independent of its Dart name.
+final class EnumValue {
+  final String value;
+  const EnumValue(this.value);
+}
+
 final class Id {
   final bool generated;
   const Id() : generated = false;

@@ -1,6 +1,10 @@
 part of '../../generate.dart';
 
-final class _SchemaReader(final CompilationUnit unit) {
+final class _SchemaReader(
+  final CompilationUnit unit,
+  final TypeSystem typeSystem,
+  final _DartNames names,
+) {
   final Map<String, _Entity> entities = {};
 
   List<_Entity> read() {
@@ -180,39 +184,8 @@ final class _SchemaReader(final CompilationUnit unit) {
 
   _Field _readField(RecordTypeAnnotationNamedField field) {
     final type = field.type.type;
-    if (type is! InterfaceType) {
-      _fail(field, 'Use a supported scalar field type.');
-    }
-    final base = type.element.name;
-    final storage = switch (base) {
-      'int' => 'integer',
-      'String' => 'text',
-      'double' => 'real',
-      'bool' => 'boolean',
-      'DateTime' => 'timestamp',
-      'BigInt' => 'bigint',
-      'Uint8List' => 'blob',
-      _ => throw GenerationException(
-        'Unsupported type ${field.type}; declare a supported scalar. Custom codecs are a separate input path.',
-      ),
-    };
-    if (!{
-      'dart:core',
-      'dart:typed_data',
-    }.contains(type.element.library.uri.toString())) {
-      _fail(field, 'This type needs an explicit custom codec.');
-    }
-    final codec = switch (base) {
-      'int' => 'integer',
-      'String' => 'text',
-      'double' => 'real',
-      'bool' => 'boolean',
-      'DateTime' => 'dateTime',
-      'BigInt' => 'bigint',
-      'Uint8List' => 'bytes',
-      _ => throw StateError('Checked scalar'),
-    };
-    final nullable = field.type.question != null;
+    if (type == null) _fail(field, 'Cannot resolve the field type.');
+    final nullable = typeSystem.isNullable(type);
     final name = field.name.lexeme;
     if ({'table', 'column'}.contains(name)) {
       _fail(
@@ -222,6 +195,7 @@ final class _SchemaReader(final CompilationUnit unit) {
     }
     var id = false, generated = false, unique = false;
     String? column, defaultSql;
+    Annotation? custom;
     for (final annotation in field.metadata) {
       final value = annotation.elementAnnotation?.computeConstantValue();
       final annotationType = value?.type;
@@ -240,15 +214,83 @@ final class _SchemaReader(final CompilationUnit unit) {
           column = value!.getField('name')!.toStringValue();
         case 'Default':
           defaultSql = value!.getField('expression')!.toStringValue();
+        case 'UseCodec':
+          if (custom != null) {
+            _fail(annotation, 'UseCodec may only appear once.');
+          }
+          custom = annotation;
         default:
           _fail(annotation, 'Unsupported ORM annotation.');
       }
     }
+    String storage, codec;
+    if (custom != null) {
+      final value = custom.elementAnnotation!.computeConstantValue()!.getField(
+        'codec',
+      )!;
+      final reference = custom.arguments!.arguments.single.argumentExpression;
+      // Constant evaluation erases extension types to their representation.
+      // Static compatibility must use the resolved source expression instead.
+      final codecType = reference.staticType;
+      if (codecType is! InterfaceType ||
+          codecType.element.name != 'Codec' ||
+          codecType.element.library.uri.toString() != 'package:orm/orm.dart') {
+        _fail(custom, 'Use a const Codec<T>.');
+      }
+      final domain = codecType.typeArguments.single;
+      bool same(DartType a, DartType b) =>
+          typeSystem.isSubtypeOf(a, b) && typeSystem.isSubtypeOf(b, a);
+      if (!same(domain, type) &&
+          !same(domain, typeSystem.promoteToNonNull(type))) {
+        _fail(custom, 'Codec<$domain> does not match field type $type.');
+      }
+      storage = value.getField('sqlType')?.toStringValue() ?? '';
+      if (!{
+        'integer',
+        'bigint',
+        'real',
+        'text',
+        'boolean',
+        'timestamp',
+        'blob',
+        'json',
+      }.contains(storage)) {
+        _fail(custom, 'Unknown codec storage type $storage.');
+      }
+      codec = names.codecReference(reference);
+      if (nullable && !typeSystem.isNullable(domain)) codec += '.nullable()';
+    } else if (type is InterfaceType && type.element is EnumElement) {
+      storage = 'text';
+      codec = names.enumeration(type.element as EnumElement);
+      if (nullable) codec += '.nullable()';
+    } else {
+      if (type is! InterfaceType ||
+          !{
+            'dart:core',
+            'dart:typed_data',
+          }.contains(type.element.library.uri.toString())) {
+        _fail(field, 'This type needs an explicit @UseCodec.');
+      }
+      final mapping = switch (type.element.name) {
+        'int' => ('integer', 'integer'),
+        'String' => ('text', 'text'),
+        'double' => ('real', 'real'),
+        'bool' => ('boolean', 'boolean'),
+        'DateTime' => ('timestamp', 'dateTime'),
+        'BigInt' => ('bigint', 'bigint'),
+        'Uint8List' => ('blob', 'bytes'),
+        _ => throw GenerationException(
+          'Unsupported field type $type; declare @UseCodec.',
+        ),
+      };
+      storage = mapping.$1;
+      codec = 'Codecs.${mapping.$2}${nullable ? '.nullable()' : ''}';
+    }
     return _Field(
       name: name,
       column: column ?? _snake(name),
-      type: '$base${nullable ? '?' : ''}',
-      codec: 'Codecs.$codec${nullable ? '.nullable()' : ''}',
+      type: names.type(type),
+      codec: codec,
       storage: storage,
       nullable: nullable,
       id: id,

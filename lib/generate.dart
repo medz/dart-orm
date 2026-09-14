@@ -7,11 +7,15 @@ import 'dart:io';
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/element/element.dart';
+import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
+import 'package:analyzer/dart/element/type_system.dart';
 import 'package:path/path.dart' as p;
 
 part 'src/generate/model.dart';
 part 'src/generate/reader.dart';
+part 'src/generate/types.dart';
 part 'src/generate/emitter.dart';
 
 final class GenerationException implements Exception {
@@ -50,11 +54,16 @@ Future<GeneratedSchema> generateSchema(
     if (errors.isNotEmpty) {
       throw GenerationException(errors.map((e) => e.toString()).join('\n'));
     }
-    final schema = _SchemaReader(resolved.unit).read();
+    final names = _DartNames(resolved.libraryElement.uri, output);
+    final schema = _SchemaReader(
+      resolved.unit,
+      resolved.typeSystem,
+      names,
+    ).read();
     final import = p
         .relative(source, from: p.dirname(output))
         .replaceAll(r'\', '/');
-    return GeneratedSchema(_emit(schema, import), {
+    return GeneratedSchema(_emit(schema, import, names), {
       'format': 1,
       'tables': [for (final table in schema) table.snapshot()],
     });

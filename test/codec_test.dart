@@ -26,6 +26,42 @@ void main() {
     expect(erased.encode(email), 'seven@example.com');
     expect(codec.nullable().decode(null), null);
   });
+
+  test(
+    'parsed JSON scalars and document presence have unambiguous decoding',
+    () {
+      expect(Codecs.json.decode('"string"'), 'string');
+      expect(Codecs.json.decode(const SqlJson('string')), 'string');
+    expect(Codecs.jsonDocument.nullable().decode(null), isNull);
+    expect(() => Codecs.jsonDocument.decode(null), throwsFormatException);
+    expect(Codecs.jsonDocument.decode('null').value, isNull);
+      expect(
+        Codecs.jsonDocument.nullable().decode(const SqlJson(null))!.value,
+        isNull,
+      );
+      expect(Codecs.jsonDocument.encode(const SqlJson(null)), 'null');
+    },
+  );
+
+  test(
+    'enum mappings reject duplicates and do not follow mutable caller maps',
+    () {
+      final labels = {_State.a: 'one', _State.b: 'two'};
+      final codec = Codecs.enumeration(labels);
+      labels[_State.a] = 'changed';
+      expect(codec.encode(_State.a), 'one');
+      expect(codec.decode('two'), _State.b);
+      expect(
+        () => Codecs.enumeration({_State.a: 'x', _State.b: 'x'}),
+        throwsArgumentError,
+      );
+      expect(() => Codecs.enumeration<_State>({}), throwsArgumentError);
+      final partial = Codecs.enumeration({_State.a: 'one'});
+      expect(() => partial.encode(_State.b), throwsA(isA<OrmException>()));
+    },
+  );
 }
 
 final class _Email(final String value);
+
+enum _State { a, b }

@@ -1,0 +1,108 @@
+{
+  "format": 1,
+  "tables": [
+    {
+      "name": "people",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": true
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "membership",
+          "type": "text",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "previous_membership",
+          "type": "text",
+          "nullable": true,
+          "generated": false
+        },
+        {
+          "name": "tags",
+          "type": "json",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "location",
+          "type": "json",
+          "nullable": true,
+          "generated": false
+        },
+        {
+          "name": "alternate",
+          "type": "text",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "details",
+          "type": "json",
+          "nullable": true,
+          "generated": false
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueKeys": [
+        [
+          "email"
+        ]
+      ],
+      "indexes": [],
+      "foreignKeys": []
+    },
+    {
+      "name": "notes",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": true
+        },
+        {
+          "name": "owner_id",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "nullable": false,
+          "generated": false
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [],
+      "foreignKeys": [
+        {
+          "columns": [
+            "owner_id"
+          ],
+          "target": "people",
+          "targetColumns": [
+            "id"
+          ],
+          "onDelete": "RESTRICT"
+        }
+      ]
+    }
+  ]
+}
