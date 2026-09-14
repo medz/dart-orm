@@ -36,6 +36,9 @@ This file records verified delivery, not planned capabilities presented as worki
 - PostgreSQL constraint changes resolve actual catalog names, including baselined schemas.
 - Migration CLI: create/check/plan/apply/status, table inspection, schema verification and baselines.
 - Explicit SQLite read-only connections; CLI read operations never create a missing database.
+- PostgreSQL recoverable autocommit steps with boolean pre/postconditions and immutable attempt checksums.
+- Durable per-step progress, exact concurrent-index state checks, explicit INVALID-index repair and CLI visibility.
+- Shared migration/baseline session locks use bounded try-lock polling without retaining waiting snapshots.
 
 ## Delivery sequence
 
@@ -52,13 +55,16 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 104 checks with native SQLite
+Static analysis is clean. The complete suite passes 117 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
 This includes a SQLite catalog regression for nullable non-rowid primary keys
 and three independent CLI process workflows (SQLite lifecycle, SQLite baseline,
-and PostgreSQL lifecycle). CLI checks and the remaining suite are run separately.
+and PostgreSQL lifecycle, including autocommit plans/progress). The full suite
+passes in one invocation. Thirteen recovery checks include two real process exits
+at durable SQL/commit boundaries, INVALID indexes, lock deadlines and concurrent
+runners; committed work is not replayed on resume.
 `dart run example/main.dart` runs successfully against a real in-memory SQLite DB.
 The generated SQLite example also compiles and runs as a native macOS AOT executable.
 
@@ -66,7 +72,8 @@ The generated SQLite example also compiles and runs as a native macOS AOT execut
 
 - Union; advanced-query capability and edge-case review.
 - Composite-key relation batching acceptance and join-based to-one loading.
-- Nontransactional migration recovery; broader unmanaged-object catalog coverage.
+- Resumable long backfills, application schema-version gates and broader unmanaged-object catalog coverage.
+- Existing-database declaration import and named SQL query generation.
 - Build integration; custom codec/schema authoring.
 - Cancellation, retry classification, genuine streaming and backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
@@ -75,12 +82,14 @@ The generated SQLite example also compiles and runs as a native macOS AOT execut
 Current to-one relation projections use batching, not joins. `verifyColumns` checks
 column names/types/nullability only. `verifySchema` additionally compares defaults,
 keys and simple indexes; its `unmanaged` objects require separate review.
-The migration runner currently accepts transactional migrations only. These are
+Transactional migration batches are atomic. PostgreSQL mixed migrations explicitly
+use durable per-step checkpoints; SQLite rejects that autocommit mode. These are
 implementation stages, not a reduction of the active goal.
 
 The full suite includes 52 shared SQLite/PostgreSQL query checks, 20 generated
 client/migration integration checks, seven source generation checks, two codec
-regressions, 19 migration evolution/catalog checks, three CLI workflows and one
+regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CLI
+workflows and one
 negative compilation suite covering seven invalid API uses.
 
 ## Environment

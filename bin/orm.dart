@@ -173,6 +173,12 @@ Future<void> main(List<String> arguments) async {
         case 'migrate plan':
           final pending = await migrator.plan(migrations);
           _print({
+            'atomic': !pending.any(
+              (m) => m.steps[db.dialect]!.any((s) => s is CheckedSql),
+            ),
+            'progress': (await migrator.progress())
+                .map((p) => p.toJson())
+                .toList(),
             'pending': [
               for (final m in pending)
                 {
@@ -186,6 +192,9 @@ Future<void> main(List<String> arguments) async {
           _print({'applied': await migrator.apply(migrations)});
         case 'migrate status':
           _print({
+            'progress': (await migrator.progress())
+                .map((p) => p.toJson())
+                .toList(),
             'applied': [
               for (final m in await migrator.history())
                 {'id': m.id, 'checksum': m.checksum},

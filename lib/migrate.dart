@@ -1,4 +1,4 @@
-/// Reviewable schema DDL and checksummed, transactional migration history.
+/// Reviewable schema DDL with checksummed transactional and recoverable migrations.
 library;
 
 import 'dart:convert';
@@ -13,6 +13,7 @@ part 'src/migrate/snapshot.dart';
 part 'src/migrate/catalog.dart';
 part 'src/migrate/step.dart';
 part 'src/migrate/diff.dart';
+part 'src/migrate/recovery.dart';
 
 String _quote(String identifier) => '"${identifier.replaceAll('"', '""')}"';
 

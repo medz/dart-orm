@@ -7,6 +7,11 @@ sealed class MigrationStep {
   factory MigrationStep.fromJson(Map<String, Object?> json) =>
       switch (json['kind']) {
         'sql' => ExecuteSql(json['sql'] as String),
+        'checkedSql' => CheckedSql(
+          json['sql'] as String,
+          readyWhen: json['readyWhen'] as String,
+          doneWhen: json['doneWhen'] as String,
+        ),
         'dropTable' => DropTable(json['table'] as String),
         'rebuild' => RebuildTable(
           SchemaSnapshot._readTable(json['before'] as Map<String, Object?>),
@@ -78,6 +83,11 @@ final class DropConstraint extends MigrationStep {
 
 Future<void> _executeStep(Database<Backend> db, MigrationStep step) async {
   switch (step) {
+    case CheckedSql():
+      throw const OrmException(
+        'MIGRATION.TRANSACTION',
+        'Checked SQL requires the recovery runner outside a transaction.',
+      );
     case ExecuteSql():
       await db.execute(SqlCommand(step.sql));
     case DropTable():

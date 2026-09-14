@@ -318,6 +318,46 @@ void main() {
           ]))['matches'],
           true,
         );
+        final first = Migration.fromJson(
+          jsonDecode(
+            await File(p.join(migrations, '0001_initial.json')).readAsString(),
+          ) as Map<String, Object?>,
+        );
+        final concurrent = Migration.steps('0002_index', {
+          SqlDialect.postgres: [
+            CheckedSql.createIndex(
+              'users',
+              const IndexSchema('nickname_lookup', ['nickname']),
+            ),
+          ],
+        }, previous: first.checksum);
+        await File(p.join(migrations, '0002_index.json'))
+            .writeAsString(jsonEncode(concurrent.toJson()));
+        expect(
+          (await cli([
+            'migrate',
+            'plan',
+            '--dir',
+            migrations,
+            ...connection,
+          ]))['atomic'],
+          false,
+        );
+        expect(
+          (await cli([
+            'migrate',
+            'apply',
+            '--dir',
+            migrations,
+            ...connection,
+          ]))['applied'],
+          ['0002_index'],
+        );
+        final status = await cli(['migrate', 'status', ...connection]);
+        expect(
+          ((status['progress'] as List).single as Map)['state'],
+          'complete',
+        );
       } finally {
         await admin.execute(SqlCommand('DROP SCHEMA $schema CASCADE'));
         await admin.close();

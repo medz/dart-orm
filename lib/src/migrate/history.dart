@@ -104,7 +104,11 @@ final class MigrationStatus {
 
 final class Migrator {
   final Database<Backend> database;
-  const Migrator(this.database);
+  final Duration lockTimeout;
+  const Migrator(
+    this.database, {
+    this.lockTimeout = const Duration(seconds: 30),
+  });
 
   /// Registers a verified existing database without replaying creation SQL.
   Future<SchemaVerification> baseline(
@@ -125,53 +129,44 @@ final class Migrator {
         'The final migration must carry the expected baseline snapshot.',
       );
     }
-    return database.transaction(
-      (tx) async {
-        if (tx.dialect == SqlDialect.postgres) {
+    return _migrationSession(
+      database,
+      lockTimeout,
+      (session) => session.transaction(
+        (tx) async {
+          if ((await Migrator(tx).history()).isNotEmpty ||
+              (await _progress(tx)).isNotEmpty) {
+            throw const OrmException(
+              'MIGRATION.BASELINE',
+              'Migration history already exists.',
+            );
+          }
+          final verification = await verifySchema(tx, expected);
+          if (!verification.matches) {
+            throw OrmException(
+              'MIGRATION.DRIFT',
+              verification.differences.join('\n'),
+            );
+          }
           await tx.execute(
             SqlCommand(
-              'SELECT pg_advisory_xact_lock(182983479, hashtext(current_schema()))',
+              'CREATE TABLE IF NOT EXISTS "_orm_migrations" (id TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)',
             ),
           );
-        }
-        if ((await Migrator(tx).history()).isNotEmpty) {
-          throw const OrmException(
-            'MIGRATION.BASELINE',
-            'Migration history already exists.',
-          );
-        }
-        final verification = await verifySchema(tx, expected);
-        if (!verification.matches) {
-          throw OrmException(
-            'MIGRATION.DRIFT',
-            verification.differences.join('\n'),
-          );
-        }
-        await tx.execute(
-          SqlCommand(
-            'CREATE TABLE IF NOT EXISTS "_orm_migrations" (id TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)',
-          ),
-        );
-        for (final migration in migrations) {
-          await _recordMigration(tx, migration);
-        }
-        return verification;
-      },
-      options: database.dialect == SqlDialect.sqlite
-          ? const SqliteTransaction(mode: .immediate)
-          : const PostgresTransaction(),
+          for (final migration in migrations) {
+            await _recordMigration(tx, migration);
+          }
+          return verification;
+        },
+        options: database.dialect == SqlDialect.sqlite
+            ? const SqliteTransaction(mode: .immediate)
+            : const PostgresTransaction(),
+      ),
     );
   }
 
   Future<List<MigrationStatus>> history() async {
-    final exists = database.dialect == SqlDialect.sqlite
-        ? SqlCommand(
-            "SELECT name FROM sqlite_schema WHERE type = 'table' AND name = '_orm_migrations'",
-          )
-        : SqlCommand(
-            "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = current_schema() AND tablename = '_orm_migrations'",
-          );
-    if ((await database.execute(exists)).rows.isEmpty) return [];
+    if (!await _hasMigrationTable(database, '_orm_migrations')) return [];
     final rows = await database.execute(
       SqlCommand('SELECT id, checksum FROM "_orm_migrations" ORDER BY id'),
     );
@@ -180,6 +175,9 @@ final class Migrator {
         MigrationStatus(row[0] as String, row[1] as String),
     ];
   }
+
+  /// Durable step checkpoints, including failed stages of partially applied migrations.
+  Future<List<MigrationProgress>> progress() => _progress(database);
 
   Future<List<Migration>> plan(List<Migration> migrations) async {
     validateMigrations(migrations, dialect: database.dialect);
@@ -199,11 +197,12 @@ final class Migrator {
         );
       }
     }
+    _validateProgress(migrations, applied, await progress(), database.dialect);
     return migrations.skip(applied.length).toList(growable: false);
   }
 
-  /// The complete pending batch is atomic. A later failure also rolls back
-  /// earlier DDL and history records from this invocation.
+  /// Transactional batches are atomic. CheckedSql explicitly opts a migration
+  /// into durable per-step checkpoints with recoverable autocommit SQL.
   Future<List<String>> apply(List<Migration> migrations) async {
     if (database.inTransaction) {
       throw const OrmException(
@@ -213,6 +212,12 @@ final class Migrator {
     }
     validateMigrations(migrations, dialect: database.dialect);
     Future<List<String>> run(Database<Backend> session) async {
+      if (session.dialect == SqlDialect.postgres &&
+          migrations.any(
+            (m) => m.steps[SqlDialect.postgres]!.any((s) => s is CheckedSql),
+          )) {
+        return _applyRecoverable(session, migrations);
+      }
       final rebuild =
           database.dialect == SqlDialect.sqlite &&
           migrations.any(
@@ -245,13 +250,6 @@ final class Migrator {
         }
         return await session.transaction(
           (tx) async {
-            if (tx.dialect == SqlDialect.postgres) {
-              await tx.execute(
-                SqlCommand(
-                  'SELECT pg_advisory_xact_lock(182983479, hashtext(current_schema()))',
-                ),
-              );
-            }
             await tx.execute(
               SqlCommand(
                 'CREATE TABLE IF NOT EXISTS "_orm_migrations" (id TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)',
@@ -305,7 +303,7 @@ final class Migrator {
       }
     }
 
-    return database.inSession ? run(database) : database.session(run);
+    return _migrationSession(database, lockTimeout, run);
   }
 }
 
@@ -339,6 +337,24 @@ void validateMigrations(
       );
     }
     for (final step in steps) {
+      if (step is CheckedSql) {
+        if (dialect != SqlDialect.postgres) {
+          throw const OrmException(
+            'MIGRATION.TARGET',
+            'Recoverable autocommit migrations currently require PostgreSQL.',
+          );
+        }
+        _validateSql(step.sql, transactional: false);
+        for (final probe in [step.readyWhen, step.doneWhen]) {
+          if (_sqlWords(probe).firstOrNull != 'SELECT') {
+            throw const OrmException(
+              'MIGRATION.PROBE',
+              'Recovery conditions must be SELECT queries.',
+            );
+          }
+        }
+        continue;
+      }
       if (step is DropTable) continue;
       if (step is RebuildTable) {
         if (dialect != SqlDialect.sqlite) {
@@ -358,35 +374,36 @@ void validateMigrations(
         }
         continue;
       }
-      final sql = (step as ExecuteSql).sql;
-      // Transaction control belongs to the runner. Nontransactional operations
-      // require a separate recoverable execution mode, not silent autocommit.
-      final words = _sqlWords(sql);
-      if (words.isEmpty) {
-        throw const OrmException(
-          'MIGRATION.EMPTY',
-          'Migration contains an empty statement.',
-        );
-      }
-      if ({
-            'BEGIN',
-            'COMMIT',
-            'ROLLBACK',
-            'END',
-            'SAVEPOINT',
-            'RELEASE',
-            'VACUUM',
-            'PRAGMA',
-            'START',
-            'ABORT',
-          }.contains(words.first) ||
-          words.contains('CONCURRENTLY')) {
-        throw const OrmException(
-          'MIGRATION.TRANSACTION',
-          'This operation requires an explicitly nontransactional migration.',
-        );
-      }
+      _validateSql((step as ExecuteSql).sql, transactional: true);
     }
+  }
+}
+
+void _validateSql(String sql, {required bool transactional}) {
+  final words = _sqlWords(sql);
+  if (words.isEmpty) {
+    throw const OrmException(
+      'MIGRATION.EMPTY',
+      'Migration contains an empty statement.',
+    );
+  }
+  if ({
+        'BEGIN',
+        'COMMIT',
+        'ROLLBACK',
+        'END',
+        'SAVEPOINT',
+        'RELEASE',
+        'PRAGMA',
+        'START',
+        'ABORT',
+      }.contains(words.first) ||
+      (transactional &&
+          (words.first == 'VACUUM' || words.contains('CONCURRENTLY')))) {
+    throw const OrmException(
+      'MIGRATION.TRANSACTION',
+      'Transaction control belongs to the runner; autocommit operations need CheckedSql.',
+    );
   }
 }
 

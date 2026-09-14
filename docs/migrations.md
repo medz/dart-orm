@@ -75,10 +75,13 @@ final appliedIds = await Migrator(db).apply(migrations);
 final verification = await verifySchema(db, target);
 ```
 
-`apply` runs the entire pending batch in one transaction. A failed copy, required
+`apply` runs a pending batch without `CheckedSql` in one transaction. A failed copy, required
 column, unique constraint, or foreign key rolls back earlier steps and history
-records from that invocation. PostgreSQL uses an advisory transaction lock scoped
-to the current database/schema; SQLite obtains an immediate write transaction.
+records from that invocation. PostgreSQL uses a dedicated connection and a session advisory lock scoped to the
+current database/schema; SQLite obtains an immediate write transaction. PostgreSQL
+lock acquisition uses short `pg_try_advisory_lock` queries outside a transaction,
+with `Migrator(db, lockTimeout: ...)` defaulting to 30 seconds. Waiting does not
+hold an old SQL snapshot that could deadlock concurrent index creation.
 Migration planning checks applied history and checksums. Catalog verification is
 an explicit separate operation; SQL history alone does not prove schema equality.
 
@@ -124,8 +127,65 @@ Manual migrations use `Migration(id, {dialect: ['SQL', ...]})`, or
 `Migration.steps` with `ExecuteSql`, `DropTable`, and `RebuildTable` operations.
 For a custom SQLite copy-and-replace migration, an explicit `DropTable` enables
 outer foreign-key handling; preserve dependent SQL objects in the reviewed steps.
-Transaction control and nontransactional commands are currently rejected by the
-runner. Recoverable nontransactional execution remains under development.
+Transaction control is owned by the runner. Use `CheckedSql` for PostgreSQL
+commands that must run outside a transaction; ordinary `ExecuteSql` rejects them.
+
+# Recoverable PostgreSQL operations
+
+```dart
+final migration = Migration.steps(
+  '0004_email_index',
+  {
+    SqlDialect.postgres: [
+      CheckedSql.createIndex(
+        'members',
+        const IndexSchema('members_email_lookup', ['email']),
+      ),
+    ],
+  },
+  previous: previousMigration.checksum,
+  snapshot: nextSnapshot,
+);
+```
+
+`CheckedSql.createIndex` builds a concurrent B-tree index using default column
+collations and operator classes. Its completion check compares the table, ordered
+columns, uniqueness, predicate/expression absence, index options and validity.
+A same-name object or an INVALID index is not proof of completion. PostgreSQL's
+[concurrent index documentation](https://www.postgresql.org/docs/current/sql-createindex.html#SQL-CREATEINDEX-CONCURRENTLY)
+explains its nontransactional execution and possible INVALID leftovers.
+
+Other operations use `CheckedSql(sql, readyWhen: 'SELECT ...', doneWhen: 'SELECT ...')`.
+Each condition must return exactly one boolean and accurately describe durable
+state. SQL and probes are reviewed migration code. The runner first checks
+`doneWhen`; if false, it requires `readyWhen`, executes SQL in autocommit mode,
+and checks `doneWhen` again. If neither state matches, it stops for explicit
+inspection/repair. It does not guess that an existing object should be dropped.
+Retry the unchanged migration after repairing the actual database.
+
+A migration containing `CheckedSql` uses durable checkpoints for every step.
+Ordinary SQL within that migration commits its effect and completion checkpoint
+in the same transaction. Checked SQL records its phase before execution and checks
+actual state on restart. An interrupted success therefore need not execute twice.
+Attempted migration checksums are frozen even before the whole migration completes.
+
+This mode is not one atomic transaction: earlier successful steps remain committed
+when a later step fails. Contiguous ordinary migrations outside a mixed migration
+still form an atomic batch. The runner lock covers all these phases on the same
+connection; baseline and ordinary migration runners use the same lock protocol.
+Session lock behavior is documented by
+[PostgreSQL](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS).
+
+Use `Migrator(db).progress()` or `migrate status` to inspect step states, failed
+phases and failure codes. `migrate plan` reports `atomic: false` for pending
+nontransactional work and includes progress. A `MIGRATION.STEP` exception retains
+the underlying error as `cause`. A failed lock release discards its connection.
+SQLite rejects `CheckedSql`; its schema rebuild path remains transactional.
+
+Tests terminate real Dart processes immediately after a concurrent DDL succeeds
+and after an ordinary step commits. Both resume from unchanged files without
+replaying committed work. They also exercise INVALID unique indexes, explicit
+repair, definition mismatches, lock timeout and simultaneous runners.
 
 # Existing databases
 
