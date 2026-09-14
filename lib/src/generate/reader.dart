@@ -134,6 +134,7 @@ final class _SchemaReader(
         'restrict' => 'RESTRICT',
         'cascade' => 'CASCADE',
         'setNull' => 'SET NULL',
+        'setDefault' => 'SET DEFAULT',
         'noAction' => 'NO ACTION',
         _ => throw GenerationException(
           'Unsupported referential action $action.',

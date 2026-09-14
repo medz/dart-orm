@@ -79,11 +79,13 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
       );
     }
     b.writeln('}');
-    b.writeln(
-      'extension ${entity.symbol}Updates on Query<${entity.rowType}, ${entity.fieldsType}> {'
-      'Future<int> patch({${entity.fields.where((f) => !f.generated).map((f) => 'Change<${f.type}> ${f.name} = const Change.keep()').join(', ')}}) => '
-      'update((row) => [${entity.fields.where((f) => !f.generated).map((f) => '...row.${f.name}.change(${f.name})').join(', ')}]).execute(); }',
-    );
+    if (entity.fields.any((f) => !f.generated)) {
+      b.writeln(
+        'extension ${entity.symbol}Updates on Query<${entity.rowType}, ${entity.fieldsType}> {'
+        'Future<int> patch({${entity.fields.where((f) => !f.generated).map((f) => 'Change<${f.type}> ${f.name} = const Change.keep()').join(', ')}}) => '
+        'update((row) => [${entity.fields.where((f) => !f.generated).map((f) => '...row.${f.name}.change(${f.name})').join(', ')}]).execute(); }',
+      );
+    }
   }
   b.writeln(
     'final appSchema = <TableSchema>[${schema.map((e) => '${e.name}Schema').join(', ')}];',

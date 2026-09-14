@@ -8,6 +8,7 @@ import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/analysis/session.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/token.dart' show Keyword;
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
@@ -16,11 +17,15 @@ import 'package:build/build.dart' as builder;
 import 'package:dart_style/dart_style.dart';
 import 'package:path/path.dart' as p;
 
+import 'migrate.dart';
+import 'orm.dart';
+
 part 'src/generate/model.dart';
 part 'src/generate/reader.dart';
 part 'src/generate/types.dart';
 part 'src/generate/emitter.dart';
 part 'src/generate/build.dart';
+part 'src/generate/import.dart';
 
 final class GenerationException implements Exception {
   final String message;

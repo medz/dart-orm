@@ -16,6 +16,7 @@ const _usage = '''Usage: dart run orm <command>
     apply: [--max-backfill-batches count]
   migrate status <database>
   db inspect --table name <database>
+  db import --output schema.dart [--tables tables.json] <database>
   db verify --schema snapshot.json <database>
   db baseline [--dir migrations] <database>
 
@@ -65,6 +66,7 @@ Future<void> main(List<String> arguments) async {
       'migrate status' => common,
       'db verify' => {...common, 'schema'},
       'db inspect' => {...common, 'table'},
+      'db import' => {...common, 'output', 'tables'},
       _ => throw FormatException('Unknown command: $command'),
     };
     final (positionals, options) = _parse(arguments.skip(2).toList(), flags);
@@ -159,6 +161,40 @@ Future<void> main(List<String> arguments) async {
         ? SchemaSnapshot.fromJson(await _jsonFile(_required(options, 'schema')))
         : null;
     final table = command == 'db inspect' ? _required(options, 'table') : null;
+    final importOutput = command == 'db import'
+        ? _required(options, 'output')
+        : null;
+    List<String>? importTables;
+    if (importOutput != null) {
+      if (p.extension(importOutput) != '.dart') {
+        throw const FormatException(
+          'Import output must be a .dart source file.',
+        );
+      }
+      for (final path in [
+        importOutput,
+        p.setExtension(importOutput, '.import.json'),
+      ]) {
+        if (await FileSystemEntity.type(path, followLinks: false) !=
+            FileSystemEntityType.notFound) {
+          throw FormatException(
+            'Import never replaces an existing output: $path',
+          );
+        }
+      }
+      if (options['tables'] case final path?) {
+        final value = jsonDecode(await File(path).readAsString());
+        if (value is! List<Object?> ||
+            value.isEmpty ||
+            value.any((v) => v is! String) ||
+            value.toSet().length != value.length) {
+          throw const FormatException(
+            '--tables must contain a JSON array of distinct physical table names.',
+          );
+        }
+        importTables = value.cast<String>();
+      }
+    }
     final migrations =
         {'migrate plan', 'migrate apply', 'db baseline'}.contains(command)
         ? await _readMigrations(options['dir'] ?? 'migrations')
@@ -176,6 +212,7 @@ Future<void> main(List<String> arguments) async {
       'migrate status',
       'db inspect',
       'db verify',
+      'db import',
     }.contains(command);
     final db = await _open(options, readOnly: readOnly);
     try {
@@ -265,6 +302,32 @@ Future<void> main(List<String> arguments) async {
             ],
             'unmanaged': _objects(info.unmanaged),
           });
+        case 'db import':
+          final result = await importSchema(db, tables: importTables);
+          final output = File(importOutput!);
+          final report = File(p.setExtension(importOutput, '.import.json'));
+          await output.parent.create(recursive: true);
+          await output.create(exclusive: true);
+          var reportCreated = false;
+          try {
+            await report.create(exclusive: true);
+            reportCreated = true;
+            await output.writeAsString(result.dart, flush: true);
+            await report.writeAsString(
+              '${const JsonEncoder.withIndent('  ').convert(result.toJson())}\n',
+              flush: true,
+            );
+          } catch (_) {
+            await output.delete();
+            if (reportCreated) await report.delete();
+            rethrow;
+          }
+          _print({
+            'source': output.path,
+            'report': report.path,
+            ...result.toJson(),
+          });
+          if (result.hasBlockingIssues) exitCode = 2;
       }
     } finally {
       await db.close();

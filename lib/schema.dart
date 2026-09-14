@@ -38,7 +38,7 @@ final class Default {
   const Default.sql(this.expression);
 }
 
-enum ReferentialAction { restrict, cascade, setNull, noAction }
+enum ReferentialAction { restrict, cascade, setNull, setDefault, noAction }
 
 Entity<M> entity<M>({String? table}) => Entity<M>(table);
 

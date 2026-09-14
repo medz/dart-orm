@@ -51,6 +51,10 @@ rebuilds and existing-database baselines. Long data transformations can use
 [resumable backfills](docs/backfills.md) with bounded batches and durable progress.
 The in-memory example builds an initial migration directly for clarity.
 
+For an existing database, [import a Record declaration](docs/importing.md), review
+its report, generate the client, and baseline the current schema without copying
+existing rows.
+
 Use `query.stream(batchSize: 128)` with `await for` to read through a database
 cursor. Reads and mutations accept `ExecutionOptions` for connection acquisition
 limits, statement deadlines and cancellation. See [streaming and execution](docs/execution.md) for connection

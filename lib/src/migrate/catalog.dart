@@ -148,11 +148,13 @@ SELECT c.conname, c.contype::text,
  ARRAY(SELECT a.attname::text FROM unnest(c.confkey) WITH ORDINALITY k(num, ord)
        JOIN pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = k.num ORDER BY k.ord),
  c.confdeltype::text, c.confupdtype::text, c.confmatchtype::text,
- c.condeferrable, c.convalidated, pg_get_constraintdef(c.oid), tn.nspname
+ c.condeferrable, c.convalidated, pg_get_constraintdef(c.oid), tn.nspname,
+ coalesce((to_jsonb(i)->>'indnullsnotdistinct')::boolean, false)
 FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid
 JOIN pg_namespace n ON n.oid = r.relnamespace
 LEFT JOIN pg_class t ON t.oid = c.confrelid
 LEFT JOIN pg_namespace tn ON tn.oid = t.relnamespace
+LEFT JOIN pg_index i ON i.indexrelid = c.conindid
 WHERE n.nspname = current_schema() AND r.relname = $1''',
         [table],
       ),
@@ -166,7 +168,15 @@ WHERE n.nspname = current_schema() AND r.relname = $1''',
           keys = (row[2] as List<Object?>).cast<String>();
       if (kind == 'p') {
         primary.addAll(keys);
-      } else if (kind == 'u' && row[8] == false && row[9] == true) {
+        if (row[8] == true || row[9] != true) {
+          unmanaged.add(
+            CatalogObject('constraint', row[0] as String, row[10] as String),
+          );
+        }
+      } else if (kind == 'u' &&
+          row[8] == false &&
+          row[9] == true &&
+          row[12] == false) {
         unique.add(keys);
       } else if (kind == 'f' &&
           row[6] == 'a' &&
@@ -198,12 +208,17 @@ WHERE n.nspname = current_schema() AND r.relname = $1''',
     final list = await db.execute(
       SqlCommand(
         r'''
-SELECT ic.relname, i.indisunique, i.indisvalid AND i.indisready,
+SELECT ic.relname, i.indisunique, i.indisvalid AND i.indisready AND i.indislive,
  ARRAY(SELECT a.attname::text FROM unnest(i.indkey) WITH ORDINALITY k(num, ord)
        LEFT JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.num ORDER BY k.ord),
  pg_get_indexdef(i.indexrelid), i.indexprs IS NULL AND i.indpred IS NULL
  AND i.indnatts = i.indnkeyatts AND am.amname = 'btree'
+ AND ic.reloptions IS NULL
+ AND NOT coalesce((to_jsonb(i)->>'indnullsnotdistinct')::boolean, false)
  AND NOT EXISTS(SELECT 1 FROM unnest(i.indoption) v WHERE v <> 0)
+ AND NOT EXISTS(SELECT 1 FROM unnest(i.indclass) v JOIN pg_opclass o ON o.oid = v WHERE NOT o.opcdefault)
+ AND NOT EXISTS(SELECT 1 FROM unnest(i.indkey, i.indcollation) k(num, collation_oid)
+   JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.num WHERE k.collation_oid <> a.attcollation)
 FROM pg_index i JOIN pg_class t ON t.oid = i.indrelid
 JOIN pg_namespace n ON n.oid = t.relnamespace JOIN pg_class ic ON ic.oid = i.indexrelid
 JOIN pg_am am ON am.oid = ic.relam

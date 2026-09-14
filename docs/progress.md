@@ -37,6 +37,8 @@ This file records verified delivery, not planned capabilities presented as worki
 - Connection leases spanning transactions, with scoped lifetime and explicit discard.
 - Portable schema snapshots; catalog checks for columns, defaults, keys and simple indexes.
 - Existing-database baselines verify declared schema facts before recording immutable history.
+- Read-only catalog import drafts Record declarations, physical-name maps and review reports, followed by the normal generator/baseline workflow.
+- Import preserves supported defaults, identities, composite/unique keys, indexes and named inverse relations; unsupported structures have explicit issues.
 - Read-only application startup version checks with explicit compatibility ranges, full history validation and recovery-state rejection.
 - Unmodeled constraints, expression/partial indexes, triggers and policies are reported separately.
 - Reviewable migration diffs, explicit renames/conversions, destructive-change gates and checksum chains.
@@ -82,7 +84,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 467 checks with native SQLite
+Static analysis is clean. The complete suite passes 486 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -194,11 +196,28 @@ concurrent SQLite workers and the application startup version gate. The existing
 native execution acceptance fixture also passes after this change. These are
 correctness checks, not backfill throughput or online availability measurements.
 
+Seventeen catalog-import checks verify both databases, including physical/Dart
+name collisions and escaped identifiers, identities/defaults, composite/self
+relations, unique indexes, read-only SQLite, scoped sessions, excluded unsupported
+types and generated expressions, nullable primary keys, virtual/shadow tables,
+PostgreSQL inheritance and specialized index semantics. Draft declarations pass
+the real analyzer/generator and produce matching schema snapshots. An imported
+client runs against PostgreSQL, and the SQLite client compiles and runs as a macOS
+AOT executable; both preserve existing rows and execute typed relationship queries,
+defaulted writes and SET DEFAULT deletes after a verified baseline. Two additional
+CLI workflows independently import, generate, baseline and verify real databases,
+reject existing output files, preserve missing SQLite files and retain blocking
+issues in review reports. The generator no longer emits invalid empty patch
+parameters for models containing only generated fields. Physical import currently
+uses the exact supported storage mappings documented in `docs/importing.md`;
+NUMERIC is not guessed to contain only integers, and broader native types remain
+part of the active goal.
+
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
 - Broader unmanaged-object catalog coverage.
-- Existing-database declaration import and named SQL query generation.
+- Named SQL query generation.
 - Configurable integer widths, exact-decimal query semantics and further native type coverage.
 - Further backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
@@ -219,7 +238,7 @@ regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CL
 workflows, 37 streaming/execution checks, 28 relation strategy checks and one
 negative compilation suite covering 19 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks and 56 backfill checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks and two import CLI workflows.
 
 ## Environment
 

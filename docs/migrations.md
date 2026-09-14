@@ -25,8 +25,12 @@ PostgreSQL-specific flags. Offline `migration check --dialect postgres` checks
 PostgreSQL operations without connecting. `db baseline` uses the final snapshot
 in the selected migration directory to register a verified existing database.
 
+Start with [catalog import](importing.md) when the database has no Dart schema.
+It drafts Record declarations and a separate review report before client generation
+and baseline; it does not change existing tables or rows.
+
 Commands return JSON, apart from `generate` and help. Exit code 2 indicates schema
-drift, 64 indicates invalid CLI arguments, and 1 indicates an execution failure.
+drift or blocking import issues, 64 indicates invalid CLI arguments, and 1 indicates an execution failure.
 Dart's launcher may also print its own build-hook progress on stderr.
 
 For renames, pass `--renames file.json` with:
