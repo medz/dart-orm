@@ -449,6 +449,13 @@ void runTests(
         expect(
           () => hooked.transaction(
             (tx) async {},
+            retry: const TransactionRetry(),
+          ),
+          throwsA(code('CAPABILITY.CANCEL')),
+        );
+        expect(
+          () => hooked.transaction(
+            (tx) async {},
             timeout: const Duration(seconds: 1),
           ),
           throwsA(code('CAPABILITY.CANCEL')),

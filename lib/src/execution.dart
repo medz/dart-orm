@@ -86,6 +86,7 @@ final class _ConnectionWait<R> {
   Timer? _timer;
   final Stopwatch? _clock;
   final Duration? _timeout;
+  final OrmException _timeoutError;
   void Function()? _unsubscribe;
   Future<R> Function(SqlConnection)? _action;
   late final Future<void> drained;
@@ -94,10 +95,17 @@ final class _ConnectionWait<R> {
   _ConnectionWait(
     Driver<Backend> driver,
     Future<R> Function(SqlConnection) action,
-    AcquisitionOptions options,
-  ) : _action = action,
-      _timeout = options.timeout,
-      _clock = options.timeout == null ? null : (Stopwatch()..start()) {
+    AcquisitionOptions options, {
+    OrmException? timeoutError,
+  }) : _action = action,
+       _timeoutError =
+           timeoutError ??
+           const OrmException(
+             'CONNECTION.TIMEOUT',
+             'Connection acquisition timed out.',
+           ),
+       _timeout = options.timeout,
+       _clock = options.timeout == null ? null : (Stopwatch()..start()) {
     _unsubscribe = options.cancellation?.listen(
       () => _abandon(
         const OrmException(
@@ -107,15 +115,7 @@ final class _ConnectionWait<R> {
       ),
     );
     if (options.timeout case final timeout?) {
-      _timer = Timer(
-        timeout,
-        () => _abandon(
-          const OrmException(
-            'CONNECTION.TIMEOUT',
-            'Connection acquisition timed out.',
-          ),
-        ),
-      );
+      _timer = Timer(timeout, () => _abandon(_timeoutError));
     }
     drained =
         Future.sync(
@@ -124,12 +124,7 @@ final class _ConnectionWait<R> {
             if (action == null) return null;
             // Timers can run late while the isolate drains queued microtasks.
             if (_clock != null && _clock.elapsed >= _timeout!) {
-              _abandon(
-                const OrmException(
-                  'CONNECTION.TIMEOUT',
-                  'Connection acquisition timed out.',
-                ),
-              );
+              _abandon(_timeoutError);
               return null;
             }
             _action = null;

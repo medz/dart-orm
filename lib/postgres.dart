@@ -41,6 +41,8 @@ final class PostgresFailure implements SqlFailure {
   @override
   bool get retryTransaction => code == '40001' || code == '40P01';
   @override
+  bool get retryCommit => false;
+  @override
   bool get commitRejected => code?.startsWith('23') == true || retryTransaction;
   @override
   String toString() => cause.toString();

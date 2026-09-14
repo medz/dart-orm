@@ -139,7 +139,8 @@ A token is a sticky request, not proof that a write was rolled back. Always awai
 the operation's result: a completed statement may win the cancellation race and
 return success. Confirmed interruptions report `OPERATION.CANCELLED` or
 `OPERATION.TIMEOUT`. Connection loss and uncertain commits remain errors whose
-outcome must be checked; the ORM does not automatically retry writes.
+outcome must be checked. Writes are retried only inside an explicitly opted-in
+transaction, subject to the confirmed-rollback rules below.
 
 SQLite uses `sqlite3_interrupt` from the exact native asset backing the open
 database. `capabilities.cancellation` is false if that build does not export the
@@ -232,7 +233,7 @@ PostgreSQL can replace a discarded physical connection from its pool. SQLite
 uses one worker connection; discarding it requires reopening the database, and
 an in-memory database cannot preserve its contents across that reopen.
 
-`SqlFailure` exposes conservative `retryTransaction` and `commitRejected`
+`SqlFailure` exposes conservative `retryTransaction`, `retryCommit` and `commitRejected`
 classification. Native PostgreSQL errors use `PostgresFailure`, retaining the
 SQLSTATE in `code` and the original `package:postgres` exception in `cause`.
 SQLite retains `SqliteFailure.code`, `extendedCode` and `message`.
@@ -246,13 +247,10 @@ SQLite retains `SqliteFailure.code`, `extendedCode` and `message`.
 | SQLite constraint errors | No | Yes |
 | Other errors | No automatic eligibility | Conservatively unknown |
 
-These flags do not authorize retry by themselves. **The ORM does not yet provide
-an automatic retry runner.** Callback replay needs confirmed rollback, application
-logic safe to repeat, a limit on attempts and total time. A SQLite COMMIT returning
-BUSY can be retried while its transaction is still active; this implementation
-currently rolls it back and reports the classified failure. It never silently
-replays the callback. PostgreSQL serialization failures require repeating the
-whole transaction logic, not only its final SQL statement.
+These flags do not enable retries by themselves. Without `retry:`, the ORM makes
+one attempt, rolls back a rejected transaction and returns its failure.
+PostgreSQL serialization failures require repeating the whole transaction logic,
+including reads and application decisions.
 [PostgreSQL retry guidance](https://www.postgresql.org/docs/current/mvcc-serialization-failure-handling.html)
 and the [SQLSTATE catalog](https://www.postgresql.org/docs/current/errcodes-appendix.html)
 explain these distinctions.
@@ -267,3 +265,73 @@ reports an unknown state and confirms cleanup with ROLLBACK.
 [SQLite autocommit status](https://www.sqlite.org/c3ref/get_autocommit.html)
 and [transaction error handling](https://www.sqlite.org/lang_transaction.html)
 describe why statement errors alone cannot establish SQLite transaction state.
+
+
+## Explicit bounded retries
+
+```dart
+final result = await db.transaction((tx) async {
+  final user = await tx.users.byId(userId).single();
+  await tx.users.where((u) => u.id.eq(userId))
+      .update((u) => [u.nickname.set(user.email)]).execute();
+  return user.email;
+},
+  retry: const TransactionRetry(
+    maxAttempts: 3,
+    timeout: Duration(seconds: 5),
+    delay: Duration(milliseconds: 10),
+    maxDelay: Duration(milliseconds: 250),
+  ),
+);
+```
+
+The callback must be safe to repeat after database rollback. Each callback attempt
+receives a fresh transaction view and re-executes its reads and decisions. The
+previous view closes before another attempt can enter. Application errors,
+constraint violations, cancelled statements and caught transaction failures do
+not trigger replay. A failed attempt's write notifications are discarded; only a
+confirmed commit publishes them. Unknown COMMIT outcomes and unconfirmed rollback
+always prohibit replay, even when a retry policy is supplied.
+
+Defaults are three attempts, a 30-second total budget, a 10-millisecond initial
+backoff and a 250-millisecond cap. Backoff grows exponentially, with jitter between
+approximately half and all of the current delay. Setting `delay: Duration.zero`
+disables backoff. The initial attempt consumes one slot; **each callback replay or
+commit-only retry consumes one additional slot from the same `maxAttempts`**.
+For example, with three slots, one callback replay leaves room for only one
+commit-only retry. Attempts are finite even when repeated failures happen quickly.
+Exhausting slots returns the final database failure; expiry reports
+`TRANSACTION.TIMEOUT`. Cancellation interrupts backoff and reports the transaction
+cancellation error without starting another attempt.
+
+SQLite COMMIT returning BUSY is retried in place only if the adapter confirms the
+same transaction is still active. The successful callback is not re-entered, so
+its in-memory result is retained. A SQLite busy snapshot error during a statement
+instead requires confirmed rollback and replay from BEGIN. PostgreSQL serialization
+failures and deadlocks also require whole-transaction replay. The current PostgreSQL
+adapter never retries COMMIT in place.
+
+`TransactionRetry.timeout` starts at the transaction call and includes acquisition,
+all attempts, callback time, SQL and backoff. `transaction(timeout: ...)` still
+starts after acquisition and spans all attempts; the shorter remaining budget wins.
+A shorter explicit acquisition timeout reports `CONNECTION.TIMEOUT`, as do native
+pool/connection failures. An ORM acquisition timer limited by the retry budget
+reports `TRANSACTION.TIMEOUT`. These error classes are tied to the source of expiry,
+not inferred from timing after the error. Native cancellation support is required.
+The cleanup and confirmed-COMMIT rules above also apply to retries.
+
+One connection remains leased for the bounded attempt series, including backoff.
+This preserves session state and avoids reacquisition on each retry, but holds a
+pool slot while waiting. Keep budgets short under contention. The ORM does not
+reconnect and replay after a transport failure, and external callback effects are
+not rolled back. This API makes no exactly-once guarantee for such effects.
+
+The real-database retry checks include PostgreSQL serialization/deadlock conflicts,
+SQLite WAL snapshot conflicts and DELETE-journal COMMIT lock contention. Additional
+driver-injected failures exercise rollback, budgets and lost acknowledgements.
+Native SQLite retry acceptance also runs without the JIT/test runner:
+
+```sh
+dart compile exe test/support/native_retry.dart -o /tmp/orm-native-retry
+/tmp/orm-native-retry
+```

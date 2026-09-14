@@ -195,13 +195,19 @@ class Database<B extends Backend> {
   Future<R> _run<R>(
     Future<R> Function(SqlConnection) action, {
     AcquisitionOptions acquire = const AcquisitionOptions(),
+    OrmException? acquisitionTimeoutError,
   }) {
     _checkActive();
     acquire.check();
     final connection = _connection;
     if (connection == null &&
         (acquire.timeout != null || acquire.cancellation != null)) {
-      final wait = _ConnectionWait(driver, action, acquire);
+      final wait = _ConnectionWait(
+        driver,
+        action,
+        acquire,
+        timeoutError: acquisitionTimeoutError,
+      );
       _track(wait.drained);
       return wait.result;
     }
@@ -362,9 +368,11 @@ class Database<B extends Backend> {
     AcquisitionOptions acquire = const AcquisitionOptions(),
     Duration? timeout,
     CancellationToken? cancellation,
+    TransactionRetry? retry,
   }) {
     _checkActive();
     acquire.check();
+    retry?._check();
     if (inTransaction) {
       throw const OrmException(
         'TRANSACTION.NESTED',
@@ -380,7 +388,7 @@ class Database<B extends Backend> {
         'Transaction cancelled before acquisition.',
       );
     }
-    if ((timeout != null || cancellation != null) &&
+    if ((timeout != null || cancellation != null || retry != null) &&
         !capabilities.cancellation) {
       throw const OrmException(
         'CAPABILITY.CANCEL',
@@ -390,106 +398,162 @@ class Database<B extends Backend> {
     final link = cancellation != null && acquire.cancellation != null
         ? _CancellationLink([cancellation, acquire.cancellation!])
         : null;
+    final budget = retry == null ? null : _RetryBudget(retry);
     try {
+      final acquireTimeout = budget?.limit(acquire.timeout) ?? acquire.timeout;
+      final totalLimitsAcquisition =
+          budget != null &&
+          (acquire.timeout == null || acquireTimeout! < acquire.timeout!);
       return _run(
         (connection) async {
-          if (_connection != null) _childActive = true;
-          final control = timeout == null && cancellation == null
+          final executionTimeout = budget?.limit(timeout) ?? timeout;
+          final control = executionTimeout == null && cancellation == null
               ? null
-              : _TransactionControl(timeout, cancellation);
-          final scoped = control == null
-              ? connection
-              : _TransactionConnection(connection, control);
-          final tx = Database<B>._(driver, scoped, onQuery, control: control);
-          var committing = false;
+              : _TransactionControl(executionTimeout, cancellation);
+          if (_connection != null) _childActive = true;
           try {
-            await _execute(scoped, SqlCommand(options?._begin ?? 'BEGIN'));
-            final result = control == null
-                ? await action(tx)
-                : await control.race(() => action(tx));
-            tx._active = false;
-            if (tx._pending.isNotEmpty || tx._childActive) {
-              await tx._drain();
-              throw const OrmException(
-                'TRANSACTION.UNAWAITED',
-                'Await every operation before leaving the transaction.',
-              );
-            }
-            control?.check();
-            if (tx._statementFailed || connection.transactionActive == false) {
-              throw const OrmException(
-                'TRANSACTION.FAILED',
-                'A statement failed or the transaction ended. Use a savepoint for recoverable errors.',
-              );
-            }
-            Future<SqlResult> commit(ExecutionOptions execution) {
-              committing = true;
-              return _execute(
-                connection,
-                SqlCommand('COMMIT'),
-                options: execution,
-              );
-            }
-
-            if (control == null) {
-              await commit(const ExecutionOptions());
-            } else {
-              await control.execute(commit, const ExecutionOptions());
-            }
-            // A confirmed COMMIT acknowledgement wins a cancellation race.
-            _changes.publish(tx._pendingChanges);
-            return result;
-          } catch (error, stack) {
-            // Classify an actual COMMIT response before applying a deadline error.
-            final expired = control?.failure;
-            var cleanup = await tx._drain();
-            try {
-              if (connection.transactionActive != false) {
-                await _execute(connection, SqlCommand('ROLLBACK'));
-              }
-            } catch (e) {
-              cleanup ??= e;
-            }
-            if (cleanup != null) {
+            while (true) {
               try {
-                await connection.invalidate();
-              } catch (_) {}
+                return await _transactionAttempt(
+                  connection,
+                  control,
+                  budget,
+                  options,
+                  action,
+                );
+              } on _RetryAfterRollback catch (failure) {
+                if (await budget!.next(control!)) continue;
+                Error.throwWithStackTrace(failure.error, failure.stack);
+              }
             }
-            if (committing && !(error is SqlFailure && error.commitRejected)) {
-              _changes.publish(tx._pendingChanges);
-              throw OrmException(
-                'TRANSACTION.COMMIT',
-                'Commit outcome is unknown; do not replay the callback.',
-                cause: error,
-              );
-            }
-            if (cleanup != null) {
-              throw OrmException(
-                'TRANSACTION.ROLLBACK',
-                'Rollback could not be confirmed; connection discarded.',
-                cause: error,
-              );
-            }
-            Error.throwWithStackTrace(
-              expired == null || identical(expired, error)
-                  ? error
-                  : OrmException(expired.code, expired.message, cause: error),
-              stack,
-            );
           } finally {
-            tx._active = false;
             control?.dispose();
             if (_connection != null) _childActive = false;
           }
         },
         acquire: AcquisitionOptions(
-          timeout: acquire.timeout,
+          timeout: acquireTimeout,
           cancellation: link?.token ?? cancellation ?? acquire.cancellation,
         ),
+        acquisitionTimeoutError: totalLimitsAcquisition
+            ? const OrmException(
+                'TRANSACTION.TIMEOUT',
+                'Transaction retry time budget expired during acquisition.',
+              )
+            : null,
       ).whenComplete(() => link?.dispose());
     } catch (_) {
       link?.dispose();
       rethrow;
+    }
+  }
+
+  Future<R> _transactionAttempt<R>(
+    SqlConnection connection,
+    _TransactionControl? control,
+    _RetryBudget? budget,
+    TransactionOptions<B>? options,
+    Future<R> Function(Database<B>) action,
+  ) async {
+    final scoped = control == null
+        ? connection
+        : _TransactionConnection(connection, control);
+    final tx = Database<B>._(driver, scoped, onQuery, control: control);
+    var committing = false;
+    try {
+      await _execute(scoped, SqlCommand(options?._begin ?? 'BEGIN'));
+      final result = control == null
+          ? await action(tx)
+          : await control.race(() => action(tx));
+      tx._active = false;
+      if (tx._pending.isNotEmpty || tx._childActive) {
+        await tx._drain();
+        throw const OrmException(
+          'TRANSACTION.UNAWAITED',
+          'Await every operation before leaving the transaction.',
+        );
+      }
+      control?.check();
+      if (tx._statementFailed || connection.transactionActive == false) {
+        throw const OrmException(
+          'TRANSACTION.FAILED',
+          'A statement failed or the transaction ended. Use a savepoint for recoverable errors.',
+        );
+      }
+      Future<SqlResult> commit(ExecutionOptions execution) {
+        committing = true;
+        return _execute(connection, SqlCommand('COMMIT'), options: execution);
+      }
+
+      while (true) {
+        try {
+          if (control == null) {
+            await commit(const ExecutionOptions());
+          } else {
+            await control.execute(commit, const ExecutionOptions());
+          }
+          break;
+        } catch (error) {
+          if (error is SqlFailure && error.commitRejected) {
+            committing = false;
+            if (budget != null &&
+                error.retryCommit &&
+                connection.transactionActive == true &&
+                await budget.next(control!)) {
+              continue;
+            }
+          }
+          rethrow;
+        }
+      }
+      // A confirmed COMMIT acknowledgement wins a cancellation race.
+      _changes.publish(tx._pendingChanges);
+      return result;
+    } catch (error, stack) {
+      // Classify an actual COMMIT response before applying a deadline error.
+      final expired = control?.failure;
+      var cleanup = await tx._drain();
+      try {
+        if (connection.transactionActive != false) {
+          await _execute(connection, SqlCommand('ROLLBACK'));
+        }
+      } catch (e) {
+        cleanup ??= e;
+      }
+      if (cleanup != null) {
+        try {
+          await connection.invalidate();
+        } catch (_) {}
+      }
+      if (committing && !(error is SqlFailure && error.commitRejected)) {
+        _changes.publish(tx._pendingChanges);
+        throw OrmException(
+          'TRANSACTION.COMMIT',
+          'Commit outcome is unknown; do not replay the callback.',
+          cause: error,
+        );
+      }
+      if (cleanup != null) {
+        throw OrmException(
+          'TRANSACTION.ROLLBACK',
+          'Rollback could not be confirmed; connection discarded.',
+          cause: error,
+        );
+      }
+      if (expired == null &&
+          error is SqlFailure &&
+          error.retryTransaction &&
+          budget != null) {
+        throw _RetryAfterRollback(error, stack);
+      }
+      Error.throwWithStackTrace(
+        expired == null || identical(expired, error)
+            ? error
+            : OrmException(expired.code, expired.message, cause: error),
+        stack,
+      );
+    } finally {
+      tx._active = false;
     }
   }
 

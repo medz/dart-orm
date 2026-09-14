@@ -16,6 +16,7 @@ This file records verified delivery, not planned capabilities presented as worki
 - Transaction-wide deadlines/cancellation with native SQL interruption, callback expiry and awaited cleanup.
 - SQLite actual transaction-state reporting, automatic rollback recovery and invalidated-savepoint protection.
 - Conservative server failure classification distinguishing known commit rejection from unknown outcome.
+- Opt-in transaction replay and SQLite COMMIT-only retry with shared attempt/time budgets and cancellable backoff.
 - Analyzer-based record generator, scalar annotations, composite keys, indexes and FK validation.
 - Generated table accessors, named create parameters, byId, typed patches and schema snapshots.
 - Batched and nested relation projections, per-parent SQL window pagination, optional/required relations.
@@ -78,7 +79,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 363 checks with native SQLite
+Static analysis is clean. The complete suite passes 392 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -152,8 +153,16 @@ known COMMIT acknowledgement races, lost acknowledgements and failed rollback.
 PostgreSQL serialization failures and deadlocks are produced by real competing
 transactions. SQLSTATE 40003 at COMMIT remains conservatively unknown. Native
 macOS AOT verifies transaction expiry and automatic rollback across a savepoint.
-Classification is implemented; bounded automatic transaction/commit retry remains
-part of the unfinished goal.
+Twenty-nine retry checks verify explicit opt-in, exact attempt limits, acquisition
+and execution time budgets, cancelled backoff, fresh transaction views, discarded
+failed-attempt notifications, unknown commits and failed rollback. Actual competing
+PostgreSQL connections produce serialization/deadlock conflicts; SQLite workers
+produce WAL busy-snapshot and DELETE-journal COMMIT conflicts. Both callback replay
+and COMMIT-only retry share one finite budget. The acquisition timer preserves its
+own error class rather than inferring the source from an elapsed clock.
+`test/support/native_retry.dart` compiles and runs as a macOS AOT executable against
+two SQLite workers, verifying snapshot replay and COMMIT retry without replaying
+the successful callback.
 
 ## Still required for the goal
 
@@ -161,7 +170,7 @@ part of the unfinished goal.
 - Resumable long backfills, application schema-version gates and broader unmanaged-object catalog coverage.
 - Existing-database declaration import and named SQL query generation.
 - Configurable integer widths, exact-decimal query semantics and further native type coverage.
-- An explicit bounded retry runner, including commit-only retry where safe, and further backend capability coverage.
+- Further backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
 - User documentation, performance measurements and complete acceptance review.
 
@@ -179,7 +188,7 @@ regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CL
 workflows, 37 streaming/execution checks, 28 relation strategy checks and one
 negative compilation suite covering 19 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks and 29 retry checks.
 
 ## Environment
 
