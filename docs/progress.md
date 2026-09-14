@@ -52,6 +52,8 @@ This file records verified delivery, not planned capabilities presented as worki
 - Typed query subscriptions with commit/savepoint boundaries, relevant-table filtering and declared FK delete effects.
 - Dependency discovery across joins, subqueries, CTEs and batch relations; explicit raw/external-write notifications.
 - Paused subscription coalescing, stale-read suppression, active-query cancellation and driver-wide subscription cleanup.
+- Opt-in build_runner integration with explicit roots, shared generation/formatting and resolver-owned dependency tracking.
+- Asset-based and real-process generation checks, imported metadata invalidation, upstream builder inputs and stale-output cleanup.
 
 ## Delivery sequence
 
@@ -68,7 +70,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 256 checks with native SQLite
+Static analysis is clean. The complete suite passes 265 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -105,13 +107,21 @@ batch relations. They also verify paused-listener cleanup, native cancellation,
 read/invalidation races and re-reading after a real PostgreSQL commit whose
 acknowledgement is deliberately lost. Subscriptions add no browser/Flutter
 acceptance claim.
+Eight asset-builder checks and one real consumer-process workflow verify the
+standard build_runner path, prior-builder inputs, imported metadata invalidation,
+error recovery, explicit root selection and deletion/recreation of generated
+outputs. CLI and builder code/snapshots match. The generator formats in-process.
+The standalone generation benchmark records 10/100/1000-model first builds,
+unchanged builds, watch edits, static analysis and output sizes with pinned
+environment metadata. On the recorded Apple M3 Max run, single-field watch edits
+took 0.52/0.65/2.17 seconds. These are single observations with warm SDK/pub caches,
+not latency percentiles, IDE completion measurements or runtime SQL benchmarks.
 
 ## Still required for the goal
 
 - Union; advanced-query capability and edge-case review.
 - Resumable long backfills, application schema-version gates and broader unmanaged-object catalog coverage.
 - Existing-database declaration import and named SQL query generation.
-- Build integration.
 - Configurable integer widths, exact-decimal query semantics and further native type coverage.
 - Connection acquisition and total transaction deadlines, retry classification and further backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
@@ -130,7 +140,8 @@ client/migration integration checks, 20 source generation checks, four codec
 regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CLI
 workflows, 37 streaming/execution checks, 28 relation strategy checks and one
 negative compilation suite covering 16 invalid API uses, plus 18 domain-codec
-integration checks and 41 subscription checks.
+integration checks, 41 subscription checks, eight asset-builder checks and one
+build_runner process workflow.
 
 ## Environment
 

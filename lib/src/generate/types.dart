@@ -1,17 +1,12 @@
 part of '../../generate.dart';
 
 /// Resolve symbols by defining library rather than copying source import text.
-final class _DartNames(final Uri source, final String output) {
+final class _DartNames(final Uri source, final String Function(Uri) importUri) {
   final Map<Uri, String> _prefixes = {};
   bool typedData = false;
   Iterable<(String, String)> get imports sync* {
     for (final entry in _prefixes.entries) {
-      final uri = entry.key.scheme == 'file'
-          ? p
-                .relative(entry.key.toFilePath(), from: p.dirname(output))
-                .replaceAll(r'\', '/')
-          : entry.key.toString();
-      yield (uri, entry.value);
+      yield (importUri(entry.key), entry.value);
     }
   }
 

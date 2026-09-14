@@ -16,6 +16,11 @@ dart run example/main.dart
 dart test
 ```
 
+For incremental generation, enable `orm:orm` for explicit schema roots in
+`build.yaml` and run `dart run build_runner watch`. See
+[generation and builds](docs/generation.md) for setup, dependency tracking and
+reproducible generation measurements.
+
 Declare data once in [schema.dart](example/schema.dart):
 
 ```dart

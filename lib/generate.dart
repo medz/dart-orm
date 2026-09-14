@@ -6,17 +6,21 @@ import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
+import 'package:analyzer/dart/analysis/session.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
 import 'package:analyzer/dart/element/type_system.dart';
+import 'package:build/build.dart' as builder;
+import 'package:dart_style/dart_style.dart';
 import 'package:path/path.dart' as p;
 
 part 'src/generate/model.dart';
 part 'src/generate/reader.dart';
 part 'src/generate/types.dart';
 part 'src/generate/emitter.dart';
+part 'src/generate/build.dart';
 
 final class GenerationException implements Exception {
   final String message;
@@ -54,22 +58,40 @@ Future<GeneratedSchema> generateSchema(
     if (errors.isNotEmpty) {
       throw GenerationException(errors.map((e) => e.toString()).join('\n'));
     }
-    final names = _DartNames(resolved.libraryElement.uri, output);
-    final schema = _SchemaReader(
-      resolved.unit,
-      resolved.typeSystem,
-      names,
-    ).read();
     final import = p
         .relative(source, from: p.dirname(output))
         .replaceAll(r'\', '/');
-    return GeneratedSchema(_emit(schema, import, names), {
-      'format': 1,
-      'tables': [for (final table in schema) table.snapshot()],
-    });
+    return _generate(
+      resolved.unit,
+      resolved.libraryElement,
+      import,
+      (uri) => uri.scheme == 'file'
+          ? p
+                .relative(uri.toFilePath(), from: p.dirname(output))
+                .replaceAll(r'\', '/')
+          : uri.toString(),
+    );
   } finally {
     await contexts.dispose();
   }
+}
+
+GeneratedSchema _generate(
+  CompilationUnit unit,
+  LibraryElement library,
+  String sourceImport,
+  String Function(Uri) importUri,
+) {
+  final names = _DartNames(library.uri, importUri);
+  final schema = _SchemaReader(unit, library.typeSystem, names).read();
+  return GeneratedSchema(
+    DartFormatter(languageVersion: library.languageVersion.effective)
+        .format(_emit(schema, sourceImport, names)),
+    {
+      'format': 1,
+      'tables': [for (final table in schema) table.snapshot()],
+    },
+  );
 }
 
 /// Writes generated output only after source analysis and schema validation.
@@ -79,15 +101,6 @@ Future<void> writeGeneratedSchema(String source, {String? output}) async {
   final file = File(output);
   await file.parent.create(recursive: true);
   await file.writeAsString(result.dart);
-  final formatted = await Process.run(Platform.resolvedExecutable, [
-    'format',
-    output,
-  ]);
-  if (formatted.exitCode != 0) {
-    throw GenerationException(
-      'Generated source failed formatting: ${formatted.stderr}',
-    );
-  }
   await File(p.setExtension(output, '.json')).writeAsString(
     '${const JsonEncoder.withIndent('  ').convert(result.snapshot)}\n',
   );
