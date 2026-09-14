@@ -13,16 +13,23 @@ enum SqliteJournal { wal, delete, memory }
 
 final class SqliteOptions {
   final String path;
-  final SqliteJournal journal;
+  final SqliteJournal? journal;
+  final bool readOnly;
   final Duration busyTimeout;
   const SqliteOptions.file(
     this.path, {
     this.journal = SqliteJournal.wal,
     this.busyTimeout = const Duration(seconds: 5),
-  });
+  }) : readOnly = false;
+  const SqliteOptions.readOnly(
+    this.path, {
+    this.busyTimeout = const Duration(seconds: 5),
+  }) : journal = null,
+       readOnly = true;
   const SqliteOptions.memory({this.busyTimeout = const Duration(seconds: 5)})
     : path = ':memory:',
-      journal = SqliteJournal.memory;
+      journal = SqliteJournal.memory,
+      readOnly = false;
 }
 
 final class SqliteFailure implements Exception {
@@ -166,7 +173,12 @@ void _sqliteMain((SendPort, SqliteOptions) init) async {
   native.Database? db;
   final commands = ReceivePort();
   try {
-    db = native.sqlite3.open(options.path);
+    db = native.sqlite3.open(
+      options.path,
+      mode: options.readOnly
+          ? native.OpenMode.readOnly
+          : native.OpenMode.readWriteCreate,
+    );
     db.execute('PRAGMA foreign_keys = ON');
     if (db.select('PRAGMA foreign_keys').single.values.single != 1) {
       throw const OrmException(
@@ -176,14 +188,18 @@ void _sqliteMain((SendPort, SqliteOptions) init) async {
     }
     db.execute('PRAGMA busy_timeout = ${options.busyTimeout.inMilliseconds}');
     final journal = db
-        .select('PRAGMA journal_mode = ${options.journal.name}')
+        .select(
+          options.journal == null
+              ? 'PRAGMA journal_mode'
+              : 'PRAGMA journal_mode = ${options.journal!.name}',
+        )
         .single
         .values
         .single;
-    if (journal != options.journal.name) {
+    if (options.journal != null && journal != options.journal!.name) {
       throw OrmException(
         'DRIVER.JOURNAL',
-        'Requested ${options.journal.name}, received $journal.',
+        'Requested ${options.journal!.name}, received $journal.',
       );
     }
     var maxParameters = 999;

@@ -111,7 +111,7 @@ final class Migrator {
     List<Migration> migrations, {
     required SchemaSnapshot expected,
   }) async {
-    _validate(migrations);
+    validateMigrations(migrations, dialect: database.dialect);
     if (database.inTransaction) {
       throw const OrmException(
         'MIGRATION.SESSION',
@@ -182,7 +182,7 @@ final class Migrator {
   }
 
   Future<List<Migration>> plan(List<Migration> migrations) async {
-    _validate(migrations);
+    validateMigrations(migrations, dialect: database.dialect);
     final applied = await history();
     if (applied.length > migrations.length) {
       throw const OrmException(
@@ -211,7 +211,7 @@ final class Migrator {
         'Migrations require a dedicated outer transaction.',
       );
     }
-    _validate(migrations);
+    validateMigrations(migrations, dialect: database.dialect);
     Future<List<String>> run(Database<Backend> session) async {
       final rebuild =
           database.dialect == SqlDialect.sqlite &&
@@ -307,81 +307,84 @@ final class Migrator {
 
     return database.inSession ? run(database) : database.session(run);
   }
+}
 
-  void _validate(List<Migration> migrations) {
-    String? last;
-    String? previousChecksum;
-    for (final migration in migrations) {
-      if (last != null && last.compareTo(migration.id) >= 0) {
-        throw const OrmException(
-          'MIGRATION.ORDER',
-          'Migration IDs must be unique and strictly ordered.',
-        );
-      }
-      last = migration.id;
-      if (migration.previous != null &&
-          migration.previous != previousChecksum) {
-        throw const OrmException(
-          'MIGRATION.CHAIN',
-          'Migration previous-checksum chain is broken.',
-        );
-      }
-      previousChecksum = migration.checksum;
-      final steps = migration.steps[database.dialect];
-      if (steps == null) {
-        throw OrmException(
-          'MIGRATION.TARGET',
-          '${migration.id} has no SQL for ${database.dialect.name}.',
-        );
-      }
-      for (final step in steps) {
-        if (step is DropTable) continue;
-        if (step is RebuildTable) {
-          if (database.dialect != SqlDialect.sqlite) {
-            throw const OrmException(
-              'MIGRATION.TARGET',
-              'Table rebuilds are SQLite operations.',
-            );
-          }
-          continue;
-        }
-        if (step is DropConstraint) {
-          if (database.dialect != SqlDialect.postgres) {
-            throw const OrmException(
-              'MIGRATION.TARGET',
-              'Constraint resolution is a PostgreSQL operation.',
-            );
-          }
-          continue;
-        }
-        final sql = (step as ExecuteSql).sql;
-        // Transaction control belongs to the runner. Nontransactional operations
-        // require a separate recoverable execution mode, not silent autocommit.
-        final words = _sqlWords(sql);
-        if (words.isEmpty) {
+/// Validates local ordering, checksum links and operations without opening a database.
+void validateMigrations(
+  List<Migration> migrations, {
+  required SqlDialect dialect,
+}) {
+  String? last;
+  String? previousChecksum;
+  for (final migration in migrations) {
+    if (last != null && last.compareTo(migration.id) >= 0) {
+      throw const OrmException(
+        'MIGRATION.ORDER',
+        'Migration IDs must be unique and strictly ordered.',
+      );
+    }
+    last = migration.id;
+    if (migration.previous != null && migration.previous != previousChecksum) {
+      throw const OrmException(
+        'MIGRATION.CHAIN',
+        'Migration previous-checksum chain is broken.',
+      );
+    }
+    previousChecksum = migration.checksum;
+    final steps = migration.steps[dialect];
+    if (steps == null) {
+      throw OrmException(
+        'MIGRATION.TARGET',
+        '${migration.id} has no SQL for ${dialect.name}.',
+      );
+    }
+    for (final step in steps) {
+      if (step is DropTable) continue;
+      if (step is RebuildTable) {
+        if (dialect != SqlDialect.sqlite) {
           throw const OrmException(
-            'MIGRATION.EMPTY',
-            'Migration contains an empty statement.',
+            'MIGRATION.TARGET',
+            'Table rebuilds are SQLite operations.',
           );
         }
-        if ({
-              'BEGIN',
-              'COMMIT',
-              'ROLLBACK',
-              'END',
-              'SAVEPOINT',
-              'RELEASE',
-              'VACUUM',
-              'PRAGMA',
-              'START',
-              'ABORT',
-            }.contains(words.first) ||
-            words.contains('CONCURRENTLY')) {
+        continue;
+      }
+      if (step is DropConstraint) {
+        if (dialect != SqlDialect.postgres) {
           throw const OrmException(
-            'MIGRATION.TRANSACTION',
-            'This operation requires an explicitly nontransactional migration.',
+            'MIGRATION.TARGET',
+            'Constraint resolution is a PostgreSQL operation.',
           );
         }
+        continue;
+      }
+      final sql = (step as ExecuteSql).sql;
+      // Transaction control belongs to the runner. Nontransactional operations
+      // require a separate recoverable execution mode, not silent autocommit.
+      final words = _sqlWords(sql);
+      if (words.isEmpty) {
+        throw const OrmException(
+          'MIGRATION.EMPTY',
+          'Migration contains an empty statement.',
+        );
+      }
+      if ({
+            'BEGIN',
+            'COMMIT',
+            'ROLLBACK',
+            'END',
+            'SAVEPOINT',
+            'RELEASE',
+            'VACUUM',
+            'PRAGMA',
+            'START',
+            'ABORT',
+          }.contains(words.first) ||
+          words.contains('CONCURRENTLY')) {
+        throw const OrmException(
+          'MIGRATION.TRANSACTION',
+          'This operation requires an explicitly nontransactional migration.',
+        );
       }
     }
   }

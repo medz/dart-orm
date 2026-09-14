@@ -1,5 +1,49 @@
 # Migrations
 
+The CLI reads saved snapshots and migration files:
+
+```sh
+dart run orm generate example/schema.dart
+dart run orm migration create 0001_initial --schema example/schema.orm.json
+dart run orm migration check
+dart run orm migrate apply --sqlite app.sqlite
+dart run orm migrate plan --sqlite app.sqlite
+dart run orm migrate status --sqlite app.sqlite
+dart run orm db verify --sqlite app.sqlite --schema example/schema.orm.json
+dart run orm db inspect --sqlite app.sqlite --table users
+```
+
+The default migration directory is `migrations`; change it with `--dir`. `plan`,
+`status`, `inspect` and `verify` open SQLite read-only and require an existing file.
+`apply` can create a new file. No-change generation writes no migration. Repeated
+IDs, overwritten files, unknown options and broken history chains are rejected.
+
+For PostgreSQL, use `--postgres-env DATABASE_URL`, with the URL held in that
+variable. TLS defaults to `verifyFull`; `--tls require|disable` is explicit.
+`--database-schema name` selects a PostgreSQL schema. SQLite rejects these
+PostgreSQL-specific flags. Offline `migration check --dialect postgres` checks
+PostgreSQL operations without connecting. `db baseline` uses the final snapshot
+in the selected migration directory to register a verified existing database.
+
+Commands return JSON, apart from `generate` and help. Exit code 2 indicates schema
+drift, 64 indicates invalid CLI arguments, and 1 indicates an execution failure.
+Dart's launcher may also print its own build-hook progress on stderr.
+
+For renames, pass `--renames file.json` with:
+
+```json
+{"tables":{"users":"members"},"columns":{"members":{"nickname":"display_name"}}}
+```
+
+Conversions use `--using file.json`, mapping dialect → table → column → SQL:
+
+```json
+{"sqlite":{"members":{"score":"CAST(score AS TEXT)"}},"postgres":{"members":{"score":"CAST(score AS TEXT)"}}}
+```
+
+`--allow-destructive` permits generating reviewed drop steps. Neither generation
+nor offline checking executes those steps.
+
 Import `package:orm/migrate.dart`. Schema files produced by `orm generate` are
 portable snapshots; generated Dart clients are not executed to obtain them.
 
