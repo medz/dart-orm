@@ -1,11 +1,17 @@
-name: _
+name: orm
+description: Typed relational data access for Dart, from declaration to migration.
+version: 0.1.0-dev.1
 publish_to: none
-
 environment:
-  sdk: ^3.10.1
-
-workspace:
-  - pub/orm
-
+  sdk: '>=3.13.0 <4.0.0'
+dependencies:
+  analyzer: ^14.1.0
+  crypto: ^3.0.7
+  path: ^1.9.1
+  postgres: ^3.5.12
+  sqlite3: ^3.6.0
 dev_dependencies:
-  lints: ^6.0.0
+  lints: ^6.1.0
+  test: ^1.31.2
+executables:
+  orm:

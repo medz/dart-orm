@@ -1,5 +1,7 @@
+.dart_tool/
+build/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 .DS_Store
 .env
-.idea/
-.vscode/
-.dart_tool/
