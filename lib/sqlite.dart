@@ -36,7 +36,11 @@ final class SqliteOptions {
       readOnly = false;
 }
 
-final class SqliteFailure implements Exception {
+final class SqliteFailure implements SqlFailure {
+  @override
+  bool get retryTransaction => code == 5;
+  @override
+  bool get commitRejected => code == 5 || code == 19;
   final int code;
   final int extendedCode;
   final String message;

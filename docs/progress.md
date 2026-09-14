@@ -13,6 +13,9 @@ This file records verified delivery, not planned capabilities presented as worki
 - Native SQLite worker with verified foreign keys, journal mode and parameter limit.
 - PostgreSQL driver with a single pool owner, TLS settings and explicit borrowed pools.
 - Transaction lifecycle, rollback, savepoints, pending work checks and query observation.
+- Transaction-wide deadlines/cancellation with native SQL interruption, callback expiry and awaited cleanup.
+- SQLite actual transaction-state reporting, automatic rollback recovery and invalidated-savepoint protection.
+- Conservative server failure classification distinguishing known commit rejection from unknown outcome.
 - Analyzer-based record generator, scalar annotations, composite keys, indexes and FK validation.
 - Generated table accessors, named create parameters, byId, typed patches and schema snapshots.
 - Batched and nested relation projections, per-parent SQL window pagination, optional/required relations.
@@ -75,7 +78,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 322 checks with native SQLite
+Static analysis is clean. The complete suite passes 363 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -138,8 +141,19 @@ regression using the native SQLite driver. Timed-out mutations, batch transactio
 sessions and queries never execute after their late leases arrive. Stream
 cancellation, watch recovery, pool PID reuse, resource draining and application
 error propagation are checked. macOS AOT also verifies that an expired queued
-write never runs after the held lease is released. These acquisition controls do
-not yet implement transaction-wide execution deadlines or automatic retries.
+write never runs after the held lease is released. Acquisition controls remain distinct from transaction-wide execution deadlines.
+
+Forty-one transaction-control checks cover SQLite and PostgreSQL plus actual
+concurrent connections and failure-injecting driver wrappers. They verify idle
+and CPU-bound callbacks, active reads/writes/cursor fetches, paused streams,
+borrowed sessions, savepoint cleanup, expired connection acquisition, native
+BEGIN/COMMIT lock waits, automatic rollback, deferred constraint rejection,
+known COMMIT acknowledgement races, lost acknowledgements and failed rollback.
+PostgreSQL serialization failures and deadlocks are produced by real competing
+transactions. SQLSTATE 40003 at COMMIT remains conservatively unknown. Native
+macOS AOT verifies transaction expiry and automatic rollback across a savepoint.
+Classification is implemented; bounded automatic transaction/commit retry remains
+part of the unfinished goal.
 
 ## Still required for the goal
 
@@ -147,7 +161,7 @@ not yet implement transaction-wide execution deadlines or automatic retries.
 - Resumable long backfills, application schema-version gates and broader unmanaged-object catalog coverage.
 - Existing-database declaration import and named SQL query generation.
 - Configurable integer widths, exact-decimal query semantics and further native type coverage.
-- Total transaction deadlines, retry classification and further backend capability coverage.
+- An explicit bounded retry runner, including commit-only retry where safe, and further backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
 - User documentation, performance measurements and complete acceptance review.
 
@@ -165,7 +179,7 @@ regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CL
 workflows, 37 streaming/execution checks, 28 relation strategy checks and one
 negative compilation suite covering 19 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks.
 
 ## Environment
 

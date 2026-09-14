@@ -82,6 +82,43 @@ Future<void> main() async {
       await held;
     }
     if (await db.users.count() != 5) throw StateError('Abandoned SQL executed');
+    final resume = Completer<void>();
+    try {
+      await db.transaction((tx) async {
+        await tx.users.create(email: 'deadline@example.com');
+        await resume.future;
+      }, timeout: const Duration(milliseconds: 60));
+      throw StateError('Transaction deadline failed');
+    } on OrmException catch (error) {
+      if (error.code != 'TRANSACTION.TIMEOUT') rethrow;
+    } finally {
+      resume.complete();
+    }
+    if (await db.users.count() != 5) {
+      throw StateError('Timed-out transaction persisted');
+    }
+    try {
+      await db.transaction((tx) async {
+        await tx.users.create(email: 'rollback@example.com');
+        try {
+          await tx.savepoint(
+            (child) => child.execute(
+              SqlCommand(
+                "INSERT OR ROLLBACK INTO users(email) VALUES ('aot0@example.com')",
+              ),
+            ),
+          );
+        } on SqliteFailure {
+          /* The outer transaction has also ended. */
+        }
+      });
+      throw StateError('Automatic rollback went undetected');
+    } on OrmException catch (error) {
+      if (error.code != 'TRANSACTION.FAILED') rethrow;
+    }
+    if (await db.users.count() != 5) {
+      throw StateError('Automatic rollback lost connection state');
+    }
     final token = CancellationToken();
     final timer = Timer(const Duration(milliseconds: 40), token.cancel);
     try {
@@ -116,7 +153,7 @@ Future<void> main() async {
     }
     await changes.cancel();
     print(
-      'Native AOT: joined projections, typed UNION records, acquisition deadlines, cursor demand, native cancellation, recovery and committed query watches passed.',
+      'Native AOT: joined projections, typed UNION records, acquisition/transaction deadlines, automatic rollback, cursor demand, native cancellation, recovery and committed query watches passed.',
     );
   } finally {
     await db.close();

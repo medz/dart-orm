@@ -728,6 +728,8 @@ final class _CommitAckConnection(
   final _CommitAckDriver driver,
 ) implements SqlConnection {
   @override
+  bool? get transactionActive => inner.transactionActive;
+  @override
   Future<SqlResult> execute(
     SqlCommand command, {
     ExecutionOptions options = const ExecutionOptions(),

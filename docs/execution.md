@@ -174,3 +174,96 @@ fetches just closes its cursor.
 `onQuery` reports `execute`, `cursorOpen`, `cursorFetch` and `cursorClose` events.
 Fetch events include actual batch row counts; they carry the original query SQL
 for attribution. Parameters are counted but their values are not recorded.
+
+
+## Transaction deadlines and failure outcomes
+
+```dart
+final cancel = CancellationToken();
+await db.transaction((tx) async {
+  await tx.users.create(email: 'one@example.com');
+  await tx.savepoint((child) async {
+    await child.users.create(email: 'two@example.com');
+  });
+},
+  acquire: const AcquisitionOptions(timeout: Duration(seconds: 1)),
+  timeout: const Duration(seconds: 5),
+  cancellation: cancel,
+);
+```
+
+`transaction(timeout: ...)` starts after acquiring its connection, immediately
+before BEGIN. It covers BEGIN, application callback time, all statements and
+savepoints, cursor consumption, and COMMIT. It does not restart for each query or
+savepoint. A monotonic check prevents new SQL or COMMIT after a CPU-bound callback
+has exceeded the deadline even when its Timer could not run promptly. The
+transaction cancellation token also cancels acquisition; `acquire.cancellation`
+continues to apply only to acquisition.
+
+Expiration rejects new operations, cancels active SQL and cursors, drains pending
+work, and rolls back using the underlying connection without the expired token.
+The outer Future completes after this cleanup. Cleanup can exceed the requested
+duration: stopping a statement, waiting for SQLite's busy handler, and confirming
+rollback take time. A driver without actual statement cancellation rejects these
+options before starting the transaction.
+
+Dart cannot forcibly stop an arbitrary asynchronous callback or interrupt Dart
+code currently monopolizing its isolate. A callback waiting on another Future
+may resume later; its expired database view rejects further operations. Its late
+errors are observed. External effects performed by callback code are not rolled
+back by the ORM. Use transaction/outbox patterns for effects that must follow
+committed data.
+
+Successful COMMIT acknowledgement wins a cancellation race. Failure outcomes are
+explicit:
+
+| Outcome | Error |
+| --- | --- |
+| Transaction deadline expires before confirmed commit | `TRANSACTION.TIMEOUT` |
+| Transaction cancellation during execution | `TRANSACTION.CANCELLED` |
+| Cancellation while still acquiring | `OPERATION.CANCELLED` |
+| Shorter statement timeout | `OPERATION.TIMEOUT` |
+| Database has already ended the transaction | `TRANSACTION.ENDED` for further calls; the enclosing transaction fails |
+| Rollback cannot be confirmed | `TRANSACTION.ROLLBACK`; the connection is discarded |
+| COMMIT outcome cannot be established | `TRANSACTION.COMMIT`; never assume callback replay is safe |
+| Server explicitly rejects COMMIT | Original classified `SqlFailure`, or the elapsed transaction deadline with that failure as its cause |
+
+PostgreSQL can replace a discarded physical connection from its pool. SQLite
+uses one worker connection; discarding it requires reopening the database, and
+an in-memory database cannot preserve its contents across that reopen.
+
+`SqlFailure` exposes conservative `retryTransaction` and `commitRejected`
+classification. Native PostgreSQL errors use `PostgresFailure`, retaining the
+SQLSTATE in `code` and the original `package:postgres` exception in `cause`.
+SQLite retains `SqliteFailure.code`, `extendedCode` and `message`.
+
+| Database error | Possible transaction retry after confirmed rollback | Known COMMIT rejection |
+| --- | --- | --- |
+| PostgreSQL `40001` or `40P01` | Yes | Yes |
+| PostgreSQL integrity constraints, SQLSTATE class `23` | No | Yes |
+| PostgreSQL `40003` | No | No |
+| SQLite `BUSY`, including extended busy codes | Yes | Yes |
+| SQLite constraint errors | No | Yes |
+| Other errors | No automatic eligibility | Conservatively unknown |
+
+These flags do not authorize retry by themselves. **The ORM does not yet provide
+an automatic retry runner.** Callback replay needs confirmed rollback, application
+logic safe to repeat, a limit on attempts and total time. A SQLite COMMIT returning
+BUSY can be retried while its transaction is still active; this implementation
+currently rolls it back and reports the classified failure. It never silently
+replays the callback. PostgreSQL serialization failures require repeating the
+whole transaction logic, not only its final SQL statement.
+[PostgreSQL retry guidance](https://www.postgresql.org/docs/current/mvcc-serialization-failure-handling.html)
+and the [SQLSTATE catalog](https://www.postgresql.org/docs/current/errcodes-appendix.html)
+explain these distinctions.
+
+SQLite reports actual autocommit state from the worker after every completed
+request, including errors. If an interrupt or `OR ROLLBACK` has already rolled
+back the whole transaction, the ORM skips a redundant ROLLBACK. A vanished
+savepoint marks its parent failed and prevents subsequent writes from silently
+running in autocommit mode. Healthy SQLite connections remain usable. PostgreSQL's
+current Dart driver does not expose transaction status publicly, so its adapter
+reports an unknown state and confirms cleanup with ROLLBACK.
+[SQLite autocommit status](https://www.sqlite.org/c3ref/get_autocommit.html)
+and [transaction error handling](https://www.sqlite.org/lang_transaction.html)
+describe why statement errors alone cannot establish SQLite transaction state.

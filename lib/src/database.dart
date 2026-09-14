@@ -37,6 +37,8 @@ final class SqlResult {
 }
 
 abstract interface class SqlConnection {
+  /// Actual adapter state after the last completed request; null if unavailable.
+  bool? get transactionActive;
   Future<SqlResult> execute(
     SqlCommand command, {
     ExecutionOptions options = const ExecutionOptions(),
@@ -114,6 +116,7 @@ class Database<B extends Backend> {
   final void Function(QueryEvent)? onQuery;
   final SqlConnection? _connection;
   final bool _transaction;
+  final _TransactionControl? _control;
   final Set<Future<void>> _pending = {};
   final Set<Future<void> Function()> _streams = {};
   Future<void> _stopStreams() =>
@@ -127,12 +130,14 @@ class Database<B extends Backend> {
 
   Database(this.driver, {this.onQuery})
     : _connection = null,
-      _transaction = false;
+      _transaction = false,
+      _control = null;
   Database._(
     this.driver,
     this._connection,
     this.onQuery, {
     this._transaction = true,
+    this._control,
   });
   Capabilities get capabilities => driver.capabilities;
   SqlDialect get dialect => capabilities.dialect;
@@ -170,6 +175,14 @@ class Database<B extends Backend> {
   void _checkActive() {
     if (!_active) {
       throw const OrmException('SESSION.CLOSED', 'Database session has ended.');
+    }
+    _control?.check();
+    if (inTransaction && _connection?.transactionActive == false) {
+      _statementFailed = true;
+      throw const OrmException(
+        'TRANSACTION.ENDED',
+        'The database has ended this transaction.',
+      );
     }
     if (_childActive) {
       throw const OrmException(
@@ -347,67 +360,149 @@ class Database<B extends Backend> {
     Future<R> Function(Database<B> tx) action, {
     TransactionOptions<B>? options,
     AcquisitionOptions acquire = const AcquisitionOptions(),
+    Duration? timeout,
+    CancellationToken? cancellation,
   }) {
+    _checkActive();
+    acquire.check();
     if (inTransaction) {
       throw const OrmException(
         'TRANSACTION.NESTED',
         'Use savepoint() inside a transaction.',
       );
     }
-    return _run((connection) async {
-      if (_connection != null) _childActive = true;
-      try {
-        await _execute(connection, SqlCommand(options?._begin ?? 'BEGIN'));
-        final tx = Database<B>._(driver, connection, onQuery);
-        var committing = false;
-        try {
-          final result = await action(tx);
-          tx._active = false;
-          if (tx._pending.isNotEmpty || tx._childActive) {
-            await tx._stopStreams();
-            await Future.wait(tx._pending.toList());
-            throw const OrmException(
-              'TRANSACTION.UNAWAITED',
-              'Await every operation before leaving the transaction.',
-            );
-          }
-          if (tx._statementFailed) {
-            throw const OrmException(
-              'TRANSACTION.FAILED',
-              'A statement failed. Use a savepoint for recoverable errors.',
-            );
-          }
-          committing = true;
-          await _execute(connection, SqlCommand('COMMIT'));
-          _changes.publish(tx._pendingChanges);
-          return result;
-        } catch (error, stack) {
-          tx._active = false;
-          await tx._stopStreams();
-          await Future.wait(tx._pending.toList());
+    if (timeout != null && timeout <= Duration.zero) {
+      throw ArgumentError.value(timeout, 'timeout');
+    }
+    if (cancellation?.isCancelled ?? false) {
+      throw const OrmException(
+        'TRANSACTION.CANCELLED',
+        'Transaction cancelled before acquisition.',
+      );
+    }
+    if ((timeout != null || cancellation != null) &&
+        !capabilities.cancellation) {
+      throw const OrmException(
+        'CAPABILITY.CANCEL',
+        'Transaction deadlines require actual statement cancellation.',
+      );
+    }
+    final link = cancellation != null && acquire.cancellation != null
+        ? _CancellationLink([cancellation, acquire.cancellation!])
+        : null;
+    try {
+      return _run(
+        (connection) async {
+          if (_connection != null) _childActive = true;
+          final control = timeout == null && cancellation == null
+              ? null
+              : _TransactionControl(timeout, cancellation);
+          final scoped = control == null
+              ? connection
+              : _TransactionConnection(connection, control);
+          final tx = Database<B>._(driver, scoped, onQuery, control: control);
+          var committing = false;
           try {
-            await _execute(connection, SqlCommand('ROLLBACK'));
-          } catch (_) {
-            await connection.invalidate();
-          }
-          if (committing) {
-            // The server may have committed before the acknowledgement failed.
-            // Re-read affected queries rather than promising a rollback.
+            await _execute(scoped, SqlCommand(options?._begin ?? 'BEGIN'));
+            final result = control == null
+                ? await action(tx)
+                : await control.race(() => action(tx));
+            tx._active = false;
+            if (tx._pending.isNotEmpty || tx._childActive) {
+              await tx._drain();
+              throw const OrmException(
+                'TRANSACTION.UNAWAITED',
+                'Await every operation before leaving the transaction.',
+              );
+            }
+            control?.check();
+            if (tx._statementFailed || connection.transactionActive == false) {
+              throw const OrmException(
+                'TRANSACTION.FAILED',
+                'A statement failed or the transaction ended. Use a savepoint for recoverable errors.',
+              );
+            }
+            Future<SqlResult> commit(ExecutionOptions execution) {
+              committing = true;
+              return _execute(
+                connection,
+                SqlCommand('COMMIT'),
+                options: execution,
+              );
+            }
+
+            if (control == null) {
+              await commit(const ExecutionOptions());
+            } else {
+              await control.execute(commit, const ExecutionOptions());
+            }
+            // A confirmed COMMIT acknowledgement wins a cancellation race.
             _changes.publish(tx._pendingChanges);
-            throw OrmException(
-              'TRANSACTION.COMMIT',
-              'Commit failed; do not retry without checking its outcome.',
-              cause: error,
+            return result;
+          } catch (error, stack) {
+            // Classify an actual COMMIT response before applying a deadline error.
+            final expired = control?.failure;
+            var cleanup = await tx._drain();
+            try {
+              if (connection.transactionActive != false) {
+                await _execute(connection, SqlCommand('ROLLBACK'));
+              }
+            } catch (e) {
+              cleanup ??= e;
+            }
+            if (cleanup != null) {
+              try {
+                await connection.invalidate();
+              } catch (_) {}
+            }
+            if (committing && !(error is SqlFailure && error.commitRejected)) {
+              _changes.publish(tx._pendingChanges);
+              throw OrmException(
+                'TRANSACTION.COMMIT',
+                'Commit outcome is unknown; do not replay the callback.',
+                cause: error,
+              );
+            }
+            if (cleanup != null) {
+              throw OrmException(
+                'TRANSACTION.ROLLBACK',
+                'Rollback could not be confirmed; connection discarded.',
+                cause: error,
+              );
+            }
+            Error.throwWithStackTrace(
+              expired == null || identical(expired, error)
+                  ? error
+                  : OrmException(expired.code, expired.message, cause: error),
+              stack,
             );
+          } finally {
+            tx._active = false;
+            control?.dispose();
+            if (_connection != null) _childActive = false;
           }
-          Error.throwWithStackTrace(error, stack);
-        } finally {
-          tx._active = false;
-        }
-      } finally {
-        if (_connection != null) _childActive = false;
-      }
-    }, acquire: acquire);
+        },
+        acquire: AcquisitionOptions(
+          timeout: acquire.timeout,
+          cancellation: link?.token ?? cancellation ?? acquire.cancellation,
+        ),
+      ).whenComplete(() => link?.dispose());
+    } catch (_) {
+      link?.dispose();
+      rethrow;
+    }
+  }
+
+  Future<Object?> _drain() async {
+    _active = false;
+    Object? error;
+    try {
+      await _stopStreams();
+    } catch (e) {
+      error = e;
+    }
+    await Future.wait(_pending.toList());
+    return error;
   }
 
   Future<R> savepoint<R>(Future<R> Function(Database<B> tx) action) {
@@ -420,10 +515,17 @@ class Database<B extends Backend> {
     return _run((connection) async {
       _childActive = true;
       final name = 'orm_sp_${_savepointId++}';
-      final child = Database<B>._(driver, connection, onQuery);
+      final child = Database<B>._(
+        driver,
+        connection,
+        onQuery,
+        control: _control,
+      );
       try {
         await _execute(connection, SqlCommand('SAVEPOINT $name'));
-        final result = await action(child);
+        final result = _control == null
+            ? await action(child)
+            : await _control.race(() => action(child));
         child._active = false;
         if (child._pending.isNotEmpty || child._childActive) {
           await child._stopStreams();
@@ -443,15 +545,21 @@ class Database<B extends Backend> {
         _mergeChanges(_pendingChanges, child._pendingChanges);
         return result;
       } catch (error, stack) {
-        child._active = false;
-        await child._stopStreams();
-        await Future.wait(child._pending.toList());
+        final cleanup = await child._drain();
+        final raw = _unscoped(connection);
         try {
-          await _execute(connection, SqlCommand('ROLLBACK TO SAVEPOINT $name'));
-          await _execute(connection, SqlCommand('RELEASE SAVEPOINT $name'));
+          if (cleanup != null) throw cleanup;
+          if (raw.transactionActive == false) {
+            // SQLite may have rolled back the whole transaction, not this savepoint.
+            _statementFailed = true;
+          } else {
+            await _execute(raw, SqlCommand('ROLLBACK TO SAVEPOINT $name'));
+            await _execute(raw, SqlCommand('RELEASE SAVEPOINT $name'));
+          }
         } catch (_) {
           _active = false;
-          await connection.invalidate();
+          _statementFailed = true;
+          await raw.invalidate();
         }
         Error.throwWithStackTrace(error, stack);
       } finally {

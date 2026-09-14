@@ -22,6 +22,9 @@ final class _SqliteWorker implements SqlConnection {
   Isolate? _isolate;
   var _id = 0, _handle = 0;
   bool _stopped = false, _busy = false;
+  bool _transactionActive = false;
+  @override
+  bool? get transactionActive => _stopped || _busy ? null : _transactionActive;
   late final bool supportsCancellation = _resolveInterrupt();
   bool _resolveInterrupt() {
     try {
@@ -61,8 +64,12 @@ final class _SqliteWorker implements SqlConnection {
         _stopped = true;
         acknowledge.send(null);
         _responses.close();
-      } else if (message case [int id, SqlResult result]) {
+      } else if (message case [int id, SqlResult result, bool active]) {
+        _transactionActive = active;
         _pending.remove(id)?.complete(result);
+      } else if (message case [int id, Object error, bool active]) {
+        _transactionActive = active;
+        _pending.remove(id)?.completeError(error);
       } else if (message case [int id, Object error]) {
         if (id == 0) {
           _fail(error);

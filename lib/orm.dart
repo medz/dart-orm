@@ -21,3 +21,4 @@ part 'src/cte.dart';
 part 'src/cursor.dart';
 part 'src/watch.dart';
 part 'src/union.dart';
+part 'src/transaction.dart';

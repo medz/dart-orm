@@ -52,7 +52,7 @@ rebuilds and existing-database baselines. The in-memory example builds an initia
 Use `query.stream(batchSize: 128)` with `await for` to read through a database
 cursor. Reads and mutations accept `ExecutionOptions` for connection acquisition
 limits, statement deadlines and cancellation. See [streaming and execution](docs/execution.md) for connection
-lifetime, batch sizing and backend behavior.
+lifetime, batch sizing, transaction-wide deadlines and failure outcomes.
 
 Single relationships use JOINs when declared keys prove uniqueness; collections
 load in parameter-aware batches. Both support typed nested selections. See

@@ -33,6 +33,19 @@ final class PostgresOptions {
   });
 }
 
+/// A server-reported error, preserving SQLSTATE and the original exception.
+final class PostgresFailure implements SqlFailure {
+  final pg.ServerException cause;
+  const PostgresFailure(this.cause);
+  String? get code => cause.code;
+  @override
+  bool get retryTransaction => code == '40001' || code == '40P01';
+  @override
+  bool get commitRejected => code?.startsWith('23') == true || retryTransaction;
+  @override
+  String toString() => cause.toString();
+}
+
 final class PostgresDriver implements Driver<Postgres> {
   final pg.Pool<void> _pool;
   final bool _ownsPool;
@@ -195,6 +208,9 @@ final class PostgresDriver implements Driver<Postgres> {
 }
 
 final class _PostgresConnection implements SqlConnection {
+  // package:postgres does not expose ReadyForQuery transaction status publicly.
+  @override
+  bool? get transactionActive => null;
   final pg.Connection connection;
   final Future<pg.Connection> Function()? _control;
   final Expando<int> _backendIds;
@@ -340,7 +356,7 @@ final class _PostgresConnection implements SqlConnection {
           cause: error,
         );
       }
-      rethrow;
+      throw PostgresFailure(error);
     } finally {
       completed = true;
       deadline?.cancel();
@@ -397,7 +413,7 @@ final class _PostgresCursor(
     _closed = true;
     try {
       await connection.execute(SqlCommand('CLOSE "$name"'));
-    } on pg.ServerException catch (e) {
+    } on PostgresFailure catch (e) {
       if (e.code != '25P02' && e.code != '34000') rethrow;
     }
   }

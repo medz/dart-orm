@@ -89,7 +89,7 @@ void _sqliteMain((SendPort, SqliteOptions) init) async {
         cursors.clear();
         db!.close();
         db = null;
-        response.send([id, const SqlResult([])]);
+        response.send([id, const SqlResult([]), false]);
         break;
       }
       try {
@@ -143,16 +143,18 @@ void _sqliteMain((SendPort, SqliteOptions) init) async {
               'Invalid SQLite worker command.',
             );
         }
-        response.send([id, result]);
+        response.send([id, result, !db!.autocommit]);
       } on native.SqliteException catch (e) {
         response.send([
           id,
           SqliteFailure(e.resultCode, e.extendedResultCode, e.message),
+          !db!.autocommit,
         ]);
       } catch (e) {
         response.send([
           id,
           e is OrmException ? e : OrmException('DRIVER.SQLITE', e.toString()),
+          !db!.autocommit,
         ]);
       }
     }
