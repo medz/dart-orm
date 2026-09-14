@@ -11,7 +11,7 @@ final class TableAlias<R, F extends Fields> {
     : fields = definition.createFields(TableRef(definition.schema));
   String _presenceName() {
     var name = '_orm_present';
-    while (definition.schema.columns.any((c) => c.name == name)) {
+    while (definition.schema.columns.any((c) => c.name.toLowerCase() == name)) {
       name += '_';
     }
     return name;
@@ -130,9 +130,7 @@ final class _WindowNode(
       );
     }
     if (order.isNotEmpty) {
-      clauses.add(
-        'ORDER BY ${order.map((o) => o._write(w)).join(', ')}',
-      );
+      clauses.add('ORDER BY ${order.map((o) => o._write(w)).join(', ')}');
     }
     if (frame != null) {
       clauses.add(switch (frame!) {

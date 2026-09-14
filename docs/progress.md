@@ -43,6 +43,9 @@ This file records verified delivery, not planned capabilities presented as worki
 - Real SQLite native interruption and PostgreSQL control-connection cancellation with awaited cleanup.
 - Per-statement deadlines, poisoned-transaction protection and atomic cancellation between batch chunks.
 - Explicit cancellation capabilities, borrowed-pool ownership and failed-control connection disposal.
+- To-one JOIN strategy using declared uniqueness, with explicit join/batch choices and cardinality checks.
+- Composite-key batch execution, tuple matching, parameter accounting and nested JOIN/window combinations.
+- Joined optional/required projections preserve row presence, nullable values, CTE exports and cursor decoding.
 
 ## Delivery sequence
 
@@ -59,7 +62,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 154 checks with native SQLite
+Static analysis is clean. The complete suite passes 182 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -76,12 +79,16 @@ early exit, relation loading, deadlines, cancelled writes, failed control connec
 and delayed cancellation races. A batch-cancellation regression was first reproduced
 as a partial commit and now verifies rollback on both databases.
 `test/support/native_execution.dart` additionally compiles and runs as a macOS AOT
-executable, verifying cursor consumption, `sqlite3_interrupt` and subsequent SQL.
+executable, verifying joined records, nullable required values, absent relations,
+cursor consumption, `sqlite3_interrupt` and subsequent SQL.
+The relationship fixture is generated from a record schema with nullable composite
+foreign keys and self-relations. It verifies 1200-key batches, key deduplication,
+per-parent windows, nested JOINs, whole-row absence and root pagination on both
+backends. Generator checks compare committed client code and schema snapshots.
 
 ## Still required for the goal
 
 - Union; advanced-query capability and edge-case review.
-- Composite-key relation batching acceptance and join-based to-one loading.
 - Resumable long backfills, application schema-version gates and broader unmanaged-object catalog coverage.
 - Existing-database declaration import and named SQL query generation.
 - Build integration; custom codec/schema authoring; committed-change query subscriptions.
@@ -89,8 +96,9 @@ executable, verifying cursor consumption, `sqlite3_interrupt` and subsequent SQL
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
 - User documentation, performance measurements and complete acceptance review.
 
-Current to-one relation projections use batching, not joins. `verifyColumns` checks
-column names/types/nullability only. `verifySchema` additionally compares defaults,
+To-one projections join by default when declared keys prove uniqueness; otherwise
+they batch and check cardinality. Collections use explicit parameter-aware batches.
+`verifyColumns` checks column names/types/nullability only. `verifySchema` additionally compares defaults,
 keys and simple indexes; its `unmanaged` objects require separate review.
 Transactional migration batches are atomic. PostgreSQL mixed migrations explicitly
 use durable per-step checkpoints; SQLite rejects that autocommit mode. These are
@@ -99,7 +107,7 @@ implementation stages, not a reduction of the active goal.
 The full suite includes 52 shared SQLite/PostgreSQL query checks, 20 generated
 client/migration integration checks, seven source generation checks, two codec
 regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CLI
-workflows, 37 streaming/execution checks and one
+workflows, 37 streaming/execution checks, 28 relation strategy checks and one
 negative compilation suite covering seven invalid API uses.
 
 ## Environment

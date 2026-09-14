@@ -49,5 +49,10 @@ cursor. Reads and mutations accept `ExecutionOptions` for statement deadlines an
 cancellation. See [streaming and execution](docs/execution.md) for connection
 lifetime, batch sizing and backend behavior.
 
+Single relationships use JOINs when declared keys prove uniqueness; collections
+load in parameter-aware batches. Both support typed nested selections. See
+[relationship strategies](docs/relations.md) for composite keys, per-parent
+pagination and explicit `.join`/`.batch` choices.
+
 Set `ORM_TEST_POSTGRES` to a **disposable** local PostgreSQL database to include
 PostgreSQL integration tests. The tests create and drop their own test tables.

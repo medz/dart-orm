@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:orm/generate.dart';
 import 'package:test/test.dart';
@@ -40,18 +41,28 @@ void main() {
   test(
     'output is deterministic and matches the committed generated client',
     () async {
-      final result = await generateSchema('example/schema.dart');
-      final temporary = File('${fixtures.path}/deterministic.dart');
-      await temporary.writeAsString(result.dart);
-      final format = await Process.run(Platform.resolvedExecutable, [
-        'format',
-        temporary.path,
-      ]);
-      expect(format.exitCode, 0);
-      expect(
-        await temporary.readAsString(),
-        await File('example/schema.orm.dart').readAsString(),
-      );
+      for (final source in [
+        'example/schema.dart',
+        'test/support/relations/schema.dart',
+      ]) {
+        final result = await generateSchema(source);
+        final temporary = File('${fixtures.path}/deterministic.dart');
+        await temporary.writeAsString(result.dart);
+        final format = await Process.run(Platform.resolvedExecutable, [
+          'format',
+          temporary.path,
+        ]);
+        expect(format.exitCode, 0);
+        final base = source.substring(0, source.length - 5);
+        expect(
+          await temporary.readAsString(),
+          await File('$base.orm.dart').readAsString(),
+        );
+        expect(
+          result.snapshot,
+          jsonDecode(await File('$base.orm.json').readAsString()),
+        );
+      }
     },
   );
 

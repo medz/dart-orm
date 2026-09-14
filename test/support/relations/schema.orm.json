@@ -1,0 +1,138 @@
+{
+  "format": 1,
+  "tables": [
+    {
+      "name": "accounts",
+      "columns": [
+        {
+          "name": "tenant",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "nullable": true,
+          "generated": false
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "nullable": true,
+          "generated": false
+        },
+        {
+          "name": "manager_id",
+          "type": "integer",
+          "nullable": true,
+          "generated": false
+        },
+        {
+          "name": "_ORM_PRESENT",
+          "type": "text",
+          "nullable": true,
+          "generated": false
+        }
+      ],
+      "primaryKey": [
+        "tenant",
+        "id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [],
+      "foreignKeys": [
+        {
+          "columns": [
+            "tenant",
+            "manager_id"
+          ],
+          "target": "accounts",
+          "targetColumns": [
+            "tenant",
+            "id"
+          ],
+          "onDelete": "RESTRICT"
+        }
+      ]
+    },
+    {
+      "name": "events",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "tenant",
+          "type": "integer",
+          "nullable": true,
+          "generated": false
+        },
+        {
+          "name": "owner",
+          "type": "integer",
+          "nullable": true,
+          "generated": false
+        },
+        {
+          "name": "reviewer",
+          "type": "integer",
+          "nullable": true,
+          "generated": false
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "score",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [],
+      "foreignKeys": [
+        {
+          "columns": [
+            "tenant",
+            "owner"
+          ],
+          "target": "accounts",
+          "targetColumns": [
+            "tenant",
+            "id"
+          ],
+          "onDelete": "RESTRICT"
+        },
+        {
+          "columns": [
+            "tenant",
+            "reviewer"
+          ],
+          "target": "accounts",
+          "targetColumns": [
+            "tenant",
+            "id"
+          ],
+          "onDelete": "RESTRICT"
+        }
+      ]
+    }
+  ]
+}

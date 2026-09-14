@@ -30,7 +30,7 @@ final class Cte<R, F extends Fields> implements _CteDefinition {
 
   Table<R, CteFields<F>> _makeTable() {
     final optional = {
-      for (final join in _source._state.joins)
+      for (final join in [..._source._state.joins, ..._plan.joins])
         if (join.left) join.alias.fields.table,
     };
     final nullable = [

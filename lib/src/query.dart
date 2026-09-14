@@ -147,7 +147,8 @@ class Query<R, F extends Fields> {
     return SqlCommand(_write(w, plan), w.parameters);
   }
 
-  String _write(_Writer w, _SelectionPlan plan) {
+  String _write(_Writer w, _SelectionPlan plan, {bool aliasColumns = false}) {
+    final joins = [..._state.joins, ...plan.joins];
     if (w.dialect != database.dialect) {
       throw const OrmException(
         'QUERY.DIALECT',
@@ -164,7 +165,7 @@ class Query<R, F extends Fields> {
         'This driver does not support window functions.',
       );
     }
-    _validateGrouping(_state, plan);
+    _validateGrouping(_state.copy(joins: joins), plan);
     final saved = Map<TableRef, String>.of(w.aliases);
     final markers = Set<TableRef>.of(w.leftJoins);
     if (w.aliases.containsKey(_state.source)) {
@@ -175,7 +176,13 @@ class Query<R, F extends Fields> {
     }
     w.aliases[_state.source] = 't${w.aliases.length}';
     final rootAlias = w.aliases[_state.source]!;
-    for (final join in _state.joins) {
+    for (final join in joins) {
+      if (w.aliases.containsKey(join.alias.fields.table)) {
+        throw const OrmException(
+          'QUERY.ALIAS',
+          'Create a fresh occurrence for each join.',
+        );
+      }
       w.aliases[join.alias.fields.table] = 't${w.aliases.length}';
       if (join.left) w.leftJoins.add(join.alias.fields.table);
     }
@@ -184,7 +191,7 @@ class Query<R, F extends Fields> {
       final ctes = <String, _CteDefinition>{};
       for (final cte in [
         ..._state.ctes,
-        for (final join in _state.joins) ?join.alias._cte,
+        for (final join in joins) ?join.alias._cte,
       ]) {
         if (ctes.containsKey(cte.name) && !identical(ctes[cte.name], cte)) {
           throw const OrmException(
@@ -200,12 +207,17 @@ class Query<R, F extends Fields> {
         );
       }
       buffer.write('SELECT ${_state.distinct ? 'DISTINCT ' : ''}');
-      buffer.write(plan.columns.map((e) => e._node.write(w)).join(', '));
+      buffer.write(
+        [
+          for (var i = 0; i < plan.columns.length; i++)
+            '${plan.columns[i]._node.write(w)}${aliasColumns ? ' AS ${w.quote('c$i')}' : ''}',
+        ].join(', '),
+      );
       buffer.write(
         ' FROM ${w.quote(_state.source.schema.name)} AS ${w.quote(rootAlias)}',
       );
       final visible = {...saved, _state.source: rootAlias};
-      for (final join in _state.joins) {
+      for (final join in joins) {
         final ref = join.alias.fields.table;
         final alias = w.aliases[ref]!;
         visible[ref] = alias;

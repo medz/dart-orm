@@ -1,8 +1,11 @@
 part of '../orm.dart';
 
+enum ToOneStrategy { automatic, join, batch }
+
 /// A relationship is a query description. Constructing or selecting it performs
 /// no I/O. List results are loaded in batches on the root query's connection.
 final class Relation<R, F extends Fields> {
+  final TableAlias<Object?, F> _alias;
   final List<Expr<Object?>> _parent;
   final List<Field<Object?>> _child;
   final F _fields;
@@ -14,12 +17,18 @@ final class Relation<R, F extends Fields> {
     required List<Expr<Object?>> parent,
     required List<Field<Object?>> Function(F) child,
   }) {
-    final fields = target.createFields(TableRef(target.schema));
+    final alias = target.alias();
+    final fields = alias.fields;
     final keys = child(fields);
-    if (parent.isEmpty || parent.length != keys.length) {
-      throw ArgumentError('Relationship keys need equal, non-zero arity.');
+    if (parent.isEmpty ||
+        parent.length != keys.length ||
+        keys.any((key) => key.table != fields.table)) {
+      throw ArgumentError(
+        'Relationship keys need equal non-zero arity and fields from the target occurrence.',
+      );
     }
     return Relation._(
+      alias,
       List.unmodifiable(parent),
       List.unmodifiable(keys),
       fields,
@@ -28,6 +37,7 @@ final class Relation<R, F extends Fields> {
     );
   }
   Relation._(
+    this._alias,
     this._parent,
     this._child,
     this._fields,
@@ -35,7 +45,7 @@ final class Relation<R, F extends Fields> {
     this._selection,
   );
   Relation<R, F> _copy(_QueryState state) =>
-      Relation._(_parent, _child, _fields, state, _selection);
+      Relation._(_alias, _parent, _child, _fields, state, _selection);
   Relation<R, F> where(Expr<bool?> Function(F) predicate) {
     final next = predicate(_fields);
     return _copy(_state.copy(predicate: _state.predicate?.and(next) ?? next));
@@ -54,9 +64,35 @@ final class Relation<R, F extends Fields> {
   }
 
   Relation<S, F> select<S>(Selection<S> Function(F) selection) =>
-      Relation._(_parent, _child, _fields, _state, selection(_fields));
+      Relation._(_alias, _parent, _child, _fields, _state, selection(_fields));
   Selection<List<R>> many() => _RelationSelection(this);
-  Selection<R?> one() =>
+  bool get _uniqueTarget {
+    final names = _child.map((key) => key.definition.name).toSet();
+    final schema = _fields.table.schema;
+    return [
+      schema.primaryKey,
+      ...schema.uniqueKeys,
+      for (final index in schema.indexes)
+        if (index.unique) index.columns,
+    ].any((key) => key.isNotEmpty && key.every(names.contains));
+  }
+
+  bool _useJoin(ToOneStrategy strategy) {
+    if (strategy == ToOneStrategy.join && !_uniqueTarget) {
+      throw const OrmException(
+        'RELATION.JOIN_KEY',
+        'A to-one join must cover a declared primary or unique target key.',
+      );
+    }
+    return strategy != ToOneStrategy.batch && _uniqueTarget;
+  }
+
+  Selection<R?> one({ToOneStrategy strategy = ToOneStrategy.automatic}) =>
+      _useJoin(strategy)
+      ? _JoinedRelationSelection<R?, F>(this)
+      : _oneBatch().map((rows) => rows.firstOrNull);
+
+  Selection<List<R>> _oneBatch() =>
       _copy(
         _state.copy(
           order: _state.order.isEmpty
@@ -71,17 +107,21 @@ final class Relation<R, F extends Fields> {
             'Expected at most one related row.',
           );
         }
-        return rows.firstOrNull;
+        return rows;
       });
-  Selection<R> required() => one().map((row) {
-    if (row == null) {
-      throw const OrmException(
-        'RELATION.MISSING',
-        'A required related row is not visible.',
-      );
-    }
-    return row;
-  });
+
+  Selection<R> required({ToOneStrategy strategy = ToOneStrategy.automatic}) =>
+      _useJoin(strategy)
+      ? _JoinedRelationSelection<R, F>(this, required: true)
+      : _oneBatch().map((rows) {
+          if (rows.isEmpty) {
+            throw const OrmException(
+              'RELATION.MISSING',
+              'A required related row is not visible.',
+            );
+          }
+          return rows.single;
+        });
   Expr<bool> any() => Expr._(_RelationSubquery(this, false), Codecs.boolean);
   Expr<bool?> none() => any().not();
   Expr<bool?> every(Expr<bool?> Function(F) condition) {
@@ -97,6 +137,63 @@ final class Relation<R, F extends Fields> {
   Expr<int> count() => Expr._(_RelationSubquery(this, true), Codecs.integer);
 }
 
+final class _JoinedRelationSelection<R, F extends Fields>(
+  final Relation<R, F> relation, {
+  final bool required = false,
+}) extends Selection<R> {
+  @override
+  _Decoder<R> _bind(_SelectionPlan plan) {
+    Expr<bool?> match(int i) => Expr._(
+      _Binary(relation._child[i]._node, '=', relation._parent[i]._node),
+      Codecs.boolean.nullable(),
+    );
+    Expr<bool?> predicate = match(0);
+    for (var i = 1; i < relation._child.length; i++) {
+      predicate = predicate.and(match(i));
+    }
+    if (relation._state.predicate case final filter?) {
+      predicate = predicate.and(filter);
+    }
+    // A proven unique match has at most one row, so skipping it or taking zero
+    // must produce an absent relation, without filtering out the root row.
+    if (relation._state.limit == 0 || (relation._state.offset ?? 0) > 0) {
+      predicate = predicate.and(value(false, Codecs.boolean));
+    }
+    final existing = plan.joins
+        .where((join) => join.alias.fields.table == relation._fields.table)
+        .firstOrNull;
+    if (existing == null) {
+      plan.joins.add(_Join(relation._alias, predicate, true));
+    } else if (!_sameSqlNode(existing.on._node, predicate._node)) {
+      throw const OrmException(
+        'RELATION.ALIAS',
+        'Use a fresh relation getter for differently filtered joins.',
+      );
+    }
+    final marker = plan.column(
+      Expr._(_Presence(relation._alias), Codecs.integer.nullable()),
+    );
+    plan.optionalDepth++;
+    late _Decoder<R> decode;
+    try {
+      decode = relation._selection._bind(plan);
+    } finally {
+      plan.optionalDepth--;
+    }
+    return (row) {
+      if (row[marker] != null) return decode(row);
+      if (required) {
+        throw const OrmException(
+          'RELATION.MISSING',
+          'A required related row is not visible.',
+        );
+      }
+      // one() instantiates a nullable R. Presence is independent of value nullability.
+      return null as R;
+    };
+  }
+}
+
 final class _RelationSubquery(
   final Relation<Object?, Fields> relation,
   final bool count,
@@ -110,6 +207,7 @@ final class _RelationSubquery(
       );
     }
     final source = relation._state.source;
+    final previous = w.aliases[source];
     final alias = 't${w.aliases.length}';
     w.aliases[source] = alias;
     try {
@@ -126,7 +224,11 @@ final class _RelationSubquery(
           'SELECT ${count ? 'COUNT(*)' : '1'} FROM ${w.quote(source.schema.name)} AS ${w.quote(alias)} WHERE ${predicates.join(' AND ')}';
       return count ? '($query)' : 'EXISTS ($query)';
     } finally {
-      w.aliases.remove(source);
+      if (previous == null) {
+        w.aliases.remove(source);
+      } else {
+        w.aliases[source] = previous;
+      }
     }
   }
 }
@@ -224,62 +326,51 @@ final class _TypedRelationBinding<R, F extends Fields>(
     List<_RelationKey> keys,
   ) {
     final state = relation._state;
-    final w = _Writer(db.dialect, {state.source: 't0'});
-    final predicates = <String>[];
-    if (relation._child.length == 1) {
-      predicates.add(
-        _In(relation._child.single._node, [
-          for (final key in keys) _Parameter(key.values.single),
-        ]).write(w),
-      );
-    } else {
-      predicates.add(
-        '(${keys.map((key) => '(${[for (var i = 0; i < key.values.length; i++) _Binary(relation._child[i]._node, '=', _Parameter(key.values[i])).write(w)].join(' AND ')})').join(' OR ')})',
-      );
-    }
-    if (state.predicate case final predicate?) {
-      predicates.add(predicate._node.write(w));
-    }
-    // Compile WHERE before SELECT is fine for numbered parameters; SQLite '?'
-    // binds by textual order, so use explicit numbered placeholders everywhere.
-    final selected = [
-      for (var i = 0; i < plan.columns.length; i++)
-        '${plan.columns[i]._node.write(w)} AS "c$i"',
-    ];
+    final w = _Writer(db.dialect, {});
+    Expr<bool?> predicate = Expr._(
+      _RelationKeys(relation._child, keys),
+      Codecs.boolean,
+    );
+    if (state.predicate case final filter?) predicate = predicate.and(filter);
     final paginated = state.limit != null || state.offset != null;
-    final order = state.order.toList();
+    final sqlPlan = _SelectionPlan()
+      ..columns.addAll(plan.columns)
+      ..required.addAll(plan.required)
+      ..joins.addAll(plan.joins);
     if (paginated) {
-      if (!db.capabilities.windowFunctions) {
-        throw const OrmException(
-          'CAPABILITY.WINDOW',
-          'Per-parent pagination needs window functions.',
-        );
-      }
-      if (order.isEmpty) {
+      if (state.order.isEmpty) {
         throw const OrmException(
           'RELATION.ORDER',
           'Per-parent pagination requires explicit ordering.',
         );
       }
-      final partition = relation._child.map((e) => e._node.write(w)).join(', ');
-      selected.add(
-        'ROW_NUMBER() OVER (PARTITION BY $partition ORDER BY ${order.map((o) => o._write(w)).join(', ')}) AS "orm_rank"',
+      sqlPlan.columns.add(
+        rowNumber(partitionBy: relation._child, orderBy: state.order),
       );
     }
-    var query =
-        'SELECT ${selected.join(', ')} FROM ${w.quote(state.source.schema.name)} AS "t0" WHERE ${predicates.join(' AND ')}';
+    final query = Query._(
+      db,
+      relation._fields,
+      _QueryState(
+        state.source,
+        predicate: predicate,
+        order: paginated ? const [] : state.order,
+      ),
+      relation._selection,
+    );
+    var text = query._write(w, sqlPlan, aliasColumns: true);
     if (paginated) {
       final offset = state.offset ?? 0;
-      query =
-          'SELECT ${[for (var i = 0; i < plan.columns.length; i++) '"c$i"'].join(', ')} FROM ($query) AS "orm_partition" WHERE "orm_rank" > ${w.parameter(offset)}';
+      final rank = w.quote('c${plan.columns.length}');
+      text =
+          'SELECT ${[for (var i = 0; i < plan.columns.length; i++) w.quote('c$i')].join(', ')} '
+          'FROM ($text) AS "orm_partition" WHERE $rank > ${w.parameter(offset)}';
       if (state.limit case final limit?) {
-        query += ' AND "orm_rank" <= ${w.parameter(offset + limit)}';
+        text += ' AND $rank <= ${w.parameter(offset + limit)}';
       }
-      query += ' ORDER BY "orm_rank"';
-    } else if (order.isNotEmpty) {
-      query += ' ORDER BY ${order.map((o) => o._write(w)).join(', ')}';
+      text += ' ORDER BY $rank';
     }
-    return SqlCommand(query, w.parameters);
+    return SqlCommand(text, w.parameters);
   }
 }
 
@@ -307,6 +398,23 @@ Future<List<List<Object?>>> _expandRelations(
     }
   }
   return rows;
+}
+
+// Row-value IN avoids a deep OR tree for large composite-key batches.
+final class _RelationKeys(
+  final List<Field<Object?>> columns,
+  final List<_RelationKey> keys,
+) extends _Node {
+  @override
+  String write(_Writer w) {
+    if (columns.length == 1) {
+      return _In(columns.single._node, [
+        for (final key in keys) _Parameter(key.values.single),
+      ]).write(w);
+    }
+    return '(${columns.map((c) => c._node.write(w)).join(', ')}) IN (${w.dialect == SqlDialect.sqlite ? 'VALUES ' : ''}'
+        '${keys.map((key) => '(${key.values.map(w.parameter).join(', ')})').join(', ')})';
+  }
 }
 
 final class _RelationKey(final List<Object?> values) {

@@ -13,6 +13,32 @@ Future<void> main() async {
     for (var i = 0; i < 5; i++) {
       await db.users.create(email: 'aot$i@example.com');
     }
+    await db.posts.create(
+      authorId: 1,
+      title: 'AOT',
+      createdAt: DateTime.utc(2026),
+    );
+    final author = await db.posts
+        .select(
+          (p) => p.author
+              .select(
+                (a) =>
+                    (a.id, a.nickname).map((id, name) => (id: id, name: name)),
+              )
+              .required(),
+        )
+        .single();
+    if (author != (id: 1, name: null)) throw StateError('Joined record failed');
+    final nullable = await db.posts
+        .select((p) => p.author.select((a) => a.nickname).required())
+        .single();
+    if (nullable != null) {
+      throw StateError('Nullable required projection failed');
+    }
+    final absent = await db.posts
+        .select((p) => p.author.where((a) => a.id.eq(99)).one())
+        .single();
+    if (absent != null) throw StateError('Optional join failed');
     final rows = await db.users
         .orderBy((u) => [u.id.asc()])
         .select((u) => u.email)
@@ -43,7 +69,7 @@ Future<void> main() async {
       throw StateError('Connection recovery failed');
     }
     print(
-      'Native AOT: cursor demand, sqlite3_interrupt and connection recovery passed.',
+      'Native AOT: joined projections, cursor demand, sqlite3_interrupt and connection recovery passed.',
     );
   } finally {
     await db.close();
