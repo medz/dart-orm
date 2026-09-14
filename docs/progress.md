@@ -7,6 +7,12 @@ This file records verified delivery, not planned capabilities presented as worki
 
 - Reset the `next` branch contents, preserving the design research and license.
 - Establish one Dart 3.13 package and local-only commit policy.
+- Typed scalar expressions, 2–6-field composable projections and dynamic field maps.
+- Immutable filters, order, offset/limit, count/exists, basic aggregation and mutations.
+- Parameter binding, table occurrence scope checking, explicit default/null changes.
+- Native SQLite worker with verified foreign keys, journal mode and parameter limit.
+- PostgreSQL driver with a single pool owner, TLS settings and explicit borrowed pools.
+- Transaction lifecycle, rollback, savepoints, pending work checks and query observation.
 
 ## Delivery sequence
 
@@ -22,6 +28,12 @@ This file records verified delivery, not planned capabilities presented as worki
 
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
+
+The first execution slice passes static analysis and 18 integration checks against
+native SQLite and a disposable PostgreSQL 18.4 instance. Coverage includes CRUD,
+projection, SQL injection-shaped input, pagination, rollback/savepoint recovery,
+unawaited work, escaped sessions and closing during active work. The table metadata
+in these tests is hand-written; generation and relationships are not implemented yet.
 
 ## Environment
 
