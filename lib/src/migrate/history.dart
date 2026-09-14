@@ -182,23 +182,81 @@ final class Migrator {
   Future<List<Migration>> plan(List<Migration> migrations) async {
     validateMigrations(migrations, dialect: database.dialect);
     final applied = await history();
-    if (applied.length > migrations.length) {
-      throw const OrmException(
-        'MIGRATION.HISTORY',
-        'Local history is missing applied migrations.',
-      );
-    }
-    for (var i = 0; i < applied.length; i++) {
-      if (applied[i].id != migrations[i].id ||
-          applied[i].checksum != migrations[i].checksum) {
-        throw OrmException(
-          'MIGRATION.CHECKSUM',
-          'Applied migration ${applied[i].id} differs from local history.',
-        );
-      }
-    }
+    _validateApplied(migrations, applied);
     _validateProgress(migrations, applied, await progress(), database.dialect);
     return migrations.skip(applied.length).toList(growable: false);
+  }
+
+  /// Checks startup compatibility in one read snapshot. Defaults to the latest
+  /// bundled migration; an explicit inclusive range supports compatible releases.
+  /// Does not apply migrations, verify catalog drift or lock out later upgrades.
+  Future<MigrationStatus> requireVersion(
+    List<Migration> migrations, {
+    String? minimum,
+    String? maximum,
+  }) {
+    migrations = List.unmodifiable(migrations);
+    validateMigrations(migrations, dialect: database.dialect);
+    if (migrations.isEmpty) {
+      throw ArgumentError(
+        'Version compatibility requires a nonempty migration history.',
+      );
+    }
+    final upper = migrations.indexWhere(
+      (m) => m.id == (maximum ?? migrations.last.id),
+    );
+    final lower = migrations.indexWhere(
+      (m) => m.id == (minimum ?? maximum ?? migrations.last.id),
+    );
+    if (lower < 0 || upper < lower) {
+      throw ArgumentError(
+        'Minimum/maximum must name an ordered range in the bundled history.',
+      );
+    }
+    if (database.inTransaction) {
+      throw const OrmException(
+        'MIGRATION.SESSION',
+        'Version compatibility requires an outer session for a consistent read snapshot.',
+      );
+    }
+    return database.transaction(
+      (tx) async {
+        final reader = Migrator(tx);
+        final applied = await reader.history();
+        if (applied.length > migrations.length) {
+          throw const OrmException(
+            'MIGRATION.VERSION',
+            'Database is newer than the bundled migration history.',
+          );
+        }
+        _validateApplied(migrations, applied);
+        final checkpoints = await reader.progress();
+        final finished = applied.map((m) => m.id).toSet();
+        for (final row in checkpoints) {
+          if (!finished.contains(row.id)) {
+            throw OrmException(
+              'MIGRATION.INCOMPLETE',
+              'Migration ${row.id} has unfinished recovery work; restore a completed version before starting the application.',
+            );
+          }
+        }
+        _validateProgress(migrations, applied, checkpoints, tx.dialect);
+        final current = applied.length - 1;
+        if (current < lower || current > upper) {
+          throw OrmException(
+            'MIGRATION.VERSION',
+            'Expected ${migrations[lower].id} through ${migrations[upper].id}; database is ${applied.lastOrNull?.id ?? "unversioned"}.',
+          );
+        }
+        return applied.last;
+      },
+      options: database.dialect == SqlDialect.postgres
+          ? const PostgresTransaction(
+              isolation: .repeatableRead,
+              readOnly: true,
+            )
+          : const SqliteTransaction(),
+    );
   }
 
   /// Transactional batches are atomic. CheckedSql explicitly opts a migration
@@ -304,6 +362,27 @@ final class Migrator {
     }
 
     return _migrationSession(database, lockTimeout, run);
+  }
+}
+
+void _validateApplied(
+  List<Migration> migrations,
+  List<MigrationStatus> applied,
+) {
+  if (applied.length > migrations.length) {
+    throw const OrmException(
+      'MIGRATION.HISTORY',
+      'Local history is missing applied migrations.',
+    );
+  }
+  for (var i = 0; i < applied.length; i++) {
+    if (applied[i].id != migrations[i].id ||
+        applied[i].checksum != migrations[i].checksum) {
+      throw OrmException(
+        'MIGRATION.CHECKSUM',
+        'Applied migration ${applied[i].id} differs from local history.',
+      );
+    }
   }
 }
 

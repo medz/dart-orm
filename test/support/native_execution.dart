@@ -9,7 +9,21 @@ Future<void> main() async {
   final db = await sqlite(const SqliteOptions.memory());
   try {
     if (!db.capabilities.cancellation) throw StateError('No native interrupt');
-    await Migrator(db).apply([Migration.create('0001_initial', appSchema)]);
+    final initial = Migration.create('0001_initial', appSchema);
+    await Migrator(db).apply([initial]);
+    if ((await Migrator(db).requireVersion([initial])).checksum !=
+        initial.checksum) {
+      throw StateError('Schema version compatibility failed');
+    }
+    final pending = Migration('0002_pending', {
+      SqlDialect.sqlite: ['SELECT 1'],
+    }, previous: initial.checksum);
+    try {
+      await Migrator(db).requireVersion([initial, pending]);
+      throw StateError('Schema version requirement was ignored');
+    } on OrmException catch (error) {
+      if (error.code != 'MIGRATION.VERSION') rethrow;
+    }
     for (var i = 0; i < 5; i++) {
       await db.users.create(email: 'aot$i@example.com');
     }
@@ -153,7 +167,7 @@ Future<void> main() async {
     }
     await changes.cancel();
     print(
-      'Native AOT: joined projections, typed UNION records, acquisition/transaction deadlines, automatic rollback, cursor demand, native cancellation, recovery and committed query watches passed.',
+      'Native AOT: schema version compatibility, joined projections, typed UNION records, acquisition/transaction deadlines, automatic rollback, cursor demand, native cancellation, recovery and committed query watches passed.',
     );
   } finally {
     await db.close();

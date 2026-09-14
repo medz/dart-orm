@@ -85,6 +85,51 @@ hold an old SQL snapshot that could deadlock concurrent index creation.
 Migration planning checks applied history and checksums. Catalog verification is
 an explicit separate operation; SQL history alone does not prove schema equality.
 
+## Application startup compatibility
+
+```dart
+// Default: the database must have completed the latest bundled migration.
+final version = await Migrator(db).requireVersion(migrations);
+
+// This release can run on either side of a compatible expand migration.
+await Migrator(db).requireVersion(
+  migrations,
+  minimum: '0001_initial',
+  maximum: '0002_expand',
+);
+```
+
+The range is inclusive and uses the ordered bundled history. Without bounds, the
+requirement is exactly its latest migration. With only `minimum`, the upper bound
+is the latest bundled migration; with only `maximum`, that version is required
+exactly. Bounds must name an ordered, nonempty range in the supplied history.
+The list is copied before asynchronous work begins.
+
+The check validates every applied ID/checksum in the history prefix, not just its
+last ID. An unversioned database, an older required version, a database outside the
+range, or a database newer than the bundled history reports `MIGRATION.VERSION`.
+Changed checksums or missing history entries report `MIGRATION.CHECKSUM`; corrupt
+checkpoint sequences report `MIGRATION.HISTORY`. Any recovery checkpoint for a
+migration not yet recorded as applied reports `MIGRATION.INCOMPLETE`, including
+checkpoints unknown to an older application. Complete or recover that migration
+before accepting application traffic.
+
+Call this on a root database or a leased session, outside an existing transaction.
+The check opens a short read transaction: PostgreSQL uses REPEATABLE READ READ ONLY,
+and SQLite uses a deferred read snapshot, including on an explicitly read-only
+file. It reads catalog/history/checkpoints without creating metadata or applying
+migrations. The returned `MigrationStatus` records the accepted ID and checksum.
+An existing caller transaction is rejected with `MIGRATION.SESSION` so the method
+can establish its own consistent snapshot.
+
+This is a point-in-time startup check. It does not prevent a later deployment
+from changing the database, check the actual catalog for drift, or prove that old
+application processes have stopped. Use `verifySchema` for catalog checks and
+coordinate incompatible contract migrations with application deployment. A
+rejected downgrade does not delete or rebuild tables.
+
+## Schema evolution
+
 `diff` generates PostgreSQL and SQLite operations together:
 
 - New nullable/defaulted columns use `ALTER TABLE` when SQLite permits the default.

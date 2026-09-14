@@ -37,6 +37,7 @@ This file records verified delivery, not planned capabilities presented as worki
 - Connection leases spanning transactions, with scoped lifetime and explicit discard.
 - Portable schema snapshots; catalog checks for columns, defaults, keys and simple indexes.
 - Existing-database baselines verify declared schema facts before recording immutable history.
+- Read-only application startup version checks with explicit compatibility ranges, full history validation and recovery-state rejection.
 - Unmodeled constraints, expression/partial indexes, triggers and policies are reported separately.
 - Reviewable migration diffs, explicit renames/conversions, destructive-change gates and checksum chains.
 - SQLite atomic copy/rebuild with preserved dependency SQL, foreign-key validation and state restoration.
@@ -79,7 +80,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 392 checks with native SQLite
+Static analysis is clean. The complete suite passes 411 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -164,10 +165,19 @@ own error class rather than inferring the source from an elapsed clock.
 two SQLite workers, verifying snapshot replay and COMMIT retry without replaying
 the successful callback.
 
+Nineteen application-version checks cover both databases: exact latest and explicit
+inclusive ranges, unversioned databases, rejected downgrades, old checksum changes,
+missing history, baselines, separate catalog drift, borrowed sessions and invalid
+ranges. PostgreSQL checks use a real partially completed recoverable migration,
+repair/resume and concurrent checkpoint creation during a consistent read snapshot.
+The caller's history list is frozen before asynchronous reads. A read-only SQLite
+file accepts a compatible version without applying migrations. The native macOS
+AOT execution fixture also checks accepted and rejected schema versions.
+
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
-- Resumable long backfills, application schema-version gates and broader unmanaged-object catalog coverage.
+- Resumable long backfills and broader unmanaged-object catalog coverage.
 - Existing-database declaration import and named SQL query generation.
 - Configurable integer widths, exact-decimal query semantics and further native type coverage.
 - Further backend capability coverage.
@@ -188,7 +198,7 @@ regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CL
 workflows, 37 streaming/execution checks, 28 relation strategy checks and one
 negative compilation suite covering 19 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks and 29 retry checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks and 19 application-version checks.
 
 ## Environment
 
