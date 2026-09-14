@@ -171,8 +171,10 @@ class Expr<T> extends Selection<T> {
     );
   }
 
-  OrderTerm asc() => OrderTerm._(this, false);
-  OrderTerm desc() => OrderTerm._(this, true);
+  OrderTerm asc({NullOrder? nulls}) => OrderTerm._(this, false, nulls);
+  OrderTerm desc({NullOrder? nulls}) => OrderTerm._(this, true, nulls);
+  CursorTerm cursor(T value, {bool descending = false, NullOrder? nulls}) =>
+      CursorTerm._(OrderTerm._(this, descending, nulls), codec.encode(value));
   Expr<int> count({bool distinct = false}) =>
       Expr._(_Function('COUNT', [_node], distinct: distinct), Codecs.integer);
   Expr<T?> min() => Expr._(_Function('MIN', [_node]), codec.nullable());
@@ -225,5 +227,9 @@ extension NumericExpression<T extends num> on Expr<T> {
 final class OrderTerm {
   final Expr<Object?> expression;
   final bool descending;
-  const OrderTerm._(this.expression, this.descending);
+  final NullOrder? nulls;
+  const OrderTerm._(this.expression, this.descending, [this.nulls]);
+  String _write(_Writer writer) =>
+      '${expression._node.write(writer)} ${descending ? 'DESC' : 'ASC'}'
+      '${nulls == null ? '' : ' NULLS ${nulls!.name.toUpperCase()}'}';
 }

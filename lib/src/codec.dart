@@ -3,10 +3,12 @@ part of '../orm.dart';
 /// Storage and Dart values meet only at this boundary.
 final class Codec<T> {
   final String sqlType;
-  final T Function(Object? value) decode;
-  final Object? Function(T value) encode;
+  final T Function(Object? value) _decode;
+  final Object? Function(T value) _encode;
 
-  const Codec(this.sqlType, this.decode, this.encode);
+  const Codec(this.sqlType, this._decode, this._encode);
+  T decode(Object? value) => _decode(value);
+  Object? encode(T value) => _encode(value);
   bool get acceptsNull => null is T;
 
   Codec<T?> nullable() => Codec(

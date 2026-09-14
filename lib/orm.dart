@@ -16,3 +16,4 @@ part 'src/relation.dart';
 part 'src/batch.dart';
 part 'src/advanced.dart';
 part 'src/cte.dart';
+part 'src/cursor.dart';

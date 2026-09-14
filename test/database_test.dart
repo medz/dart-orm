@@ -492,6 +492,88 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
         },
       );
     });
+
+    test(
+      'keyset pagination uses a unique tie breaker in mixed directions',
+      () async {
+        await db
+            .table(users)
+            .insertMany(
+              [1, 1, 2, 2, 3].indexed,
+              (u, entry) => [
+                u.email.set('score-${entry.$1}'),
+                u.score.set(entry.$2),
+              ],
+            )
+            .execute();
+        final rows = await db
+            .table(users)
+            .seekAfter(
+              (u) => [u.score.cursor(2, descending: true), u.id.cursor(3)],
+            )
+            .select((u) => u.id)
+            .get();
+        expect(rows, [4, 1, 2]);
+        expect(
+          () => db.table(users).seekAfter((u) => [u.score.cursor(1)]),
+          throwsA(isA<OrmException>()),
+        );
+      },
+    );
+
+    test(
+      'keyset pagination handles null order and validates versioned tokens',
+      () async {
+        await create('one', nickname: 'a');
+        await create('two', nickname: 'b');
+        await create('three');
+        await create('four');
+        final q = db.table(users);
+        final token = q.cursorToken(
+          (u) => [u.nickname.cursor('b', nulls: .last), u.id.cursor(2)],
+        );
+        expect(
+          await q
+              .seekToken(
+                token,
+                orderBy: (u) => [u.nickname.asc(nulls: .last), u.id.asc()],
+              )
+              .select((u) => u.id)
+              .get(),
+          [3, 4],
+        );
+        expect(
+          await q
+              .seekAfter(
+                (u) => [u.nickname.cursor(null, nulls: .first), u.id.cursor(3)],
+              )
+              .select((u) => u.id)
+              .get(),
+          [4, 1, 2],
+        );
+        expect(
+          await q
+              .seekAfter(
+                (u) => [u.nickname.cursor(null, nulls: .last), u.id.cursor(3)],
+              )
+              .select((u) => u.id)
+              .get(),
+          [4],
+        );
+        expect(
+          () => q.seekAfter((u) => [u.nickname.cursor(null), u.id.cursor(1)]),
+          throwsA(isA<OrmException>()),
+        );
+        expect(
+          () => q.seekToken(token, orderBy: (u) => [u.id.asc()]),
+          throwsA(isA<OrmException>()),
+        );
+        expect(
+          () => q.seekToken('bad-token', orderBy: (u) => [u.id.asc()]),
+          throwsA(isA<OrmException>()),
+        );
+      },
+    );
   });
 }
 

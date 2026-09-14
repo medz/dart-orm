@@ -25,6 +25,8 @@ This file records verified delivery, not planned capabilities presented as worki
 - Explicit alias joins/self joins, guarded outer-join projections, scalar/IN/EXISTS subqueries.
 - SQL window expressions and pre-execution aggregate/grouping placement checks.
 - CTEs with typed references to exported SQL expressions, mapped row decoding and nullable exports.
+- Keyset pagination with unique tie breakers, mixed directions, explicit null ordering and versioned cursor transport.
+- Actual generated-API negative type tests and checked codec calls after generic type erasure.
 
 ## Delivery sequence
 
@@ -41,7 +43,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 67 checks with native SQLite
+Static analysis is clean. The complete suite passes 74 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -49,7 +51,7 @@ transactions, migration rollback/history and the generated application client.
 
 ## Still required for the goal
 
-- Union and keyset pagination; advanced-query capability and edge-case review.
+- Union; advanced-query capability and edge-case review.
 - Composite-key relation batching acceptance and join-based to-one loading.
 - Migration diff/rename/rebuild, baseline, full constraint/index drift and nontransactional recovery.
 - Complete migration CLI and build integration; custom codec/schema authoring.
@@ -62,8 +64,9 @@ column names/types/nullability only and is deliberately not named full schema ve
 The migration runner currently accepts transactional migrations only. These are
 implementation stages, not a reduction of the active goal.
 
-The full suite includes 46 shared SQLite/PostgreSQL query checks, 14 generated
-client/migration integration checks, and seven source generation checks.
+The full suite includes 50 shared SQLite/PostgreSQL query checks, 14 generated
+client/migration integration checks, seven source generation checks, two codec
+regressions and one negative compilation suite covering seven invalid API uses.
 
 ## Environment
 

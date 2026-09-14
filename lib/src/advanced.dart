@@ -131,7 +131,7 @@ final class _WindowNode(
     }
     if (order.isNotEmpty) {
       clauses.add(
-        'ORDER BY ${order.map((o) => '${o.expression._node.write(w)} ${o.descending ? 'DESC' : 'ASC'}').join(', ')}',
+        'ORDER BY ${order.map((o) => o._write(w)).join(', ')}',
       );
     }
     if (frame != null) {

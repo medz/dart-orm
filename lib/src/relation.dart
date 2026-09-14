@@ -254,7 +254,7 @@ final class _TypedRelationBinding<R, F extends Fields>(
       }
       final partition = relation._child.map((e) => e._node.write(w)).join(', ');
       selected.add(
-        'ROW_NUMBER() OVER (PARTITION BY $partition ORDER BY ${order.map((o) => '${o.expression._node.write(w)} ${o.descending ? 'DESC' : 'ASC'}').join(', ')}) AS "orm_rank"',
+        'ROW_NUMBER() OVER (PARTITION BY $partition ORDER BY ${order.map((o) => o._write(w)).join(', ')}) AS "orm_rank"',
       );
     }
     var query =
@@ -269,7 +269,7 @@ final class _TypedRelationBinding<R, F extends Fields>(
       query += ' ORDER BY "orm_rank"';
     } else if (order.isNotEmpty) {
       query +=
-          ' ORDER BY ${order.map((o) => '${o.expression._node.write(w)} ${o.descending ? 'DESC' : 'ASC'}').join(', ')}';
+          ' ORDER BY ${order.map((o) => o._write(w)).join(', ')}';
     }
     return SqlCommand(query, w.parameters);
   }

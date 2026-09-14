@@ -233,7 +233,7 @@ class Query<R, F extends Fields> {
       }
       if (_state.order.isNotEmpty) {
         buffer.write(
-          ' ORDER BY ${_state.order.map((o) => '${o.expression._node.write(w)} ${o.descending ? 'DESC' : 'ASC'}').join(', ')}',
+          ' ORDER BY ${_state.order.map((o) => o._write(w)).join(', ')}',
         );
       }
       if (_state.limit case final limit?) {
