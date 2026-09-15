@@ -1,0 +1,84 @@
+Running build hooks...Running build hooks...00:00 +0: loading test/instant_test.dart
+00:00 +0: test/instant_test.dart: strict UTC parsing handles eras, offsets, endpoints and invalid components
+00:00 +1: test/instant_test.dart: UTC defaults and local DateTime inputs do not depend on the process timezone
+00:01 +2: test/instant_test.dart: historical migration checksum and timestamp tag remain immutable
+00:01 +3: test/instant_test.dart: UTC instant sqlite native round trips and streams preserve exact microseconds and common endpoints
+00:01 +4: test/instant_test.dart: UTC instant sqlite chronological comparisons, grouping, windows, union and CTEs use instants
+00:01 +5: test/instant_test.dart: UTC instant sqlite offset-equivalent keys join and batch through the same unique index
+00:01 +6: test/instant_test.dart: UTC instant sqlite current snapshots, physical catalog and imported DateTime declarations agree
+00:03 +7: test/instant_test.dart: UTC instant sqlite offset literals compare by value while expression casts remain visible
+00:03 +8: test/instant_test.dart: UTC instant sqlite reviewed migration preserves history and repairs legacy timestamp ordering
+00:03 +9: test/instant_test.dart: UTC instant sqlite legacy key collisions and invalid calendar values roll back conversion
+00:03 +10: test/instant_test.dart: UTC instant sqlite instant primary-key backfills resume across sub-millisecond boundaries
+00:03 +11: test/instant_test.dart: UTC instant sqlite external infinity and out-of-DateTime values fail decoding without wrapping
+00:03 +12: test/instant_test.dart: UTC instant postgres native round trips and streams preserve exact microseconds and common endpoints
+00:04 +13: test/instant_test.dart: UTC instant postgres chronological comparisons, grouping, windows, union and CTEs use instants
+00:04 +14: test/instant_test.dart: UTC instant postgres offset-equivalent keys join and batch through the same unique index
+00:04 +15: test/instant_test.dart: UTC instant postgres current snapshots, physical catalog and imported DateTime declarations agree
+00:04 +16: test/instant_test.dart: UTC instant postgres offset literals compare by value while expression casts remain visible
+00:04 +17: test/instant_test.dart: UTC instant postgres reviewed migration preserves history and repairs legacy timestamp ordering
+00:04 +18: test/instant_test.dart: UTC instant postgres instant primary-key backfills resume across sub-millisecond boundaries
+00:04 +19: test/instant_test.dart: UTC instant postgres external infinity and out-of-DateTime values fail decoding without wrapping
+00:04 +20: loading test/generator_test.dart
+00:05 +20: test/generator_test.dart: (setUpAll)
+00:05 +20: test/generator_test.dart: client and snapshot paths cannot overwrite the declaration
+00:05 +21: test/generator_test.dart: record annotations, physical names, relations and snapshots
+00:06 +22: test/generator_test.dart: output is deterministic and matches the committed generated client
+00:12 +23: test/generator_test.dart: composite keys and more than six fields generate analyzable code
+00:13 +24: test/generator_test.dart: computed keys are rejected instead of executing a fake row
+00:13 +25: test/generator_test.dart: computed declarations reject conflicting defaults, empty SQL and invalid row identities
+00:16 +26: test/generator_test.dart: client defaults reject incompatible, asynchronous, private and ambiguous factories
+00:18 +27: test/generator_test.dart: CHECK declarations reject dynamic SQL, empty overrides and duplicate names
+00:20 +28: test/generator_test.dart: custom types resolve defining libraries when output moves to another directory
+00:20 +29: test/generator_test.dart: nested generic and record types preserve nullable aliases without running codecs
+00:21 +30: test/generator_test.dart: invalid custom declaration: wrong_codec
+00:21 +31: test/generator_test.dart: invalid custom declaration: nullable_codec
+00:22 +32: test/generator_test.dart: invalid custom declaration: erased_extension
+00:22 +33: test/generator_test.dart: invalid custom declaration: unknown_storage
+00:22 +34: test/generator_test.dart: invalid custom declaration: private_codec
+00:22 +35: test/generator_test.dart: invalid custom declaration: private_type
+00:23 +36: test/generator_test.dart: invalid custom declaration: inline_codec
+00:23 +37: test/generator_test.dart: invalid custom declaration: duplicate_codec
+00:23 +38: test/generator_test.dart: invalid custom declaration: missing_codec
+00:23 +39: test/generator_test.dart: invalid custom declaration: duplicate_labels
+00:24 +40: test/generator_test.dart: invalid custom declaration: duplicate_enum_annotation
+00:24 +41: test/generator_test.dart: foreign keys require unique targets
+00:24 +42: test/generator_test.dart: query-only edges do not alter physical snapshots or require unique targets
+00:25 +43: test/generator_test.dart: constrained and unconstrained edges retain separate migration meaning
+00:25 +44: test/generator_test.dart: invalid query-only relation: lookup_computed
+00:25 +45: test/generator_test.dart: invalid query-only relation: lookup_codec
+00:25 +46: test/generator_test.dart: invalid query-only relation: lookup_inverse
+00:26 +47: test/generator_test.dart: invalid query-only relation: lookup_type
+00:26 +48: test/generator_test.dart: invalid query-only relation: lookup_delete
+00:26 +49: test/generator_test.dart: Dart type errors stop generation
+00:26 +50: test/generator_test.dart: duplicate physical names and nullable primary keys are rejected
+00:27 +51: test/generator_test.dart: (tearDownAll)
+00:27 +51: loading test/named_sql_generation_test.dart
+00:27 +51: test/named_sql_generation_test.dart: source contracts reject missing/extra parameters and row metadata
+00:31 +52: test/named_sql_generation_test.dart: SQL edits and modified generated code fail freshness checks
+00:33 +53: test/named_sql_generation_test.dart: asset builder and standalone generator emit identical SQL contracts
+00:35 +54: test/named_sql_generation_test.dart: generated APIs reject missing/wrong parameters, result types and unsupported backends
+00:35 +55: test/named_sql_generation_test.dart: CLI checks a persistent SQLite database without creating missing files
+00:55 +56: loading test/named_sql_test.dart
+00:55 +56: test/named_sql_test.dart: template binds repeated names once and preserves quotes/comments
+00:55 +57: test/named_sql_test.dart: templates reject ambiguous bindings and incomplete or multiple statements
+00:55 +58: test/named_sql_test.dart: generated client is deterministic and checked against its Dart declaration
+00:58 +59: test/named_sql_test.dart: sqlite typed parameters, projection and repeated nullable bindings compose
+00:58 +60: test/named_sql_test.dart: sqlite native numeric and temporal codecs survive binding and streaming
+00:58 +61: test/named_sql_test.dart: sqlite CTEs and unions retain distinct query arguments and field identity
+00:58 +62: test/named_sql_test.dart: sqlite transactions see pending writes and rollback normally
+00:58 +63: test/named_sql_test.dart: sqlite named sources reject table mutations and require explicit watch reads
+00:58 +64: test/named_sql_test.dart: sqlite native checks accept declared shape and preserve prepared-statement state
+00:58 +65: test/named_sql_test.dart: sqlite native checks reject syntax, missing tables and missing result aliases
+00:58 +66: test/named_sql_test.dart: sqlite native checks do not evaluate application expressions
+00:58 +67: test/named_sql_test.dart: postgres typed parameters, projection and repeated nullable bindings compose
+00:59 +68: test/named_sql_test.dart: postgres native numeric and temporal codecs survive binding and streaming
+00:59 +69: test/named_sql_test.dart: postgres CTEs and unions retain distinct query arguments and field identity
+00:59 +70: test/named_sql_test.dart: postgres transactions see pending writes and rollback normally
+00:59 +71: test/named_sql_test.dart: postgres named sources reject table mutations and require explicit watch reads
+00:59 +72: test/named_sql_test.dart: postgres native checks accept declared shape and preserve prepared-statement state
+00:59 +73: test/named_sql_test.dart: postgres native checks reject syntax, missing tables and missing result aliases
+00:59 +74: test/named_sql_test.dart: postgres native checks do not evaluate application expressions
+00:59 +75: loading test/build_runner_test.dart
+00:59 +75: test/build_runner_test.dart: real build_runner build/watch tracks imports, recovers errors and deletes stale outputs
+01:33 +76: All tests passed!

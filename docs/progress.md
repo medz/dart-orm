@@ -1,26 +1,29 @@
 # Implementation status
 
-Active goal: validate and finish the implemented Dart schema/migration workflow.
-Current snapshots, fixed historical migration definitions and static registries are
-Dart files; the project entrypoint owns typed connection/rename/conversion inputs.
-The JSON file readers/CLI options are removed without a compatibility lane. Named
-SQL generation also emits only Dart, with freshness checked against the declaration
+The Dart schema/migration workflow is implemented and verified. Current snapshots,
+fixed historical migration definitions and static registries are Dart libraries;
+the project entrypoint owns typed connection/rename/conversion inputs. The JSON
+artifact readers and CLI options are removed without a compatibility lane. Named
+SQL generation also emits only Dart and checks freshness against the declaration
 and SQL source. Internal checksum/checkpoint encodings and reports remain JSON.
 
-Native verification completed: the full run passed 837 tests and exposed one test
-still opening a removed JSON fixture. That test was corrected; a focused 76-test
-run passed, including generation, named SQL and build_runner build/watch. A separate
-AOT bundle test passed after deleting the consumer's Dart sources and build cache.
-Browser and Android APK acceptance for this source revision are still pending.
-The earlier captures below are historical evidence, not the new workflow's final
-platform acceptance.
+The [Dart migration acceptance](../research/validation/dart-migrations.json) records
+837 passing tests in the full run and one stale test-fixture path, then a passing
+76-test focused run covering that correction and the final generation changes.
+This is two invocations, not a single all-green full run. The independent AOT bundle
+check passes after deleting consumer Dart sources and build cache; an AOT historical
+backfill additionally proves bounded pause and concurrent exact-once resume.
+Current-source Chrome JS/WASM each pass 19 checks. Android debug install, release
+AOT APK upgrade and distinct-process restart pass 4/17/11 checks with compiled Dart
+history and no migration JSON assets. The runnable project migration entrypoint
+also passes check/apply/verify/no-replay against a disposable SQLite file.
 
 The common lifecycle in `research/new-dart-orm-design.md` is implemented and
 accepted. The [design acceptance map](acceptance.md) connects each requirement to
 evidence; the [capability review](capabilities.md) states extensions and unverified
 targets. This is a local implementation, with no package publication or push.
 
-Latest verification: [835 native tests](../research/validation/native.json) pass
+Earlier baseline: [835 native tests](../research/validation/native.json) pass
 in one invocation with PostgreSQL enabled. The [usage capture](../research/validation/usage.json)
 passes dependency resolution, generation, the README and teams examples, nine
 query cookbook checks on each backend, migration-chain validation and clean
@@ -45,6 +48,8 @@ intermediate List allocations; it does not establish a throughput improvement.
 
 - Reset the `next` branch contents, preserving the design research and license.
 - Establish one Dart 3.13 package and local-only commit policy.
+- Dart physical snapshots, fixed migration files, per-file fingerprints, static registries and typed project CLI configuration; generated output cannot overwrite its source declaration.
+- Direct retirement of schema/migration/named-query JSON artifacts, with source-based named-query freshness checks and compiled application migration history.
 - Typed scalar expressions, 2–6-field composable projections and dynamic field maps.
 - Immutable filters, order, offset/limit, count/exists, basic aggregation and mutations.
 - Parameter binding, table occurrence scope checking, explicit default/null changes.

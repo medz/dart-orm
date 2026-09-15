@@ -8,8 +8,7 @@ all database operations and migration checks run in Dart through the public ORM.
 
 The current example statically imports fixed Dart migrations and their recorded
 fingerprints. Migration JSON assets and runtime asset loading have been removed.
-The capture described below precedes this change until the new APK acceptance run
-is recorded.
+The current APK capture verifies this workflow at source `85c4e42`.
 
 The [captured report](../research/validation/flutter.json) records Flutter 3.47.4
 stable, Dart 3.13.3 and SQLite 3.53.4 on an Android API 35 arm64 emulator. It includes
@@ -29,8 +28,8 @@ The upgrade adds a defaulted `done` column and a comments table without dropping
 or rebuilding the existing notes table.
 
 During the final captured release run, summing a recursive sequence of two million
-integers took 253,845 microseconds. The main isolate's 16 ms timer advanced 15
-times and its Flutter animation listener advanced 7 times during that awaited SQL
+integers took 335,844 microseconds. The main isolate's 16 ms timer advanced 20
+times and its Flutter animation listener advanced 12 times during that awaited SQL
 operation. The report's `flutterFrames` field counts those animation frame
 callbacks; it is not a raster timing or delivered-FPS measurement. This establishes
 that database work does not occupy the UI isolate for the entire query. It does
@@ -50,5 +49,6 @@ This verifies Android arm64 on the recorded emulator. Physical devices, iOS and
 macOS Flutter need their own acceptance runs. Process force-stop/relaunch does not
 simulate sudden power loss. Watch refreshes cover writes made through the same
 database instance; external writes still need [explicit invalidation](watch.md).
-The 834 native SQLite/PostgreSQL checks and 19 scenarios in each Chrome JS/WASM
-run are separate evidence. This stage changed no ORM runtime source.
+The [native Dart migration regression](../research/validation/dart-migrations.json)
+and 19 scenarios in each Chrome JS/WASM run are separate evidence. The compiled
+APK histories have fixed fingerprints and need no schema or migration JSON assets.

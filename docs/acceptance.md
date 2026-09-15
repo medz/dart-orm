@@ -65,18 +65,20 @@ streaming, failures and dynamic field snapshots on both native backends.
 | Review query, type and unmanaged catalog coverage | [Capability review](capabilities.md); final native suite includes real triggers and complete policy/RLS metadata checks |
 | Run documented onboarding and complex query usage | [Usage capture](../research/validation/usage.json): dependencies, generation, both existing examples, nine cookbook checks on each backend, migration-chain validation and clean analysis |
 
-The [full native capture](../research/validation/native.json) records the command,
-versions, source base plus changed-file hashes and exact [test log](../research/validation/native.log).
-Its 835 passing tests include real CLI and build_runner subprocess workflows,
-not just direct library calls. The later cookbook and documentation changes do
-not alter the tested runtime or test sources.
+The [Dart migration acceptance](../research/validation/dart-migrations.json) records
+the replacement of JSON artifacts with Dart snapshots, fixed history and static
+registration. Its full native run passed 837 tests and found one old fixture path;
+the correction and final generator changes pass a 76-test follow-up. The record
+retains both logs instead of claiming a single all-green full invocation. AOT
+checks execute compiled history without consumer source files and resume historical
+backfills. The original [835-test capture](../research/validation/native.json)
+remains a historical baseline.
 
-The browser and Android captures precede the final PostgreSQL catalog metadata
-fix. That fix changes only the PostgreSQL SQL branch; the recorded SQLite worker,
-browser and Flutter execution paths are unchanged. Android proves the native
-Flutter lane on the recorded emulator, not Apple platforms or every type/scenario
-from the native server suite. See [Flutter scope](flutter.md) and
-[browser scope](sqlite-web.md) for exact assertions.
+Current Chrome JS/WASM and Android APK captures use the Dart workflow source.
+Android proves the native Flutter lane on its recorded emulator, including compiled
+migration definitions, upgrade and process restart; it does not certify Apple
+platforms or every server type/scenario. See [Flutter scope](flutter.md) and
+[browser scope](sqlite-web.md) for the exact assertions.
 
 ## Extension boundaries in the design
 

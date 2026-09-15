@@ -57,6 +57,9 @@ Commit them before use in persistent environments. See [migration workflows](doc
 rebuilds and existing-database baselines. Long data transformations can use
 [resumable backfills](docs/backfills.md) with bounded batches and durable progress.
 The in-memory example builds an initial migration directly for clarity.
+The persistent [Dart migration entrypoint](example/migrate.dart) runs with
+`dart run example/migrate.dart check`; set `ORM_SQLITE_PATH` for a SQLite file or
+`DATABASE_URL` for PostgreSQL before `apply` or `verify`.
 
 For an existing database, [import a Record declaration](docs/importing.md), review
 its report, generate the client, and baseline the current schema without copying

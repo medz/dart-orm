@@ -1,0 +1,4 @@
+Running build hooks...Running build hooks...Running link hooks...Running link hooks...Copying 1 build assets:
+package:sqlite3/src/ffi/libsqlite3.g.dart
+Generated: /Users/seven/workspace/dart-orm/.dart_tool/backfill-aot/bundle/bin/native_backfill
+Native AOT: historical backfill declaration, bounded pause, concurrent resume and startup compatibility passed.

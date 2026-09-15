@@ -133,6 +133,6 @@ incorrect transformation. Statement timeouts and lock waits retain driver behavi
 Reproduce the standalone SQLite native acceptance check with:
 
 ```sh
-dart compile exe test/support/native_backfill.dart -o /tmp/orm-native-backfill
-/tmp/orm-native-backfill
+dart build cli --target test/support/native_backfill.dart --output .dart_tool/backfill-aot
+.dart_tool/backfill-aot/bundle/bin/native_backfill
 ```
