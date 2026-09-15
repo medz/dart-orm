@@ -175,6 +175,11 @@ final class LocalTime implements Comparable<LocalTime> {
     }
   }
 
+  /// Round fractional seconds, with exact halves toward the next second.
+  LocalTime withPrecision(int digits) => LocalTime.fromMicroseconds(
+    microseconds + _temporalRoundDelta(microseconds, digits),
+  );
+
   int get hour => microseconds ~/ 3600000000;
   int get minute => microseconds ~/ 60000000 % 60;
   int get second => microseconds ~/ 1000000 % 60;
@@ -235,6 +240,17 @@ final class LocalDateTime implements Comparable<LocalDateTime> {
     }
   }
 
+  /// Match PostgreSQL TIMESTAMP(p): exact halves round away from 2000-01-01.
+  LocalDateTime withPrecision(int digits) => add(
+    Duration(
+      microseconds: _temporalRoundDelta(
+        time.microseconds,
+        digits,
+        beforeEpoch: date.julianDay < 2451545,
+      ),
+    ),
+  );
+
   LocalDateTime add(Duration duration) {
     final days = _floorDiv(duration.inMicroseconds, _microsecondsPerDay);
     final ticks =
@@ -273,5 +289,96 @@ final class _TemporalNode(final _Node child, final String kind) extends _Node {
     return w.dialect == SqlDialect.sqlite
         ? '($text COLLATE "orm_${kind}_v1")'
         : text;
+  }
+}
+
+void _checkTemporalPrecision(int digits) {
+  if (digits < 0 || digits > 6) throw RangeError.range(digits, 0, 6, 'digits');
+}
+
+// Use day-local microseconds so the full timestamp range stays exact on JS.
+int _temporalRoundDelta(int ticks, int digits, {bool beforeEpoch = false}) {
+  _checkTemporalPrecision(digits);
+  final unit = const [1000000, 100000, 10000, 1000, 100, 10, 1][digits];
+  final remainder = ticks % unit;
+  return remainder * 2 > unit || remainder * 2 == unit && !beforeEpoch
+      ? unit - remainder
+      : -remainder;
+}
+
+extension InstantPrecision on DateTime {
+  /// Round a resolved UTC instant using PostgreSQL TIMESTAMPTZ(p) rules.
+  DateTime withPrecision(int digits) {
+    final utc = _checkedInstant(this);
+    final rounded = LocalDateTime(
+      LocalDate(utc.year, utc.month, utc.day),
+      LocalTime(
+        utc.hour,
+        utc.minute,
+        utc.second,
+        utc.millisecond * 1000 + utc.microsecond,
+      ),
+    ).withPrecision(digits);
+    final date = rounded.date, time = rounded.time;
+    return _checkedInstant(
+      DateTime.utc(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+        time.second,
+        time.microsecond ~/ 1000,
+        time.microsecond % 1000,
+      ),
+    );
+  }
+}
+
+final class _TemporalCast(
+  final _Node child,
+  final String kind,
+  final int digits,
+) extends _Node {
+  @override
+  String writeSql(_Writer w) {
+    _checkTemporalPrecision(digits);
+    if (!w.temporal) {
+      throw const OrmException(
+        'CAPABILITY.TEMPORAL',
+        'This driver does not provide temporal values.',
+      );
+    }
+    final type = switch (kind) {
+      'time' => 'TIME($digits) WITHOUT TIME ZONE',
+      'local_datetime' => 'TIMESTAMP($digits) WITHOUT TIME ZONE',
+      'instant' => 'TIMESTAMPTZ($digits)',
+      _ => throw ArgumentError('Temporal precision requires temporal storage.'),
+    };
+    final sql = child.write(w);
+    return w.dialect == SqlDialect.postgres
+        ? 'CAST($sql AS $type)'
+        : "orm_temporal_cast_v1($sql, '$kind', $digits)";
+  }
+}
+
+extension TimeExpression<T extends LocalTime?> on Expr<T> {
+  Expr<T> withPrecision(int digits) {
+    _checkTemporalPrecision(digits);
+    return Expr._(_TemporalCast(_node, 'time', digits), codec);
+  }
+}
+
+extension LocalDateTimeExpression<T extends LocalDateTime?> on Expr<T> {
+  Expr<T> withPrecision(int digits) {
+    _checkTemporalPrecision(digits);
+    return Expr._(_TemporalCast(_node, 'local_datetime', digits), codec);
+  }
+}
+
+extension InstantExpression<T extends DateTime?> on Expr<T> {
+  Expr<T> withPrecision(int digits) {
+    _checkTemporalPrecision(digits);
+    return Expr._(_TemporalCast(_node, 'instant', digits), codec);
   }
 }

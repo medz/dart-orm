@@ -10,6 +10,7 @@ import 'package:web/web.dart' as web;
 import 'schema.orm.dart';
 import 'schema.dart' as models;
 import 'teams.dart';
+import 'precision.dart';
 
 final checks = <Map<String, Object?>>[];
 final wasm = Uri.parse('/sqlite3.wasm');
@@ -106,6 +107,10 @@ Future<void> main() async {
     await check(
       'many-to-many plans, phase observations, payloads, pagination and transaction writes preserve query counts',
       () => checkTeams(wasm, worker),
+    );
+    await check(
+      'temporal column precision preserves epoch ties, extended ranges, defaults and keys',
+      () => checkTemporalPrecision(wasm, worker),
     );
     final db = await memory();
     try {

@@ -110,6 +110,7 @@ Migration _diff(
               integerBits: c.integerBits,
               decimalPrecision: c.decimalPrecision,
               decimalScale: c.decimalScale,
+              temporalPrecision: c.temporalPrecision,
             ),
         ],
         primaryKey: table.primaryKey

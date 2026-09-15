@@ -125,6 +125,12 @@ int _sqliteIntegerBits(String name, List<_SqliteCheck> checks) {
 
 String _withoutIntegerChecks(String sql, List<ColumnInfo> columns) {
   final known = {
+    for (final c in columns.where((c) => c.temporalPrecision != null))
+      _temporalSignature(
+        c.name,
+        _temporalCollationKind(c.collation)!,
+        c.temporalPrecision!,
+      ),
     for (final c in columns.where((c) => c.decimalPrecision != null))
       _decimalSignature(c.name, c.decimalPrecision!, c.decimalScale ?? 0),
     for (final c in columns.where((c) => c.storageType == 'INTEGER'))
@@ -278,4 +284,48 @@ String _withoutStorageCollations(String sql, List<ColumnInfo> columns) {
     start = c.end;
   }
   return (result..write(sql.substring(start))).toString();
+}
+
+String _temporalSignature(String name, String kind, int digits) => jsonEncode(
+  _sqliteTokens(_temporalCheck(name, kind, digits)).map((t) => t.text).toList(),
+);
+int? _sqliteTemporalPrecision(
+  String name,
+  String kind,
+  List<_SqliteCheck> checks,
+) {
+  for (var digits = 0; digits < 6; digits++) {
+    final signature = _temporalSignature(name, kind, digits);
+    if (checks.any((c) => c.name == null && c.signature == signature)) {
+      return digits;
+    }
+  }
+  return null;
+}
+
+String? _uncoerceTemporal(String sql, String kind, int digits) {
+  final tokens = _sqliteTokens(sql);
+  if (tokens.length < 8 ||
+      tokens[0].text != 'ORM_TEMPORAL_CAST_V1' ||
+      tokens[1].text != '(' ||
+      tokens.last.text != ')') {
+    return null;
+  }
+  final separators = <int>[];
+  var depth = 0;
+  for (var i = 2; i < tokens.length - 1; i++) {
+    if (tokens[i].text == '(') depth++;
+    if (tokens[i].text == ')') depth--;
+    if (depth < 0) return null;
+    if (depth == 0 && tokens[i].text == ',') separators.add(i);
+  }
+  if (separators.length != 2 || depth != 0) return null;
+  final [a, b] = separators;
+  if (b != a + 2 ||
+      tokens[a + 1].text != 's:$kind' ||
+      tokens.length != b + 3 ||
+      int.tryParse(tokens[b + 1].text) != digits) {
+    return null;
+  }
+  return sql.substring(tokens[2].start, tokens[a].start).trim();
 }

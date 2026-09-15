@@ -334,6 +334,9 @@ Future<SchemaVerification> verifySchema(
       if (found.nullable != column.nullable) {
         differences.add('$path nullability differs');
       }
+      if ((found.temporalPrecision ?? 6) != (column.temporalPrecision ?? 6)) {
+        differences.add('$path temporal precision differs');
+      }
       if (!_matchesDecimalDigits(column, found)) {
         differences.add('$path decimal precision/scale differs');
       }
@@ -423,21 +426,56 @@ Future<SchemaVerification> verifySchema(
 
 String? _columnDefault(String? value, Column<Object?> column) {
   var normalized = _normalizeDefault(value);
+  var temporalPrefix = '';
+  if (normalized != null &&
+      column.temporalPrecision != null &&
+      column.temporalPrecision != 6) {
+    final inner = _uncoerceTemporal(
+      normalized,
+      column.codec.sqlType,
+      column.temporalPrecision!,
+    );
+    if (inner != null) {
+      normalized = _normalizeDefault(inner);
+      temporalPrefix = 'temporal cast:';
+    }
+    final type = _columnStorageType(
+      column,
+      SqlDialect.postgres,
+    ).toLowerCase().replaceFirst('timestamptz', 'timestamp');
+    final native = column.codec.sqlType == 'instant'
+        ? '$type with time zone'
+        : type;
+    if (normalized != null && normalized.endsWith('::$native')) {
+      normalized = _normalizeDefault(
+        normalized.substring(0, normalized.length - native.length - 2),
+      );
+    }
+  }
   if (normalized != null &&
       normalized.startsWith("'") &&
       normalized.endsWith("'")) {
     final literal = normalized.substring(1, normalized.length - 1);
     final parsed = switch (column.codec.sqlType) {
-      'instant' => _instantDefault(literal),
+      'instant' => _instantDefault(literal, column.temporalPrecision ?? 6),
       'date' => LocalDate.tryParse(literal),
       'time' => LocalTime.tryParse(literal),
       'local_datetime' => LocalDateTime.tryParse(literal),
       _ => null,
     };
-    if (parsed != null) return parsed.toString();
+    if (parsed != null) {
+      final digits = column.temporalPrecision ?? 6;
+      final rounded = switch (parsed) {
+        LocalTime() => parsed.withPrecision(digits),
+        LocalDateTime() => parsed.withPrecision(digits),
+        DateTime() => parsed.withPrecision(digits),
+        _ => parsed,
+      };
+      return '$temporalPrefix$rounded';
+    }
   }
   if (normalized == null || column.codec.sqlType != 'decimal') {
-    return normalized;
+    return normalized == null ? null : '$temporalPrefix$normalized';
   }
   final unwrapped = column.decimalPrecision == null
       ? null
@@ -492,9 +530,11 @@ String? _normalizeDefault(String? value) {
   );
 }
 
-String? _instantDefault(String literal) {
+String? _instantDefault(String literal, int digits) {
   try {
-    return Codecs.dateTime.encode(Codecs.dateTime.decode(literal)) as String;
+    return Codecs.dateTime.encode(
+      Codecs.dateTime.decode(literal).withPrecision(digits),
+    ) as String;
   } on FormatException {
     return null;
   }

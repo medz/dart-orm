@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-15T07:03:33.787266+00:00",
-  "scope": "Real isolated Chromium on macOS; JS and Dart WASM clients with a dedicated JS SQLite worker. Correctness checks, not throughput benchmarks. Updated direct selection decoding and fixed-length relation row expansion exercise six-field mixed types, deferred mapping/order, memberships, plan and phase observations, query/row counts, OPFS persistence, reload recovery and upgrades.",
+  "capturedAt": "2026-09-15T07:35:13.545112+00:00",
+  "scope": "Real isolated Chromium on macOS; JS and Dart WASM clients with a dedicated JS SQLite worker. Correctness checks, not throughput benchmarks. Temporal precision covers generated writes, defaults, computed columns, epoch ties, BC and extended dates, maximum instant rounding, catalog verification and relationship keys. Existing selection, memberships, observations, persistence, reload recovery and upgrade scenarios also pass.",
   "commands": [
     "dart run tool/test_browser.dart",
     "dart run tool/test_browser.dart --wasm"
@@ -14,7 +14,11 @@
       "checks": [
         {
           "name": "many-to-many plans, phase observations, payloads, pagination and transaction writes preserve query counts",
-          "milliseconds": 82
+          "milliseconds": 64
+        },
+        {
+          "name": "temporal column precision preserves epoch ties, extended ranges, defaults and keys",
+          "milliseconds": 39
         },
         {
           "name": "memory migrations and verified foreign keys",
@@ -26,11 +30,11 @@
         },
         {
           "name": "computed stored and virtual fields recompute across CRUD and migrations",
-          "milliseconds": 33
+          "milliseconds": 34
         },
         {
           "name": "generated CHECK enforcement and atomic constraint migrations",
-          "milliseconds": 26
+          "milliseconds": 24
         },
         {
           "name": "generated records, projections and typed relation batches",
@@ -38,11 +42,11 @@
         },
         {
           "name": "rollback, savepoints and transaction lifetime",
-          "milliseconds": 1
+          "milliseconds": 2
         },
         {
           "name": "stream cursor batches and early release",
-          "milliseconds": 3
+          "milliseconds": 2
         },
         {
           "name": "commit invalidation and watch snapshots",
@@ -50,7 +54,7 @@
         },
         {
           "name": "exact BigInt, Decimal, blobs and calendar transport",
-          "milliseconds": 4
+          "milliseconds": 3
         },
         {
           "name": "explicit unsupported cancellation",
@@ -58,7 +62,7 @@
         },
         {
           "name": "large real values retain floating storage",
-          "milliseconds": 3
+          "milliseconds": 4
         },
         {
           "name": "instant microseconds are exact or explicitly rejected",
@@ -66,23 +70,23 @@
         },
         {
           "name": "worker does not block the browser event loop",
-          "milliseconds": 155
+          "milliseconds": 156
         },
         {
           "name": "startup failures are bounded and release failed workers",
-          "milliseconds": 30
+          "milliseconds": 28
         },
         {
           "name": "OPFS commit survives a closed worker and new connection",
-          "milliseconds": 111
+          "milliseconds": 95
         },
         {
           "name": "page reload recovers committed rows and rolls back interrupted transaction",
-          "milliseconds": 2
+          "milliseconds": 3
         },
         {
           "name": "persistent schema upgrades after reload preserve existing data",
-          "milliseconds": 21
+          "milliseconds": 23
         }
       ],
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
@@ -96,27 +100,31 @@
       "checks": [
         {
           "name": "many-to-many plans, phase observations, payloads, pagination and transaction writes preserve query counts",
-          "milliseconds": 53
+          "milliseconds": 51
+        },
+        {
+          "name": "temporal column precision preserves epoch ties, extended ranges, defaults and keys",
+          "milliseconds": 39
         },
         {
           "name": "memory migrations and verified foreign keys",
-          "milliseconds": 14
+          "milliseconds": 13
         },
         {
           "name": "client factories distinguish omission, explicit null and prepared batch values",
-          "milliseconds": 18
+          "milliseconds": 16
         },
         {
           "name": "computed stored and virtual fields recompute across CRUD and migrations",
-          "milliseconds": 28
+          "milliseconds": 26
         },
         {
           "name": "generated CHECK enforcement and atomic constraint migrations",
-          "milliseconds": 24
+          "milliseconds": 23
         },
         {
           "name": "generated records, projections and typed relation batches",
-          "milliseconds": 2
+          "milliseconds": 3
         },
         {
           "name": "rollback, savepoints and transaction lifetime",
@@ -128,7 +136,7 @@
         },
         {
           "name": "commit invalidation and watch snapshots",
-          "milliseconds": 1
+          "milliseconds": 0
         },
         {
           "name": "exact BigInt, Decimal, blobs and calendar transport",
@@ -140,7 +148,7 @@
         },
         {
           "name": "large real values retain floating storage",
-          "milliseconds": 3
+          "milliseconds": 2
         },
         {
           "name": "instant microseconds are exact or explicitly rejected",
@@ -148,7 +156,7 @@
         },
         {
           "name": "worker does not block the browser event loop",
-          "milliseconds": 157
+          "milliseconds": 158
         },
         {
           "name": "startup failures are bounded and release failed workers",
@@ -164,7 +172,7 @@
         },
         {
           "name": "persistent schema upgrades after reload preserve existing data",
-          "milliseconds": 12
+          "milliseconds": 14
         }
       ],
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",

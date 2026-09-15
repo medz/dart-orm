@@ -12,6 +12,7 @@ platform limits are recorded in [progress](progress.md).
 | --- | --- |
 | §§2, 4–5: Record declarations, separate table identity, restricted selectors, static input/result types | `lib/schema.dart`, `lib/src/generate/`; `generator_test`, `types_test`, generated fixtures and `generated_database_test` |
 | §§4–5: compound keys, physical names, indexes, FK navigation, domain codecs | Generator, `relation_test`, `integer_test`, `custom_codec_test`, catalog/import tests |
+| §§5, 10–11: temporal column precision | `temporal_precision_test`: generated declarations and SQL coercion, epoch ties, finite ranges, defaults/computed values, rounded relation keys, import/catalog drift and reviewed migration rollback; real JS/WASM worker scenario; [semantics](types.md#temporal-precision) |
 | §4.2: explicit navigation without database FKs | `relatesTo`; `unconstrained_relation_test` checks missing/duplicate targets, composite/self/inverse edges, no FK/index/cascade, watch and constraint transitions; generator/type negatives |
 | §12 declaration table: general CHECK constraints | `check_test`, generator/CLI tests and browser scenario: declaration, native enforcement/NULL, catalog/import, drift, add/change/remove/rename and atomic rollback; limits in [checks](checks.md) |
 | §§4.3, 5, 8: client-generated values separate from database defaults | `client_default_test`, generator/type negatives and browser scenario: typed factories, omission/value/null/DEFAULT, batches, conflicts, preparation/reuse and rollback; snapshots/imports exclude client code; [defaults](defaults.md) |
@@ -46,7 +47,7 @@ streaming, failures and dynamic field snapshots on both native backends.
 
 | Gate from the design | Evidence still required |
 | --- | --- |
-| §§5, 10–11: remaining type/catalog capability review | Verify supported types against imported precision, defaults, native representation and migration behavior. Temporal column precision/conversion remains open in [types](types.md). Unsupported extensions must stay explicit. |
+| §§5, 10–11: remaining type/catalog capability review | Verify supported types against imported precision, defaults, native representation and migration behavior. Timezone conversions and remaining temporal operations are open in [types](types.md). Unsupported extensions must stay explicit. |
 | §13.2–13.3: authoring/editing costs | Generation report covers 10/100/1000 models, build/watch and analysis. Declaration-form comparison, editor rename/diagnostic behavior and actual completion measurements need direct evidence; no claim of superiority over class/table declarations. |
 | §§11–12: native Flutter | An actual Flutter application exercising background SQLite, persistence, older-schema upgrade and watch delivery. Standalone macOS JIT/AOT and Chrome are different evidence. |
 | §§3, 12–13: whole-product acceptance | Run the documented onboarding, generated CRUD/relations, persistent migration/recovery and compatibility workflow on final source. Reconcile this map and every pending item in progress before completing the goal. |

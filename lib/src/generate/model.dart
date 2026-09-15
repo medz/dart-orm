@@ -16,6 +16,7 @@ final class _Field {
   final int? integerBits;
   final int? decimalPrecision;
   final int? decimalScale;
+  final int? temporalPrecision;
   const _Field({
     required this.name,
     required this.column,
@@ -32,6 +33,7 @@ final class _Field {
     this.integerBits,
     this.decimalPrecision,
     this.decimalScale,
+    this.temporalPrecision,
   });
   Map<String, Object?> snapshot() => {
     'name': column,
@@ -46,6 +48,8 @@ final class _Field {
         'storage': computed!.storage.name,
       },
     if (integerBits != null && integerBits != 64) 'integerBits': integerBits,
+    if (temporalPrecision != null && temporalPrecision != 6)
+      'temporalPrecision': temporalPrecision,
     if (decimalPrecision != null) 'decimalPrecision': decimalPrecision,
     if (decimalPrecision != null && decimalScale != null && decimalScale != 0)
       'decimalScale': decimalScale,

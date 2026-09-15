@@ -257,7 +257,7 @@ final class _SchemaReader(
     String? column, defaultSql, clientDefault;
     ComputedColumn? computed;
     int? integerBits;
-    int? decimalPrecision, decimalScale;
+    int? decimalPrecision, decimalScale, temporalPrecision;
     Annotation? custom;
     for (final annotation in field.metadata) {
       final value = annotation.elementAnnotation?.computeConstantValue();
@@ -334,6 +334,11 @@ final class _SchemaReader(
             _fail(annotation, 'UseCodec may only appear once.');
           }
           custom = annotation;
+        case 'TemporalPrecision':
+          if (temporalPrecision != null) {
+            _fail(annotation, 'TemporalPrecision may only appear once.');
+          }
+          temporalPrecision = value!.getField('digits')!.toIntValue();
         case 'DecimalDigits':
           if (decimalPrecision != null) {
             _fail(annotation, 'DecimalDigits may only appear once.');
@@ -431,6 +436,15 @@ final class _SchemaReader(
         'DecimalDigits requires decimal storage, precision 1..1000 and scale -1000..1000.',
       );
     }
+    if (temporalPrecision != null &&
+        (!{'time', 'local_datetime', 'instant'}.contains(storage) ||
+            temporalPrecision < 0 ||
+            temporalPrecision > 6)) {
+      _fail(
+        field,
+        'TemporalPrecision requires time, local timestamp or instant storage and 0..6 digits.',
+      );
+    }
     if (integerBits != null &&
         (storage != 'integer' || !{16, 32, 64}.contains(integerBits))) {
       _fail(
@@ -454,6 +468,7 @@ final class _SchemaReader(
       integerBits: integerBits,
       decimalPrecision: decimalPrecision,
       decimalScale: decimalScale,
+      temporalPrecision: temporalPrecision,
     );
   }
 

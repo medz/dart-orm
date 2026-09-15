@@ -5,9 +5,9 @@ This file records verified delivery, not planned capabilities presented as worki
 The [design acceptance map](acceptance.md) ties remaining gates to the original
 requirements and distinguishes direct coverage from missing evidence.
 
-Latest verification: 813 native tests pass in one invocation with PostgreSQL
-enabled; analysis reports no issues. Real Chrome JS and Dart WASM each pass 18
-scenarios. These checks include query plan inspection and phase observations.
+Latest verification: 834 native tests pass in one invocation with PostgreSQL
+enabled; analysis reports no issues. Real Chrome JS and Dart WASM each pass 19
+scenarios, including temporal column precision and extended date/instant ranges.
 
 The same-driver runtime cost baseline covers SQLite and PostgreSQL, including
 controlled TCP latency, concurrency and separate allocation traces. That baseline
@@ -68,6 +68,7 @@ intermediate List allocations; it does not establish a throughput improvement.
 - Exact SQL decimal division and six explicit rounding modes, including full finite-range checks and window projections with preserved filtering/grouping/pagination.
 - Exact rounded decimal averages with bounded PostgreSQL component sums, incremental SQLite accumulation and shared window inputs.
 - LocalDate, LocalTime and LocalDateTime with microsecond precision and full finite native PostgreSQL ranges, independent of DateTime and session timezone.
+- Temporal column precision from zero to six digits, matching PostgreSQL rounding in SQLite, with generated writes, explicit value/SQL rounding, default/computed coercion, catalog/import and reviewed precision migrations.
 - Calendar generation/import, SQLite indexed collations, normalized relation keys, typed cursors and resumable historical date-key backfills.
 - Explicit UTC instant storage, offset-equivalent SQLite indexing, strict process-independent decoding and overflow-checked native PostgreSQL DateTime decoding.
 - Reviewed legacy timestamp upgrades preserve captured migration checksums and roll back invalid values or newly equivalent SQLite unique keys.
@@ -606,12 +607,30 @@ disposal; cancellation, portal release and connection reuse must stay valid.
 The current adapter deliberately retains its verified cleanup behavior. The
 measured round-trip cost and scope are documented in `docs/performance.md`.
 
+Temporal precision now spans declarations, generated/manual columns, immutable
+snapshots, SQL assignments and value/expression operations. Default and explicit
+six-digit declarations retain the prior canonical snapshot and migration checksum.
+SQLite uses managed coercion/functions and CHECKs; PostgreSQL uses native type
+modifiers. Runtime rounding uses day-local microseconds to preserve extended dates
+on JS without overflowing a total timestamp count. Tests cover all seven precisions
+around the PostgreSQL epoch, BC dates, extended timestamp/instant limits, nullable
+values, defaults/computed columns, CTE/grouping/streams, batch/upsert and rounded
+relation keys. Import roundtrips preserve metadata and avoid duplicate wrappers.
+Reviewed narrowing and rename can detect merged unique keys, rolling back schema,
+data and history before a successful retry.
+
+The new 21-check suite and the 17-check catalog import suite pass together. The
+full native invocation then passes 834 checks with PostgreSQL enabled. Static
+analysis passes. Real JS and WASM each pass 19 browser scenarios, including the
+new precision worker scenario and existing persistence/reload upgrades. The
+captured browser report includes both runs; no native Flutter claim is added.
+
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
 - Broader unmanaged-object catalog coverage.
 - Further native type coverage.
-- Temporal column precision and timezone conversions.
+- Timezone conversions and remaining temporal operations.
 - Further backend capability coverage.
 - Native Flutter checks and remaining platform acceptance review.
 - User documentation, performance measurements and complete acceptance review.
@@ -640,3 +659,9 @@ in the current aggregate above.
 
 Use the standalone SDK if the Flutter launcher tries to update its cache:
 `/Users/seven/workspace/flutter/bin/cache/dart-sdk/bin/dart`.
+
+On 2026-09-15 the installed Flutter cache reports 3.47.4 stable with Dart 3.13.3.
+Xcode reports 27.0 (27A266a), but `xcodebuild -license check` exits 69 and explicitly
+reports that its license has not been accepted. Native Flutter verification needs
+the user's own license review/acceptance and any remaining Xcode initialization.
+No license was accepted on the user's behalf; other development can continue.

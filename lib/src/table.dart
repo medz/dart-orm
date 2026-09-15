@@ -24,6 +24,7 @@ final class Column<T> {
   final int? integerBits;
   final int? decimalPrecision;
   final int? decimalScale;
+  final int? temporalPrecision;
   const Column(
     this.name,
     this.codec, {
@@ -35,6 +36,7 @@ final class Column<T> {
     this.integerBits,
     this.decimalPrecision,
     this.decimalScale,
+    this.temporalPrecision,
   });
 }
 
@@ -168,7 +170,13 @@ final class Field<T> extends ReadField<T> {
   Assignment _assign(_Node node) => Assignment._(
     this,
     definition.decimalPrecision == null
-        ? node
+        ? definition.temporalPrecision == null
+              ? node
+              : _TemporalCast(
+                  node,
+                  definition.codec.sqlType,
+                  definition.temporalPrecision!,
+                )
         : _DecimalCast(
             node,
             definition.decimalPrecision!,

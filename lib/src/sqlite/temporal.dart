@@ -1,6 +1,31 @@
 part of 'functions.dart';
 
 void _registerTemporals(native.CommonDatabase db) {
+  Object round(Object value, String kind, int digits) => switch (kind) {
+    'time' => Codecs.time.decode(value).withPrecision(digits),
+    'local_datetime' =>
+      Codecs.localDateTime.decode(value).withPrecision(digits),
+    'instant' => Codecs.dateTime.decode(value).withPrecision(digits),
+    _ => throw ArgumentError('Unknown temporal storage.'),
+  };
+  for (final fits in [false, true]) {
+    db.createFunction(
+      functionName: fits ? 'orm_temporal_fits_v1' : 'orm_temporal_cast_v1',
+      argumentCount: const native.AllowedArgumentCount(3),
+      deterministic: true,
+      directOnly: false,
+      function: (args) {
+        if (args[0] == null) return null;
+        final kind = args[1] as String, digits = args[2] as int;
+        final rounded = round(args[0]!, kind, digits);
+        if (fits) return rounded == round(args[0]!, kind, 6) ? 1 : 0;
+        return rounded is DateTime
+            ? Codecs.dateTime.encode(rounded)
+            : rounded.toString();
+      },
+    );
+  }
+
   db.createFunction(
     functionName: 'orm_instant_v1',
     argumentCount: const native.AllowedArgumentCount(1),

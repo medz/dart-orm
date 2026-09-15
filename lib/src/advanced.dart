@@ -159,7 +159,7 @@ bool _aggregate(_Node node) => switch (node) {
 };
 bool _window(_Node node) => node is _WindowNode || _children(node).any(_window);
 List<_Node> _children(_Node node) => switch (node) {
-  _TemporalNode(:final child) => [child],
+  _TemporalNode(:final child) || _TemporalCast(:final child) => [child],
   _DecimalAverage(:final child) || _AverageInput(:final child) => [child],
   _DecimalRatio(:final numerator, :final divisor) => [numerator, ?divisor],
   _DecimalNode(:final child) => [child],
@@ -308,6 +308,11 @@ bool _sameSqlNode(_Node a, _Node b) {
       _DecimalCast(child: final bc, precision: final bp, scale: final bs),
     ) =>
       ap == bp && asc == bs && _sameSqlNode(ac, bc),
+    (
+      _TemporalCast(child: final ac, kind: final ak, digits: final ap),
+      _TemporalCast(child: final bc, kind: final bk, digits: final bp),
+    ) =>
+      ak == bk && ap == bp && _sameSqlNode(ac, bc),
     (_DecimalNode(child: final ac), _DecimalNode(child: final bc)) =>
       _sameSqlNode(ac, bc),
     (

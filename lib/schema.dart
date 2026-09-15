@@ -81,6 +81,12 @@ final class DecimalDigits {
   const DecimalDigits(this.precision, [this.scale = 0]);
 }
 
+/// Fractional second digits (0..6) for time, local timestamp or UTC instant columns.
+final class TemporalPrecision {
+  final int digits;
+  const TemporalPrecision(this.digits);
+}
+
 enum ReferentialAction { restrict, cascade, setNull, setDefault, noAction }
 
 /// A fixed SQL file with declared result and parameter Record types.

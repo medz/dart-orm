@@ -55,6 +55,19 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
           );
         }
       }
+      if (column.temporalPrecision != null &&
+          (!{
+                'time',
+                'local_datetime',
+                'instant',
+              }.contains(column.codec.sqlType) ||
+              column.temporalPrecision! < 0 ||
+              column.temporalPrecision! > 6)) {
+        throw const OrmException(
+          'SCHEMA.TEMPORAL_PRECISION',
+          'Temporal precision requires time, local timestamp or instant storage and 0..6 digits.',
+        );
+      }
       if (column.integerBits != null &&
           (column.codec.sqlType != 'integer' ||
               !{16, 32, 64}.contains(column.integerBits))) {
@@ -181,6 +194,13 @@ String _columnDefinition(Column<Object?> c, SqlDialect dialect) {
   if (c.defaultSql case final value?) {
     b.write(' DEFAULT (${_coerceColumn(value, c, dialect)})');
   }
+  if (dialect == SqlDialect.sqlite &&
+      c.temporalPrecision != null &&
+      c.temporalPrecision != 6) {
+    b.write(
+      ' CHECK (${_temporalCheck(c.name, c.codec.sqlType, c.temporalPrecision!)})',
+    );
+  }
   if (dialect == SqlDialect.sqlite && c.decimalPrecision != null) {
     b.write(
       ' CHECK (${_decimalCheck(c.name, c.decimalPrecision!, c.decimalScale ?? 0)})',
@@ -261,10 +281,24 @@ String _columnStorageType(Column<Object?> column, SqlDialect dialect) =>
         32 => 'INTEGER',
         _ => 'BIGINT',
       }
+    : dialect == SqlDialect.postgres &&
+          column.temporalPrecision != null &&
+          column.temporalPrecision != 6
+    ? switch (column.codec.sqlType) {
+        'time' => 'TIME(${column.temporalPrecision}) WITHOUT TIME ZONE',
+        'local_datetime' =>
+          'TIMESTAMP(${column.temporalPrecision}) WITHOUT TIME ZONE',
+        'instant' => 'TIMESTAMPTZ(${column.temporalPrecision})',
+        _ => throw const OrmException(
+          'SCHEMA.TEMPORAL_PRECISION',
+          'Temporal precision requires temporal storage.',
+        ),
+      }
     : _storageType(column.codec.sqlType, dialect);
 
 bool _sameStorage(Column<Object?> a, Column<Object?> b) =>
     a.codec.sqlType == b.codec.sqlType &&
+    (a.temporalPrecision ?? 6) == (b.temporalPrecision ?? 6) &&
     (a.integerBits ?? 64) == (b.integerBits ?? 64) &&
     a.decimalPrecision == b.decimalPrecision &&
     (a.decimalScale ?? 0) == (b.decimalScale ?? 0);
@@ -275,7 +309,14 @@ String _coerceColumn(
   SqlDialect dialect,
 ) => dialect == SqlDialect.sqlite && column.decimalPrecision != null
     ? 'orm_decimal_cast_v1($expression, ${column.decimalPrecision}, ${column.decimalScale ?? 0})'
+    : dialect == SqlDialect.sqlite &&
+          column.temporalPrecision != null &&
+          column.temporalPrecision != 6
+    ? "orm_temporal_cast_v1($expression, '${column.codec.sqlType}', ${column.temporalPrecision})"
     : expression;
+
+String _temporalCheck(String name, String kind, int digits) =>
+    "${_quote(name)} IS NULL OR orm_temporal_fits_v1(${_quote(name)}, '$kind', $digits)";
 
 String _decimalCheck(String name, int precision, int scale) =>
     '${_quote(name)} IS NULL OR orm_decimal_fits_v1(${_quote(name)}, $precision, $scale)';
@@ -297,6 +338,7 @@ final class ColumnInfo {
   final String? collation;
   final int? decimalPrecision;
   final int? decimalScale;
+  final int? temporalPrecision;
   const ColumnInfo({
     required this.name,
     required this.storageType,
@@ -308,6 +350,7 @@ final class ColumnInfo {
     this.collation,
     this.decimalPrecision,
     this.decimalScale,
+    this.temporalPrecision,
   });
 
   /// Removes the managed SQLite default coercion when drafting a declaration.
@@ -317,6 +360,13 @@ final class ColumnInfo {
               _normalizeDefault(defaultSql)!,
               decimalPrecision!,
               decimalScale ?? 0,
+            ) ??
+            defaultSql
+      : defaultSql != null && storageType == 'TEXT' && temporalPrecision != null
+      ? _uncoerceTemporal(
+              _normalizeDefault(defaultSql)!,
+              _temporalCollationKind(collation)!,
+              temporalPrecision!,
             ) ??
             defaultSql
       : defaultSql;
@@ -366,6 +416,14 @@ Future<List<ColumnInfo>> inspectColumns(
           collation: collation,
           decimalPrecision: digits?.$1,
           decimalScale: digits?.$2,
+          temporalPrecision:
+              type == 'TEXT' && _temporalCollationKind(collation) != null
+              ? _sqliteTemporalPrecision(
+                  name,
+                  _temporalCollationKind(collation)!,
+                  checks,
+                )
+              : null,
           nullable: row[3] == 0 && !(row[5] != 0 && rowidPrimaryKey),
           defaultSql: row[4] as String?,
           generated: (row[6] as int) > 0,
@@ -398,10 +456,8 @@ ORDER BY a.attnum''',
     for (final row in result.rows)
       ColumnInfo(
         name: row[0] as String,
-        storageType: (row[1] as String).toUpperCase().replaceAll(
-          'TIMESTAMP WITH TIME ZONE',
-          'TIMESTAMPTZ',
-        ),
+        storageType: _postgresStorageName(row[1] as String),
+        temporalPrecision: _postgresTemporalPrecision(row[1] as String),
         nullable: row[2] as bool,
         defaultSql: row[5] == '' ? row[3] as String? : null,
         generated: row[4] as bool,
@@ -450,6 +506,10 @@ Future<List<String>> verifyColumns(
       }
       if (column.nullable != expected.nullable) {
         differences.add('$path nullability differs');
+      }
+      if ((column.temporalPrecision ?? 6) !=
+          (expected.temporalPrecision ?? 6)) {
+        differences.add('$path temporal precision differs');
       }
       if (!_matchesDecimalDigits(expected, column)) {
         differences.add('$path decimal precision/scale differs');
@@ -501,4 +561,31 @@ bool _matchesDecimalDigits(Column<Object?> expected, ColumnInfo actual) =>
     caseSensitive: false,
   ).firstMatch(type.replaceAll(' ', ''));
   return match == null ? null : (int.parse(match[1]!), int.parse(match[2]!));
+}
+
+String? _temporalCollationKind(String? collation) =>
+    switch (collation?.toLowerCase()) {
+      'orm_time_v1' => 'time',
+      'orm_local_datetime_v1' => 'local_datetime',
+      'orm_instant_v1' => 'instant',
+      _ => null,
+    };
+
+int? _postgresTemporalPrecision(String type) {
+  final match = RegExp(
+    r'^(?:time|timestamp)\(([0-6])\) (?:with|without) time zone$',
+    caseSensitive: false,
+  ).firstMatch(type);
+  return match == null ? null : int.parse(match[1]!);
+}
+
+String _postgresStorageName(String type) {
+  var name = type.toUpperCase().replaceFirstMapped(
+    RegExp(r'^TIMESTAMP(\([0-6]\))? WITH TIME ZONE$'),
+    (m) => 'TIMESTAMPTZ${m[1] ?? ''}',
+  );
+  if (_postgresTemporalPrecision(type) == 6) {
+    name = name.replaceFirst('(6)', '');
+  }
+  return name;
 }

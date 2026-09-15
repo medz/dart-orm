@@ -331,7 +331,12 @@ Future<ImportedSchema> _importCatalog(
 // Match physical types exactly. In particular, NUMERIC does not prove BigInt,
 // and SQLite TEXT does not prove an application DateTime, enum, or JSON codec.
 (String, String?)? _importType(ColumnInfo column, SqlDialect dialect) =>
-    switch ((dialect, column.storageType)) {
+    switch ((
+      dialect,
+      column.temporalPrecision == null
+          ? column.storageType
+          : column.storageType.replaceFirst(RegExp(r'\([0-6]\)'), ''),
+    )) {
       (SqlDialect.sqlite, 'TEXT')
           when column.collation?.toLowerCase() == 'orm_decimal_v1' =>
         ('Decimal', null),
@@ -511,6 +516,9 @@ ImportedSchema _importDeclarations(
       b.writeln('@ColumnName(${_literal(c.name)})');
       if (c.integerBits != null && c.integerBits != 64) {
         b.writeln('@IntegerBits(${c.integerBits})');
+      }
+      if (c.temporalPrecision != null && c.temporalPrecision != 6) {
+        b.writeln('@TemporalPrecision(${c.temporalPrecision})');
       }
       if (c.decimalPrecision != null) {
         b.writeln(

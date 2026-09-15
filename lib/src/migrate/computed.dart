@@ -102,6 +102,18 @@ String _withoutComputed(String sql) {
 
 ComputedColumn? _declarationComputed(ColumnInfo column) {
   final value = column.computed;
+  if (value != null &&
+      column.storageType == 'TEXT' &&
+      column.temporalPrecision != null) {
+    final expression = _uncoerceTemporal(
+      value.sqlite,
+      _temporalCollationKind(column.collation)!,
+      column.temporalPrecision!,
+    );
+    return expression == null
+        ? value
+        : ComputedColumn(expression, storage: value.storage);
+  }
   if (value == null ||
       column.storageType != 'TEXT' ||
       column.decimalPrecision == null) {
@@ -174,6 +186,7 @@ TableSchema _materializedColumns(TableSchema table) => TableSchema(
         integerBits: c.integerBits,
         decimalPrecision: c.decimalPrecision,
         decimalScale: c.decimalScale,
+        temporalPrecision: c.temporalPrecision,
       ),
   ],
   primaryKey: table.primaryKey,

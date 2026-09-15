@@ -312,9 +312,80 @@ TEXT does not imply a calendar type. Changing text to a calendar type requires a
 reviewed migration; newly equivalent unique keys can make conversion fail and
 roll back. Historical backfills persist canonical text keys for resumable paging.
 
-Column precision declarations (`TIME(p)` / `TIMESTAMP(p)`), SQL calendar
-arithmetic and timezone-aware conversions remain pending. Use local types when
+SQL calendar arithmetic and timezone-aware conversions remain pending. Use local types when
 the domain value actually has no timezone; use DateTime for resolved instants.
+
+## Temporal precision
+
+```dart
+typedef Event = ({
+  @Id.generated() int id,
+  @TemporalPrecision(3) LocalTime clock,
+  @TemporalPrecision(3) LocalDateTime appointment,
+  @TemporalPrecision(0) DateTime occurredAt,
+});
+final events = entity<Event>();
+```
+
+`@TemporalPrecision` accepts 0 through 6 fractional second digits on `LocalTime`,
+`LocalDateTime` and `DateTime`, including nullable fields and domain codecs with
+the corresponding storage tag. Manual `Column` declarations use
+`temporalPrecision: 3`. Date-only and unrelated storage types are rejected.
+Omitting precision retains microseconds. Explicit six and the default have the
+same canonical snapshot and DDL, preserving existing migration checksums.
+
+| Dart value | PostgreSQL column | SQLite column |
+| --- | --- | --- |
+| `LocalTime` | `TIME(p) WITHOUT TIME ZONE` | collated TEXT with precision CHECK |
+| `LocalDateTime` | `TIMESTAMP(p) WITHOUT TIME ZONE` | collated TEXT with precision CHECK |
+| `DateTime` | `TIMESTAMPTZ(p)` | UTC text with precision CHECK |
+
+The precision range follows PostgreSQL's [date/time type contract](https://www.postgresql.org/docs/18/datatype-datetime.html).
+ORM inserts, updates, batches and upserts coerce assigned expressions in SQL.
+SQLite defaults, computed expressions and migration copies use the same registered
+function. Raw PostgreSQL writes undergo native column coercion; raw SQLite writes
+with excess nonzero digits fail the CHECK instead of silently changing the input.
+External SQLite connections need these ORM functions and collations registered.
+Default/six-digit columns retain their previous validation behavior.
+
+Rounding matches PostgreSQL's [timestamp implementation](https://github.com/postgres/postgres/blob/REL_18_STABLE/src/backend/utils/adt/timestamp.c)
+and [time implementation](https://github.com/postgres/postgres/blob/REL_18_STABLE/src/backend/utils/adt/date.c):
+nearest representable value, with exact halves away from midnight for `LocalTime`
+and away from 2000-01-01 for timestamps. Instant rounding uses the UTC timeline.
+For example, at three digits, `2000-01-01 00:00:00.0005` becomes `.001`, while
+`1999-12-31 23:59:59.9995` becomes `.999`. A time can reach `24:00`; a timestamp
+can move into the next day. Values outside the supported finite range are rejected.
+
+Value methods and SQL expressions expose the same explicit operation:
+
+```dart
+final rounded = LocalTime.parse('12:00:00.1235').withPrecision(3);
+final selected = await db.events
+    .select((e) => e.appointment.withPrecision(0))
+    .get();
+```
+
+`withPrecision` also applies to local timestamps and resolved DateTime instants;
+the DateTime operation returns UTC.
+SQL results preserve nullable types. The operation composes with projections,
+CTEs, grouping and streams. Column precision does not change the value codec or
+implicitly round predicate parameters. Use the returned stored key, or explicitly
+round a lookup value, when precision affects a primary/foreign key.
+
+Catalog inspection, CLI inspection and import retain precision. Recognized SQLite
+precision checks and coercion wrappers are interpreted as column metadata; other
+checks remain visible. Import drafts defaults and computed SQL without adding a
+second SQLite wrapper. Changing precision is a type change and requires reviewed
+conversion expressions for both dialects. Rounding can merge unique keys; such a
+failure rolls back the data, schema and migration history together. Renames retain
+the precision metadata.
+
+`temporal_precision_test` covers native SQLite/PostgreSQL values, generated writes,
+all seven precisions around the PostgreSQL epoch, defaults/computed values,
+relations, batch/upsert rollback, import, catalog drift and reviewed migration
+rollback. The browser precision scenario additionally checks BC dates, extended
+timestamps and the maximum DateTime boundary through the worker. These checks do
+not establish native Flutter behavior or add timezone conversion support.
 
 ## Signed integer column widths
 

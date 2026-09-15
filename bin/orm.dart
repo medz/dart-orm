@@ -317,6 +317,8 @@ Future<void> main(List<String> arguments) async {
                     'decimalPrecision': c.decimalPrecision,
                   if (c.decimalPrecision != null)
                     'decimalScale': c.decimalScale ?? 0,
+                  if (c.temporalPrecision != null)
+                    'temporalPrecision': c.temporalPrecision,
                   if (c.collation != null) 'collation': c.collation,
                 },
             ],
