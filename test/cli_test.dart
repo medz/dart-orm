@@ -96,6 +96,11 @@ void main() {
         columns: [
           ...usersSchema.columns,
           Column('status', Codecs.text, defaultSql: "'active'"),
+          Column(
+            'email_size',
+            Codecs.integer,
+            computed: const ComputedColumn('length(email)'),
+          ),
         ],
         primaryKey: usersSchema.primaryKey,
         uniqueKeys: usersSchema.uniqueKeys,
@@ -142,6 +147,12 @@ void main() {
       'name': 'valid_status',
       'expression': "status IN ('active', 'disabled')",
     });
+    expect(
+      (constrained['columns'] as List).cast<Map<String, Object?>>().singleWhere(
+        (c) => c['name'] == 'email_size',
+      )['computed'],
+      {'expression': 'length(email)', 'storage': 'stored'},
+    );
     expect(
       (await cli([
         'db',

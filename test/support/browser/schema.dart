@@ -6,6 +6,9 @@ typedef User = ({
   @Id.generated() int id,
   @Unique() String email,
   @ClientDefault(defaultNickname) String? nickname,
+  @Computed.sql('length(email)') int emailSize,
+  @Computed.sql('upper(nickname)', storage: ComputedStorage.virtual)
+  String? upperNickname,
 });
 typedef Post = ({@Id.generated() int id, int authorId, String title});
 typedef Reading = ({@Id() int id, double value});

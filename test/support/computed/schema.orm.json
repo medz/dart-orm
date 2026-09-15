@@ -1,0 +1,117 @@
+{
+  "format": 1,
+  "tables": [
+    {
+      "name": "lines",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": true
+        },
+        {
+          "name": "price",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "quantity",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "nullable": true,
+          "generated": false
+        },
+        {
+          "name": "total",
+          "type": "integer",
+          "nullable": false,
+          "generated": false,
+          "computed": {
+            "sqlite": "price * quantity",
+            "postgres": "price * quantity",
+            "storage": "stored"
+          }
+        },
+        {
+          "name": "label_size",
+          "type": "integer",
+          "nullable": false,
+          "generated": false,
+          "computed": {
+            "sqlite": "length(label)",
+            "postgres": "char_length(label)",
+            "storage": "virtual"
+          }
+        },
+        {
+          "name": "normalized_note",
+          "type": "text",
+          "nullable": true,
+          "generated": false,
+          "computed": {
+            "sqlite": "upper(note)",
+            "postgres": "upper(note)",
+            "storage": "stored"
+          }
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [
+        {
+          "name": "by_total",
+          "columns": [
+            "total"
+          ],
+          "unique": false
+        }
+      ],
+      "foreignKeys": [],
+      "checks": [
+        {
+          "name": "nonnegative",
+          "sqlite": "price >= 0 AND quantity >= 0",
+          "postgres": "price >= 0 AND quantity >= 0"
+        }
+      ]
+    },
+    {
+      "name": "bands",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "generated": false
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [],
+      "foreignKeys": []
+    }
+  ]
+}

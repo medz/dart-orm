@@ -78,5 +78,5 @@ considers existing rowids. Coordinate uniqueness when mixing these sources.
 
 `DateTime.now` is application time encoded by the UTC instant codec, not SQL
 CURRENT_TIMESTAMP. Ordinary Dart constructor defaults do not declare database
-defaults. Computed/read-only columns remain a separate item in the
-[acceptance map](acceptance.md).
+defaults. Use [computed columns](computed.md) for expressions the database
+recomputes when their source values change.

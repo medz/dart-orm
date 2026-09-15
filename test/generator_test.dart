@@ -53,6 +53,7 @@ void main() {
         'test/support/unconstrained/schema.dart',
         'test/support/checks/schema.dart',
         'test/support/defaults/schema.dart',
+        'test/support/computed/schema.dart',
       ]) {
         final result = await generateSchema(source);
         final temporary = File('${fixtures.path}/deterministic.dart');
@@ -109,6 +110,31 @@ final key = users.primaryKey((u) => u.id + 1);
 '''),
       throwsA(isA<GenerationException>()),
     );
+  });
+
+  test('computed declarations reject conflicting defaults, empty SQL and invalid row identities', () async {
+    final cases = [
+      "typedef Item = ({int id, @Computed.sql('') int value});",
+      "typedef Item = ({int id, @Computed.sql('1', postgres: '') int value});",
+      "typedef Item = ({int id, @Computed.sql('1') @Default.sql('0') int value});",
+      "int factory() => 1; typedef Item = ({int id, @Computed.sql('1') @ClientDefault(factory) int value});",
+      "typedef Item = ({@Id.generated() @Computed.sql('1') int id, int value});",
+      "typedef Item = ({@Id() @Computed.sql('1') int id, int value});",
+      "typedef Item = ({@Computed.sql('1') int value});",
+      "typedef Item = ({int id, @Computed.sql('1') @Computed.sql('2') int value});",
+      "typedef Item = ({int id, int readColumn});",
+      "typedef Item = ({int id, @Unique() @Computed.sql('id + 1', storage: ComputedStorage.virtual) int value});",
+    ];
+    for (var i = 0; i < cases.length; i++) {
+      await expectLater(
+        generate(
+          'computed_invalid_$i',
+          '${cases[i]}\nfinal items = entity<Item>();',
+        ),
+        throwsA(isA<GenerationException>()),
+        reason: cases[i],
+      );
+    }
   });
 
   test('client defaults reject incompatible, asynchronous, private and ambiguous factories', () async {

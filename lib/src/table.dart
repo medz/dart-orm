@@ -13,6 +13,7 @@ final class Column<T> {
   final bool nullable;
   final bool generated;
   final String? defaultSql;
+  final ComputedColumn? computed;
 
   /// Called once for an omitted value when constructing an insert. Prepared
   /// mutations retain that value; compilation and updates never call this.
@@ -29,11 +30,32 @@ final class Column<T> {
     this.nullable = false,
     this.generated = false,
     this.defaultSql,
+    this.computed,
     this.clientDefault,
     this.integerBits,
     this.decimalPrecision,
     this.decimalScale,
   });
+}
+
+enum ComputedStorage { stored, virtual }
+
+/// Database-computed SQL using physical column names.
+final class ComputedColumn {
+  final String sqlite, postgres;
+  final ComputedStorage storage;
+  const ComputedColumn(
+    String expression, {
+    this.storage = ComputedStorage.stored,
+  }) : sqlite = expression,
+       postgres = expression;
+  const ComputedColumn.forDialects({
+    required this.sqlite,
+    required this.postgres,
+    this.storage = ComputedStorage.stored,
+  });
+  String expression(SqlDialect dialect) =>
+      dialect == SqlDialect.sqlite ? sqlite : postgres;
 }
 
 final class ForeignKey {
@@ -122,13 +144,25 @@ abstract class Fields {
   final TableRef table;
   const Fields(this.table);
   Field<T> column<T>(Column<T> column) => Field._(table, column);
+  ReadField<T> readColumn<T>(Column<T> column) => ReadField._(table, column);
 }
 
-final class Field<T> extends Expr<T> {
+base class ReadField<T> extends Expr<T> {
   final TableRef table;
   final Column<T> definition;
-  Field._(this.table, this.definition)
+  ReadField._(this.table, this.definition)
     : super._(_ColumnNode(table, definition.name), definition.codec);
+}
+
+final class Field<T> extends ReadField<T> {
+  Field._(super.table, super.definition) : super._() {
+    if (definition.computed != null) {
+      throw const OrmException(
+        'COLUMN.READ_ONLY',
+        'Use readColumn for a computed column.',
+      );
+    }
+  }
   Assignment set(T value) => _assign(_Parameter(codec.encode(value)));
   Assignment setExpression(Expr<T> expression) => _assign(expression._node);
   Assignment _assign(_Node node) => Assignment._(

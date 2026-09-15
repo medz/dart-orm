@@ -257,7 +257,7 @@ Future<void> main() async {
         await generate(subset);
       });
 
-      test('unsupported storage and generated expressions exclude whole tables with reasons', () async {
+      test('unsupported storage excludes its table while computed SQL imports with a review note', () async {
         final integer = getInt();
         await db.execute(
           SqlCommand(
@@ -273,10 +273,10 @@ Future<void> main() async {
           ),
         );
         final draft = await importSchema(db);
-        expect(draft.entities.keys, ['supported']);
+        expect(draft.entities.keys, ['computed', 'supported']);
         expect(
           draft.issues.map((i) => i.code),
-          containsAll(['IMPORT.TYPE', 'IMPORT.GENERATED']),
+          containsAll(['IMPORT.TYPE', 'IMPORT.COMPUTED_SQL']),
         );
         expect(draft.hasBlockingIssues, true);
         await generate(draft);

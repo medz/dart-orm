@@ -145,6 +145,11 @@ rejected downgrade does not delete or rebuild tables.
 - Type changes require SQL conversion expressions for each dialect. Expressions
   are trusted migration code and use column names after declared renames.
 
+[Computed target columns](computed.md) use their own expressions to populate old
+rows and derive values on type changes. They are excluded from rebuild copy maps;
+their addition does not require a default or application backfill. Mode conversions
+and native expression dependencies have separate documented migration limits.
+
 For long data transformations, use a reviewed [resumable backfill](backfills.md).
 It carries a historical table definition, commits bounded batches with their
 primary-key cursors, supports bounded runs, and verifies completion. Both SQLite

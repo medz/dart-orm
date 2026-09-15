@@ -307,6 +307,11 @@ Future<void> main(List<String> arguments) async {
                   'nullable': c.nullable,
                   'default': c.defaultSql,
                   'generated': c.generated,
+                  if (c.computed case final computed?)
+                    'computed': {
+                      'expression': computed.expression(db.dialect),
+                      'storage': computed.storage.name,
+                    },
                   if (c.integerBits != null) 'integerBits': c.integerBits,
                   if (c.decimalPrecision != null)
                     'decimalPrecision': c.decimalPrecision,

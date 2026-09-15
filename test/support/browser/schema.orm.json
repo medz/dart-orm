@@ -21,6 +21,28 @@
           "type": "text",
           "nullable": true,
           "generated": false
+        },
+        {
+          "name": "email_size",
+          "type": "integer",
+          "nullable": false,
+          "generated": false,
+          "computed": {
+            "sqlite": "length(email)",
+            "postgres": "length(email)",
+            "storage": "stored"
+          }
+        },
+        {
+          "name": "upper_nickname",
+          "type": "text",
+          "nullable": true,
+          "generated": false,
+          "computed": {
+            "sqlite": "upper(nickname)",
+            "postgres": "upper(nickname)",
+            "storage": "virtual"
+          }
         }
       ],
       "primaryKey": [

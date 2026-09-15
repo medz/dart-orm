@@ -15,7 +15,7 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
     for (final f in entity.fields) {
       b.writeln(
         'final ${_columnSymbol(entity, f)} = Column<${f.type}>(${_literal(f.column)}, ${f.codec}, '
-        'nullable: ${f.nullable}, generated: ${f.generated}${f.defaultSql == null ? '' : ', defaultSql: ${_literal(f.defaultSql!)}'}${f.clientDefault == null ? '' : ', clientDefault: ${f.clientDefault}'}${f.integerBits == null || f.integerBits == 64 ? '' : ', integerBits: ${f.integerBits}'}${f.decimalPrecision == null ? '' : ', decimalPrecision: ${f.decimalPrecision}'}${f.decimalScale == null || f.decimalScale == 0 ? '' : ', decimalScale: ${f.decimalScale}'});',
+        'nullable: ${f.nullable}, generated: ${f.generated}${f.defaultSql == null ? '' : ', defaultSql: ${_literal(f.defaultSql!)}'}${f.clientDefault == null ? '' : ', clientDefault: ${f.clientDefault}'}${f.computed == null ? '' : ', computed: ${_computedLiteral(f.computed!)}'}${f.integerBits == null || f.integerBits == 64 ? '' : ', integerBits: ${f.integerBits}'}${f.decimalPrecision == null ? '' : ', decimalPrecision: ${f.decimalPrecision}'}${f.decimalScale == null || f.decimalScale == 0 ? '' : ', decimalScale: ${f.decimalScale}'});',
       );
     }
     b.writeln(
@@ -31,7 +31,9 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
       'final class ${entity.fieldsType} extends Fields {\n ${entity.fieldsType}(super.table);',
     );
     for (final f in entity.fields) {
-      b.writeln('late final ${f.name} = column(${_columnSymbol(entity, f)});');
+      b.writeln(
+        'late final ${f.name} = ${f.computed == null ? 'column' : 'readColumn'}(${_columnSymbol(entity, f)});',
+      );
     }
     for (final edge in entity.edges) {
       if (edge.onDelete == null) {
@@ -58,6 +60,7 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
     final parameters = <String>[];
     final assignments = <String>[];
     for (final f in entity.fields) {
+      if (f.computed != null) continue;
       if (f.generated || f.defaultSql != null || f.clientDefault != null) {
         parameters.add('Change<${f.type}> ${f.name} = const Change.keep()');
         assignments.add('...row.${f.name}.change(${f.name})');
@@ -85,11 +88,11 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
       );
     }
     b.writeln('}');
-    if (entity.fields.any((f) => !f.generated)) {
+    if (entity.fields.any((f) => !f.generated && f.computed == null)) {
       b.writeln(
         'extension ${entity.symbol}Updates on Query<${entity.rowType}, ${entity.fieldsType}> {'
-        'Future<int> patch({${entity.fields.where((f) => !f.generated).map((f) => 'Change<${f.type}> ${f.name} = const Change.keep()').join(', ')}}) => '
-        'update((row) => [${entity.fields.where((f) => !f.generated).map((f) => '...row.${f.name}.change(${f.name})').join(', ')}]).execute(); }',
+        'Future<int> patch({${entity.fields.where((f) => !f.generated && f.computed == null).map((f) => 'Change<${f.type}> ${f.name} = const Change.keep()').join(', ')}}) => '
+        'update((row) => [${entity.fields.where((f) => !f.generated && f.computed == null).map((f) => '...row.${f.name}.change(${f.name})').join(', ')}]).execute(); }',
       );
     }
   }
@@ -119,3 +122,6 @@ String _recordSelection(List<_Field> fields, String row) {
   return '(${_recordSelection(left, row)}, ${_recordSelection(right, row)})'
       '.map((left, right) => (${[...left.map((f) => '${f.name}: left.${f.name}'), ...right.map((f) => '${f.name}: right.${f.name}')].join(', ')}))';
 }
+
+String _computedLiteral(ComputedColumn value) =>
+    'ComputedColumn.forDialects(sqlite: ${_literal(value.sqlite)}, postgres: ${_literal(value.postgres)}, storage: ComputedStorage.${value.storage.name})';

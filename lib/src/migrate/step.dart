@@ -57,7 +57,10 @@ final class RebuildTable extends MigrationStep {
     : copy = Map.unmodifiable(copy) {
     if (before.name != after.name ||
         copy.isEmpty ||
-        copy.keys.any((key) => !after.columns.any((c) => c.name == key))) {
+        copy.keys.any(
+          (key) =>
+              !after.columns.any((c) => c.name == key && c.computed == null),
+        )) {
       throw const OrmException(
         'MIGRATION.REBUILD',
         'Rebuild requires the same table name and an explicit target-column copy map.',
@@ -181,7 +184,8 @@ Future<void> _rebuild(Database<Backend> db, RebuildTable step) async {
   final unsupported = actual.unmanaged
       .where((o) => !{'index', 'trigger', 'view'}.contains(o.kind))
       .toList();
-  if (unsupported.isNotEmpty || actual.columns.any((c) => c.generated)) {
+  if (unsupported.isNotEmpty ||
+      actual.columns.any((c) => c.generated && c.computed == null)) {
     throw OrmException(
       'MIGRATION.UNMANAGED',
       '$name has unmodeled table constraints/options; provide a manual migration to preserve them.',

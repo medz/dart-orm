@@ -25,9 +25,37 @@ final _usersNickname = Column<String?>(
   generated: false,
   clientDefault: models.defaultNickname,
 );
+final _usersEmailSize = Column<int>(
+  "email_size",
+  Codecs.integer,
+  nullable: false,
+  generated: false,
+  computed: ComputedColumn.forDialects(
+    sqlite: "length(email)",
+    postgres: "length(email)",
+    storage: ComputedStorage.stored,
+  ),
+);
+final _usersUpperNickname = Column<String?>(
+  "upper_nickname",
+  Codecs.text.nullable(),
+  nullable: true,
+  generated: false,
+  computed: ComputedColumn.forDialects(
+    sqlite: "upper(nickname)",
+    postgres: "upper(nickname)",
+    storage: ComputedStorage.virtual,
+  ),
+);
 final usersSchema = TableSchema(
   "users",
-  columns: [_usersId, _usersEmail, _usersNickname],
+  columns: [
+    _usersId,
+    _usersEmail,
+    _usersNickname,
+    _usersEmailSize,
+    _usersUpperNickname,
+  ],
   primaryKey: ["id"],
   uniqueKeys: [
     ["email"],
@@ -48,6 +76,8 @@ final class UsersFields extends Fields {
   late final id = column(_usersId);
   late final email = column(_usersEmail);
   late final nickname = column(_usersNickname);
+  late final emailSize = readColumn(_usersEmailSize);
+  late final upperNickname = readColumn(_usersUpperNickname);
   Relation<models.Post, PostsFields> get posts =>
       Relation(postsTable, parent: [id], child: (row) => [row.authorId]);
 }
@@ -55,11 +85,16 @@ final class UsersFields extends Fields {
 final usersTable = Table<models.User, UsersFields>(
   usersSchema,
   UsersFields.new,
-  (row) => (
-    row.id,
-    row.email,
-    row.nickname,
-  ).map((id, email, nickname) => (id: id, email: email, nickname: nickname)),
+  (row) =>
+      (row.id, row.email, row.nickname, row.emailSize, row.upperNickname).map(
+        (id, email, nickname, emailSize, upperNickname) => (
+          id: id,
+          email: email,
+          nickname: nickname,
+          emailSize: emailSize,
+          upperNickname: upperNickname,
+        ),
+      ),
 );
 
 final class UsersTableSet extends TableSet<models.User, UsersFields> {

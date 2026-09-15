@@ -25,6 +25,7 @@ requirements and distinguishes direct coverage from missing evidence.
 - Named SQL files with generated Record parameters/results, dialect-specific methods, native structure checks and stale-output detection.
 - Explicit named-query build_runner assets, CLI generation/checking and shared query/transaction/stream/watch execution.
 - Generated table accessors, named create parameters, byId, typed patches and schema snapshots.
+- Database computed expressions with stored/virtual modes, typed read-only fields, catalog/import metadata and reviewed migrations.
 - Batched and nested relation projections, per-parent SQL window pagination, optional/required relations.
 - Explicit `relatesTo` query navigation without a database FK, including nonunique/composite/self/inverse edges and unchanged physical snapshots.
 - Correlated relation any/none/every/count; UNKNOWN fails every, and empty sets satisfy it.
@@ -217,7 +218,7 @@ correctness checks, not backfill throughput or online availability measurements.
 Seventeen catalog-import checks verify both databases, including physical/Dart
 name collisions and escaped identifiers, identities/defaults, composite/self
 relations, unique indexes, read-only SQLite, scoped sessions, excluded unsupported
-types and generated expressions, nullable primary keys, virtual/shadow tables,
+types, nullable primary keys, virtual/shadow tables,
 PostgreSQL inheritance and specialized index semantics. Draft declarations pass
 the real analyzer/generator and produce matching schema snapshots. An imported
 client runs against PostgreSQL, and the SQLite client compiles and runs as a macOS
@@ -475,9 +476,29 @@ modes pass 16 scenarios, adding client omission versus explicit null and prepare
 batch behavior. The browser schema snapshot itself is unchanged by adding a
 client factory. No throughput measurement is claimed by these correctness runs.
 
+Nineteen computed-column checks cover SQLite and PostgreSQL stored/virtual CRUD,
+nullable results, batch/conflict returning, generated relationship keys, quoted SQL,
+catalog/import roundtrips and drift. Existing rows survive add/drop, expression and
+result-type changes, stored-to-ordinary materialization, renamed CHECK expressions,
+indexes, incoming references and views. Invalid recomputation rolls back rows,
+schema and migration history. Decimal computation retains precision casts through
+import and generation. Ten invalid declaration cases and seven invalid generated
+API uses fail source/type checks; low-level copy/backfill maps reject computed
+targets. CLI inspection returns computation SQL and storage mode.
+
+The implementation uses `ReadField<T>` for computed results and excludes those
+fields from generated creation/patch inputs. Native PostgreSQL mode/dependency
+limits remain explicit; automatic diff requires reviewed replacement plans for
+mode conversions it cannot emit natively. Renamed computed SQLite tables may
+require two copies. See `docs/computed.md` for these costs and migration limits.
+The complete native suite passes 761 checks in one invocation with PostgreSQL
+enabled, and static analysis reports no issues. Real Chrome JS and Dart WASM each
+pass 17 scenarios, including computed updates and migration recomputation alongside
+the existing OPFS recovery/upgrade scenarios. The captured browser report records
+both runs; these do not establish throughput or native Flutter behavior.
+
 ## Still required for the goal
 
-- Computed/read-only columns from design sections 4.3, 5 and 8.
 - Explicit generated junction-table/many-to-many acceptance with payload fields and query-count checks.
 - Advanced-query capability and edge-case review.
 - Broader unmanaged-object catalog coverage.
@@ -490,7 +511,7 @@ client factory. No throughput measurement is claimed by these correctness runs.
 
 To-one projections join by default when declared keys prove uniqueness; otherwise
 they batch and check cardinality. Collections use explicit parameter-aware batches.
-`verifyColumns` checks column names/types/nullability, integer widths, decimal precision/scale and SQLite collations. `verifySchema` additionally compares defaults,
+`verifyColumns` checks column names/types/nullability, integer widths, decimal precision/scale, SQLite collations and computed expressions/modes. `verifySchema` additionally compares defaults,
 keys, row CHECK constraints and simple indexes; its `unmanaged` objects require separate review.
 Ordinary migration batches are atomic. Explicit backfills use durable per-step
 checkpoints and short data transactions on both databases. General recoverable
@@ -504,6 +525,9 @@ workflows, 37 streaming/execution checks, 28 relation strategy checks and three
 negative compilation checks covering 29 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
 build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks, 20 UTC instant checks, 24 named SQL checks, two explicit floating-parameter checks, 24 unconstrained-relation checks 17 CHECK-constraint checks and 17 client-default checks.
+
+Nineteen computed-column checks and additional generation/type checks are included
+in the current aggregate above.
 
 ## Environment
 

@@ -196,7 +196,17 @@ final class _SchemaReader(
     }
     final indexNames = <String>{};
     for (final entity in entities.values) {
+      if (entity.fields.every((f) => f.computed != null)) {
+        throw GenerationException(
+          '${entity.name} needs at least one ordinary column.',
+        );
+      }
       for (final key in entity.primaryKey) {
+        if (entity.field(key).computed != null) {
+          throw GenerationException(
+            'SQLite primary keys cannot contain computed columns: ${entity.name}.$key.',
+          );
+        }
         if (entity.field(key).nullable) {
           throw GenerationException(
             '${entity.name} primary keys cannot be nullable.',
@@ -207,6 +217,19 @@ final class _SchemaReader(
         if (f.storage != 'integer' || !_same(entity.primaryKey, [f.name])) {
           throw GenerationException(
             'Generated identity requires a single integer primary key: ${entity.name}.${f.name}.',
+          );
+        }
+      }
+      for (final keys in [
+        ...entity.uniqueKeys,
+        ...entity.indexes.map((i) => i.keys),
+      ]) {
+        if (keys.any(
+          (key) =>
+              entity.field(key).computed?.storage == ComputedStorage.virtual,
+        )) {
+          throw GenerationException(
+            '${entity.name}: PostgreSQL 18 cannot index a virtual computed column. Use stored computation for indexed columns.',
           );
         }
       }
@@ -224,7 +247,7 @@ final class _SchemaReader(
     if (type == null) _fail(field, 'Cannot resolve the field type.');
     final nullable = typeSystem.isNullable(type);
     final name = field.name.lexeme;
-    if ({'table', 'column'}.contains(name)) {
+    if ({'table', 'column', 'readColumn'}.contains(name)) {
       _fail(
         field,
         'Field name $name conflicts with the fields API. Use another Dart name and @ColumnName.',
@@ -232,6 +255,7 @@ final class _SchemaReader(
     }
     var id = false, generated = false, unique = false;
     String? column, defaultSql, clientDefault;
+    ComputedColumn? computed;
     int? integerBits;
     int? decimalPrecision, decimalScale;
     Annotation? custom;
@@ -253,6 +277,24 @@ final class _SchemaReader(
           column = value!.getField('name')!.toStringValue();
         case 'Default':
           defaultSql = value!.getField('expression')!.toStringValue();
+        case 'Computed':
+          if (computed != null) {
+            _fail(annotation, 'Computed may only appear once.');
+          }
+          final sql = value!.getField('expression')!.toStringValue()!;
+          computed = ComputedColumn.forDialects(
+            sqlite: value.getField('sqlite')?.toStringValue() ?? sql,
+            postgres: value.getField('postgres')?.toStringValue() ?? sql,
+            storage:
+                ComputedStorage.values[value
+                    .getField('storage')!
+                    .getField('index')!
+                    .toIntValue()!],
+          );
+          if (computed.sqlite.trim().isEmpty ||
+              computed.postgres.trim().isEmpty) {
+            _fail(annotation, 'Computed SQL expressions must be non-empty.');
+          }
         case 'ClientDefault':
           if (clientDefault != null) {
             _fail(annotation, 'ClientDefault may only appear once.');
@@ -303,6 +345,10 @@ final class _SchemaReader(
       }
     }
     String storage, codec;
+    if (computed != null &&
+        (generated || defaultSql != null || clientDefault != null)) {
+      _fail(field, 'Computed columns cannot have identity or insert defaults.');
+    }
     if (custom != null) {
       final value = custom.elementAnnotation!.computeConstantValue()!.getField(
         'codec',
@@ -404,6 +450,7 @@ final class _SchemaReader(
       unique: unique,
       defaultSql: defaultSql,
       clientDefault: clientDefault,
+      computed: computed,
       integerBits: integerBits,
       decimalPrecision: decimalPrecision,
       decimalScale: decimalScale,

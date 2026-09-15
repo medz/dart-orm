@@ -5,6 +5,53 @@ import 'package:analyzer/dart/analysis/results.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('computed generated fields are statically readable and never writable', () async {
+    final dir = await Directory('.dart_tool/orm-computed-types')
+        .create(recursive: true);
+    final file = File('${dir.path}/negative.dart').absolute;
+    final invalid = [
+      "db.lines.create(price: 1, quantity: 1, label: '', total: 1);",
+      'db.lines.byId(1).patch(total: const Change.set(1));',
+      'db.lines.update((r) => [r.total.set(1)]);',
+      'db.lines.update((r) => [r.total.increment(1)]);',
+      'db.lines.update((r) => [r.total.defaultValue()]);',
+      'db.lines.update((r) => [r.total.setExpression(r.price)]);',
+      'db.lines.select((r) => r.total.eq("wrong"));',
+    ];
+    await file.writeAsString(
+      "import 'package:orm/orm.dart';\nimport '../../test/support/computed/schema.orm.dart';\nvoid wrong(Database<Sqlite> db) {\n${invalid.join('\n')}\n}\n",
+    );
+    final contexts = AnalysisContextCollection(includedPaths: [file.path]);
+    try {
+      final result =
+          await contexts
+                  .contextFor(file.path)
+                  .currentSession
+                  .getResolvedUnit(file.path)
+              as ResolvedUnitResult;
+      final errors = result.diagnostics
+          .where((e) => e.severity.name.toLowerCase() == 'error')
+          .toList();
+      expect(
+        errors.any(
+          (e) => e.diagnosticCode.lowerCaseName.contains('uri_does_not_exist'),
+        ),
+        false,
+      );
+      for (var i = 0; i < invalid.length; i++) {
+        expect(
+          errors.any(
+            (e) => result.lineInfo.getLocation(e.offset).lineNumber == i + 4,
+          ),
+          true,
+          reason: invalid[i],
+        );
+      }
+    } finally {
+      await contexts.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
   test('client-default create parameters preserve domain, nullable and timestamp types', () async {
     final directory = await Directory('.dart_tool/orm-default-type-tests')
         .create(recursive: true);

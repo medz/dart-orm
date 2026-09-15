@@ -75,6 +75,14 @@ Migration _diff(
   String tableName(String name) => renames.tables[name] ?? name;
   String columnName(String table, String column) =>
       renames.columns[tableName(table)]?[column] ?? column;
+  final computedRenames = from.tables
+      .where(
+        (t) =>
+            t.columns.any((c) => c.computed != null) &&
+            (renames.tables.containsKey(t.name) ||
+                (renames.columns[tableName(t.name)]?.isNotEmpty ?? false)),
+      )
+      .toList();
   // CHECK SQL is deliberately not rewritten as text. Remove it before native
   // renames, then validate the explicitly declared target expressions afterward.
   final checkedRenames = from.tables
@@ -98,6 +106,7 @@ Migration _diff(
               nullable: c.nullable,
               generated: c.generated,
               defaultSql: c.defaultSql,
+              computed: c.computed,
               integerBits: c.integerBits,
               decimalPrecision: c.decimalPrecision,
               decimalScale: c.decimalScale,
@@ -153,6 +162,7 @@ Migration _diff(
     for (final c in after[name]!.columns) {
       final prior = old[c.name];
       if (prior == null &&
+          c.computed == null &&
           (c.generated || (!c.nullable && c.defaultSql == null))) {
         throw OrmException(
           'MIGRATION.BACKFILL',
@@ -165,7 +175,19 @@ Migration _diff(
           '$name.${c.name} identity changes require a manual migration.',
         );
       }
-      if (prior != null && !_sameStorage(prior, c)) {
+      if (prior != null &&
+          ((prior.computed == null && c.computed != null) ||
+              (prior.computed != null &&
+                  c.computed != null &&
+                  prior.computed!.storage != c.computed!.storage) ||
+              (prior.computed?.storage == ComputedStorage.virtual &&
+                  c.computed == null))) {
+        throw OrmException(
+          'MIGRATION.COMPUTED',
+          '$name.${c.name} needs a reviewed PostgreSQL replacement/materialization migration for this computed-mode change.',
+        );
+      }
+      if (prior != null && c.computed == null && !_sameStorage(prior, c)) {
         for (final dialect in SqlDialect.values) {
           if (using[dialect]?[name]?[c.name] == null) {
             throw OrmException(
@@ -188,6 +210,7 @@ Migration _diff(
             .firstOrNull;
         if (old == null ||
             next == null ||
+            next.computed != null ||
             _sameStorage(old, next) ||
             entry.value.trim().isEmpty) {
           throw OrmException(
@@ -201,12 +224,19 @@ Migration _diff(
   final plans = <SqlDialect, List<MigrationStep>>{};
   for (final dialect in SqlDialect.values) {
     final steps = <MigrationStep>[];
-    for (final table in checkedRenames) {
+    for (final table in {
+      ...checkedRenames,
+      if (dialect == SqlDialect.sqlite) ...computedRenames,
+    }) {
       if (dialect == SqlDialect.sqlite) {
+        var target = _withChecks(table, const []);
+        if (computedRenames.contains(table)) {
+          target = _materializedColumns(target);
+        }
         steps.add(
           RebuildTable(
             table,
-            _withChecks(table, const []),
+            target,
             copy: {for (final c in table.columns) c.name: _quote(c.name)},
           ),
         );
@@ -285,7 +315,12 @@ Migration _diff(
       }
     }
     for (final name in shared) {
-      final old = before[name]!, next = after[name]!;
+      var old = before[name]!;
+      if (dialect == SqlDialect.sqlite &&
+          computedRenames.any((t) => tableName(t.name) == name)) {
+        old = _materializedColumns(old);
+      }
+      final next = after[name]!;
       final oldColumns = {for (final c in old.columns) c.name: c};
       final newColumns = {for (final c in next.columns) c.name: c};
       final removed = oldColumns.keys.toSet().difference(
@@ -326,7 +361,9 @@ Migration _diff(
             next,
             copy: {
               for (final column in newColumns.keys.where(
-                oldColumns.containsKey,
+                (c) =>
+                    oldColumns.containsKey(c) &&
+                    newColumns[c]!.computed == null,
               ))
                 column: using[dialect]?[name]?[column] ?? _quote(column),
             },
@@ -376,13 +413,27 @@ Migration _diff(
         final prefix =
             'ALTER TABLE ${_quote(name)} ALTER COLUMN ${_quote(column)}';
         final typeChanged = !_sameStorage(a, b);
+        if (a.computed != null && b.computed == null) {
+          steps.add(ExecuteSql('$prefix DROP EXPRESSION'));
+        }
         if (typeChanged && a.defaultSql != null) {
           steps.add(ExecuteSql('$prefix DROP DEFAULT'));
         }
         if (typeChanged) {
           steps.add(
             ExecuteSql(
-              '$prefix TYPE ${_columnStorageType(b, dialect)} USING (${using[dialect]![name]![column]})',
+              '$prefix TYPE ${_columnStorageType(b, dialect)}'
+              '${b.computed != null ? '' : ' USING (${using[dialect]![name]![column]})'}',
+            ),
+          );
+        }
+        if (b.computed != null &&
+            (a.computed?.expression(dialect) !=
+                    b.computed!.expression(dialect) ||
+                typeChanged)) {
+          steps.add(
+            ExecuteSql(
+              '$prefix SET EXPRESSION AS (${_coerceColumn(b.computed!.expression(dialect), b, dialect)}\n)',
             ),
           );
         }
@@ -447,9 +498,10 @@ Migration _diff(
 
 bool _sameForeignKey(ForeignKey a, ForeignKey b) =>
     _hash(_foreignKeyJson(a)) == _hash(_foreignKeyJson(b));
-bool _canAddSqlite(Column<Object?> column) =>
-    column.defaultSql == null ||
-    RegExp(
-      r"^(NULL|TRUE|FALSE|[+-]?[0-9]+(\.[0-9]+)?|'([^']|'')*'|[xX]'[0-9a-fA-F]*')$",
-      caseSensitive: false,
-    ).hasMatch(column.defaultSql!.trim());
+bool _canAddSqlite(Column<Object?> column) => column.computed != null
+    ? column.computed!.storage == ComputedStorage.virtual
+    : column.defaultSql == null ||
+          RegExp(
+            r"^(NULL|TRUE|FALSE|[+-]?[0-9]+(\.[0-9]+)?|'([^']|'')*'|[xX]'[0-9a-fA-F]*')$",
+            caseSensitive: false,
+          ).hasMatch(column.defaultSql!.trim());

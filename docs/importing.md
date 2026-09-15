@@ -105,7 +105,9 @@ need explicit support. See
 [decimal boundaries](decimals.md) before reviewing a draft.
 
 SQLite rowid integer primary keys and PostgreSQL BY DEFAULT integer primary-key
-identities get `@Id.generated()`. ALWAYS identities, generated expressions,
+identities get `@Id.generated()`. [Computed expressions](computed.md) become
+`@Computed.sql` with their stored/virtual mode and an `IMPORT.COMPUTED_SQL`
+portability review note. ALWAYS identities,
 non-primary identities and nullable primary keys require explicit write semantics
 and are currently blocking. Sequence defaults such as a BIGSERIAL default retain
 their catalog SQL; import does not convert them to identities or reset sequences.

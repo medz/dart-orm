@@ -64,6 +64,8 @@ reviewed constraint migrations.
 
 Use [client defaults](docs/defaults.md) for typed Dart value factories and SQL
 defaults for database-generated values, with explicit omission/value/default inputs.
+Declare [computed columns](docs/computed.md) for database expressions with typed
+read-only results, explicit stored/virtual modes and reviewed migrations.
 
 For complex SQL files, [generate named queries](docs/named-sql.md) with typed
 Record parameters/results, native database structure checks and the same query

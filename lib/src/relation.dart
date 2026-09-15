@@ -7,7 +7,7 @@ enum ToOneStrategy { automatic, join, batch }
 final class Relation<R, F extends Fields> {
   final TableAlias<Object?, F> _alias;
   final List<Expr<Object?>> _parent;
-  final List<Field<Object?>> _child;
+  final List<ReadField<Object?>> _child;
   final F _fields;
   final _QueryState _state;
   final Selection<R> _selection;
@@ -15,7 +15,7 @@ final class Relation<R, F extends Fields> {
   factory Relation(
     Table<R, F> target, {
     required List<Expr<Object?>> parent,
-    required List<Field<Object?>> Function(F) child,
+    required List<ReadField<Object?>> Function(F) child,
   }) {
     final alias = target.alias();
     final fields = alias.fields;
@@ -420,7 +420,7 @@ Future<List<List<Object?>>> _expandRelations(
 
 // Row-value IN avoids a deep OR tree for large composite-key batches.
 final class _RelationKeys(
-  final List<Field<Object?>> columns,
+  final List<ReadField<Object?>> columns,
   final List<_RelationKey> keys,
 ) extends _Node {
   @override

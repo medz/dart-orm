@@ -150,7 +150,9 @@ Future<TableInfo> inspectTable(Database<Backend> db, String table) async {
       withoutChecks = (text..write(remaining.substring(start))).toString();
     }
     if (sql != null &&
-        _sqlWords(_withoutStorageCollations(withoutChecks, columns)).any(
+        _sqlWords(
+          _withoutStorageCollations(_withoutComputed(withoutChecks), columns),
+        ).any(
           {
             'CHECK',
             'DEFERRABLE',
@@ -353,16 +355,28 @@ Future<SchemaVerification> verifySchema(
         differences.add('$path default differs');
       }
       if (db.dialect == SqlDialect.postgres &&
+          column.computed == null &&
+          found.computed == null &&
           found.generated != column.generated) {
         differences.add('$path generation differs');
       }
-      if (db.dialect == SqlDialect.sqlite && found.generated) {
+      if (db.dialect == SqlDialect.sqlite &&
+          found.generated &&
+          found.computed == null) {
         differences.add('$path uses an unmodeled generated expression');
       }
     }
     for (final name in columns.keys) {
       differences.add('${table.name}.$name is unmanaged');
     }
+    differences.addAll(
+      await _verifyComputed(
+        db,
+        table,
+        actual.columns,
+        contextMatches: checkContextMatches,
+      ),
+    );
     void compare(String kind, Object? desired, Object? found) {
       if (_hash(desired) != _hash(found)) {
         differences.add('${table.name} $kind differs');

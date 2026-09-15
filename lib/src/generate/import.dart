@@ -244,6 +244,21 @@ Future<ImportedSchema> _importCatalog(
     }
     for (final column in info.columns) {
       final path = '$name.${column.name}';
+      if (column.computed != null &&
+          (info.primaryKey.contains(column.name) ||
+              (column.computed!.storage == ComputedStorage.virtual &&
+                  [
+                    ...info.uniqueKeys,
+                    ...info.indexes.map((i) => i.columns),
+                  ].any((key) => key.contains(column.name))))) {
+        issues.add(
+          SchemaImportIssue(
+            'IMPORT.COMPUTED_KEY',
+            path,
+            'Portable declarations cannot use computed primary keys or indexed virtual columns.',
+          ),
+        );
+      }
       if (_importType(column, db.dialect) == null) {
         issues.add(
           SchemaImportIssue(
@@ -262,7 +277,7 @@ Future<ImportedSchema> _importCatalog(
           ),
         );
       }
-      if (column.generated) {
+      if (column.generated && column.computed == null) {
         if (db.dialect == SqlDialect.postgres &&
             modes[column.name]![1] == 'd' &&
             modes[column.name]![2] == '' &&
@@ -280,6 +295,16 @@ Future<ImportedSchema> _importCatalog(
           );
         }
       }
+    }
+    if (info.columns.isNotEmpty &&
+        info.columns.every((c) => c.computed != null)) {
+      issues.add(
+        SchemaImportIssue(
+          'IMPORT.COMPUTED_TABLE',
+          name,
+          'Portable declarations need at least one ordinary column.',
+        ),
+      );
     }
     if (db.dialect == SqlDialect.sqlite &&
         info.primaryKey.length == 1 &&
@@ -357,6 +382,7 @@ final class _ImportNames {
     ...Keyword.keywords.keys,
     'table',
     'column',
+    'readColumn',
     'hashCode',
     'runtimeType',
     'toString',
@@ -494,6 +520,20 @@ ImportedSchema _importDeclarations(
       if (generated[info.name]!.contains(c.name)) b.writeln('@Id.generated()');
       if (c.declarationDefaultSql != null) {
         b.writeln('@Default.sql(${_literal(c.declarationDefaultSql!)})');
+      }
+      if (c.computed != null) {
+        final computed = c.declarationComputed!;
+        b.writeln(
+          '@Computed.sql(${_literal(computed.expression(dialect))}, storage: ComputedStorage.${computed.storage.name})',
+        );
+        issues.add(
+          SchemaImportIssue(
+            'IMPORT.COMPUTED_SQL',
+            '${info.name}.${c.name}',
+            'Computed SQL was read from ${dialect.name}; review expression portability before using another backend.',
+            blocking: false,
+          ),
+        );
       }
       if (type.$2 != null) b.writeln('@UseCodec(${type.$2})');
       b.writeln(

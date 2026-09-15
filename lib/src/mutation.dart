@@ -28,11 +28,12 @@ final class Mutation<F extends Fields> {
     this._rows,
   }) : _assignments = List.unmodifiable(assignments);
 
-  Mutation<F> onConflictDoNothing({List<Field<Object?>> Function(F)? target}) =>
-      _withConflict(target == null ? [] : target(_fields), const [], null);
+  Mutation<F> onConflictDoNothing({
+    List<ReadField<Object?>> Function(F)? target,
+  }) => _withConflict(target == null ? [] : target(_fields), const [], null);
 
   Mutation<F> onConflictUpdate({
-    required List<Field<Object?>> Function(F) target,
+    required List<ReadField<Object?>> Function(F) target,
     required List<Assignment> Function(F existing, F incoming) set,
   }) {
     if (_createFields == null) {
@@ -53,7 +54,7 @@ final class Mutation<F extends Fields> {
   }
 
   Mutation<F> _withConflict(
-    List<Field<Object?>> target,
+    List<ReadField<Object?>> target,
     List<Assignment> assignments,
     TableRef? incoming,
   ) {

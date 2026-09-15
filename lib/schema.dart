@@ -2,10 +2,11 @@
 /// never called with synthetic row values.
 library;
 
-import 'orm.dart' show Codec;
+import 'orm.dart' show Codec, ComputedStorage;
 export 'orm.dart'
     show
         Codec,
+        ComputedStorage,
         Codecs,
         SqlJson,
         Decimal,
@@ -52,6 +53,19 @@ final class Default {
 final class ClientDefault<T> {
   final T Function() factory;
   const ClientDefault(this.factory);
+}
+
+/// SQL computed by the database; omitted from generated writes.
+final class Computed {
+  final String expression;
+  final String? sqlite, postgres;
+  final ComputedStorage storage;
+  const Computed.sql(
+    this.expression, {
+    this.sqlite,
+    this.postgres,
+    this.storage = ComputedStorage.stored,
+  });
 }
 
 /// Signed integer column storage. SQL expression results retain the int codec.

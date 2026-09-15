@@ -79,6 +79,9 @@ final class SchemaSnapshot {
       nullable: nullable,
       generated: json['generated'] as bool,
       defaultSql: json['default'] as String?,
+      computed: json['computed'] == null
+          ? null
+          : _readComputed(json['computed'] as Map<String, Object?>),
       integerBits: json['integerBits'] as int?,
       decimalPrecision: json['decimalPrecision'] as int?,
       decimalScale: json['decimalScale'] as int?,
@@ -116,6 +119,7 @@ Map<String, Object?> _columnJson(Column<Object?> column) => {
   'nullable': column.nullable,
   'generated': column.generated,
   if (column.defaultSql != null) 'default': column.defaultSql,
+  if (column.computed != null) 'computed': _computedJson(column.computed!),
   if (column.integerBits != null && column.integerBits != 64)
     'integerBits': column.integerBits,
   if (column.decimalPrecision != null)

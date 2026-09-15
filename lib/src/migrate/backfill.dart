@@ -28,7 +28,9 @@ final class Backfill extends MigrationStep {
         set.entries.any(
           (e) =>
               e.value.trim().isEmpty ||
-              !table.columns.any((c) => c.name == e.key && !c.generated) ||
+              !table.columns.any(
+                (c) => c.name == e.key && !c.generated && c.computed == null,
+              ) ||
               table.primaryKey.contains(e.key),
         )) {
       throw ArgumentError(

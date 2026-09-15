@@ -12,6 +12,7 @@ final class _Field {
   final bool unique;
   final String? defaultSql;
   final String? clientDefault;
+  final ComputedColumn? computed;
   final int? integerBits;
   final int? decimalPrecision;
   final int? decimalScale;
@@ -27,6 +28,7 @@ final class _Field {
     this.unique = false,
     this.defaultSql,
     this.clientDefault,
+    this.computed,
     this.integerBits,
     this.decimalPrecision,
     this.decimalScale,
@@ -37,6 +39,12 @@ final class _Field {
     'nullable': nullable,
     'generated': generated,
     if (defaultSql != null) 'default': defaultSql,
+    if (computed != null)
+      'computed': {
+        'sqlite': computed!.sqlite,
+        'postgres': computed!.postgres,
+        'storage': computed!.storage.name,
+      },
     if (integerBits != null && integerBits != 64) 'integerBits': integerBits,
     if (decimalPrecision != null) 'decimalPrecision': decimalPrecision,
     if (decimalPrecision != null && decimalScale != null && decimalScale != 0)

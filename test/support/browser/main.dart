@@ -151,6 +151,69 @@ Future<void> main() async {
           await isolated.close();
         }
       });
+      await check('computed stored and virtual fields recompute across CRUD and migrations', () async {
+        final isolated = await memory();
+        try {
+          await initialize(isolated);
+          final row = await isolated.users.create(email: 'computed');
+          expect(
+            row.emailSize == 8 && row.upperNickname == 'GUEST',
+            'Computed creation differs',
+          );
+          await isolated.users
+              .byId(row.id)
+              .patch(email: .set('edited'), nickname: .set(null));
+          final updated = await isolated.users.single();
+          expect(
+            updated.emailSize == 6 && updated.upperNickname == null,
+            'Computed update differs',
+          );
+          final start = SchemaSnapshot(appSchema);
+          final initial = Migration.create('0001_browser', appSchema);
+          final target = SchemaSnapshot([
+            for (final table in appSchema)
+              if (table.name != 'users')
+                table
+              else
+                TableSchema(
+                  table.name,
+                  columns: [
+                    for (final c in table.columns)
+                      if (c.name != 'email_size')
+                        c
+                      else
+                        Column(
+                          'email_size',
+                          Codecs.integer,
+                          computed: const ComputedColumn('length(email) + 1'),
+                        ),
+                  ],
+                  primaryKey: table.primaryKey,
+                  uniqueKeys: table.uniqueKeys,
+                  foreignKeys: table.foreignKeys,
+                  indexes: table.indexes,
+                  checks: table.checks,
+                ),
+          ]);
+          final migration = Migration.diff(
+            '0002_computed',
+            from: start,
+            to: target,
+            previous: initial.checksum,
+          );
+          await Migrator(isolated).apply([initial, migration]);
+          expect(
+            (await isolated.users.single()).emailSize == 7,
+            'Migration did not recompute existing row',
+          );
+          expect(
+            (await verifySchema(isolated, target)).matches,
+            'Computed catalog differs',
+          );
+        } finally {
+          await isolated.close();
+        }
+      });
       await check(
         'generated CHECK enforcement and atomic constraint migrations',
         () async {

@@ -10,6 +10,12 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
       throw const OrmException('SCHEMA.DUPLICATE', 'Duplicate table name.');
     }
     final columns = <String>{};
+    if (table.columns.every((c) => c.computed != null)) {
+      throw const OrmException(
+        'SCHEMA.COMPUTED',
+        'A table needs at least one ordinary column.',
+      );
+    }
     final checkNames = <String>{};
     for (final check in table.checks) {
       if (check.expression(dialect).trim().isEmpty ||
@@ -23,6 +29,19 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
       }
     }
     for (final column in table.columns) {
+      if (column.computed case final computed?) {
+        if (computed.expression(dialect).trim().isEmpty ||
+            column.generated ||
+            column.defaultSql != null ||
+            column.clientDefault != null ||
+            (dialect == SqlDialect.sqlite &&
+                table.primaryKey.contains(column.name))) {
+          throw const OrmException(
+            'SCHEMA.COMPUTED',
+            'Computed columns require non-empty SQL, no identity/default, and cannot be a SQLite primary key.',
+          );
+        }
+      }
       if (column.decimalPrecision != null || column.decimalScale != null) {
         if (column.codec.sqlType != 'decimal' ||
             column.decimalPrecision == null ||
@@ -57,6 +76,19 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
         throw const OrmException(
           'SCHEMA.KEY',
           'Key references an unknown column.',
+        );
+      }
+      if (dialect == SqlDialect.postgres &&
+          key.any(
+            (name) => table.columns.any(
+              (c) =>
+                  c.name == name &&
+                  c.computed?.storage == ComputedStorage.virtual,
+            ),
+          )) {
+        throw const OrmException(
+          'SCHEMA.COMPUTED',
+          'PostgreSQL 18 does not support indexes or unique keys on virtual computed columns.',
         );
       }
     }
@@ -141,6 +173,11 @@ String _columnDefinition(Column<Object?> c, SqlDialect dialect) {
     );
   }
   if (!c.nullable) b.write(' NOT NULL');
+  if (c.computed case final computed?) {
+    b.write(
+      ' GENERATED ALWAYS AS (${_coerceColumn(computed.expression(dialect), c, dialect)}\n) ${computed.storage.name.toUpperCase()}',
+    );
+  }
   if (c.defaultSql case final value?) {
     b.write(' DEFAULT (${_coerceColumn(value, c, dialect)})');
   }
@@ -255,6 +292,7 @@ final class ColumnInfo {
   final bool nullable;
   final String? defaultSql;
   final bool generated;
+  final ComputedColumn? computed;
   final int? integerBits;
   final String? collation;
   final int? decimalPrecision;
@@ -265,6 +303,7 @@ final class ColumnInfo {
     required this.nullable,
     this.defaultSql,
     this.generated = false,
+    this.computed,
     this.integerBits,
     this.collation,
     this.decimalPrecision,
@@ -281,6 +320,9 @@ final class ColumnInfo {
             ) ??
             defaultSql
       : defaultSql;
+
+  /// SQL suitable for a declaration, without ORM storage coercion wrappers.
+  ComputedColumn? get declarationComputed => _declarationComputed(this);
 }
 
 Future<List<ColumnInfo>> inspectColumns(
@@ -303,6 +345,7 @@ Future<List<ColumnInfo>> inspectColumns(
     );
     final sql = ddl.rows.firstOrNull?.first as String? ?? '';
     final checks = _sqliteChecks(sql);
+    final computed = _sqliteComputedColumns(sql);
     final collations = {
       for (final c in _sqliteColumnCollations(sql))
         _sqliteName(c.column): c.collation,
@@ -326,6 +369,7 @@ Future<List<ColumnInfo>> inspectColumns(
           nullable: row[3] == 0 && !(row[5] != 0 && rowidPrimaryKey),
           defaultSql: row[4] as String?,
           generated: (row[6] as int) > 0,
+          computed: computed[_sqliteName(name)],
           integerBits: type == 'INTEGER'
               ? _sqliteIntegerBits(name, checks)
               : null,
@@ -340,7 +384,7 @@ Future<List<ColumnInfo>> inspectColumns(
       '''
 SELECT a.attname, pg_catalog.format_type(a.atttypid, a.atttypmod),
        NOT a.attnotnull, pg_get_expr(d.adbin, d.adrelid),
-       a.attidentity <> '' OR a.attgenerated <> ''
+       a.attidentity <> '' OR a.attgenerated <> '', a.attgenerated::text
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -359,8 +403,16 @@ ORDER BY a.attnum''',
           'TIMESTAMPTZ',
         ),
         nullable: row[2] as bool,
-        defaultSql: row[3] as String?,
+        defaultSql: row[5] == '' ? row[3] as String? : null,
         generated: row[4] as bool,
+        computed: row[5] == ''
+            ? null
+            : ComputedColumn(
+                row[3] as String,
+                storage: row[5] == 's'
+                    ? ComputedStorage.stored
+                    : ComputedStorage.virtual,
+              ),
         decimalPrecision: _postgresDecimalDigits(row[1] as String)?.$1,
         decimalScale: _postgresDecimalDigits(row[1] as String)?.$2,
         integerBits: switch ((row[1] as String).toUpperCase()) {
@@ -381,17 +433,19 @@ Future<List<String>> verifyColumns(
 ) async {
   final differences = <String>[];
   for (final table in tables) {
-    final actual = {
-      for (final c in await inspectColumns(db, table.name)) c.name: c,
-    };
+    final inspected = await inspectColumns(db, table.name);
+    final actual = {for (final c in inspected) c.name: c};
+    var contextMatches = true;
     for (final expected in table.columns) {
       final column = actual.remove(expected.name);
       final path = '${table.name}.${expected.name}';
       if (column == null) {
+        contextMatches = false;
         differences.add('$path is missing');
         continue;
       }
       if (column.storageType != _columnStorageType(expected, db.dialect)) {
+        contextMatches = false;
         differences.add('$path type is ${column.storageType}');
       }
       if (column.nullable != expected.nullable) {
@@ -412,6 +466,14 @@ Future<List<String>> verifyColumns(
     for (final extra in actual.keys) {
       differences.add('${table.name}.$extra is unmanaged');
     }
+    differences.addAll(
+      await _verifyComputed(
+        db,
+        table,
+        inspected,
+        contextMatches: contextMatches,
+      ),
+    );
   }
   return differences;
 }
