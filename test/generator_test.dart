@@ -43,6 +43,7 @@ void main() {
     () async {
       for (final source in [
         'example/schema.dart',
+        'example/teams/schema.dart',
         'test/support/relations/schema.dart',
         'test/support/codecs/schema.dart',
         'test/support/integers/schema.dart',

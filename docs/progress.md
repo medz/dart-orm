@@ -27,6 +27,7 @@ requirements and distinguishes direct coverage from missing evidence.
 - Generated table accessors, named create parameters, byId, typed patches and schema snapshots.
 - Database computed expressions with stored/virtual modes, typed read-only fields, catalog/import metadata and reviewed migrations.
 - Batched and nested relation projections, per-parent SQL window pagination, optional/required relations.
+- Runnable generated many-to-many membership example with role/time payloads, composite keys, bidirectional queries, transactional writes and measured query/row counts.
 - Explicit `relatesTo` query navigation without a database FK, including nonunique/composite/self/inverse edges and unchanged physical snapshots.
 - Correlated relation any/none/every/count; UNKNOWN fails every, and empty sets satisfy it.
 - Dialect DDL, cyclic PostgreSQL FK creation, immutable migration checksums and atomic history.
@@ -497,9 +498,30 @@ pass 17 scenarios, including computed updates and migration recomputation alongs
 the existing OPFS recovery/upgrade scenarios. The captured browser report records
 both runs; these do not establish throughput or native Flutter behavior.
 
+Eighteen many-to-many checks exercise the generated `example/teams` schema against
+SQLite and PostgreSQL. Memberships carry an enum role and UTC joining time, with
+two foreign keys and a composite primary key. Forward/reverse pagination returns
+only requested associations; root pagination and empty results remain independent.
+Nested team rosters deduplicate shared keys, parameter limits trigger bounded
+chunks, and correlated predicates/counts remain in one statement. Tests assert
+actual statement counts and fetched-row volume alongside payloads and endpoint
+identity. Transactions roll back partial endpoint/association writes; composite-key
+conflicts preserve joining times, unlinking preserves endpoints, cascades remove
+only affected memberships, and watches track committed payload/endpoint changes.
+
+Six invalid generated API uses fail analysis, covering composite keys, enum
+payloads, result shapes and nonexistent implicit graph writes. The new example is
+part of deterministic generation checks and runs directly, reporting two SQL
+statements returning one root and two association rows. The targeted native
+invocation passes 54 checks (many-to-many, generator and types), and static analysis
+reports no issues. This stage adds examples and acceptance coverage over the
+existing runtime; the last full-suite run remains the 761-check invocation above.
+Real Chrome JS and Dart WASM each pass 18 scenarios. Both exercise the same teams
+schema, checking association payloads, per-parent limits, two-statement reads,
+transaction updates and endpoint cascades. The browser report retains both runs.
+
 ## Still required for the goal
 
-- Explicit generated junction-table/many-to-many acceptance with payload fields and query-count checks.
 - Advanced-query capability and edge-case review.
 - Broader unmanaged-object catalog coverage.
 - Further native type coverage.

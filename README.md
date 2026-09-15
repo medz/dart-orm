@@ -67,6 +67,10 @@ defaults for database-generated values, with explicit omission/value/default inp
 Declare [computed columns](docs/computed.md) for database expressions with typed
 read-only results, explicit stored/virtual modes and reviewed migrations.
 
+Model [many-to-many memberships](docs/relations.md#many-to-many-with-business-fields)
+with an explicit association table, typed business fields and per-parent pagination.
+Run `dart run example/teams/main.dart` to see its selected records and SQL counts.
+
 For complex SQL files, [generate named queries](docs/named-sql.md) with typed
 Record parameters/results, native database structure checks and the same query
 composition, transaction and streaming APIs.

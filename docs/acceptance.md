@@ -20,6 +20,7 @@ platform limits are recorded in [progress](progress.md).
 | §6: joins, grouping/HAVING, subqueries, CTEs, windows and UNION | `union_test`, `relation_test`, `watch_test`, decimal/temporal query suites; exported-column and scope checks |
 | §6: named SQL with typed parameters/results and database structure checking | `named_sql_test`, `named_sql_generation_test`, real CLI/build_runner workflows |
 | §§6–7: stable cursors, optional/required to-one, batched lists and per-parent limits | `database_test`, `relation_test`, cursor checks in numeric/temporal suites; actual query counts and nullable presence |
+| §§4.2, 7, 12: many-to-many business records | `example/teams`, `many_to_many_test`, generated-type negatives and browser scenario: two FKs, composite membership keys, role/time payloads, bidirectional and nested projections, per-parent limits, parameter chunks, transaction/upsert/cascade/watch and actual query/row counts; [usage](relations.md#many-to-many-with-business-fields) |
 | §8: create/patch/delete, absent versus NULL/default, atomic expression writes, batch/upsert/returning | Generated client and `database_test`; later-chunk failure rolls back earlier chunks |
 | §9: explicit sessions, savepoints, lifetime, cancellation, unknown commits, retries and acquisition limits | `transaction_test`, `retry_test`, `acquisition_test`, `stream_test`; real database interruption and state readback |
 | §10: reviewed snapshots/diffs, explicit rename/conversion, history, baseline/drift and recoverable migrations | `migration_test`, `migration_recovery_test`, `backfill_test`, `schema_version_test`, import and CLI suites |
@@ -35,7 +36,6 @@ commands and limits in [SQLite web](sqlite-web.md).
 
 | Gate from the design | Evidence still required |
 | --- | --- |
-| §§4.2, 7, 12: many-to-many business records | A generated junction-table example with two FKs and payload fields; typed nested projections, per-parent limits, writes and query-count assertions on both databases. Existing nested relations are useful evidence but do not replace this named scenario. |
 | §§5, 10–11: remaining type/catalog capability review | Verify supported types against imported precision, defaults, native representation and migration behavior. Temporal column precision/conversion remains open in [types](types.md). Unsupported extensions must stay explicit. |
 | §12: inspectable cost | `compile` and `QueryEvent` expose SQL/counts/driver elapsed time. Separate acquisition/decoding measurements and a clearly non-executing plan-inspection path still need implementation/evidence. No claim that elapsed time isolates server CPU. |
 | §13.3: runtime cost comparison | Same driver, SQL, values and output shape for raw versus ORM reads/projections/relations; query counts, returned volume, latency distribution, throughput, memory/allocation and pool wait, with explicit local/RTT conditions. Decimal microbenchmarks do not cover this gate. |

@@ -9,6 +9,7 @@ import 'package:web/web.dart' as web;
 
 import 'schema.orm.dart';
 import 'schema.dart' as models;
+import 'teams.dart';
 
 final checks = <Map<String, Object?>>[];
 final wasm = Uri.parse('/sqlite3.wasm');
@@ -102,6 +103,10 @@ Future<void> main() async {
       await report({'passed': true, 'checks': checks});
       return;
     }
+    await check(
+      'many-to-many payloads, per-parent limits, transaction writes and cascade preserve query counts',
+      () => checkTeams(wasm, worker),
+    );
     final db = await memory();
     try {
       await check('memory migrations and verified foreign keys', () async {

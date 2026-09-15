@@ -1,0 +1,119 @@
+{
+  "format": 1,
+  "tables": [
+    {
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "generated": false
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [],
+      "foreignKeys": []
+    },
+    {
+      "name": "teams",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "generated": false
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [],
+      "foreignKeys": []
+    },
+    {
+      "name": "memberships",
+      "columns": [
+        {
+          "name": "team_id",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "user_id",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "nullable": false,
+          "generated": false,
+          "default": "'member'"
+        },
+        {
+          "name": "joined_at",
+          "type": "instant",
+          "nullable": false,
+          "generated": false
+        }
+      ],
+      "primaryKey": [
+        "team_id",
+        "user_id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [
+        {
+          "name": "user_memberships",
+          "columns": [
+            "user_id",
+            "joined_at",
+            "team_id"
+          ],
+          "unique": false
+        }
+      ],
+      "foreignKeys": [
+        {
+          "columns": [
+            "team_id"
+          ],
+          "target": "teams",
+          "targetColumns": [
+            "id"
+          ],
+          "onDelete": "CASCADE"
+        },
+        {
+          "columns": [
+            "user_id"
+          ],
+          "target": "users",
+          "targetColumns": [
+            "id"
+          ],
+          "onDelete": "CASCADE"
+        }
+      ]
+    }
+  ]
+}

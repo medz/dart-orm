@@ -55,6 +55,97 @@ rules, so declare them explicitly in the imported schema. This API covers
 same-database key equality, including self relations; it does not implement
 cross-database queries or arbitrary relationship predicate declarations.
 
+## Many-to-many with business fields
+
+An explicit association table gives each membership its own role and joining time.
+The [teams example](../example/teams/schema.dart) uses two foreign keys and a
+composite primary key, with no artificial membership ID:
+
+```dart
+enum MembershipRole { owner, member }
+typedef Membership = ({
+  int teamId,
+  int userId,
+  @Default.sql("'member'") MembershipRole role,
+  DateTime joinedAt,
+});
+final memberships = entity<Membership>();
+final membershipKey = memberships.primaryKey((m) => (m.teamId, m.userId));
+final team = memberships.key((m) => m.teamId)
+    .references(teams.key((t) => t.id), inverse: 'memberships', onDelete: .cascade);
+final user = memberships.key((m) => m.userId)
+    .references(users.key((u) => u.id), inverse: 'memberships', onDelete: .cascade);
+```
+
+`teams` and `users` are separately declared entities. The resulting navigation is
+`user.memberships → membership.team`, or `team.memberships → membership.user`.
+Select the relationship's payload together with the opposite endpoint:
+
+```dart
+final cards = await db.users.select((u) => (
+  u.name,
+  u.memberships.orderBy((m) => [m.joinedAt.desc(), m.teamId.desc()]).take(2)
+    .select((m) => (m.team.select((t) => t.name).required(), m.role)
+      .map((team, role) => (team: team, role: role))).many(),
+).map((name, teams) => (name: name, teams: teams))).get();
+```
+
+This returns a typed list of user names and membership cards. Each membership's
+role belongs to that association; two users sharing a team can have different
+roles. An empty relationship returns `[]`. Use a deterministic tie breaker with
+per-parent pagination. Root pagination is independent of the membership limits.
+
+Create and update memberships through their ordinary generated table API:
+
+```dart
+await db.transaction((tx) async {
+  await tx.memberships.create(teamId: 10, userId: 1,
+      role: .set(MembershipRole.owner), joinedAt: DateTime.now());
+  await tx.memberships.byId(teamId: 20, userId: 1)
+      .patch(role: .set(MembershipRole.member));
+});
+await db.memberships.byId(teamId: 10, userId: 1).delete().execute();
+```
+
+The composite key rejects duplicate memberships. Both endpoints must already
+exist, or be created earlier in the same transaction. Unlinking deletes only the
+association. Deleting an endpoint follows the declared cascade, removing its
+memberships while retaining opposite endpoints. Composite-key `onConflictUpdate`
+can change a role while leaving the original joining time unchanged. There are
+no hidden object-graph saves or implicit writes through a navigation getter.
+
+The example declares one index beginning with `user_id` for reverse traversal;
+its primary key already begins with `team_id`. Additional ordering indexes depend
+on measured query patterns, not an index added automatically for every relation.
+
+Real SQLite/PostgreSQL checks establish these statement counts for the fixture,
+within the available parameter capacity:
+
+| Selection | SQL statements | Rows returned by each statement |
+| --- | --- | --- |
+| Four users, latest two memberships each, joined team names | 2 | 4, 5 |
+| Three teams, second member per team, joined user names | 2 | 3, 2 |
+| Four users, all memberships/teams, each team's complete roster | 3 | 4, 6, 6 |
+| Membership counts, every-member predicate and team-existence predicate | 1 | 4 |
+| Empty root result with a membership selection | 1 | 0 |
+
+Parameter chunking adds statements: with a deliberately limited five-parameter
+driver, a member-role filter and per-user limit execute one root plus two child
+statements. Roster lookups deduplicate shared team keys. These checks establish
+returned volume and statement counts, not throughput, physical database page reads
+or optimizer cost. Snapshot-consistency rules below still apply to multi-statement
+loads. `watch()` observes committed association and selected endpoint changes.
+
+Run the self-contained SQLite example:
+
+```sh
+dart run bin/orm.dart generate example/teams/schema.dart
+dart run example/teams/main.dart
+```
+
+It prints the selected records, SQL statement count and returned row counts. The
+same generated schema is exercised against PostgreSQL by `many_to_many_test.dart`.
+
 ## Single relationships
 
 `one()` returns an optional related result. `required()` checks that a related

@@ -5,6 +5,52 @@ import 'package:analyzer/dart/analysis/results.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('junction-table keys, enum payloads and nested results keep generated types', () async {
+    final dir = await Directory('.dart_tool/orm-many-types')
+        .create(recursive: true);
+    final file = File('${dir.path}/negative.dart').absolute;
+    final invalid = [
+      'db.memberships.byId(1);',
+      'db.memberships.byId(teamId: 1);',
+      "db.memberships.create(teamId: 'wrong', userId: 1, joinedAt: DateTime.now());",
+      "db.memberships.byId(teamId: 1, userId: 1).patch(role: const Change.set('owner'));",
+      'db.users.select((u) => u.memberships.connect(1));',
+      'final Future<List<String>> rows = db.users.select((u) => u.memberships.many()).get();',
+    ];
+    await file.writeAsString(
+      "import 'package:orm/orm.dart';\nimport '../../example/teams/schema.orm.dart';\nvoid wrong(Database<Sqlite> db) {\n${invalid.join('\n')}\n}\n",
+    );
+    final contexts = AnalysisContextCollection(includedPaths: [file.path]);
+    try {
+      final result =
+          await contexts
+                  .contextFor(file.path)
+                  .currentSession
+                  .getResolvedUnit(file.path)
+              as ResolvedUnitResult;
+      final errors = result.diagnostics
+          .where((e) => e.severity.name.toLowerCase() == 'error')
+          .toList();
+      expect(
+        errors.any(
+          (e) => e.diagnosticCode.lowerCaseName.contains('uri_does_not_exist'),
+        ),
+        false,
+      );
+      for (var i = 0; i < invalid.length; i++) {
+        expect(
+          errors.any(
+            (e) => result.lineInfo.getLocation(e.offset).lineNumber == i + 4,
+          ),
+          true,
+          reason: invalid[i],
+        );
+      }
+    } finally {
+      await contexts.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
   test('computed generated fields are statically readable and never writable', () async {
     final dir = await Directory('.dart_tool/orm-computed-types')
         .create(recursive: true);
