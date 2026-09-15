@@ -60,29 +60,6 @@ final class Migration {
     allowDestructive: allowDestructive,
     using: using,
   );
-  factory Migration.fromJson(Map<String, Object?> json) {
-    if (json['format'] != 2) {
-      throw const OrmException(
-        'MIGRATION.FORMAT',
-        'Unsupported migration format.',
-      );
-    }
-    final steps = json['steps'] as Map<String, Object?>;
-    return Migration.steps(
-      json['id'] as String,
-      {
-        for (final entry in steps.entries)
-          SqlDialect.values.byName(entry.key): [
-            for (final step in entry.value as List<Object?>)
-              MigrationStep.fromJson(step as Map<String, Object?>),
-          ],
-      },
-      snapshot: json['snapshot'] == null
-          ? null
-          : SchemaSnapshot.fromJson(json['snapshot'] as Map<String, Object?>),
-      previous: json['previous'] as String?,
-    );
-  }
   Map<String, Object?> toJson() => {
     'format': 2,
     'id': id,
@@ -334,6 +311,23 @@ void _validateApplied(
         'Applied migration ${applied[i].id} differs from local history.',
       );
     }
+  }
+}
+
+/// Validates every target supported by the whole history. A PostgreSQL-only step
+/// narrows the history to PostgreSQL; it does not need a fake SQLite equivalent.
+void validateMigrationHistory(List<Migration> migrations) {
+  final targets = SqlDialect.values
+      .where((dialect) => migrations.every((m) => m.steps.containsKey(dialect)))
+      .toList();
+  if (targets.isEmpty) {
+    throw const OrmException(
+      'MIGRATION.TARGET',
+      'Migration history has no common database target.',
+    );
+  }
+  for (final dialect in targets) {
+    validateMigrations(migrations, dialect: dialect);
   }
 }
 

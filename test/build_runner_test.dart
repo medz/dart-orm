@@ -25,16 +25,27 @@ final namedRows = sqlQuery<QueryRow, ({int minimum})>(sqlite: 'rows.sql');
       const sql = 'SELECT title, status FROM rows_0 WHERE score >= :minimum';
       await fixture.write('lib/rows.sql', sql);
       final client = fixture.file('lib/schema.orm.dart');
-      final snapshot = fixture.file('lib/schema.orm.json');
+      final snapshot = fixture.file('lib/schema.snapshot.dart');
       final queries = fixture.file('lib/queries.queries.dart');
+      await fixture.write('bin/read_schema.dart', r'''
+import 'dart:convert';
+import '../lib/schema.snapshot.dart';
+void main() => print('@@schema ${jsonEncode(schema.toJson())}');
+''');
+      Future<Map<String, Object?>> inspectSnapshot() async {
+        final result = await fixture.run(['run', 'bin/read_schema.dart']);
+        final line = result.output
+            .split('\n')
+            .firstWhere((l) => l.startsWith('@@schema '));
+        return jsonDecode(line.substring('@@schema '.length))
+            as Map<String, Object?>;
+      }
+
       final first = await fixture.run(['run', 'build_runner', 'build']);
-      expect(first.output, contains('wrote 4 outputs'));
+      expect(first.output, contains('wrote 3 outputs'));
       expect(await queries.readAsString(), contains('NamedRowsFields'));
       expect(await client.exists(), true);
-      expect(
-        (jsonDecode(await snapshot.readAsString()) as Map)['tables'],
-        hasLength(1),
-      );
+      expect((await inspectSnapshot())['tables'], hasLength(1));
       final before = await client.stat();
       final unchanged = await fixture.run(['run', 'build_runner', 'build']);
       expect(unchanged.output, contains('wrote 0 outputs'));
@@ -56,8 +67,7 @@ final namedRows = sqlQuery<QueryRow, ({int minimum})>(sqlite: 'rows.sql');
       await watcher.next();
       expect(await client.readAsString(), contains('"ready-now"'));
       expect(await queries.readAsString(), contains('"ready-now"'));
-      final json =
-          jsonDecode(await snapshot.readAsString()) as Map<String, Object?>;
+      final json = await inspectSnapshot();
       final tables = json['tables'] as List<Object?>;
       final columns =
           (tables.single as Map<String, Object?>)['columns'] as List<Object?>;

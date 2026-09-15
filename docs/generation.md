@@ -12,8 +12,10 @@ database.
 dart run orm generate lib/schema.dart
 ```
 
-This writes `lib/schema.orm.dart` and `lib/schema.orm.json`. The latter is the
-physical schema snapshot used by migration tools. For an explicitly chosen
+This writes `lib/schema.orm.dart` and `lib/schema.snapshot.dart`. The latter is the
+physical schema snapshot used by migration tools. It is a standalone Dart library
+with no application imports. An explicit `database.dart` output gets an adjacent
+`database.snapshot.dart`. For an explicitly chosen
 output path:
 
 ```sh
@@ -60,7 +62,7 @@ next to their input files. Import generated clients with prefixes if their
 declaration names overlap.
 
 The output of `lib/schema.dart` is always `lib/schema.orm.dart` and
-`lib/schema.orm.json`. There are no ORM-specific builder options. Use the CLI's
+`lib/schema.snapshot.dart`. There are no ORM-specific builder options. Use the CLI's
 output argument for other locations. `build_runner` owns its build cache and output
 cleanup; do not manually edit that cache or generated source.
 
@@ -87,7 +89,7 @@ the [build_runner documentation](https://pub.dev/packages/build_runner).
 
 Both entry points validate the schema's Dart semantic errors before emission.
 The builder also rejects non-library roots, unknown codec mappings and duplicate
-enum storage labels. Formatting and snapshot serialization finish before it
+enum storage labels. Formatting of client and snapshot source finish before it
 writes either output. A failed build reports an error; repairing the input lets
 the same watcher generate again.
 
@@ -122,7 +124,7 @@ measurements. The first build includes build_runner's builder compilation. Run
 the benchmark independently of test suites or other builds, with the generator
 source fixed for the entire run.
 
-Recorded on Apple M3 Max with Dart 3.13.3 and build_runner 2.16.1 (seconds):
+Historical measurements before the Dart snapshot workflow, recorded on Apple M3 Max with Dart 3.13.3 and build_runner 2.16.1 (seconds):
 
 | Models | First build | Unchanged build | Watch field edit | Watch import edit | Analyze |
 | --- | ---: | ---: | ---: | ---: | ---: |

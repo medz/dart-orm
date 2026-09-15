@@ -76,7 +76,7 @@ void main() {
         expect(draft.entities, {'accounts': 'accounts', 'notes': 'notes'});
         expect(draft.dart, contains('@Id.generated()'));
         final client = await generate(draft);
-        final snapshot = SchemaSnapshot.fromJson(client.snapshot);
+        final snapshot = client.snapshot;
         expect((await verifySchema(db, snapshot)).differences, isEmpty);
         final history = [Migration.create('0001_baseline', snapshot.tables)];
         await Migrator(db).baseline(history, expected: snapshot);
@@ -201,13 +201,7 @@ Future<void> main() async {
           expect(draft.fields[name]!.values.toSet().length, columns.length);
         }
         final client = await generate(draft);
-        expect(
-          (await verifySchema(
-            db,
-            SchemaSnapshot.fromJson(client.snapshot),
-          )).differences,
-          isEmpty,
-        );
+        expect((await verifySchema(db, client.snapshot)).differences, isEmpty);
         final analysis = await Process.run(Platform.resolvedExecutable, [
           'analyze',
           '${directory.path}/schema.dart',
@@ -244,13 +238,7 @@ Future<void> main() async {
         final draft = await importSchema(db);
         expect(draft.issues, isEmpty);
         final result = await generate(draft);
-        expect(
-          (await verifySchema(
-            db,
-            SchemaSnapshot.fromJson(result.snapshot),
-          )).differences,
-          isEmpty,
-        );
+        expect((await verifySchema(db, result.snapshot)).differences, isEmpty);
         final subset = await importSchema(db, tables: ['links']);
         expect(subset.hasBlockingIssues, true);
         expect(subset.issues.single.code, 'IMPORT.RELATION');
@@ -352,10 +340,7 @@ Future<void> main() async {
             expect(draft.dart, contains('SqlJson? document'));
             final result = await generate(draft);
             expect(
-              (await verifySchema(
-                db,
-                SchemaSnapshot.fromJson(result.snapshot),
-              )).differences,
+              (await verifySchema(db, result.snapshot)).differences,
               isEmpty,
             );
           }
@@ -445,13 +430,7 @@ FOR EACH ROW EXECUTE FUNCTION normalize_label()'''),
           }
         }
         final result = await generate(draft);
-        expect(
-          (await verifySchema(
-            db,
-            SchemaSnapshot.fromJson(result.snapshot),
-          )).differences,
-          isEmpty,
-        );
+        expect((await verifySchema(db, result.snapshot)).differences, isEmpty);
         // Read-only import and verification must leave the trigger operational.
         await db.execute(
           SqlCommand(
@@ -555,7 +534,7 @@ USING (id > 0) WITH CHECK (id < 100)'''),
               hasLength(2),
             );
             final generated = await generate(draft);
-            final expected = SchemaSnapshot.fromJson(generated.snapshot);
+            final expected = generated.snapshot;
             final baseline = await Migrator(db).baseline([
               Migration.create('0001_protected', expected.tables),
             ], expected: expected);

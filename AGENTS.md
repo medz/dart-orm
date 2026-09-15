@@ -13,5 +13,9 @@ This branch is a new implementation. The design reference is
 - Preserve immutable migration history and never infer destructive renames.
 - Prefer small Conventional Commits. Do not push without explicit authorization.
 - Keep `docs/progress.md` accurate, including unfinished work and validation limits.
+- Schema snapshots and saved migrations are Dart source. Retire the old JSON file
+  workflow directly; do not add compatibility readers or parallel output modes.
+- Keep historical migration definitions independent of current application models.
+  Persist reviewed fingerprints and use static imports for migration registration.
 
 Commands: `dart run bin/orm.dart`, `dart analyze`, `dart test`.

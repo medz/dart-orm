@@ -29,16 +29,19 @@ may reference the same file. Paths are relative to the declaring Dart library.
 
 ```sh
 dart run orm queries generate lib/queries.dart
-dart run orm queries check --manifest lib/queries.queries.json --sqlite app.db
-dart run orm queries check --manifest lib/queries.queries.json \
+dart run orm queries check --source lib/queries.dart --sqlite app.db
+dart run orm queries check --source lib/queries.dart \
   --postgres-env DATABASE_URL --database-schema public
 ```
 
-Generation writes `queries.queries.dart` and `queries.queries.json`. It works
+Generation writes only `queries.queries.dart`. It works
 offline, analyzes source types and codecs, and verifies that every dialect's
-parameter names match the declared record. Commit both outputs with the SQL and
-source declaration. `queries check` first re-analyzes the source and compares both
-outputs; stale SQL, declarations or edited generated code require regeneration.
+parameter names match the declared record. Commit this output with the SQL and
+source declaration. `queries check` first re-analyzes the source and compares the
+generated Dart code; stale SQL, declarations or edited generated code require regeneration.
+
+For a custom generated location, add `--output path.dart` to `queries check`.
+The programmatic equivalent is `checkGeneratedQueries(source, output: path)`.
 
 Import the generated file to use the method:
 

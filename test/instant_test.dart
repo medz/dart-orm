@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -8,6 +7,7 @@ import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
 import 'support/instants/schema.orm.dart';
+import 'support/instants/m0001_legacy.dart' as historical;
 
 DateTime instant(String value) => Codecs.dateTime.decode(value);
 
@@ -71,11 +71,7 @@ void main() {
     );
   });
 
-  Future<Migration> legacy() async => Migration.fromJson(
-    jsonDecode(
-      await File('test/support/instants/0001_legacy.json').readAsString(),
-    ) as Map<String, Object?>,
-  );
+  Future<Migration> legacy() async => historical.migration;
   test(
     'historical migration checksum and timestamp tag remain immutable',
     () async {
@@ -89,12 +85,7 @@ void main() {
         first.snapshot!.tables.single.columns.first.codec.sqlType,
         'timestamp',
       );
-      expect(
-        first.toJson(),
-        jsonDecode(
-          await File('test/support/instants/0001_legacy.json').readAsString(),
-        ),
-      );
+      expect(first.checksum, historical.migrationChecksum);
       expect(Codecs.dateTime.sqlType, 'instant');
     },
   );
@@ -313,10 +304,7 @@ void main() {
           await file.writeAsString(imported.dart);
           final generated = await generateSchema(file.path);
           expect(
-            (await verifySchema(
-              db,
-              SchemaSnapshot.fromJson(generated.snapshot),
-            )).differences,
+            (await verifySchema(db, generated.snapshot)).differences,
             isEmpty,
           );
         } finally {

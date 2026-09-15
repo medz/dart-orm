@@ -214,10 +214,7 @@ void main() {
               await source.writeAsString(imported.dart);
               final generated = await generateSchema(source.path);
               expect(
-                (await verifySchema(
-                  db,
-                  SchemaSnapshot.fromJson(generated.snapshot),
-                )).differences,
+                (await verifySchema(db, generated.snapshot)).differences,
                 isEmpty,
               );
             } finally {
@@ -264,8 +261,7 @@ void main() {
                   storage == ComputedStorage.stored ? 1 : 0,
                 );
               }
-              await Migrator(db)
-                  .apply([initial, Migration.fromJson(add.toJson())]);
+              await Migrator(db).apply([initial, add]);
               expect(
                 (await db.execute(SqlCommand('SELECT total FROM scores'))).rows,
                 [
@@ -485,10 +481,7 @@ void main() {
             await file.writeAsString(imported.dart);
             final result = await generateSchema(file.path);
             expect(
-              (await verifySchema(
-                db,
-                SchemaSnapshot.fromJson(result.snapshot),
-              )).differences,
+              (await verifySchema(db, result.snapshot)).differences,
               isEmpty,
             );
           } finally {
@@ -548,6 +541,5 @@ void main() {
       ),
       throwsArgumentError,
     );
-    expect(SchemaSnapshot.fromJson(stored.toJson()).checksum, stored.checksum);
   });
 }

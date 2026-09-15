@@ -6,7 +6,8 @@ phase; SQLite executes through `package:orm/sqlite.dart` in its worker isolate.
 
 The legacy schema stores two notes. The current schema preserves the physical
 `body` column while exposing `text`, adds a defaulted `done` field and a related
-comments table. Both migrations are saved immutable JSON assets. The application
+comments table. Both migrations are fixed Dart libraries with recorded fingerprints, imported
+through a static registry and compiled into the APK. No migration assets are loaded. The application
 checks generated CRUD, transaction rollback, relation projections, watch delivery,
 cancellation, read-only reopening and process persistence.
 

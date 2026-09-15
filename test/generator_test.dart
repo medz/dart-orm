@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:convert';
 
 import 'package:orm/generate.dart';
 import 'package:test/test.dart';
@@ -18,6 +17,25 @@ void main() {
     return generateSchema(file.path);
   }
 
+  test('client and snapshot paths cannot overwrite the declaration', () async {
+    const declaration =
+        "import 'package:orm/schema.dart';\ntypedef Row = ({int id});\nfinal rows = entity<Row>();\n";
+    for (final (name, outputName) in [
+      ('same.dart', 'same.dart'),
+      ('overlap.snapshot.dart', 'overlap.dart'),
+    ]) {
+      final source = File('${fixtures.path}/$name');
+      final output = File('${fixtures.path}/$outputName');
+      await source.writeAsString(declaration);
+      await expectLater(
+        writeGeneratedSchema(source.path, output: output.path),
+        throwsA(isA<GenerationException>()),
+      );
+      expect(await source.readAsString(), declaration);
+      if (name != outputName) expect(await output.exists(), false);
+    }
+  });
+
   test('record annotations, physical names, relations and snapshots', () async {
     final result = await generateSchema('example/schema.dart');
     expect(result.dart, contains('Future<models.User> create('));
@@ -26,7 +44,7 @@ void main() {
       result.dart,
       contains('Relation<models.Post, PostsFields> get posts'),
     );
-    final tables = result.snapshot['tables'] as List<Object?>;
+    final tables = result.snapshot.toJson()['tables'] as List<Object?>;
     expect(tables.length, 2);
     expect((tables[1] as Map<String, Object?>)['foreignKeys'], [
       {
@@ -70,8 +88,8 @@ void main() {
           await File('$base.orm.dart').readAsString(),
         );
         expect(
-          result.snapshot,
-          jsonDecode(await File('$base.orm.json').readAsString()),
+          result.snapshotDart,
+          await File('$base.snapshot.dart').readAsString(),
         );
       }
     },
@@ -270,7 +288,7 @@ final rows = entity<Row>();
     final result = await generateSchema(source);
     expect(result.dart, contains('models.Optional'));
     expect(result.dart, contains('models.valueCodec.nullable()'));
-    final table = (result.snapshot['tables'] as List).single as Map;
+    final table = (result.snapshot.toJson()['tables'] as List).single as Map;
     final columns = table['columns'] as List;
     expect((columns[1] as Map)['nullable'], true);
   });
@@ -432,7 +450,7 @@ final events = entity<Event>();
 $source
 final matchingUsers = events.key((e) => e.label).relatesTo(users.key((u) => u.label), inverse: 'events');
 ''');
-    expect(after.snapshot, before.snapshot);
+    expect(after.snapshot.toJson(), before.snapshot.toJson());
     expect(after.dart, contains('get matchingUsers'));
     expect(after.dart, contains('get events'));
     expect(
@@ -453,7 +471,7 @@ final events = entity<Event>();
 final ownerAccount = events.key((e) => e.owner).references(users.key((u) => u.id));
 final lookupAccount = events.key((e) => e.lookup).relatesTo(users.key((u) => u.id));
 ''');
-      final table = (result.snapshot['tables'] as List).last as Map;
+      final table = (result.snapshot.toJson()['tables'] as List).last as Map;
       expect(table['foreignKeys'], [
         {
           'columns': ['owner'],

@@ -5,6 +5,8 @@ import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
+import 'support/migration_project.dart';
+
 void main() {
   for (final backend in [
     'sqlite',
@@ -13,12 +15,13 @@ void main() {
     test(
       'CLI $backend imports reviews generates and baselines existing data without replacing files',
       () async {
-        final directory = await Directory('.dart_tool/orm-import-cli-$backend')
-            .create(recursive: true);
-        final path = '${directory.path}/data.sqlite';
-        final source = '${directory.path}/schema.dart';
-        final tables = File('${directory.path}/tables.json');
-        await tables.writeAsString('["existing"]');
+        final schema =
+            'orm_import_${pid}_${DateTime.now().microsecondsSinceEpoch}';
+        final project = await MigrationProject.create(
+          postgresSchema: backend == 'postgres' ? schema : null,
+        );
+        final path = project.databasePath;
+        final source = '${project.path}/lib/imported.dart';
         final options = backend == 'sqlite'
             ? ['--sqlite', path]
             : [
@@ -27,7 +30,7 @@ void main() {
                 '--tls',
                 'disable',
                 '--database-schema',
-                'orm_import_cli_tests',
+                schema,
               ];
         late Database<Backend> db;
         Future<ProcessResult> cli(List<String> args, {int code = 0}) async {
@@ -62,13 +65,13 @@ void main() {
               PostgresOptions(
                 url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
                 tls: .disable,
-                schema: 'orm_import_cli_tests',
+                schema: schema,
               ),
             );
             await db.execute(
-              SqlCommand('DROP SCHEMA IF EXISTS orm_import_cli_tests CASCADE'),
+              SqlCommand('DROP SCHEMA IF EXISTS $schema CASCADE'),
             );
-            await db.execute(SqlCommand('CREATE SCHEMA orm_import_cli_tests'));
+            await db.execute(SqlCommand('CREATE SCHEMA $schema'));
           }
           try {
             await db.execute(
@@ -87,14 +90,14 @@ void main() {
               ...options,
               '--output',
               source,
-              '--tables',
-              tables.path,
+              '--table',
+              'existing',
             ]);
             final report =
                 jsonDecode(imported.stdout as String) as Map<String, Object?>;
             expect(report['issues'], isEmpty);
             expect(
-              await File('${directory.path}/schema.import.json').exists(),
+              await File('${project.path}/lib/imported.import.json').exists(),
               true,
             );
             final original = await File(source).readAsString();
@@ -106,35 +109,16 @@ void main() {
               source,
             ], code: 64);
             expect(await File(source).readAsString(), original);
-            final migrations = '${directory.path}/migrations';
             await cli(['generate', source]);
-            await cli([
-              'migration',
-              'create',
-              '0001_imported',
-              '--schema',
-              '${directory.path}/schema.orm.json',
-              '--dir',
-              migrations,
-            ]);
-            final baseline = await cli([
-              'db',
-              'baseline',
-              ...options,
-              '--dir',
-              migrations,
-            ]);
-            expect(
-              (jsonDecode(baseline.stdout as String) as Map)['matches'],
-              true,
+            await project.fixture.write(
+              'lib/target.dart',
+              await File('${project.path}/lib/imported.snapshot.dart')
+                  .readAsString(),
             );
-            await cli([
-              'db',
-              'verify',
-              ...options,
-              '--schema',
-              '${directory.path}/schema.orm.json',
-            ]);
+            await project.run(['create', '0001_imported']);
+            final baseline = await project.run(['baseline']);
+            expect(baseline['matches'], true);
+            await project.run(['verify']);
             expect(
               (await db.execute(SqlCommand('SELECT id, value FROM existing')))
                   .rows,
@@ -143,41 +127,44 @@ void main() {
               ],
             );
 
-            final blockedSource = '${directory.path}/blocked.dart';
-            await tables.writeAsString('["missing"]');
+            final blockedSource = '${project.path}/lib/blocked.dart';
             final blocked = await cli([
               'db',
               'import',
               ...options,
               '--output',
               blockedSource,
-              '--tables',
-              tables.path,
+              '--table',
+              'missing',
             ], code: 2);
             expect(
               (jsonDecode(blocked.stdout as String) as Map)['issues'],
               isNotEmpty,
             );
             expect(await File(blockedSource).exists(), true);
-            await tables.writeAsString('["existing", "existing"]');
             await cli([
               'db',
               'import',
               ...options,
               '--output',
-              '${directory.path}/invalid.dart',
-              '--tables',
-              tables.path,
+              '${project.path}/lib/invalid.dart',
+              '--table',
+              'existing',
+              '--table',
+              'existing',
             ], code: 64);
             expect(
-              await File('${directory.path}/invalid.dart').exists(),
+              await File('${project.path}/lib/invalid.dart').exists(),
               false,
             );
           } finally {
+            if (backend == 'postgres') {
+              await db.execute(SqlCommand('DROP SCHEMA $schema CASCADE'));
+            }
             await db.close();
           }
         } finally {
-          await directory.delete(recursive: true);
+          await project.dispose();
         }
       },
       timeout: const Timeout(Duration(minutes: 3)),

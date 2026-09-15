@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 import 'support/codecs/alternate.dart' as alt;
 import 'support/codecs/schema.dart' show Person;
 import 'support/codecs/schema.orm.dart';
+import 'support/codecs/schema.snapshot.dart' as physical;
 import 'support/codecs/types.dart';
 
 void main() {
@@ -307,7 +308,7 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
 
     test('migration snapshots retain physical storage without executing domain codecs', () async {
       final snapshot = SchemaSnapshot(appSchema);
-      final restored = SchemaSnapshot.fromJson(snapshot.toJson());
+      final restored = physical.schema;
       expect(restored.toJson(), snapshot.toJson());
       final verification = await verifySchema(db, restored);
       expect(verification.differences, isEmpty);

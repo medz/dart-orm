@@ -12,7 +12,8 @@ Future<void> main() async {
       throw StateError('UTC storage used process timezone');
     }
     final local = DateTime(2024, 1, 1);
-    if (Codecs.dateTime.decode(Codecs.dateTime.encode(local)) != local.toUtc()) {
+    if (Codecs.dateTime.decode(Codecs.dateTime.encode(local)) !=
+        local.toUtc()) {
       throw StateError('Local input changed instant');
     }
     final first = await db.events.create(at: expected);

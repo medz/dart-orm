@@ -265,10 +265,7 @@ void main() {
             final file = File('${dir.path}/schema.dart');
             await file.writeAsString(draft.dart);
             final generated = await generateSchema(file.path);
-            final verification = await verifySchema(
-              db,
-              SchemaSnapshot.fromJson(generated.snapshot),
-            );
+            final verification = await verifySchema(db, generated.snapshot);
             expect(verification.differences, isEmpty);
             expect(verification.unmanaged, isEmpty);
           } finally {
@@ -544,11 +541,9 @@ void main() {
           .readAsStringSync(),
     );
     expect(
-      generated.snapshot,
-      jsonDecode(
-        File('test/support/temporal_precision/schema.orm.json')
-            .readAsStringSync(),
-      ),
+      generated.snapshotDart,
+      File('test/support/temporal_precision/schema.snapshot.dart')
+          .readAsStringSync(),
     );
     final dir = await Directory('.dart_tool/temporal-precision-invalid')
         .create(recursive: true);

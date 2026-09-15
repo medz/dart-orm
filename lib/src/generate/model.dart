@@ -35,25 +35,35 @@ final class _Field {
     this.decimalScale,
     this.temporalPrecision,
   });
-  Map<String, Object?> snapshot() => {
-    'name': column,
-    'type': storage,
-    'nullable': nullable,
-    'generated': generated,
-    if (defaultSql != null) 'default': defaultSql,
-    if (computed != null)
-      'computed': {
-        'sqlite': computed!.sqlite,
-        'postgres': computed!.postgres,
-        'storage': computed!.storage.name,
-      },
-    if (integerBits != null && integerBits != 64) 'integerBits': integerBits,
-    if (temporalPrecision != null && temporalPrecision != 6)
-      'temporalPrecision': temporalPrecision,
-    if (decimalPrecision != null) 'decimalPrecision': decimalPrecision,
-    if (decimalPrecision != null && decimalScale != null && decimalScale != 0)
-      'decimalScale': decimalScale,
-  };
+  Column<Object?> snapshot() {
+    final Codec<Object?> physical = switch (storage) {
+      'integer' => Codecs.integer,
+      'bigint' => Codecs.bigint,
+      'decimal' => Codecs.decimal,
+      'text' => Codecs.text,
+      'real' => Codecs.real,
+      'boolean' => Codecs.boolean,
+      'instant' => Codecs.dateTime,
+      'date' => Codecs.date,
+      'time' => Codecs.time,
+      'local_datetime' => Codecs.localDateTime,
+      'blob' => Codecs.bytes,
+      'json' => Codecs.json,
+      _ => throw GenerationException('Unknown storage type $storage.'),
+    };
+    return Column<Object?>(
+      column,
+      nullable ? physical.nullable() : physical,
+      nullable: nullable,
+      generated: generated,
+      defaultSql: defaultSql,
+      computed: computed,
+      integerBits: integerBits,
+      decimalPrecision: decimalPrecision,
+      decimalScale: decimalScale,
+      temporalPrecision: temporalPrecision,
+    );
+  }
 }
 
 final class _Entity {
@@ -86,31 +96,27 @@ final class _Entity {
   List<String> columns(List<String> keys) => [
     for (final key in keys) field(key).column,
   ];
-  Map<String, Object?> snapshot() => {
-    'name': table,
-    'columns': [for (final f in fields) f.snapshot()],
-    'primaryKey': columns(primaryKey),
-    'uniqueKeys': [for (final key in uniqueKeys) columns(key)],
-    'indexes': [
+  TableSchema snapshot() => TableSchema(
+    table,
+    columns: [for (final f in fields) f.snapshot()],
+    primaryKey: columns(primaryKey),
+    uniqueKeys: [for (final key in uniqueKeys) columns(key)],
+    indexes: [
       for (final i in indexes)
-        {'name': i.name, 'columns': columns(i.keys), 'unique': i.unique},
+        IndexSchema(i.name, columns(i.keys), unique: i.unique),
     ],
-    'foreignKeys': [
+    foreignKeys: [
       for (final edge in edges)
         if (edge.isForeignKey)
-          {
-            'columns': columns(edge.parentKeys),
-            'target': edge.target.table,
-            'targetColumns': edge.target.columns(edge.childKeys),
-            'onDelete': edge.onDelete,
-          },
+          ForeignKey(
+            columns(edge.parentKeys),
+            edge.target.table,
+            edge.target.columns(edge.childKeys),
+            onDelete: edge.onDelete!,
+          ),
     ],
-    if (checks.isNotEmpty)
-      'checks': [
-        for (final c in checks)
-          {'name': c.name, 'sqlite': c.sqlite, 'postgres': c.postgres},
-      ],
-  };
+    checks: checks,
+  );
   @override
   String toString() => name;
 }

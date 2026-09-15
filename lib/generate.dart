@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/analysis/session.dart';
+import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/token.dart' show Keyword;
 import 'package:analyzer/dart/element/element.dart';
@@ -27,6 +28,7 @@ part 'src/generate/emitter.dart';
 part 'src/generate/build.dart';
 part 'src/generate/import.dart';
 part 'src/generate/queries.dart';
+part 'src/generate/migrations.dart';
 
 final class GenerationException implements Exception {
   final String message;
@@ -37,8 +39,9 @@ final class GenerationException implements Exception {
 
 final class GeneratedSchema {
   final String dart;
-  final Map<String, Object?> snapshot;
+  final SchemaSnapshot snapshot;
   const GeneratedSchema(this.dart, this.snapshot);
+  String get snapshotDart => _formatMigration(schemaSource(snapshot));
 }
 
 Future<GeneratedSchema> generateSchema(
@@ -49,6 +52,13 @@ Future<GeneratedSchema> generateSchema(
   final output = p.normalize(
     p.absolute(outputPath ?? p.setExtension(source, '.orm.dart')),
   );
+  if (p.extension(output) != '.dart' ||
+      source == output ||
+      source == _schemaSnapshotPath(output)) {
+    throw const GenerationException(
+      'Client and snapshot outputs must be separate Dart files from the source.',
+    );
+  }
   final contexts = AnalysisContextCollection(includedPaths: [source]);
   try {
     final resolved = await contexts
@@ -93,10 +103,7 @@ GeneratedSchema _generate(
   return GeneratedSchema(
     DartFormatter(languageVersion: library.languageVersion.effective)
         .format(_emit(schema, sourceImport, names)),
-    {
-      'format': 1,
-      'tables': [for (final table in schema) table.snapshot()],
-    },
+    SchemaSnapshot([for (final table in schema) table.snapshot()]),
   );
 }
 
@@ -106,8 +113,11 @@ Future<void> writeGeneratedSchema(String source, {String? output}) async {
   final result = await generateSchema(source, outputPath: output);
   final file = File(output);
   await file.parent.create(recursive: true);
+  final snapshot = result.snapshotDart;
   await file.writeAsString(result.dart);
-  await File(p.setExtension(output, '.json')).writeAsString(
-    '${const JsonEncoder.withIndent('  ').convert(result.snapshot)}\n',
-  );
+  await File(_schemaSnapshotPath(output)).writeAsString(snapshot);
 }
+
+String _schemaSnapshotPath(String output) => output.endsWith('.orm.dart')
+    ? '${output.substring(0, output.length - '.orm.dart'.length)}.snapshot.dart'
+    : p.setExtension(output, '.snapshot.dart');

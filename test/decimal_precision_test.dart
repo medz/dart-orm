@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -8,6 +7,7 @@ import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
 import 'support/precision/schema.orm.dart';
+import 'support/precision/schema.snapshot.dart' as physical;
 
 Decimal d(String value) => Decimal.parse(value);
 
@@ -190,12 +190,7 @@ void main() {
       test('catalogs snapshots and imported declarations retain precision scale and defaults', () async {
         await create();
         final snapshot = SchemaSnapshot(appSchema);
-        expect(
-          SchemaSnapshot.fromJson(
-            jsonDecode(jsonEncode(snapshot.toJson())) as Map<String, Object?>,
-          ).checksum,
-          snapshot.checksum,
-        );
+        expect(physical.schema.checksum, snapshot.checksum);
         final verification = await verifySchema(db, snapshot);
         expect(verification.differences, isEmpty);
         expect(verification.unmanaged, isEmpty);
@@ -218,10 +213,7 @@ void main() {
           final file = File('${dir.path}/schema.dart');
           await file.writeAsString(draft.dart);
           final generated = await generateSchema(file.path);
-          final check = await verifySchema(
-            db,
-            SchemaSnapshot.fromJson(generated.snapshot),
-          );
+          final check = await verifySchema(db, generated.snapshot);
           expect(check.differences, isEmpty);
         } finally {
           await dir.delete(recursive: true);
@@ -402,12 +394,8 @@ void main() {
                 ),
               ],
           }, previous: first.checksum);
-          final restored = Migration.fromJson(
-            jsonDecode(jsonEncode(next.toJson())) as Map<String, Object?>,
-          );
-          expect(restored.checksum, next.checksum);
-          await Migrator(db).apply([first, restored], maxBackfillBatches: 1);
-          await Migrator(db).apply([first, restored]);
+          await Migrator(db).apply([first, next], maxBackfillBatches: 1);
+          await Migrator(db).apply([first, next]);
           expect(await db.prices.where((p) => p.label.eq('done')).count(), 3);
         },
       );

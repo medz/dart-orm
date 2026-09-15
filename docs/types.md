@@ -230,7 +230,7 @@ instants, so the shown conversion preserves values; existing infinities or value
 beyond DateTime's range still require separate data review. Old cursor tokens
 carry the old storage tag and cannot be reused under the new ordering contract.
 
-The [captured legacy migration](../test/support/instants/0001_legacy.json) is tested
+The [captured legacy migration](../test/support/instants/m0001_legacy.dart) is tested
 against its checksum from commit `00853b4`, including upgrade and rollback on real
 databases. Plain unmanaged SQLite TEXT still imports as String; the managed
 instant collation lets the importer infer DateTime without sampling data.

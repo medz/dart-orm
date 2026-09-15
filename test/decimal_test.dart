@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -8,6 +7,7 @@ import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
 import 'support/decimals/schema.orm.dart';
+import 'support/decimals/schema.snapshot.dart' as physical;
 
 Decimal d(String s) => Decimal.parse(s);
 
@@ -265,12 +265,7 @@ void main() {
         await create();
         await amounts(['12345678901234567890.00000000001']);
         final snapshot = SchemaSnapshot(appSchema);
-        expect(
-          SchemaSnapshot.fromJson(
-            jsonDecode(jsonEncode(snapshot.toJson())) as Map<String, Object?>,
-          ).checksum,
-          snapshot.checksum,
-        );
+        expect(physical.schema.checksum, snapshot.checksum);
         final verification = await verifySchema(db, snapshot);
         expect(verification.differences, isEmpty);
         expect(verification.unmanaged, isEmpty);
@@ -286,10 +281,7 @@ void main() {
           await source.writeAsString(imported.dart);
           final generated = await generateSchema(source.path);
           expect(
-            (await verifySchema(
-              db,
-              SchemaSnapshot.fromJson(generated.snapshot),
-            )).differences,
+            (await verifySchema(db, generated.snapshot)).differences,
             isEmpty,
           );
         } finally {

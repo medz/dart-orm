@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -10,7 +9,6 @@ import 'package:test/test.dart';
 import 'support/named_sql/queries.queries.dart';
 
 const source = 'test/support/named_sql/queries.dart';
-const manifest = 'test/support/named_sql/queries.queries.json';
 final posts = TableSchema(
   'posts',
   columns: [Column('author', Codecs.text), Column('points', Codecs.integer)],
@@ -110,14 +108,13 @@ void main() {
     },
   );
 
-  test('generated client and manifest are deterministic and fresh', () async {
+  test('generated client is deterministic and checked against its Dart declaration', () async {
     final generated = await generateQueries(source);
     expect(
       generated.dart,
       await File('test/support/named_sql/queries.queries.dart').readAsString(),
     );
-    expect(generated.manifest, jsonDecode(await File(manifest).readAsString()));
-    expect((await readGeneratedQueries(manifest)).dart, generated.dart);
+    expect((await checkGeneratedQueries(source)).dart, generated.dart);
   });
 
   for (final dialect in SqlDialect.values) {

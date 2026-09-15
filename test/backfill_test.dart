@@ -8,6 +8,8 @@ import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
 import 'support/backfill.dart';
+import 'support/backfill_history/migrations.g.dart' as historical;
+import 'support/migration_project.dart';
 
 Matcher code(String value) =>
     isA<OrmException>().having((e) => e.code, 'code', value);
@@ -71,9 +73,7 @@ void main() {
         'chunks pause and resume from a checksummed historical declaration',
         () async {
           await seed(db);
-          final migration = Migration.fromJson(
-            jsonDecode(jsonEncode(fill().toJson())) as Map<String, Object?>,
-          );
+          final migration = historical.migrationHistory.checked.last;
           expect(migration.checksum, fill().checksum);
           expect(
             await runner.apply([initial, migration], maxBackfillBatches: 2),
@@ -451,69 +451,35 @@ void main() {
         'CLI previews non-atomic work and reports a bounded run as incomplete',
         () async {
           await seed(db);
-          final migrations = Directory('${directory.path}/migrations');
-          await migrations.create();
+          final project = await MigrationProject.create(
+            postgresSchema: backend == 'postgres' ? 'orm_backfill_tests' : null,
+            sqlitePath: path,
+          );
+          addTearDown(project.dispose);
+          await project.target(fill().snapshot ?? SchemaSnapshot([payload]));
           for (final m in [initial, fill()]) {
-            await File('${migrations.path}/${m.id}.json')
-                .writeAsString(jsonEncode(m.toJson()));
+            await project.append(m);
           }
-          final connection = backend == 'sqlite'
-              ? ['--sqlite', path]
-              : [
-                  '--postgres-env',
-                  'ORM_TEST_POSTGRES',
-                  '--database-schema',
-                  'orm_backfill_tests',
-                  '--tls',
-                  'disable',
-                ];
-          Future<Map<String, Object?>> cli(List<String> args) async {
-            final result = await Process.run(Platform.resolvedExecutable, [
-              'run',
-              'bin/orm.dart',
-              ...args,
-              ...connection,
-            ]);
-            expect(
-              result.exitCode,
-              0,
-              reason: '${result.stderr}\n${result.stdout}',
-            );
-            return jsonDecode(result.stdout as String) as Map<String, Object?>;
-          }
-
-          final plan = await cli(['migrate', 'plan', '--dir', migrations.path]);
+          final plan = await project.run(['plan']);
           expect(plan['atomic'], false);
-          final paused = await cli([
-            'migrate',
+          final paused = await project.run([
             'apply',
-            '--dir',
-            migrations.path,
             '--max-backfill-batches',
             '1',
           ]);
           expect(paused, {'applied': <String>[], 'complete': false});
-          final status = await cli(['migrate', 'status']);
+          final status = await project.run(['status']);
           expect(
             (((status['progress'] as List).single as Map)['backfill']
                 as Map)['rows'],
             3,
           );
-          expect(
-            await cli([
-              'migrate',
-              'apply',
-              '--dir',
-              migrations.path,
-              '--max-backfill-batches',
-              '10',
-            ]),
-            {
-              'applied': ['0002_fill'],
-              'complete': true,
-            },
-          );
+          expect(await project.run(['apply', '--max-backfill-batches', '10']), {
+            'applied': ['0002_fill'],
+            'complete': true,
+          });
         },
+        timeout: const Timeout(Duration(minutes: 2)),
       );
 
       test('temporary tables cannot redirect the historical backfill target', () async {
@@ -686,18 +652,23 @@ void main() {
           () async {
             await seed(db);
             final migrations = [initial, fill()];
-            final file = File('${directory.path}/history.json');
-            await file.writeAsString(
-              jsonEncode(migrations.map((m) => m.toJson()).toList()),
-            );
+            final project = await MigrationProject.create();
+            addTearDown(project.dispose);
+            for (final m in migrations) {
+              await project.append(m);
+            }
+            await project.fixture.write('bin/crash.dart', '''
+import '${File('test/support/backfill_crash.dart').absolute.uri}';
+import '../lib/migrations/migrations.g.dart';
+Future<void> main(List<String> args) => crashBackfill(migrationHistory.checked, args);
+''');
             final child = await Process.run(Platform.resolvedExecutable, [
               'run',
-              'test/support/backfill_crash.dart',
-              file.path,
+              'bin/crash.dart',
               backend,
               backend == 'sqlite' ? path : 'orm_backfill_tests',
               boundary,
-            ]);
+            ], workingDirectory: project.path);
             expect(
               child.exitCode,
               91,

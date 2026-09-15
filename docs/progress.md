@@ -1,5 +1,20 @@
 # Implementation status
 
+Active goal: validate and finish the implemented Dart schema/migration workflow.
+Current snapshots, fixed historical migration definitions and static registries are
+Dart files; the project entrypoint owns typed connection/rename/conversion inputs.
+The JSON file readers/CLI options are removed without a compatibility lane. Named
+SQL generation also emits only Dart, with freshness checked against the declaration
+and SQL source. Internal checksum/checkpoint encodings and reports remain JSON.
+
+Native verification completed: the full run passed 837 tests and exposed one test
+still opening a removed JSON fixture. That test was corrected; a focused 76-test
+run passed, including generation, named SQL and build_runner build/watch. A separate
+AOT bundle test passed after deleting the consumer's Dart sources and build cache.
+Browser and Android APK acceptance for this source revision are still pending.
+The earlier captures below are historical evidence, not the new workflow's final
+platform acceptance.
+
 The common lifecycle in `research/new-dart-orm-design.md` is implemented and
 accepted. The [design acceptance map](acceptance.md) connects each requirement to
 evidence; the [capability review](capabilities.md) states extensions and unverified
@@ -373,7 +388,7 @@ cast drift. Instant-key backfills resume across BC and sub-millisecond boundarie
 Out-of-DateTime PostgreSQL values retain raw text and fail typed decoding without
 integer overflow or connection damage.
 
-The captured `test/support/instants/0001_legacy.json` was emitted using commit
+The captured `test/support/instants/m0001_legacy.dart` was emitted using commit
 `00853b4`. Its original checksum is asserted after decoding with the current
 migration reader. Both databases upgrade it through a reviewed timestamp-to-instant
 change; SQLite tests prove rollback on equivalent keys and invalid calendar text.

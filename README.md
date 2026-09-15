@@ -52,8 +52,8 @@ await db.close();
 
 For PostgreSQL, use `postgres(PostgresOptions(url: url))`; TLS certificate
 verification is the default. Each backend has its own transaction options.
-Migrations should be saved, reviewed and committed before use in persistent
-environments. See [migration workflows](docs/migrations.md) for diffs, renames,
+Schema snapshots and reviewed migrations are Dart files with a static registry.
+Commit them before use in persistent environments. See [migration workflows](docs/migrations.md) for diffs, renames,
 rebuilds and existing-database baselines. Long data transformations can use
 [resumable backfills](docs/backfills.md) with bounded batches and durable progress.
 The in-memory example builds an initial migration directly for clarity.

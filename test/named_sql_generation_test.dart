@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
@@ -71,19 +70,19 @@ void main() {
       'SELECT 1 AS n',
     );
     final source = file('query.dart').path;
-    final manifest = file('query.queries.json').path;
     await writeGeneratedQueries(source);
-    await readGeneratedQueries(manifest);
+    await checkGeneratedQueries(source);
+    expect(await file('query.queries.json').exists(), false);
     await file('query.sql').writeAsString('SELECT 2 AS n');
     await expectLater(
-      readGeneratedQueries(manifest),
+      checkGeneratedQueries(source),
       throwsA(isA<GenerationException>()),
     );
     await writeGeneratedQueries(source);
     await file('query.queries.dart')
         .writeAsString('// modified\n', mode: FileMode.append);
     await expectLater(
-      readGeneratedQueries(manifest),
+      checkGeneratedQueries(source),
       throwsA(isA<GenerationException>()),
     );
     await expectLater(
@@ -91,6 +90,16 @@ void main() {
       throwsA(isA<GenerationException>()),
     );
     expect(await file('query.dart').readAsString(), contains('sqlQuery'));
+    final output = file('custom.dart').path;
+    await writeGeneratedQueries(source, output: output);
+    await checkGeneratedQueries(source, output: output);
+    await file('query.dart').writeAsString(
+      (await file('query.dart').readAsString()).replaceAll('int n', 'double n'),
+    );
+    await expectLater(
+      checkGeneratedQueries(source, output: output),
+      throwsA(isA<GenerationException>()),
+    );
   });
 
   test(
@@ -125,14 +134,6 @@ void main() {
           AssetId('orm', 'test/support/named_sql/queries.queries.dart'),
         ),
         standalone.dart,
-      );
-      expect(
-        jsonDecode(
-          files.testing.readString(
-            AssetId('orm', 'test/support/named_sql/queries.queries.json'),
-          ),
-        ),
-        standalone.manifest,
       );
     },
   );
@@ -212,8 +213,8 @@ void main() {
       final args = [
         'queries',
         'check',
-        '--manifest',
-        file('query.queries.json').path,
+        '--source',
+        file('query.dart').path,
         '--sqlite',
       ];
       final checked = await run([...args, file('database.db').path]);

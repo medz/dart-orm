@@ -8,6 +8,7 @@ import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
 
 import 'legacy/seed.dart';
+import 'migrations/migrations.g.dart';
 import 'schema.orm.dart';
 
 typedef NoteCard = ({int id, String text, bool done, List<String> comments});
@@ -48,13 +49,7 @@ Future<Map<String, Object?>> runAcceptance({
       await File(path).exists() == (phase != 'legacy'),
       phase == 'legacy' ? 'Fresh database' : 'Existing database retained',
     );
-    final migrations = <Migration>[
-      for (final id in ['0001_initial', if (version == 2) '0002_comments'])
-        Migration.fromJson(
-          jsonDecode(await rootBundle.loadString('assets/migrations/$id.json'))
-              as Map<String, Object?>,
-        ),
-    ];
+    final migrations = migrationHistory.checked.take(version).toList();
     final db = database = await sqlite(SqliteOptions.file(path));
     report['sqlite'] = (await db.execute(SqlCommand('SELECT sqlite_version()')))
         .rows

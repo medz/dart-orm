@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -188,11 +187,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
             },
           ),
         );
-        final restored = Migration.fromJson(
-          jsonDecode(jsonEncode(migration.toJson())) as Map<String, Object?>,
-        );
-        expect(restored.checksum, migration.checksum);
-        await Migrator(db).apply([initial, restored]);
+        await Migrator(db).apply([initial, migration]);
         expect(
           (await db.execute(
             SqlCommand('SELECT id, email, label, score, status FROM members'),
@@ -393,10 +388,14 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
 
     if (backend == 'sqlite') {
       test('catalog distinguishes nullable non-rowid primary keys', () async {
-        await db.execute(SqlCommand('CREATE TABLE audit (id TEXT PRIMARY KEY)'));
+        await db.execute(
+          SqlCommand('CREATE TABLE audit (id TEXT PRIMARY KEY)'),
+        );
         expect((await inspectColumns(db, 'audit')).single.nullable, true);
         await db.execute(SqlCommand('DROP TABLE audit'));
-        await db.execute(SqlCommand('CREATE TABLE audit (id INTEGER PRIMARY KEY)'));
+        await db.execute(
+          SqlCommand('CREATE TABLE audit (id INTEGER PRIMARY KEY)'),
+        );
         expect((await inspectColumns(db, 'audit')).single.nullable, false);
       });
 

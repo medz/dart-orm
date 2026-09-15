@@ -6,6 +6,7 @@ import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
 import '../example/schema.orm.dart';
+import '../example/schema.snapshot.dart' as physical;
 
 void main() {
   runGeneratedTests('sqlite', () => sqlite(const SqliteOptions.memory()));
@@ -91,20 +92,21 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
       expect((await Migrator(db).history()).single.checksum, initial.checksum);
     });
 
-    test('snapshot round trip and full managed catalog comparison', () async {
-      final snapshot = SchemaSnapshot.fromJson(
-        SchemaSnapshot(appSchema).toJson(),
-      );
-      await Migrator(db).apply([initial]);
-      final verification = await verifySchema(db, snapshot);
-      expect(verification.differences, isEmpty);
-      expect(verification.unmanaged, isEmpty);
-      await db.execute(SqlCommand('DROP INDEX author_timeline'));
-      expect(
-        (await verifySchema(db, snapshot)).differences,
-        contains('posts indexes differs'),
-      );
-    });
+    test(
+      'compiled physical snapshot and full managed catalog comparison',
+      () async {
+        final snapshot = physical.schema;
+        await Migrator(db).apply([initial]);
+        final verification = await verifySchema(db, snapshot);
+        expect(verification.differences, isEmpty);
+        expect(verification.unmanaged, isEmpty);
+        await db.execute(SqlCommand('DROP INDEX author_timeline'));
+        expect(
+          (await verifySchema(db, snapshot)).differences,
+          contains('posts indexes differs'),
+        );
+      },
+    );
 
     test('baseline preserves existing rows and verifies keys before recording history', () async {
       for (final statement in createSchema(appSchema, db.dialect)) {

@@ -47,12 +47,9 @@ Future<void> main(List<String> arguments) async {
   final generated = await generateSchema('test/support/browser/schema.dart');
   if (generated.dart !=
           await File('test/support/browser/schema.orm.dart').readAsString() ||
-      jsonEncode(generated.snapshot) !=
-          jsonEncode(
-            jsonDecode(
-              await File('test/support/browser/schema.orm.json').readAsString(),
-            ),
-          )) {
+      generated.snapshotDart !=
+          await File('test/support/browser/schema.snapshot.dart')
+              .readAsString()) {
     throw StateError('Regenerate the browser schema fixture.');
   }
   Future<void> compile(List<String> args) async {

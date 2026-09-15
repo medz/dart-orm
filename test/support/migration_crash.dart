@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -6,23 +5,22 @@ import 'package:orm/postgres.dart';
 
 // Real process termination at a successful SQL/commit boundary. The parent test
 // verifies database state and resumes using the unchanged migration files.
-Future<void> main(List<String> args) async {
-  final migrations =
-      (jsonDecode(await File(args[0]).readAsString()) as List<Object?>)
-          .map((value) => Migration.fromJson(value as Map<String, Object?>))
-          .toList();
+Future<void> crashMigration(
+  List<Migration> migrations,
+  List<String> args,
+) async {
   var observed = false;
   final db = postgres(
     PostgresOptions(
       url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
       tls: .disable,
-      schema: args[1],
+      schema: args[0],
       maxConnections: 1,
     ),
     onQuery: (event) {
       if (event.error != null) return;
-      if (event.sql == args[2]) observed = true;
-      if (observed && (args[3] == 'statement' || event.sql == 'COMMIT')) {
+      if (event.sql == args[1]) observed = true;
+      if (observed && (args[2] == 'statement' || event.sql == 'COMMIT')) {
         exit(91);
       }
     },

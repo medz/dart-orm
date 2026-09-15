@@ -39,7 +39,7 @@ Future<void> main(List<String> args) async {
           fixture.file('lib/schema.dart').path,
         );
         final generationMicros = watch.elapsedMicroseconds - normalizeMicros;
-        final snapshot = jsonEncode(generated.snapshot);
+        final snapshot = jsonEncode(generated.snapshot.toJson());
         final baseline = expected[variant];
         if (baseline == null) {
           expected[variant] = (
@@ -55,7 +55,7 @@ Future<void> main(List<String> args) async {
           );
         }
         await fixture.write('lib/schema.orm.dart', generated.dart);
-        await fixture.write('lib/schema.orm.json', snapshot);
+        await fixture.write('lib/schema.snapshot.dart', generated.snapshotDart);
         return (
           generated: generated,
           report: {
@@ -79,7 +79,7 @@ Future<void> main(List<String> args) async {
       }
 
       final base = await emit('base', original);
-      _checkSnapshot(base.generated.snapshot);
+      _checkSnapshot(base.generated.snapshot.toJson());
       await fixture.write('lib/client.dart', authoringConsumer);
       final initialAnalysis = await fixture.run(['analyze', 'lib']);
 

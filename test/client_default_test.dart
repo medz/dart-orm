@@ -7,6 +7,7 @@ import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
 import 'support/defaults/schema.orm.dart';
+import 'support/defaults/schema.snapshot.dart' as physical;
 import 'support/defaults/types.dart' as d;
 
 void main() {
@@ -192,7 +193,7 @@ void main() {
 
         test('snapshots, migrations, catalogs and imports never store or run a client factory', () async {
           final original = SchemaSnapshot(appSchema);
-          final restored = SchemaSnapshot.fromJson(original.toJson());
+          final restored = physical.schema;
           expect(
             restored.tables
                 .expand((t) => t.columns)

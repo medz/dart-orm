@@ -6,6 +6,11 @@ directory. SQLite runs in the native driver's worker isolate. The small Android
 method channel supplies the directory, launch phase, API level and process ID;
 all database operations and migration checks run in Dart through the public ORM.
 
+The current example statically imports fixed Dart migrations and their recorded
+fingerprints. Migration JSON assets and runtime asset loading have been removed.
+The capture described below precedes this change until the new APK acceptance run
+is recorded.
+
 The [captured report](../research/validation/flutter.json) records Flutter 3.47.4
 stable, Dart 3.13.3 and SQLite 3.53.4 on an Android API 35 arm64 emulator. It includes
 the exact framework/engine revisions, APK hashes, source hashes and device build.

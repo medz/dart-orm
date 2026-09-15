@@ -29,8 +29,8 @@ final backfill = Migration.steps(
 );
 ```
 
-Save this migration as JSON with `toJson()`, review it, and use the unchanged file
-on subsequent runs. Its table definition, assignments, filter, completion SQL and
+Save this migration with `writeMigration` from `package:orm/generate.dart`, review
+the emitted Dart file, and import it through the static history on subsequent runs. Its table definition, assignments, filter, completion SQL and
 batch size are covered by the migration checksum. Expressions are trusted migration
 SQL, so write separate expressions for each dialect when their behavior differs.
 No latest generated client or application codec callback is needed to resume.
@@ -54,12 +54,12 @@ may need the next call after the final permitted data batch. A batch limit is no
 a wall-clock or statement timeout.
 
 ```sh
-dart run orm migrate plan --sqlite app.sqlite --dir migrations
-dart run orm migrate apply --sqlite app.sqlite --dir migrations --max-backfill-batches 10
-dart run orm migrate status --sqlite app.sqlite
+dart run bin/migrate.dart plan
+dart run bin/migrate.dart apply --max-backfill-batches 10
+dart run bin/migrate.dart status
 ```
 
-PostgreSQL uses the existing `--postgres-env`, `--database-schema` and TLS options.
+Configure PostgreSQL in the Dart entrypoint as described in [migrations](migrations.md).
 Plans report `atomic: false` when pending work includes a backfill. Bounded CLI
 runs additionally return `complete: false` until the entire migration list is
 applied. Status includes `backfill.rows`, `batches`, `last` and `upper`. Keys are

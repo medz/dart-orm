@@ -11,13 +11,14 @@ dart run orm db import --postgres-env DATABASE_URL --database-schema public --ou
 
 # Review lib/schema.dart and lib/schema.import.json first.
 dart run orm generate lib/schema.dart
-dart run orm migration create 0001_baseline --schema lib/schema.orm.json
-dart run orm db baseline --sqlite app.sqlite
-dart run orm db verify --sqlite app.sqlite --schema lib/schema.orm.json
+# Add the Dart entrypoint described in migrations.md, then:
+dart run orm migration registry migrations
+dart run bin/migrate.dart create 0001_baseline
+dart run bin/migrate.dart baseline
+dart run bin/migrate.dart verify
 ```
 
-Use the PostgreSQL connection options for all database commands when importing
-PostgreSQL. Existing database-specific defaults and objects need reviewed migrations;
+Configure the same PostgreSQL database in the [Dart migration entrypoint](migrations.md). Existing database-specific defaults and objects need reviewed migrations;
 an imported declaration is not automatically a portable creation script for the
 other dialect. Baseline verifies the declared schema before recording history and
 does not execute the initial creation SQL.
@@ -28,8 +29,8 @@ PostgreSQL uses a read-only, repeatable-read transaction in the selected schema.
 Each invocation uses one catalog snapshot. Existing outer transactions are rejected;
 a borrowed session without an active transaction is allowed.
 
-To limit the import, put exact physical table names in a JSON array, such as
-`["accounts", "notes"]`, and supply `--tables tables.json`. Without this option,
+To import one table, use `--table accounts`. For a selected related group, use
+`importSchema(db, tables: ['accounts', 'notes'])` in Dart. Without a selection,
 discovery covers SQLite main or the current PostgreSQL schema. Internal ORM history
 tables are omitted. Include the referenced tables when importing relationships;
 missing targets and temporary objects shadowing selected tables produce issues.

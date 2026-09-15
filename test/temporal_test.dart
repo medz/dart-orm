@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -11,6 +10,7 @@ import 'package:postgres/postgres.dart' as pg;
 import 'package:test/test.dart';
 
 import 'support/temporals/schema.orm.dart';
+import 'support/temporals/schema.snapshot.dart' as physical;
 
 void main() {
   final url = Platform.environment['ORM_TEST_POSTGRES'];
@@ -576,12 +576,7 @@ void main() {
         () async {
           await create();
           final snapshot = SchemaSnapshot(appSchema);
-          expect(
-            SchemaSnapshot.fromJson(
-              jsonDecode(jsonEncode(snapshot.toJson())) as Map<String, Object?>,
-            ).checksum,
-            snapshot.checksum,
-          );
+          expect(physical.schema.checksum, snapshot.checksum);
           expect((await verifySchema(db, snapshot)).differences, isEmpty);
           expect((await verifySchema(db, snapshot)).unmanaged, isEmpty);
           expect(await verifyColumns(db, appSchema), isEmpty);
@@ -596,10 +591,7 @@ void main() {
             await file.writeAsString(imported.dart);
             final generated = await generateSchema(file.path);
             expect(
-              (await verifySchema(
-                db,
-                SchemaSnapshot.fromJson(generated.snapshot),
-              )).differences,
+              (await verifySchema(db, generated.snapshot)).differences,
               isEmpty,
             );
           } finally {

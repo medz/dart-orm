@@ -81,10 +81,7 @@ void main() {
               final source = File('${directory.path}/schema.dart');
               await source.writeAsString(imported.dart);
               final generated = await generateSchema(source.path);
-              final result = await verifySchema(
-                db,
-                SchemaSnapshot.fromJson(generated.snapshot),
-              );
+              final result = await verifySchema(db, generated.snapshot);
               expect(result.differences, isEmpty);
               expect(result.unmanaged, isEmpty);
               expect(imported.dart, contains('.check('));
@@ -93,7 +90,7 @@ void main() {
                 contains('IMPORT.CHECK_SQL'),
               );
               await db.execute(SqlCommand('DROP TABLE _orm_migrations'));
-              final snapshot = SchemaSnapshot.fromJson(generated.snapshot);
+              final snapshot = generated.snapshot;
               await Migrator(db).baseline([
                 Migration.create('0001_imported', snapshot.tables),
               ], expected: snapshot);
@@ -153,8 +150,7 @@ void main() {
             );
             expect((await verifySchema(db, start)).differences, isEmpty);
             await db.execute(SqlCommand('UPDATE scores SET value = 2'));
-            await Migrator(db)
-                .apply([initial, Migration.fromJson(add.toJson())]);
+            await Migrator(db).apply([initial, add]);
             expect((await verifySchema(db, positive)).differences, isEmpty);
             final stricter = SchemaSnapshot([
               scores(const [CheckSchema('positive', 'value >= 3')]),
@@ -523,6 +519,5 @@ void main() {
       TableSchema('legacy', columns: [Column('id', Codecs.integer)]),
     ]).toJson();
     expect((legacy['tables'] as List).single, isNot(contains('checks')));
-    expect(SchemaSnapshot.fromJson(legacy).toJson(), legacy);
   });
 }

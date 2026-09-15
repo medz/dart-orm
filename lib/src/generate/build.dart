@@ -22,7 +22,7 @@ final class _OrmQueryBuilder implements builder.Builder {
   const _OrmQueryBuilder();
   @override
   Map<String, List<String>> get buildExtensions => const {
-    '.dart': ['.queries.dart', '.queries.json'],
+    '.dart': ['.queries.dart'],
   };
   @override
   Future<void> build(builder.BuildStep step) async {
@@ -50,10 +50,7 @@ final class _OrmQueryBuilder implements builder.Builder {
         builder.AssetId.resolve(Uri.parse(path), from: input),
       ),
     );
-    final manifest =
-        '${const JsonEncoder.withIndent('  ').convert(result.manifest)}\n';
     await step.writeAsString(output, result.dart);
-    await step.writeAsString(input.changeExtension('.queries.json'), manifest);
   }
 }
 
@@ -61,7 +58,7 @@ final class _OrmBuilder implements builder.Builder {
   const _OrmBuilder();
   @override
   Map<String, List<String>> get buildExtensions => const {
-    '.dart': ['.orm.dart', '.orm.json'],
+    '.dart': ['.orm.dart', '.snapshot.dart'],
   };
 
   @override
@@ -90,10 +87,9 @@ final class _OrmBuilder implements builder.Builder {
       },
     );
     // Both outputs are fully constructed before touching the build writer.
-    final snapshot =
-        '${const JsonEncoder.withIndent('  ').convert(result.snapshot)}\n';
+    final snapshot = result.snapshotDart;
     await step.writeAsString(output, result.dart);
-    await step.writeAsString(input.changeExtension('.orm.json'), snapshot);
+    await step.writeAsString(input.changeExtension('.snapshot.dart'), snapshot);
   }
 
   Future<(CompilationUnit, LibraryElement)> _resolveSchema(

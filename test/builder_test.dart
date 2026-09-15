@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:build/build.dart';
@@ -45,12 +44,10 @@ void main() {
         standalone.dart,
       );
       expect(
-        jsonDecode(
-          files.testing.readString(
-            AssetId('orm', 'test/support/codecs/schema.orm.json'),
-          ),
+        files.testing.readString(
+          AssetId('orm', 'test/support/codecs/schema.snapshot.dart'),
         ),
-        standalone.snapshot,
+        standalone.snapshotDart,
       );
       expect(
         files.testing.resolverEntrypointsTracked,

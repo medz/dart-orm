@@ -51,11 +51,12 @@ Future<void> main(List<String> args) async {
       await watcher.close();
       watcher = null;
       final analysis = await fixture.run(['analyze', 'lib']);
-      final snapshot = jsonDecode(
-        await fixture.file('lib/schema.orm.json').readAsString(),
-      ) as Map<String, Object?>;
-      if ((snapshot['tables'] as List<Object?>).length != models) {
-        throw StateError('Incorrect table count.');
+      final snapshotSource = await fixture
+          .file('lib/schema.snapshot.dart')
+          .readAsString();
+      if (RegExp(r'TableSchema\(').allMatches(snapshotSource).length !=
+          models) {
+        throw StateError('Incorrect table count in generated Dart snapshot.');
       }
       final value = <String, Object?>{
         'models': models,
@@ -64,6 +65,9 @@ Future<void> main(List<String> args) async {
             ?.group(1),
         'schema_bytes': await fixture.file('lib/schema.dart').length(),
         'generated_dart_bytes': await client.length(),
+        'snapshot_dart_bytes': await fixture
+            .file('lib/schema.snapshot.dart')
+            .length(),
         'cold_build_ms': cold.milliseconds,
         'no_change_build_ms': unchanged.milliseconds,
         'watch_start_ms': watchStart,

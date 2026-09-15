@@ -1,10 +1,11 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
 import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
+
+import 'support/migration_project.dart';
 
 void main() {
   test(
@@ -98,11 +99,7 @@ void main() {
         index,
         ExecuteSql('UPDATE payload SET touches = touches + 1'),
       ]);
-      final restored = Migration.fromJson(
-        jsonDecode(jsonEncode(migration.toJson())) as Map<String, Object?>,
-      );
-      expect(restored.checksum, migration.checksum);
-      expect(await Migrator(db).apply([initial, restored]), [migration.id]);
+      expect(await Migrator(db).apply([initial, migration]), [migration.id]);
       expect(
         (await db.execute(SqlCommand(index.doneWhen))).rows.single.single,
         true,
@@ -111,7 +108,7 @@ void main() {
         (await Migrator(db).progress()).map((p) => p.state),
         everyElement(MigrationStepState.complete),
       );
-      expect(await Migrator(db).apply([initial, restored]), isEmpty);
+      expect(await Migrator(db).apply([initial, migration]), isEmpty);
       expect(
         (await db.execute(SqlCommand('SELECT touches FROM payload'))).rows
             .map((r) => r.single),
@@ -399,22 +396,23 @@ void main() {
               ? [ExecuteSql(update), index]
               : [index, ExecuteSql(update)],
         );
-        final directory = await Directory.systemTemp.createTemp(
-          'orm-recovery-',
-        );
+        final project = await MigrationProject.create();
         try {
-          final file = File('${directory.path}/migrations.json');
-          await file.writeAsString(
-            jsonEncode([initial.toJson(), migration.toJson()]),
-          );
+          for (final m in [initial, migration]) {
+            await project.append(m);
+          }
+          await project.fixture.write('bin/crash.dart', '''
+import '${File('test/support/migration_crash.dart').absolute.uri}';
+import '../lib/migrations/migrations.g.dart';
+Future<void> main(List<String> args) => crashMigration(migrationHistory.checked, args);
+''');
           final process = await Process.run(Platform.resolvedExecutable, [
             'run',
-            'test/support/migration_crash.dart',
-            file.path,
+            'bin/crash.dart',
             schema,
             crashAtCommit ? update : index.sql,
             crashAtCommit ? 'commit' : 'statement',
-          ]);
+          ], workingDirectory: project.path);
           expect(
             process.exitCode,
             91,
@@ -442,10 +440,10 @@ void main() {
           );
           expect((await Migrator(db).history()).length, 2);
         } finally {
-          await directory.delete(recursive: true);
+          await project.dispose();
         }
       },
-      timeout: const Timeout(Duration(seconds: 30)),
+      timeout: const Timeout(Duration(seconds: 60)),
     );
   }
 }

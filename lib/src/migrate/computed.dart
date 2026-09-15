@@ -5,12 +5,6 @@ Map<String, Object?> _computedJson(ComputedColumn value) => {
   'postgres': value.postgres,
   'storage': value.storage.name,
 };
-ComputedColumn _readComputed(Map<String, Object?> value) =>
-    ComputedColumn.forDialects(
-      sqlite: value['sqlite'] as String,
-      postgres: value['postgres'] as String,
-      storage: ComputedStorage.values.byName(value['storage'] as String),
-    );
 
 typedef _SqliteComputed = ({
   String column,

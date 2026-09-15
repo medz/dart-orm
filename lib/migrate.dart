@@ -10,6 +10,7 @@ import 'orm.dart';
 part 'src/migrate/schema.dart';
 part 'src/migrate/history.dart';
 part 'src/migrate/snapshot.dart';
+part 'src/migrate/source.dart';
 part 'src/migrate/catalog.dart';
 part 'src/migrate/step.dart';
 part 'src/migrate/diff.dart';

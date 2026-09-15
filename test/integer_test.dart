@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -8,6 +7,7 @@ import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
 import 'support/integers/schema.orm.dart';
+import 'support/integers/schema.snapshot.dart' as physical;
 
 void main() {
   for (final backend in [
@@ -163,38 +163,30 @@ void main() {
         },
       );
 
-      test(
-        'JSON history and imports retain widths without confusing value codecs',
-        () async {
-          await create();
-          final snapshot = SchemaSnapshot(appSchema);
-          final restored = SchemaSnapshot.fromJson(
-            jsonDecode(jsonEncode(snapshot.toJson())) as Map<String, Object?>,
+      test('Dart snapshots and imports retain widths without confusing value codecs', () async {
+        await create();
+        final snapshot = SchemaSnapshot(appSchema);
+        final restored = physical.schema;
+        expect(restored.checksum, snapshot.checksum);
+        final imported = await importSchema(db);
+        expect(imported.issues, isEmpty);
+        expect(imported.dart, contains('@IntegerBits(16)'));
+        expect(imported.dart, contains('@IntegerBits(32)'));
+        final directory = await Directory(
+          '.dart_tool/orm-integer-import-$backend',
+        ).create(recursive: true);
+        try {
+          final file = File('${directory.path}/schema.dart');
+          await file.writeAsString(imported.dart);
+          final result = await generateSchema(file.path);
+          expect(
+            (await verifySchema(db, result.snapshot)).differences,
+            isEmpty,
           );
-          expect(restored.checksum, snapshot.checksum);
-          final imported = await importSchema(db);
-          expect(imported.issues, isEmpty);
-          expect(imported.dart, contains('@IntegerBits(16)'));
-          expect(imported.dart, contains('@IntegerBits(32)'));
-          final directory = await Directory(
-            '.dart_tool/orm-integer-import-$backend',
-          ).create(recursive: true);
-          try {
-            final file = File('${directory.path}/schema.dart');
-            await file.writeAsString(imported.dart);
-            final result = await generateSchema(file.path);
-            expect(
-              (await verifySchema(
-                db,
-                SchemaSnapshot.fromJson(result.snapshot),
-              )).differences,
-              isEmpty,
-            );
-          } finally {
-            await directory.delete(recursive: true);
-          }
-        },
-      );
+        } finally {
+          await directory.delete(recursive: true);
+        }
+      });
 
       TableSchema sized(int? bits, {String column = 'value'}) => TableSchema(
         'sized',
@@ -453,11 +445,7 @@ typedef Row = ({@IntegerBits(16) @UseCodec(idCodec) Identifier id});
 final rows = entity<Row>();
 ''');
       final generated = await generateSchema(source.path);
-      final column = SchemaSnapshot.fromJson(generated.snapshot)
-          .tables
-          .single
-          .columns
-          .single;
+      final column = generated.snapshot.tables.single.columns.single;
       expect(column.integerBits, 16);
       expect(column.codec.sqlType, 'integer');
       expect(generated.dart, contains('integerBits: 16'));

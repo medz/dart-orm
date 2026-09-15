@@ -58,26 +58,16 @@ Future<void> writeGeneratedQueries(String source, {String? output}) async {
   final file = File(output);
   await file.parent.create(recursive: true);
   await file.writeAsString(result.dart);
-  await File(p.setExtension(output, '.json')).writeAsString(
-    '${const JsonEncoder.withIndent('  ').convert(result.manifest)}\n',
-  );
 }
 
 /// Re-analysis prevents checking stale SQL, parameter codecs or generated code.
-Future<GeneratedQueries> readGeneratedQueries(String manifestPath) async {
-  final manifest = jsonDecode(
-    await File(manifestPath).readAsString(),
-  ) as Map<String, Object?>;
-  if (manifest['format'] != 1 || manifest['source'] is! String) {
-    throw const GenerationException('Unsupported named SQL manifest.');
-  }
-  final output = p.setExtension(manifestPath, '.dart');
-  final result = await generateQueries(
-    p.join(p.dirname(manifestPath), manifest['source']! as String),
-    outputPath: output,
-  );
-  if (jsonEncode(result.manifest) != jsonEncode(manifest) ||
-      await File(output).readAsString() != result.dart) {
+Future<GeneratedQueries> checkGeneratedQueries(
+  String source, {
+  String? output,
+}) async {
+  output ??= p.setExtension(source, '.queries.dart');
+  final result = await generateQueries(source, outputPath: output);
+  if (await File(output).readAsString() != result.dart) {
     throw const GenerationException(
       'Named SQL output is stale. Run queries generate first.',
     );

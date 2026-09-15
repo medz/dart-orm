@@ -1,39 +1,9 @@
 part of '../../migrate.dart';
 
-/// An explicit, serializable operation in a reviewed migration.
+/// An explicit operation in a reviewed migration.
 sealed class MigrationStep {
   const MigrationStep();
   Map<String, Object?> toJson();
-  factory MigrationStep.fromJson(Map<String, Object?> json) =>
-      switch (json['kind']) {
-        'sql' => ExecuteSql(json['sql'] as String),
-        'checkedSql' => CheckedSql(
-          json['sql'] as String,
-          readyWhen: json['readyWhen'] as String,
-          doneWhen: json['doneWhen'] as String,
-        ),
-        'backfill' => Backfill(
-          SchemaSnapshot._readTable(json['table'] as Map<String, Object?>),
-          set: (json['set'] as Map<String, Object?>).cast<String, String>(),
-          where: json['where'] as String,
-          doneWhen: json['doneWhen'] as String,
-          batchSize: json['batchSize'] as int,
-        ),
-        'dropTable' => DropTable(json['table'] as String),
-        'rebuild' => RebuildTable(
-          SchemaSnapshot._readTable(json['before'] as Map<String, Object?>),
-          SchemaSnapshot._readTable(json['after'] as Map<String, Object?>),
-          copy: (json['copy'] as Map<String, Object?>).cast<String, String>(),
-        ),
-        'dropConstraint' => DropConstraint(
-          json['table'] as String,
-          json['constraint'] as Map<String, Object?>,
-        ),
-        _ => throw const OrmException(
-          'MIGRATION.FORMAT',
-          'Unknown migration step.',
-        ),
-      };
 }
 
 final class ExecuteSql(final String sql) extends MigrationStep {
@@ -106,11 +76,7 @@ Future<void> _executeStep(Database<Backend> db, MigrationStep step) async {
       await _rebuild(db, step);
     case DropConstraint():
       if (step.constraint['kind'] == 'c') {
-        await _dropCheck(
-          db,
-          step.table,
-          SchemaSnapshot._readCheck(step.constraint),
-        );
+        await _dropCheck(db, step.table, _readCheck(step.constraint));
         return;
       }
       final rows = await db.execute(
