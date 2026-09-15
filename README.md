@@ -11,6 +11,8 @@ This branch is unrelated to earlier ORM implementations.
 
 The [browser SQLite entry point](docs/sqlite-web.md) runs in a dedicated worker,
 with explicit in-memory or OPFS storage and the same generated query API.
+The [native Flutter example](docs/flutter.md) verifies Android APK upgrades,
+background SQLite, persistence and commit-driven query subscriptions.
 
 ```sh
 dart pub get

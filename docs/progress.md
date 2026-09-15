@@ -8,6 +8,9 @@ requirements and distinguishes direct coverage from missing evidence.
 Latest verification: 834 native tests pass in one invocation with PostgreSQL
 enabled; analysis reports no issues. Real Chrome JS and Dart WASM each pass 19
 scenarios, including temporal column precision and extended date/instant ranges.
+An actual Android Flutter application additionally passes 4/17/11 checks across
+legacy installation, AOT release APK upgrade and process restart; see
+[native Flutter evidence and limits](flutter.md).
 
 Editor verification additionally covers real generated APIs at 10/100/1000 models:
 fifteen completion probes with 300 warm samples, twelve diagnostic checks matching
@@ -30,6 +33,7 @@ intermediate List allocations; it does not establish a throughput improvement.
 - Native SQLite worker with verified foreign keys, journal mode and parameter limit.
 - Browser SQLite worker with explicit memory/OPFS storage, exclusive ownership, verified journaling/foreign keys and shared native codecs/functions.
 - Real Chrome acceptance for JavaScript and Dart WASM clients, including persistent reopen, interrupted-transaction recovery and schema upgrades after page reload.
+- Actual Android Flutter acceptance with generated APIs, persistent file storage, old debug APK to new AOT release APK upgrade, distinct-process reopen, watch/rollback behavior and background cancellation/reuse.
 - PostgreSQL driver with a single pool owner, TLS settings and explicit borrowed pools.
 - Transaction lifecycle, rollback, savepoints, pending work checks and query observation.
 - Non-executing SQL/column/key/join/batch inspection and optional acquisition/SQL/decode phase observations with immutable metadata and isolated observer failures.
@@ -682,6 +686,31 @@ preserve the distinction between schema-only adapters and nominal runtime rows.
 Root static analysis passes. Runtime sources remain unchanged; this work does not
 claim additional database or native Flutter validation.
 
+## Native Flutter APK upgrade acceptance
+
+The Android application and host runner are now captured in
+`research/validation/flutter.json`. Flutter 3.47.4/Dart 3.13.3 loads SQLite 3.53.4
+on an isolated API 35 arm64 emulator. Version code 1 writes two records; version
+code 2 is installed with `adb install -r`, adds the new field/relationship, retains
+the original physical column and verifies existing values down to microseconds.
+The release application checks generated writes/projections, transaction rollback,
+commit-driven watch delivery, native cancellation and subsequent worker reuse.
+An independently restarted release process verifies three persisted rows and the
+comment, unchanged migration checksums, no migration replay and read-only reopen.
+
+The three phases pass 4/17/11 assertions. A two-million-row recursive sum completes
+while main-isolate timer and Flutter animation callbacks advance (15 and 7 in the
+final capture). These are progress observations, not an FPS or throughput claim.
+Source/APK/screenshot hashes and version/history/row continuity were independently
+read back. The stable screenshot was visually inspected. Initial oversized log
+chunks were truncated by Android; bounded chunks and a fresh complete run resolved
+the report transport issue. ORM runtime source is unchanged. Root analysis and
+the bundled migration chain check pass; the prior 834-test native run and 19+19
+browser scenarios remain separate runtime evidence.
+
+This closes the Android native Flutter gate, not physical-device, Apple-platform
+or power-loss acceptance. Reproduction and exact scope are in [Flutter](flutter.md).
+
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
@@ -689,7 +718,7 @@ claim additional database or native Flutter validation.
 - Further native type coverage.
 - Timezone conversions and remaining temporal operations.
 - Further backend capability coverage.
-- Native Flutter checks and remaining platform acceptance review.
+- Remaining platform acceptance review; Android native Flutter has direct evidence above.
 - User documentation, performance measurements and complete acceptance review.
 
 To-one projections join by default when declared keys prove uniqueness; otherwise
@@ -719,11 +748,12 @@ Use the standalone SDK if the Flutter launcher tries to update its cache:
 
 On 2026-09-15 the installed Flutter cache reports 3.47.4 stable with Dart 3.13.3.
 Xcode reports 27.0 (27A266a), but `xcodebuild -license check` exits 69 and explicitly
-reports that its license has not been accepted. Native Flutter verification needs
-the user's own license review/acceptance and any remaining Xcode initialization.
+reports that its license has not been accepted. Apple-platform Flutter verification
+needs the user's own license review/acceptance and any remaining Xcode initialization.
 No license was accepted on the user's behalf; other development can continue.
 
-The host also contains Android Studio, an Android SDK with API 35/36/36.1 platforms
-and an installed API 35 arm64 emulator image. Android provides another candidate
-for native Flutter verification without relying on Xcode. Existence checks alone
-do not prove emulator startup, a Flutter build, or application behavior.
+The installed Android SDK and API 35 arm64 image were used to create a separate
+temporary AVD without modifying the user's existing AVD. Both APK builds and the
+three application phases succeeded. Flutter's build provisioned its NDK
+28.2.13676358 through the existing SDK setup; no interactive license acceptance
+was performed. Android acceptance does not depend on resolving the Xcode state.

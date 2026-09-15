@@ -1,0 +1,81 @@
+{
+  "format": 1,
+  "tables": [
+    {
+      "name": "notes",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": true
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "done",
+          "type": "boolean",
+          "nullable": false,
+          "generated": false,
+          "default": "false"
+        },
+        {
+          "name": "created_at",
+          "type": "instant",
+          "nullable": false,
+          "generated": false
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [],
+      "foreignKeys": []
+    },
+    {
+      "name": "comments",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": true
+        },
+        {
+          "name": "note_id",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "text",
+          "type": "text",
+          "nullable": false,
+          "generated": false
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [],
+      "foreignKeys": [
+        {
+          "columns": [
+            "note_id"
+          ],
+          "target": "notes",
+          "targetColumns": [
+            "id"
+          ],
+          "onDelete": "CASCADE"
+        }
+      ]
+    }
+  ]
+}

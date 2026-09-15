@@ -1,0 +1,21 @@
+name: orm_flutter
+description: Native Flutter acceptance application for Dart ORM.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.13.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  orm:
+    path: ../..
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/migrations/

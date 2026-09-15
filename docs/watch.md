@@ -145,4 +145,7 @@ savepoint rollback, multi-level cascades, pause, cancellation and database close
 Controlled completed-read and commit-acknowledgement faults exercise race handling
 against real database state. Negative compilation checks verify subscription
 result types. The native execution example also verifies subscriptions in macOS
-AOT. Browser and Flutter platform acceptance remain separate unfinished work.
+AOT. Real Chrome JavaScript and Dart WASM runs verify worker subscriptions;
+the [native Flutter application](flutter.md) also verifies initial delivery,
+committed relation writes, rollback without notification and typed patch refresh
+inside an Android AOT release application.
