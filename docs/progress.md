@@ -102,7 +102,7 @@ requirements and distinguishes direct coverage from missing evidence.
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 703 checks with native SQLite
+Static analysis is clean. The complete suite passes 721 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -376,8 +376,8 @@ when their source is deleted. The native named-query fixture compiles and runs a
 a macOS AOT executable with SQLite. See
 `docs/named-sql.md` for the API and validation limits.
 
-Fourteen browser acceptance scenarios pass in Chrome 153 with a JavaScript client,
-and the same fourteen pass with a Dart WASM client. Both use a separately compiled
+Fifteen browser acceptance scenarios pass in Chrome 153 with a JavaScript client,
+and the same fifteen pass with a Dart WASM client. Both use a separately compiled
 JavaScript database worker and the pinned sqlite3 3.6.0 WASM asset. They cover
 memory migrations/catalogs, FK enforcement, generated records and relations,
 rollback/savepoints/transaction lifetime, bounded cursors, watch snapshots, exact
@@ -429,9 +429,32 @@ The complete native suite passes all 703 checks in one invocation after these
 changes, with PostgreSQL enabled. Both complete browser runs and static analysis
 also pass. The design acceptance map records the remaining product gates.
 
+Seventeen CHECK checks cover generated named/unnamed constraints, SQL NULL,
+native write failures, import and baseline without replacing rows, duplicate
+constraints, drift, casts/precedence, missing/type-changed columns and SQLite
+Unicode identifiers. Add/change/remove migrations validate old data and roll back
+history on failure; explicit renames preserve incoming references, indexes,
+views and SQLite triggers. Unclaimed checks still block SQLite rebuilds.
+PostgreSQL unvalidated, NO INHERIT and NOT ENFORCED constraints stay unmanaged;
+verification plans but does not execute volatile row expressions.
+
+The generator additionally rejects dynamic/empty CHECK SQL, empty names and
+duplicate names. CLI inspection exposes names and expressions. Older snapshots
+without checks preserve their JSON/checksum representation. CHECK SQL is trusted,
+uses physical names and may have backend overrides; PostgreSQL comparison has
+planning cost, and checked SQLite renames may copy a table twice. These boundaries
+are documented in `docs/checks.md`.
+
+The complete native suite passes 721 checks in one invocation, with PostgreSQL
+enabled, after updating an old integer-test assertion for the newly recognized
+CHECK catalog category. Static analysis reports no issues. Real Chrome JS and
+Dart WASM runs each pass 15 scenarios, including generated CHECK enforcement,
+atomic constraint migration failure/retry and persistent upgrades. The browser
+report records both runs; these are correctness checks, not performance results.
+
 ## Still required for the goal
 
-- General CHECK declarations, computed/read-only columns and explicit client-generated values from design sections 4.3, 5 and 8.
+- Computed/read-only columns and explicit client-generated values from design sections 4.3, 5 and 8.
 - Explicit generated junction-table/many-to-many acceptance with payload fields and query-count checks.
 - Advanced-query capability and edge-case review.
 - Broader unmanaged-object catalog coverage.
@@ -445,19 +468,19 @@ also pass. The design acceptance map records the remaining product gates.
 To-one projections join by default when declared keys prove uniqueness; otherwise
 they batch and check cardinality. Collections use explicit parameter-aware batches.
 `verifyColumns` checks column names/types/nullability, integer widths, decimal precision/scale and SQLite collations. `verifySchema` additionally compares defaults,
-keys and simple indexes; its `unmanaged` objects require separate review.
+keys, row CHECK constraints and simple indexes; its `unmanaged` objects require separate review.
 Ordinary migration batches are atomic. Explicit backfills use durable per-step
 checkpoints and short data transactions on both databases. General recoverable
 autocommit SQL remains PostgreSQL-only; SQLite rejects `CheckedSql`. These are
 implementation stages, not a reduction of the active goal.
 
 The full suite includes 52 shared SQLite/PostgreSQL query checks, 20 generated
-client/migration integration checks, 27 source generation checks, five codec
+client/migration integration checks, 28 source generation checks, five codec
 regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CLI
 workflows, 37 streaming/execution checks, 28 relation strategy checks and three
 negative compilation checks covering 29 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks, 20 UTC instant checks, 24 named SQL checks, two explicit floating-parameter checks and 24 unconstrained-relation checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks, 20 UTC instant checks, 24 named SQL checks, two explicit floating-parameter checks, 24 unconstrained-relation checks and 17 CHECK-constraint checks.
 
 ## Environment
 

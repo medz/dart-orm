@@ -32,6 +32,13 @@ final usersSchema = TableSchema(
     ["email"],
   ],
   indexes: [],
+  checks: [
+    CheckSchema.forDialects(
+      "valid_email",
+      sqlite: "length(email) > 0",
+      postgres: "length(email) > 0",
+    ),
+  ],
   foreignKeys: [],
 );
 

@@ -51,6 +51,7 @@ final class _Entity {
   final List<List<String>> uniqueKeys;
   final List<_Index> indexes = [];
   final List<_Edge> edges = [];
+  final List<CheckSchema> checks = [];
   _Entity(this.name, this.table, this.row, this.fields)
     : primaryKey = [
         for (final f in fields)
@@ -90,6 +91,11 @@ final class _Entity {
             'onDelete': edge.onDelete,
           },
     ],
+    if (checks.isNotEmpty)
+      'checks': [
+        for (final c in checks)
+          {'name': c.name, 'sqlite': c.sqlite, 'postgres': c.postgres},
+      ],
   };
   @override
   String toString() => name;

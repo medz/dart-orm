@@ -44,6 +44,23 @@ final class ForeignKey {
   });
 }
 
+/// A row CHECK expression. A null name leaves naming to the database.
+final class CheckSchema {
+  final String? name;
+  final String sqlite;
+  final String postgres;
+  const CheckSchema(this.name, String expression)
+    : sqlite = expression,
+      postgres = expression;
+  const CheckSchema.forDialects(
+    this.name, {
+    required this.sqlite,
+    required this.postgres,
+  });
+  String expression(SqlDialect dialect) =>
+      dialect == SqlDialect.sqlite ? sqlite : postgres;
+}
+
 final class IndexSchema {
   final String name;
   final List<String> columns;
@@ -58,6 +75,7 @@ final class TableSchema {
   final List<List<String>> uniqueKeys;
   final List<ForeignKey> foreignKeys;
   final List<IndexSchema> indexes;
+  final List<CheckSchema> checks;
   TableSchema(
     this.name, {
     required List<Column<Object?>> columns,
@@ -65,6 +83,7 @@ final class TableSchema {
     List<List<String>> uniqueKeys = const [],
     List<ForeignKey> foreignKeys = const [],
     List<IndexSchema> indexes = const [],
+    List<CheckSchema> checks = const [],
   }) : columns = List.unmodifiable(columns),
        primaryKey = List.unmodifiable(primaryKey),
        uniqueKeys = List.unmodifiable(
@@ -79,6 +98,7 @@ final class TableSchema {
              onDelete: key.onDelete,
            ),
        ]),
+       checks = List.unmodifiable(checks),
        indexes = List.unmodifiable([
          for (final index in indexes)
            IndexSchema(

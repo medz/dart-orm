@@ -102,6 +102,14 @@ Future<void> _executeStep(Database<Backend> db, MigrationStep step) async {
     case RebuildTable():
       await _rebuild(db, step);
     case DropConstraint():
+      if (step.constraint['kind'] == 'c') {
+        await _dropCheck(
+          db,
+          step.table,
+          SchemaSnapshot._readCheck(step.constraint),
+        );
+        return;
+      }
       final rows = await db.execute(
         SqlCommand(
           r'''
@@ -158,6 +166,18 @@ WHERE n.nspname = current_schema() AND r.relname = $1''',
 Future<void> _rebuild(Database<Backend> db, RebuildTable step) async {
   final before = step.before, after = step.after, name = after.name;
   final actual = await inspectTable(db, name);
+  final checkMatches = await _matchChecks(
+    db,
+    name,
+    before.checks,
+    actual.checks,
+  );
+  if (actual.checks.length > checkMatches.whereType<int>().length) {
+    throw OrmException(
+      'MIGRATION.UNMANAGED',
+      '$name has undeclared CHECK constraints.',
+    );
+  }
   final unsupported = actual.unmanaged
       .where((o) => !{'index', 'trigger', 'view'}.contains(o.kind))
       .toList();

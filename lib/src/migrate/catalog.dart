@@ -15,6 +15,7 @@ final class TableInfo {
   final List<ForeignKey> foreignKeys;
   final List<IndexSchema> indexes;
   final List<CatalogObject> unmanaged;
+  final List<CheckInfo> checks;
   const TableInfo({
     required this.name,
     required this.columns,
@@ -23,6 +24,7 @@ final class TableInfo {
     required this.foreignKeys,
     required this.indexes,
     required this.unmanaged,
+    this.checks = const [],
   });
 }
 
@@ -41,6 +43,7 @@ Future<TableInfo> inspectTable(Database<Backend> db, String table) async {
       unique = <List<String>>[],
       indexes = <IndexSchema>[];
   final foreign = <ForeignKey>[], unmanaged = <CatalogObject>[];
+  final checks = <CheckInfo>[];
   if (db.dialect == SqlDialect.sqlite) {
     final info = await db.execute(
       SqlCommand('PRAGMA table_xinfo(${_quote(table)})'),
@@ -132,13 +135,22 @@ Future<TableInfo> inspectTable(Database<Backend> db, String table) async {
       ),
     );
     final sql = ddl.rows.firstOrNull?.first as String?;
+    var withoutChecks = sql ?? '';
+    if (sql != null) {
+      // Storage checks retain their existing column-width/precision meaning.
+      final remaining = _withoutIntegerChecks(sql, columns);
+      final parsed = _sqliteChecks(remaining);
+      checks.addAll(parsed.map((c) => CheckInfo(c.name, c.expression)));
+      final text = StringBuffer();
+      var start = 0;
+      for (final check in parsed) {
+        text.write(remaining.substring(start, check.start));
+        start = check.end;
+      }
+      withoutChecks = (text..write(remaining.substring(start))).toString();
+    }
     if (sql != null &&
-        _sqlWords(
-          _withoutStorageCollations(
-            _withoutIntegerChecks(sql, columns),
-            columns,
-          ),
-        ).any(
+        _sqlWords(_withoutStorageCollations(withoutChecks, columns)).any(
           {
             'CHECK',
             'DEFERRABLE',
@@ -163,7 +175,9 @@ SELECT c.conname, c.contype::text,
        JOIN pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = k.num ORDER BY k.ord),
  c.confdeltype::text, c.confupdtype::text, c.confmatchtype::text,
  c.condeferrable, c.convalidated, pg_get_constraintdef(c.oid), tn.nspname,
- coalesce((to_jsonb(i)->>'indnullsnotdistinct')::boolean, false)
+ coalesce((to_jsonb(i)->>'indnullsnotdistinct')::boolean, false),
+ pg_get_expr(c.conbin, c.conrelid), c.connoinherit, c.conislocal, c.coninhcount,
+ coalesce((to_jsonb(c)->>'conenforced')::boolean, true)
 FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid
 JOIN pg_namespace n ON n.oid = r.relnamespace
 LEFT JOIN pg_class t ON t.oid = c.confrelid
@@ -213,6 +227,13 @@ WHERE n.nspname = current_schema() AND r.relname = $1''',
             },
           ),
         );
+      } else if (kind == 'c' &&
+          row[9] == true &&
+          row[14] == false &&
+          row[15] == true &&
+          row[16] == 0 &&
+          row[17] == true) {
+        checks.add(CheckInfo(row[0] as String, row[13] as String));
       } else if (kind != 'n') {
         unmanaged.add(
           CatalogObject('constraint', row[0] as String, row[10] as String),
@@ -282,6 +303,7 @@ FROM pg_policies WHERE schemaname = current_schema() AND tablename = $1''',
     foreignKeys: foreign,
     indexes: indexes,
     unmanaged: unmanaged,
+    checks: List.unmodifiable(checks),
   );
 }
 
@@ -294,14 +316,17 @@ Future<SchemaVerification> verifySchema(
     final actual = await inspectTable(db, table.name);
     unmanaged.addAll(actual.unmanaged);
     final columns = {for (final c in actual.columns) c.name: c};
+    var checkContextMatches = true;
     for (final column in table.columns) {
       final found = columns.remove(column.name),
           path = '${table.name}.${column.name}';
       if (found == null) {
+        checkContextMatches = false;
         differences.add('$path is missing');
         continue;
       }
       if (found.storageType != _columnStorageType(column, db.dialect)) {
+        checkContextMatches = false;
         differences.add('$path type differs');
       }
       if (found.nullable != column.nullable) {
@@ -348,6 +373,23 @@ Future<SchemaVerification> verifySchema(
         values.map((v) => jsonEncode(_canonical(v))).toList()..sort();
     compare('primary key', table.primaryKey, actual.primaryKey);
     compare('unique keys', set(table.uniqueKeys), set(actual.uniqueKeys));
+    // Expected SQL may no longer resolve when a referenced column/type drifted.
+    // Report that schema drift instead of attempting an invalid EXPLAIN.
+    final checkMatches = checkContextMatches
+        ? await _matchChecks(db, table.name, table.checks, actual.checks)
+        : List<int?>.filled(table.checks.length, null);
+    if (checkMatches.any((i) => i == null) ||
+        checkMatches.length != actual.checks.length) {
+      differences.add('${table.name} checks differs');
+      for (var i = 0; i < actual.checks.length; i++) {
+        if (!checkMatches.contains(i)) {
+          final c = actual.checks[i];
+          unmanaged.add(
+            CatalogObject('check', c.name ?? '${table.name}#$i', c.expression),
+          );
+        }
+      }
+    }
     compare(
       'foreign keys',
       set(table.foreignKeys.map(_foreignKeyJson)),

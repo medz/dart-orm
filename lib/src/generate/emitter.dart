@@ -24,6 +24,7 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
       'primaryKey: ${_strings(entity.columns(entity.primaryKey))}, '
       'uniqueKeys: [${entity.uniqueKeys.map((k) => _strings(entity.columns(k))).join(', ')}], '
       'indexes: [${entity.indexes.map((i) => 'IndexSchema(${_literal(i.name)}, ${_strings(entity.columns(i.keys))}, unique: ${i.unique})').join(', ')}], '
+      '${entity.checks.isEmpty ? '' : 'checks: [${entity.checks.map((c) => 'CheckSchema.forDialects(${c.name == null ? 'null' : _literal(c.name!)}, sqlite: ${_literal(c.sqlite)}, postgres: ${_literal(c.postgres)})').join(', ')}], '}'
       'foreignKeys: [${entity.edges.where((e) => e.isForeignKey).map((e) => 'ForeignKey(${_strings(entity.columns(e.parentKeys))}, ${_literal(e.target.table)}, ${_strings(e.target.columns(e.childKeys))}, onDelete: ${_literal(e.onDelete!)})').join(', ')}]);',
     );
     b.writeln(

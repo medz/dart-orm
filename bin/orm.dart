@@ -330,6 +330,10 @@ Future<void> main(List<String> arguments) async {
               for (final i in info.indexes)
                 {'name': i.name, 'columns': i.columns, 'unique': i.unique},
             ],
+            'checks': [
+              for (final check in info.checks)
+                {'name': check.name, 'expression': check.expression},
+            ],
             'unmanaged': _objects(info.unmanaged),
           });
         case 'db import':

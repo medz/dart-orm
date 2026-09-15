@@ -535,6 +535,29 @@ ImportedSchema _importDeclarations(
         extra: ', name: ${_literal(index.name)}, unique: ${index.unique}',
       );
     }
+    final checks = info.checks.toList()
+      ..sort(
+        (a, b) =>
+            jsonEncode([a.name, a.expression])
+                .compareTo(jsonEncode([b.name, b.expression])),
+      );
+    for (final check in checks) {
+      final symbol = names.take(check.name ?? '${entity}Check');
+      b.writeln(
+        'final $symbol = $entity.check(${_literal(check.expression)}, '
+        'name: ${check.name == null ? 'null' : _literal(check.name!)});',
+      );
+    }
+    if (checks.isNotEmpty) {
+      issues.add(
+        SchemaImportIssue(
+          'IMPORT.CHECK_SQL',
+          info.name,
+          'CHECK expressions use ${dialect.name} SQL. Review other-dialect overrides before deploying this declaration elsewhere.',
+          blocking: false,
+        ),
+      );
+    }
     final foreign = info.foreignKeys.toList()
       ..sort(
         (a, b) => jsonEncode([a.columns, a.target, a.targetColumns, a.onDelete])

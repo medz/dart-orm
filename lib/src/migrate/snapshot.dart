@@ -46,6 +46,10 @@ final class SchemaSnapshot {
       for (final value in json['foreignKeys'] as List<Object?>)
         _readForeignKey(value as Map<String, Object?>),
     ],
+    checks: [
+      for (final c in (json['checks'] as List<Object?>? ?? const []))
+        _readCheck(c as Map<String, Object?>),
+    ],
   );
   static Column<Object?> _readColumn(Map<String, Object?> json) {
     final codec = switch (json['type']) {
@@ -92,7 +96,19 @@ final class SchemaSnapshot {
     (json['targetColumns'] as List<Object?>).cast<String>(),
     onDelete: json['onDelete'] as String,
   );
+  static CheckSchema _readCheck(Map<String, Object?> json) =>
+      CheckSchema.forDialects(
+        json['name'] as String?,
+        sqlite: json['sqlite'] as String,
+        postgres: json['postgres'] as String,
+      );
 }
+
+Map<String, Object?> _checkJson(CheckSchema check) => {
+  'name': check.name,
+  'sqlite': check.sqlite,
+  'postgres': check.postgres,
+};
 
 Map<String, Object?> _columnJson(Column<Object?> column) => {
   'name': column.name,
@@ -127,4 +143,5 @@ Map<String, Object?> _tableJson(TableSchema table) => {
   'uniqueKeys': table.uniqueKeys,
   'indexes': [for (final index in table.indexes) _indexJson(index)],
   'foreignKeys': [for (final key in table.foreignKeys) _foreignKeyJson(key)],
+  if (table.checks.isNotEmpty) 'checks': table.checks.map(_checkJson).toList(),
 };

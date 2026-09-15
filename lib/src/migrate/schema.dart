@@ -10,6 +10,18 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
       throw const OrmException('SCHEMA.DUPLICATE', 'Duplicate table name.');
     }
     final columns = <String>{};
+    final checkNames = <String>{};
+    for (final check in table.checks) {
+      if (check.expression(dialect).trim().isEmpty ||
+          check.name != null &&
+              (check.name!.isEmpty ||
+                  !checkNames.add(_sqliteName(check.name!)))) {
+        throw const OrmException(
+          'SCHEMA.CHECK',
+          'CHECK expressions and names must be non-empty; names must be unique per table.',
+        );
+      }
+    }
     for (final column in table.columns) {
       if (column.decimalPrecision != null || column.decimalScale != null) {
         if (column.codec.sqlType != 'decimal' ||
@@ -102,6 +114,7 @@ String _createTable(TableSchema table, SqlDialect dialect, {String? name}) {
   for (final key in table.uniqueKeys) {
     definitions.add('UNIQUE (${key.map(_quote).join(', ')})');
   }
+  definitions.addAll(table.checks.map((c) => _checkDefinition(c, dialect)));
   if (dialect == SqlDialect.sqlite) {
     for (final key in table.foreignKeys) {
       definitions.add(_foreignKey(key));
@@ -110,6 +123,9 @@ String _createTable(TableSchema table, SqlDialect dialect, {String? name}) {
 
   return 'CREATE TABLE ${_quote(name ?? table.name)} (${definitions.join(', ')})';
 }
+
+String _checkDefinition(CheckSchema check, SqlDialect dialect) =>
+    '${check.name == null ? '' : 'CONSTRAINT ${_quote(check.name!)} '}CHECK (${check.expression(dialect)}\n)';
 
 String _columnDefinition(Column<Object?> c, SqlDialect dialect) {
   final b = StringBuffer('${_quote(c.name)} ${_columnStorageType(c, dialect)}');

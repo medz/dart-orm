@@ -82,6 +82,15 @@ final class Entity<M> {
       const SchemaConstraint();
   SchemaConstraint unique<K>(K Function(M) selector) =>
       const SchemaConstraint();
+
+  /// Trusted SQL using physical column names. Omitted name uses the declaration
+  /// name; explicit name: null preserves an unnamed imported constraint.
+  SchemaConstraint check(
+    String expression, {
+    String? name,
+    String? sqlite,
+    String? postgres,
+  }) => const SchemaConstraint();
   SchemaConstraint index<K>(
     K Function(M) selector, {
     String? name,

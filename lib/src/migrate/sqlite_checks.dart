@@ -1,7 +1,13 @@
 part of '../../migrate.dart';
 
 typedef _SqliteToken = ({String text, int start, int end});
-typedef _SqliteCheck = ({String signature, int start, int end});
+typedef _SqliteCheck = ({
+  String signature,
+  String expression,
+  String? name,
+  int start,
+  int end,
+});
 
 bool _sqliteWord(int c) =>
     c >= 128 ||
@@ -14,8 +20,9 @@ String _sqliteName(String name) => String.fromCharCodes(
   name.codeUnits.map((c) => c >= 65 && c <= 90 ? c + 32 : c),
 );
 
-// Recognize only the range expressions emitted by this ORM, without mistaking
-// quoted defaults/comments for constraints. This is not a general SQL parser.
+// Tokenize constraint expressions without mistaking quoted defaults/comments for
+// constraints. Storage ranges still require exact emitted signatures below.
+// This is not a general SQL parser.
 List<_SqliteToken> _sqliteTokens(String sql) {
   final result = <_SqliteToken>[];
   var i = 0;
@@ -82,11 +89,19 @@ List<_SqliteCheck> _sqliteChecks(String sql) {
       if (tokens[end].text == ')' && --depth == 0) break;
     }
     if (depth != 0) break;
+    final named = i >= 2 && tokens[i - 2].text == 'CONSTRAINT';
+    final name = named ? tokens[i - 1] : null;
     checks.add((
       signature: jsonEncode(
         tokens.sublist(i + 2, end).map((t) => t.text).toList(),
       ),
-      start: tokens[i].start,
+      expression: sql.substring(tokens[i + 1].end, tokens[end].start).trim(),
+      name: name == null
+          ? null
+          : name.text.startsWith('i:') || name.text.startsWith('s:')
+          ? name.text.substring(2)
+          : sql.substring(name.start, name.end),
+      start: named ? tokens[i - 2].start : tokens[i].start,
       end: tokens[end].end,
     ));
     i = end;
@@ -101,7 +116,9 @@ String _integerSignature(String name, int bits) => jsonEncode(
 int _sqliteIntegerBits(String name, List<_SqliteCheck> checks) {
   for (final bits in [16, 32]) {
     final signature = _integerSignature(name, bits);
-    if (checks.any((c) => c.signature == signature)) return bits;
+    if (checks.any((c) => c.name == null && c.signature == signature)) {
+      return bits;
+    }
   }
   return 64;
 }
@@ -116,7 +133,7 @@ String _withoutIntegerChecks(String sql, List<ColumnInfo> columns) {
   final result = StringBuffer();
   var start = 0;
   for (final check in _sqliteChecks(sql)) {
-    if (!known.contains(check.signature)) continue;
+    if (check.name != null || !known.contains(check.signature)) continue;
     result.write(sql.substring(start, check.start));
     start = check.end;
   }
@@ -131,6 +148,7 @@ String _decimalSignature(String name, int precision, int scale) => jsonEncode(
 
 (int, int)? _sqliteDecimalDigits(String name, List<_SqliteCheck> checks) {
   for (final check in checks) {
+    if (check.name != null) continue;
     final tokens = (jsonDecode(check.signature) as List).cast<String>();
     final index = tokens.indexOf('ORM_DECIMAL_FITS_V1');
     if (index < 0 || index + 7 >= tokens.length) continue;

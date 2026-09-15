@@ -58,6 +58,10 @@ For an existing database, [import a Record declaration](docs/importing.md), revi
 its report, generate the client, and baseline the current schema without copying
 existing rows.
 
+Declare [row CHECK constraints](docs/checks.md) with explicit SQL and optional
+backend overrides; generated snapshots support catalog verification, import and
+reviewed constraint migrations.
+
 For complex SQL files, [generate named queries](docs/named-sql.md) with typed
 Record parameters/results, native database structure checks and the same query
 composition, transaction and streaming APIs.

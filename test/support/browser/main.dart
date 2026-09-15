@@ -112,6 +112,60 @@ Future<void> main() async {
         await rejects(() => db.posts.create(authorId: 999, title: 'invalid'));
       });
       await check(
+        'generated CHECK enforcement and atomic constraint migrations',
+        () async {
+          await rejects(() => db.users.create(email: ''));
+          expect(
+            (await inspectTable(db, 'users')).checks.length == 1,
+            'Generated CHECK missing',
+          );
+          final isolated = await memory();
+          try {
+            TableSchema table(List<CheckSchema> constraints) => TableSchema(
+              'scores',
+              columns: [Column('value', Codecs.integer)],
+              checks: constraints,
+            );
+            final start = SchemaSnapshot([table(const [])]);
+            final first = Migration.create('0001_initial', start.tables);
+            await Migrator(isolated).apply([first]);
+            await isolated.execute(
+              SqlCommand('INSERT INTO scores VALUES (-1)'),
+            );
+            final target = SchemaSnapshot([
+              table(const [CheckSchema('positive', 'value >= 0')]),
+            ]);
+            final second = Migration.diff(
+              '0002_check',
+              from: start,
+              to: target,
+              previous: first.checksum,
+            );
+            await rejects(() => Migrator(isolated).apply([first, second]));
+            expect(
+              (await verifySchema(isolated, start)).matches,
+              'Failed CHECK migration changed schema',
+            );
+            expect(
+              (await Migrator(isolated).history()).length == 1,
+              'Failed CHECK migration changed history',
+            );
+            await isolated.execute(SqlCommand('UPDATE scores SET value = 2'));
+            await Migrator(isolated).apply([first, second]);
+            expect(
+              (await verifySchema(isolated, target)).matches,
+              'CHECK migration differs',
+            );
+            await rejects(
+              () =>
+                  isolated.execute(SqlCommand('UPDATE scores SET value = -1')),
+            );
+          } finally {
+            await isolated.close();
+          }
+        },
+      );
+      await check(
         'generated records, projections and typed relation batches',
         () async {
           final a = await db.users.create(email: 'a');

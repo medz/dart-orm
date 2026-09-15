@@ -75,10 +75,21 @@ Migration _diff(
   String tableName(String name) => renames.tables[name] ?? name;
   String columnName(String table, String column) =>
       renames.columns[tableName(table)]?[column] ?? column;
+  // CHECK SQL is deliberately not rewritten as text. Remove it before native
+  // renames, then validate the explicitly declared target expressions afterward.
+  final checkedRenames = from.tables
+      .where(
+        (t) =>
+            t.checks.isNotEmpty &&
+            (renames.tables.containsKey(t.name) ||
+                (renames.columns[tableName(t.name)]?.isNotEmpty ?? false)),
+      )
+      .toList();
   final before = {
     for (final table in from.tables)
       tableName(table.name): TableSchema(
         tableName(table.name),
+        checks: checkedRenames.contains(table) ? const [] : table.checks,
         columns: [
           for (final c in table.columns)
             Column<Object?>(
@@ -189,7 +200,25 @@ Migration _diff(
   }
   final plans = <SqlDialect, List<MigrationStep>>{};
   for (final dialect in SqlDialect.values) {
-    final steps = <MigrationStep>[...renameSql];
+    final steps = <MigrationStep>[];
+    for (final table in checkedRenames) {
+      if (dialect == SqlDialect.sqlite) {
+        steps.add(
+          RebuildTable(
+            table,
+            _withChecks(table, const []),
+            copy: {for (final c in table.columns) c.name: _quote(c.name)},
+          ),
+        );
+      } else {
+        for (final check in table.checks) {
+          steps.add(
+            DropConstraint(table.name, {'kind': 'c', ..._checkJson(check)}),
+          );
+        }
+      }
+    }
+    steps.addAll(renameSql);
     final addedForeignKeys = <(String, ForeignKey)>[];
     if (dialect == SqlDialect.postgres) {
       bool keysChanged(String name) {
@@ -283,10 +312,13 @@ Migration _diff(
             next.uniqueKeys,
             next.foreignKeys.map(_foreignKeyJson).toList(),
           ]);
+      final checks = _checkDelta(old.checks, next.checks, dialect);
       if (dialect == SqlDialect.sqlite &&
           (removed.isNotEmpty ||
               changed.isNotEmpty ||
               keysChanged ||
+              checks.removed.isNotEmpty ||
+              checks.added.isNotEmpty ||
               added.any((c) => !_canAddSqlite(newColumns[c]!)))) {
         steps.add(
           RebuildTable(
@@ -303,6 +335,9 @@ Migration _diff(
         continue;
       }
       if (dialect == SqlDialect.postgres) {
+        for (final check in checks.removed) {
+          steps.add(DropConstraint(name, {'kind': 'c', ..._checkJson(check)}));
+        }
         if (_hash(old.primaryKey) != _hash(next.primaryKey) &&
             old.primaryKey.isNotEmpty) {
           steps.add(
@@ -366,6 +401,14 @@ Migration _diff(
         }
       }
       if (dialect == SqlDialect.postgres) {
+        if (checks.added.isNotEmpty) {
+          steps.add(
+            ExecuteSql(
+              'ALTER TABLE ${_quote(name)} '
+              '${checks.added.map((c) => 'ADD ${_checkDefinition(c, dialect)}').join(', ')}',
+            ),
+          );
+        }
         if (_hash(old.primaryKey) != _hash(next.primaryKey) &&
             next.primaryKey.isNotEmpty) {
           steps.add(

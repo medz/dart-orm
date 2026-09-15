@@ -411,7 +411,16 @@ void main() {
           );
           final info = await inspectTable(db, 'sized');
           expect(info.columns.last.integerBits, 64);
-          expect(info.unmanaged.map((o) => o.kind), contains('table options'));
+          expect(info.checks.single.expression, endsWith('OR 1'));
+          final verification = await verifySchema(
+            db,
+            SchemaSnapshot([sized(16)]),
+          );
+          expect(
+            verification.differences,
+            contains('sized.value integer width differs'),
+          );
+          expect(verification.unmanaged.map((o) => o.kind), contains('check'));
         });
       }
     });

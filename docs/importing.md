@@ -56,6 +56,11 @@ indexes and representable foreign keys become declarations. Relationships get na
 and inverse selections; rename these before generation if a domain name is clearer.
 Foreign-key actions include SET DEFAULT.
 
+Ordinary enforced [CHECK constraints](checks.md) become `.check(...)` declarations
+with their native names and SQL. A nonblocking `IMPORT.CHECK_SQL` note requests
+review of backend-specific expressions before deployment on another dialect.
+PostgreSQL unvalidated, unenforced and inheritance-specific checks remain unmanaged.
+
 The JSON report records the dialect, schema, name maps, and issues:
 
 - Blocking issues exclude an unsupported table or relation. CLI exit code is 2;

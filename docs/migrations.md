@@ -172,11 +172,16 @@ connection. Incoming cascade relations therefore do not delete child rows during
 replacement. Existing views are retained and checked after replacement.
 
 The runner preserves unmanaged indexes and triggers whose SQL can be restored.
-Unmodeled table constraints/options (`CHECK`, collations, generated expressions,
+Unmodeled table constraints/options (undeclared `CHECK`, collations, generated expressions,
 `STRICT`, `WITHOUT ROWID`, and similar features) require a manual migration;
 they are never silently discarded. Removing columns from a table with triggers
 also requires explicit manual handling. A new managed index cannot silently
 replace an unmanaged index of the same name.
+
+[Declared CHECK constraints](checks.md) participate in schema diffs, inspection
+and import. SQLite adds/changes/removes them through a rebuild; PostgreSQL uses
+constraint DDL. Checked renames explicitly remove and re-add the declared SQL,
+which can require two SQLite copies. Existing rows are validated before commit.
 
 Manual migrations use `Migration(id, {dialect: ['SQL', ...]})`, or
 `Migration.steps` with `ExecuteSql`, `DropTable`, and `RebuildTable` operations.

@@ -51,6 +51,7 @@ void main() {
         'test/support/temporals/schema.dart',
         'test/support/instants/schema.dart',
         'test/support/unconstrained/schema.dart',
+        'test/support/checks/schema.dart',
       ]) {
         final result = await generateSchema(source);
         final temporary = File('${fixtures.path}/deterministic.dart');
@@ -107,6 +108,34 @@ final key = users.primaryKey((u) => u.id + 1);
 '''),
       throwsA(isA<GenerationException>()),
     );
+  });
+
+  test('CHECK declarations reject dynamic SQL, empty overrides and duplicate names', () async {
+    for (final (name, declaration) in [
+      (
+        'dynamic_check',
+        "final sql = 'id > 0'; final valid = items.check(sql);",
+      ),
+      ('empty_check', "final valid = items.check(' ');"),
+      (
+        'empty_check_override',
+        "final valid = items.check('id > 0', sqlite: '');",
+      ),
+      (
+        'duplicate_check',
+        "final one = items.check('id > 0', name: 'valid'); final two = items.check('id < 10', name: 'VALID');",
+      ),
+      ('empty_check_name', "final valid = items.check('id > 0', name: '');"),
+    ]) {
+      await expectLater(
+        generate(name, '''
+typedef Item = ({@Id() int id});
+final items = entity<Item>();
+$declaration
+'''),
+        throwsA(isA<GenerationException>()),
+      );
+    }
   });
 
   test('custom types resolve defining libraries when output moves to another directory', () async {

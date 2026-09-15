@@ -99,6 +99,9 @@ void main() {
         ],
         primaryKey: usersSchema.primaryKey,
         uniqueKeys: usersSchema.uniqueKeys,
+        checks: const [
+          CheckSchema('valid_status', "status IN ('active', 'disabled')"),
+        ],
       ),
       postsSchema,
     ]);
@@ -127,6 +130,18 @@ void main() {
       1,
     );
     await cli(['migrate', 'apply', '--sqlite', file, '--dir', migrations]);
+    final constrained = await cli([
+      'db',
+      'inspect',
+      '--sqlite',
+      file,
+      '--table',
+      'users',
+    ]);
+    expect((constrained['checks'] as List).single, {
+      'name': 'valid_status',
+      'expression': "status IN ('active', 'disabled')",
+    });
     expect(
       (await cli([
         'db',

@@ -20,6 +20,7 @@ typedef Value = ({
   DateTime instant,
 });
 final users = entity<User>();
+final validEmail = users.check('length(email) > 0');
 final posts = entity<Post>();
 final values = entity<Value>();
 final readings = entity<Reading>();

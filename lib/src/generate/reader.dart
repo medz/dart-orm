@@ -73,6 +73,35 @@ final class _SchemaReader(
       final entity = entities[(call.target as SimpleIdentifier).name];
       if (entity == null) continue;
       final method = call.methodName.name;
+      if (method == 'check') {
+        final expression = call.argumentList.arguments.first.argumentExpression;
+        if (expression is! SimpleStringLiteral ||
+            expression.value.trim().isEmpty) {
+          _fail(expression, 'CHECK requires a non-empty SQL string literal.');
+        }
+        final name = _named(call, 'name') is NullLiteral
+            ? null
+            : _namedString(call, 'name') ?? _snake(variable.name.lexeme);
+        final check = CheckSchema.forDialects(
+          name,
+          sqlite: _namedString(call, 'sqlite') ?? expression.value,
+          postgres: _namedString(call, 'postgres') ?? expression.value,
+        );
+        if (check.sqlite.trim().isEmpty ||
+            check.postgres.trim().isEmpty ||
+            name != null &&
+                (name.isEmpty ||
+                    entity.checks.any(
+                      (c) => c.name?.toLowerCase() == name.toLowerCase(),
+                    ))) {
+          _fail(
+            call,
+            'CHECK expressions and names must be non-empty; names must be unique per table.',
+          );
+        }
+        entity.checks.add(check);
+        continue;
+      }
       if (!{'primaryKey', 'unique', 'index'}.contains(method)) continue;
       final keys = _selector(
         call.argumentList.arguments.first.argumentExpression,
