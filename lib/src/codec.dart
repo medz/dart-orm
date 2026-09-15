@@ -7,6 +7,13 @@ final class SqlJson {
   const SqlJson(this.value);
 }
 
+/// Explicit floating-point SQL input. JavaScript cannot distinguish an
+/// integral double from int by runtime type; this preserves the SQL intention.
+final class SqlReal {
+  final double value;
+  const SqlReal(this.value);
+}
+
 /// Storage and Dart values meet only at this boundary.
 final class Codec<T> {
   final String sqlType;
@@ -126,7 +133,8 @@ abstract final class Codecs {
   static final real = Codec<double>(
     'real',
     (v) => v is String ? double.parse(v) : (v as num).toDouble(),
-    (v) => v,
+    (v) =>
+        const bool.fromEnvironment('dart.library.js_interop') ? SqlReal(v) : v,
   );
   static final text = Codec<String>('text', (v) => v as String, (v) => v);
   static final boolean = Codec<bool>(

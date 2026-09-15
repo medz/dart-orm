@@ -170,6 +170,7 @@ extension KeysetQuery<R, F extends Fields> on Query<R, F> {
 
 Object? _encodeCursorValue(Object? value) => switch (value) {
   null || String() || bool() => value,
+  SqlReal(:final value) when value.isFinite => ['double', value.toString()],
   int v => ['int', v.toString()],
   double v when v.isFinite => ['double', v.toString()],
   DateTime v => ['time', v.toUtc().toIso8601String()],

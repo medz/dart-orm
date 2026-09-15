@@ -42,8 +42,7 @@ void _sqliteMain((SendPort, SqliteOptions) init) async {
           ? native.OpenMode.readOnly
           : native.OpenMode.readWriteCreate,
     );
-    _registerDecimals(db);
-    _registerTemporals(db);
+    registerSqliteFunctions(db);
     db.execute('PRAGMA foreign_keys = ON');
     if (db.select('PRAGMA foreign_keys').single.values.single != 1) {
       throw const OrmException(
@@ -100,7 +99,9 @@ void _sqliteMain((SendPort, SqliteOptions) init) async {
           case SqlCommand():
             final statement = db!.prepare(command.sql, checkNoTail: true);
             try {
-              final rows = statement.select(command.parameters);
+              final rows = statement.select(
+                sqliteParameters(command.parameters),
+              );
               result = SqlResult(
                 [for (final row in rows) row.values.toList()],
                 columns: rows.columnNames,
@@ -123,7 +124,9 @@ void _sqliteMain((SendPort, SqliteOptions) init) async {
               }
               final cursor = _NativeCursor(
                 statement,
-                statement.selectCursor(command.command.parameters),
+                statement.selectCursor(
+                  sqliteParameters(command.command.parameters),
+                ),
               );
               final cursorId = ++nextCursor;
               cursors[cursorId] = cursor;

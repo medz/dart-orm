@@ -11,6 +11,8 @@ This file records verified delivery, not planned capabilities presented as worki
 - Immutable filters, order, offset/limit, count/exists, basic aggregation and mutations.
 - Parameter binding, table occurrence scope checking, explicit default/null changes.
 - Native SQLite worker with verified foreign keys, journal mode and parameter limit.
+- Browser SQLite worker with explicit memory/OPFS storage, exclusive ownership, verified journaling/foreign keys and shared native codecs/functions.
+- Real Chrome acceptance for JavaScript and Dart WASM clients, including persistent reopen, interrupted-transaction recovery and schema upgrades after page reload.
 - PostgreSQL driver with a single pool owner, TLS settings and explicit borrowed pools.
 - Transaction lifecycle, rollback, savepoints, pending work checks and query observation.
 - Transaction-wide deadlines/cancellation with native SQL interruption, callback expiry and awaited cleanup.
@@ -97,7 +99,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 669 checks with native SQLite
+Static analysis is clean. The complete suite passes 671 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -368,18 +370,52 @@ with runtime decoding, rather than claimed database inference.
 The real build_runner build/watch process also tracks named SQL assets and imported
 enum changes, recovers from SQL parameter errors, and removes both query outputs
 when their source is deleted. The native named-query fixture compiles and runs as
-a macOS AOT executable with SQLite. The complete suite passes 669 checks in this
-run; this is correctness evidence, not a throughput measurement. See
+a macOS AOT executable with SQLite. See
 `docs/named-sql.md` for the API and validation limits.
+
+Fourteen browser acceptance scenarios pass in Chrome 153 with a JavaScript client,
+and the same fourteen pass with a Dart WASM client. Both use a separately compiled
+JavaScript database worker and the pinned sqlite3 3.6.0 WASM asset. They cover
+memory migrations/catalogs, FK enforcement, generated records and relations,
+rollback/savepoints/transaction lifetime, bounded cursors, watch snapshots, exact
+BigInt/Decimal/blob/calendar transport, unsupported interruption, responsive UI
+events during a long query, bounded startup failures and exclusive OPFS ownership.
+Committed rows survive closing/reopening and an actual page reload while a second
+transaction is still open. Reload recovery discards that transaction, passes
+integrity_check, and applies the next schema version without losing prior rows.
+
+Browser acceptance reproduced two numeric differences: integral doubles can be
+mistaken for unsafe integer parameters, and epoch-microsecond arithmetic loses
+precision for remote DateTime values. Explicit SqlReal binding and component-based
+instant decoding preserve their intent and precision in both compilation modes.
+Floating keyset cursor tokens preserve their value and stable tie breaker.
+Checks include BC microseconds and DateTime's upper boundary. Two additional real
+native database checks verify SqlReal floating storage on SQLite and PostgreSQL.
+The native UTC instant AOT fixture is revalidated after sharing SQLite functions
+with the web worker. Captured browser results are in
+`research/validation/browser.json`; setup and limitations are in
+`docs/sqlite-web.md`. These correctness checks do not measure throughput or certify
+Safari, Firefox, Flutter embedding, IndexedDB or a shared multi-tab service.
+Statement interruption remains explicitly unsupported by this web driver.
+After the floating-cursor correction, all 54 native query/floating-parameter
+checks pass again, as do both complete browser runs and static analysis.
+
+The native full suite passes in one invocation with PostgreSQL enabled. macOS runs
+test files serially because separate Dart CLI startups can concurrently rewrite
+and codesign the shared SQLite native-asset cache before application code starts.
+Explicit concurrent database operations inside tests remain enabled. Browser
+acceptance commands run separately from the native suite.
 
 ## Still required for the goal
 
+- General CHECK declarations, computed/read-only columns and explicit client-generated values from design sections 4.3, 5 and 8.
+- Explicit read-only relation declarations without database foreign keys from design section 4.2.
 - Advanced-query capability and edge-case review.
 - Broader unmanaged-object catalog coverage.
 - Further native type coverage.
 - Temporal column precision and timezone conversions.
 - Further backend capability coverage.
-- Browser worker/persistence adapter and real browser verification; native Flutter checks.
+- Native Flutter checks and remaining platform acceptance review.
 - User documentation, performance measurements and complete acceptance review.
 
 To-one projections join by default when declared keys prove uniqueness; otherwise
@@ -397,7 +433,7 @@ regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CL
 workflows, 37 streaming/execution checks, 28 relation strategy checks and two
 negative compilation checks covering 24 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks, 20 UTC instant checks and 24 named SQL checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks, 20 UTC instant checks, 24 named SQL checks and two explicit floating-parameter checks.
 
 ## Environment
 

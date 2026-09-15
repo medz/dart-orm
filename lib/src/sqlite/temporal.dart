@@ -1,6 +1,6 @@
-part of '../../sqlite.dart';
+part of 'functions.dart';
 
-void _registerTemporals(native.Database db) {
+void _registerTemporals(native.CommonDatabase db) {
   db.createFunction(
     functionName: 'orm_instant_v1',
     argumentCount: const native.AllowedArgumentCount(1),

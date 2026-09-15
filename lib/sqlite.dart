@@ -8,12 +8,13 @@ import 'dart:ffi' as ffi;
 import 'package:sqlite3/sqlite3.dart' as native;
 
 import 'orm.dart';
+import 'src/sqlite/failure.dart';
+import 'src/sqlite/functions.dart';
+export 'src/sqlite/failure.dart';
 export 'orm.dart';
 
 part 'src/sqlite/worker.dart';
 part 'src/sqlite/native.dart';
-part 'src/sqlite/decimal.dart';
-part 'src/sqlite/temporal.dart';
 
 enum SqliteJournal { wal, delete, memory }
 
@@ -36,21 +37,6 @@ final class SqliteOptions {
     : path = ':memory:',
       journal = SqliteJournal.memory,
       readOnly = false;
-}
-
-final class SqliteFailure implements SqlFailure {
-  @override
-  bool get retryTransaction => code == 5;
-  @override
-  bool get retryCommit => code == 5;
-  @override
-  bool get commitRejected => code == 5 || code == 19;
-  final int code;
-  final int extendedCode;
-  final String message;
-  const SqliteFailure(this.code, this.extendedCode, this.message);
-  @override
-  String toString() => 'SqliteFailure($extendedCode): $message';
 }
 
 final class SqliteDriver implements Driver<Sqlite> {

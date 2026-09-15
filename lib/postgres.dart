@@ -248,7 +248,11 @@ final class _PostgresConnection implements SqlConnection {
     );
     try {
       final rows = <pg.ResultRow>[];
-      final subscription = statement.bind(command.parameters).listen(rows.add);
+      final subscription = statement
+          .bind([
+            for (final p in command.parameters) p is SqlReal ? p.value : p,
+          ])
+          .listen(rows.add);
       try {
         await subscription.asFuture<void>();
         final schema = await subscription.schema;

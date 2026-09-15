@@ -13,8 +13,12 @@ DateTime _decodeInstant(Object? value) => switch (value) {
 };
 
 DateTime _checkedInstant(DateTime value) {
-  final utc = value.toUtc(), ticks = value.microsecondsSinceEpoch;
-  if (ticks < _minInstantMicros || ticks > _maxInstantMicros) {
+  final utc = value.toUtc(), millis = value.millisecondsSinceEpoch;
+  // Epoch milliseconds fit JavaScript's exact integer range; total microseconds
+  // do not. DateTime stores the remaining microsecond component separately.
+  if (millis < _minInstantMicros ~/ 1000 ||
+      millis > _maxInstantMicros ~/ 1000 ||
+      millis == _maxInstantMicros ~/ 1000 && utc.microsecond != 0) {
     throw const FormatException(
       'Instant exceeds the common DateTime/PostgreSQL range.',
     );
@@ -93,6 +97,20 @@ DateTime _parseInstant(String text) {
         ordinal == _maxInstantJulian && within != 0) {
       throw const FormatException(
         'Instant exceeds the common DateTime/PostgreSQL range.',
+      );
+    }
+    if (const bool.fromEnvironment('dart.library.js_interop')) {
+      final date = LocalDate.fromJulianDay(ordinal);
+      final clock = LocalTime.fromMicroseconds(within);
+      return DateTime.utc(
+        date.year,
+        date.month,
+        date.day,
+        clock.hour,
+        clock.minute,
+        clock.second,
+        clock.microsecond ~/ 1000,
+        clock.microsecond % 1000,
       );
     }
     return DateTime.fromMicrosecondsSinceEpoch(

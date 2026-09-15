@@ -9,6 +9,9 @@ and [implementation status](docs/progress.md).
 One package, independent SQLite and PostgreSQL entry points, no runtime reflection.
 This branch is unrelated to earlier ORM implementations.
 
+The [browser SQLite entry point](docs/sqlite-web.md) runs in a dedicated worker,
+with explicit in-memory or OPFS storage and the same generated query API.
+
 ```sh
 dart pub get
 dart run orm generate example/schema.dart
