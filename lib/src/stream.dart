@@ -9,20 +9,25 @@ extension QueryStreaming<R, F extends Fields> on Query<R, F> {
   }) {
     if (batchSize < 1) throw ArgumentError.value(batchSize, 'batchSize');
     final (plan, decode) = _plan();
+    final command = _compile(plan);
     return database._stream(
-      _compile(plan),
+      command,
       batchSize: batchSize,
       options: options,
-      decode: (connection, rows, execution) async => [
-        for (final row in await _expandRelations(
+      decode: (connection, rows, execution) async {
+        final expanded = await _expandRelations(
           database,
           connection,
           plan,
           rows,
           options: execution,
-        ))
-          decode(row),
-      ],
+        );
+        return database._observeDecode(
+          command.sql,
+          expanded.length,
+          () => [for (final row in expanded) decode(row)],
+        );
+      },
     );
   }
 }
@@ -93,7 +98,7 @@ extension _DatabaseStreaming on Database<Backend> {
       QueryOperation operation,
       Future<T> Function() action,
     ) async {
-      final watch = Stopwatch()..start();
+      final watch = onQuery == null ? null : (Stopwatch()..start());
       Object? error;
       T? result;
       try {
@@ -103,6 +108,7 @@ extension _DatabaseStreaming on Database<Backend> {
         if (inTransaction) _statementFailed = true;
         rethrow;
       } finally {
+        watch?.stop();
         try {
           onQuery?.call(
             QueryEvent(
@@ -111,7 +117,7 @@ extension _DatabaseStreaming on Database<Backend> {
               parameterCount: operation == .cursorOpen
                   ? command.parameters.length
                   : 0,
-              elapsed: watch.elapsed,
+              elapsed: watch!.elapsed,
               rowCount: result is SqlResult ? result.rows.length : null,
               error: error,
             ),

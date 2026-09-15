@@ -71,6 +71,10 @@ Model [many-to-many memberships](docs/relations.md#many-to-many-with-business-fi
 with an explicit association table, typed business fields and per-parent pagination.
 Run `dart run example/teams/main.dart` to see its selected records and SQL counts.
 
+Use `query.inspect()` for SQL templates, selected columns, joins and conditional
+relation batches without connecting. Optional `onAcquire`, `onQuery` and `onDecode`
+callbacks measure execution phases. See [plans and observations](docs/observability.md).
+
 For complex SQL files, [generate named queries](docs/named-sql.md) with typed
 Record parameters/results, native database structure checks and the same query
 composition, transaction and streaming APIs.

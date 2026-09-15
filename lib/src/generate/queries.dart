@@ -181,6 +181,8 @@ Future<GeneratedQueries> _generateQueries(
       if ({
         'driver',
         'onQuery',
+        'onAcquire',
+        'onDecode',
         'capabilities',
         'dialect',
         'inTransaction',

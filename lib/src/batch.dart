@@ -134,6 +134,10 @@ final class BatchReturning<R> {
     final plan = _SelectionPlan();
     final decode = _selection._bind(plan);
     final result = await _batch._run(selection: plan, options: options);
-    return [for (final row in result.rows) decode(row)];
+    return _batch.database._observeDecode(
+      null,
+      result.rows.length,
+      () => [for (final row in result.rows) decode(row)],
+    );
   }
 }

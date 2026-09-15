@@ -438,4 +438,11 @@ final class _PostgresCursor(
 Database<Postgres> postgres(
   PostgresOptions options, {
   void Function(QueryEvent)? onQuery,
-}) => Database(PostgresDriver(options), onQuery: onQuery);
+  void Function(AcquisitionEvent)? onAcquire,
+  void Function(DecodeEvent)? onDecode,
+}) => Database(
+  PostgresDriver(options),
+  onQuery: onQuery,
+  onAcquire: onAcquire,
+  onDecode: onDecode,
+);

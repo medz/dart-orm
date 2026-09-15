@@ -6,7 +6,14 @@ import 'schema.orm.dart';
 
 Future<void> main() async {
   final events = <QueryEvent>[];
-  final db = await sqlite(const SqliteOptions.memory(), onQuery: events.add);
+  final acquisitions = <AcquisitionEvent>[];
+  final decodes = <DecodeEvent>[];
+  final db = await sqlite(
+    const SqliteOptions.memory(),
+    onQuery: events.add,
+    onAcquire: acquisitions.add,
+    onDecode: decodes.add,
+  );
   try {
     await Migrator(db).apply([Migration.create('0001_teams', appSchema)]);
     await db.transaction((tx) async {
@@ -26,26 +33,34 @@ Future<void> main() async {
       );
     });
     events.clear();
-    final cards = await db.users
-        .select(
-          (u) => (
-            u.name,
-            u.memberships
-                .orderBy((m) => [m.joinedAt.desc(), m.teamId.desc()])
-                .take(2)
-                .select(
-                  (m) => (
-                    m.team.select((t) => t.name).required(),
-                    m.role,
-                  ).map((team, role) => (team: team, role: role)),
-                )
-                .many(),
-          ).map((name, teams) => (name: name, teams: teams)),
-        )
-        .get();
+    acquisitions.clear();
+    decodes.clear();
+    final query = db.users.select(
+      (u) => (
+        u.name,
+        u.memberships
+            .orderBy((m) => [m.joinedAt.desc(), m.teamId.desc()])
+            .take(2)
+            .select(
+              (m) => (
+                m.team.select((t) => t.name).required(),
+                m.role,
+              ).map((team, role) => (team: team, role: role)),
+            )
+            .many(),
+      ).map((name, teams) => (name: name, teams: teams)),
+    );
+    final plan = query.inspect();
+    print(
+      '${plan.sqlTemplateCount} SQL templates; ${plan.loads.single.maxKeysPerBatch} parent keys per batch',
+    );
+    final cards = await query.get();
     print(cards);
     print(
       '${events.length} SQL statements; ${events.map((e) => e.rowCount).toList()} rows',
+    );
+    print(
+      '${acquisitions.length} acquisition; ${decodes.length} decode batches',
     );
   } finally {
     await db.close();

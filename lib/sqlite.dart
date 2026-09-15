@@ -97,4 +97,11 @@ final class SqliteDriver implements Driver<Sqlite> {
 Future<Database<Sqlite>> sqlite(
   SqliteOptions options, {
   void Function(QueryEvent)? onQuery,
-}) async => Database(await SqliteDriver.open(options), onQuery: onQuery);
+  void Function(AcquisitionEvent)? onAcquire,
+  void Function(DecodeEvent)? onDecode,
+}) async => Database(
+  await SqliteDriver.open(options),
+  onQuery: onQuery,
+  onAcquire: onAcquire,
+  onDecode: onDecode,
+);

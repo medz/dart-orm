@@ -236,7 +236,9 @@ UNKNOWN counts as unsatisfied. Use `any` as well when an empty relationship
 should be excluded.
 
 `compile()` exposes the root SQL, including selected to-one JOINs. It does not
-pretend to contain the later collection statements. `onQuery` reports every
+pretend to contain the later collection statements. `inspect()` also describes
+conditional child SQL templates, output/key slots, joins and batch capacity;
+see [plans and observations](observability.md). `onQuery` reports every
 executed statement and fetched row count. Streaming uses these same strategies
 per root batch; see [execution](execution.md).
 

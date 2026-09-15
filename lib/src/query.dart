@@ -150,10 +150,11 @@ class Query<R, F extends Fields> {
     return (plan, decode);
   }
 
-  SqlCommand _compile(_SelectionPlan plan) {
+  SqlCommand _compile(_SelectionPlan plan, {_ReadTables? reads}) {
     final w = _Writer(
       database.dialect,
       {},
+      reads: reads,
       exactDecimal: database.capabilities.exactDecimal,
       temporal: database.capabilities.temporal,
     );
@@ -355,13 +356,18 @@ class Query<R, F extends Fields> {
 
   SqlCommand compile() => _compile(_plan().$1);
 
+  /// Inspects SQL and conditional relation batches without acquiring a connection.
+  /// This does not ask the database optimizer for an execution plan.
+  QueryPlan inspect() => _inspectQuery(this);
+
   Future<List<R>> get({ExecutionOptions options = const ExecutionOptions()}) {
     options.check();
     return database._run((connection) async {
       final (plan, decode) = _plan();
+      final command = _compile(plan);
       final result = await database._execute(
         connection,
-        _compile(plan),
+        command,
         options: options,
       );
       final rows = await _expandRelations(
@@ -371,7 +377,11 @@ class Query<R, F extends Fields> {
         result.rows,
         options: options,
       );
-      return [for (final row in rows) decode(row)];
+      return database._observeDecode(
+        command.sql,
+        rows.length,
+        () => [for (final row in rows) decode(row)],
+      );
     }, acquire: options._acquisition);
   }
 

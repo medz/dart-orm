@@ -278,14 +278,19 @@ final class Returning<R> {
   }) async {
     final plan = _SelectionPlan();
     final decode = _selection._bind(plan);
+    final command = _mutation._compile(plan);
     final result = await _mutation.database._executeCommand(
-      _mutation._compile(plan),
+      command,
       options: options,
       changedTables: [_mutation._state.source.schema],
       affectedOnly: true,
       cascade: _mutation._kind == _MutationKind.delete,
     );
-    return [for (final row in result.rows) decode(row)];
+    return _mutation.database._observeDecode(
+      command.sql,
+      result.rows.length,
+      () => [for (final row in result.rows) decode(row)],
+    );
   }
 
   Future<R> single({

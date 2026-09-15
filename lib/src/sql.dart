@@ -105,6 +105,7 @@ final class _Raw(final List<String> parts, final List<_Node> values)
     extends _Node {
   @override
   String writeSql(_Writer w) {
+    if (w.reads?.includeRaw == true) w.reads!.opaque = true;
     final result = StringBuffer(parts.first);
     for (var i = 0; i < values.length; i++) {
       result

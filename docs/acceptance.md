@@ -26,6 +26,7 @@ platform limits are recorded in [progress](progress.md).
 | §10: reviewed snapshots/diffs, explicit rename/conversion, history, baseline/drift and recoverable migrations | `migration_test`, `migration_recovery_test`, `backfill_test`, `schema_version_test`, import and CLI suites |
 | §11: distinct PostgreSQL/native SQLite configuration and connection ownership | `lib/postgres.dart`, `lib/sqlite.dart`; native suites exercise both backends, capability rejection, borrowed pools and disposal |
 | §§11–12: worker/persistence, real cursor streaming and commit-driven observation | Native `stream_test`/`watch_test`; real JS and Dart WASM browser reports include OPFS reload recovery and upgrade |
+| §12: inspectable query structure and execution phases | `plan_test`, `observation_test` and real JS/WASM teams scenario: non-executing SQL/column/key/join/batch descriptions, composite parameter capacity, real acquisition waits/cancellation, decode/stream/RETURNING scopes and observer exception isolation; [measurement limits](observability.md) |
 
 The filenames in this table refer to `test/<name>.dart` unless another location
 is shown. The browser report is
@@ -37,7 +38,6 @@ commands and limits in [SQLite web](sqlite-web.md).
 | Gate from the design | Evidence still required |
 | --- | --- |
 | §§5, 10–11: remaining type/catalog capability review | Verify supported types against imported precision, defaults, native representation and migration behavior. Temporal column precision/conversion remains open in [types](types.md). Unsupported extensions must stay explicit. |
-| §12: inspectable cost | `compile` and `QueryEvent` expose SQL/counts/driver elapsed time. Separate acquisition/decoding measurements and a clearly non-executing plan-inspection path still need implementation/evidence. No claim that elapsed time isolates server CPU. |
 | §13.3: runtime cost comparison | Same driver, SQL, values and output shape for raw versus ORM reads/projections/relations; query counts, returned volume, latency distribution, throughput, memory/allocation and pool wait, with explicit local/RTT conditions. Decimal microbenchmarks do not cover this gate. |
 | §13.2–13.3: authoring/editing costs | Generation report covers 10/100/1000 models, build/watch and analysis. Declaration-form comparison, editor rename/diagnostic behavior and actual completion measurements need direct evidence; no claim of superiority over class/table declarations. |
 | §§11–12: native Flutter | An actual Flutter application exercising background SQLite, persistence, older-schema upgrade and watch delivery. Standalone macOS JIT/AOT and Chrome are different evidence. |

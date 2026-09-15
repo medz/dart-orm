@@ -114,4 +114,11 @@ final class SqliteWebDriver implements Driver<Sqlite> {
 Future<Database<Sqlite>> sqliteWeb(
   SqliteWebOptions options, {
   void Function(QueryEvent)? onQuery,
-}) async => Database(await SqliteWebDriver.open(options), onQuery: onQuery);
+  void Function(AcquisitionEvent)? onAcquire,
+  void Function(DecodeEvent)? onDecode,
+}) async => Database(
+  await SqliteWebDriver.open(options),
+  onQuery: onQuery,
+  onAcquire: onAcquire,
+  onDecode: onDecode,
+);

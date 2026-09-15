@@ -249,6 +249,7 @@ final class _RelationSelection<R, F extends Fields>(
 }
 
 abstract class _RelationBinding {
+  RelationLoadPlan inspect(Database<Backend> db);
   void collectReads(Database<Backend> db, _ReadTables reads);
   Future<List<Object?>> load(
     Database<Backend> db,
@@ -262,6 +263,8 @@ final class _TypedRelationBinding<R, F extends Fields>(
   final Relation<R, F> relation,
   final List<int> parentIndices,
 ) extends _RelationBinding {
+  @override
+  RelationLoadPlan inspect(Database<Backend> db) => _inspectRelation(db, this);
   @override
   void collectReads(Database<Backend> db, _ReadTables reads) => reads.query(
     Query._(db, relation._fields, relation._state, relation._selection),
@@ -308,11 +311,8 @@ final class _TypedRelationBinding<R, F extends Fields>(
       final end = offset + chunkSize < all.length
           ? offset + chunkSize
           : all.length;
-      final result = await db._execute(
-        connection,
-        _compile(db, plan, all.sublist(offset, end)),
-        options: options,
-      );
+      final command = _compile(db, plan, all.sublist(offset, end));
+      final result = await db._execute(connection, command, options: options);
       final rows = await _expandRelations(
         db,
         connection,
@@ -320,13 +320,15 @@ final class _TypedRelationBinding<R, F extends Fields>(
         result.rows,
         options: options,
       );
-      for (final row in rows) {
-        final key = _RelationKey([
-          for (var i = 0; i < childIndices.length; i++)
-            _relationValue(relation._child[i], row[childIndices[i]]),
-        ]);
-        (grouped[key] ??= []).add(decode(row));
-      }
+      db._observeDecode(command.sql, rows.length, () {
+        for (final row in rows) {
+          final key = _RelationKey([
+            for (var i = 0; i < childIndices.length; i++)
+              _relationValue(relation._child[i], row[childIndices[i]]),
+          ]);
+          (grouped[key] ??= []).add(decode(row));
+        }
+      });
     }
     return [
       for (final key in parentKeys) List<R>.unmodifiable(grouped[key] ?? <R>[]),
@@ -336,12 +338,14 @@ final class _TypedRelationBinding<R, F extends Fields>(
   SqlCommand _compile(
     Database<Backend> db,
     _SelectionPlan plan,
-    List<_RelationKey> keys,
-  ) {
+    List<_RelationKey> keys, {
+    _ReadTables? reads,
+  }) {
     final state = relation._state;
     final w = _Writer(
       db.dialect,
       {},
+      reads: reads,
       exactDecimal: db.capabilities.exactDecimal,
       temporal: db.capabilities.temporal,
     );

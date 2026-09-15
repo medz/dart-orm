@@ -6,9 +6,12 @@ import '../../../example/teams/schema.orm.dart';
 
 Future<void> checkTeams(Uri wasm, Uri worker) async {
   final events = <QueryEvent>[];
+  final acquired = <AcquisitionEvent>[], decoded = <DecodeEvent>[];
   final db = await sqliteWeb(
     SqliteWebOptions.memory(wasm: wasm, worker: worker),
     onQuery: events.add,
+    onAcquire: acquired.add,
+    onDecode: decoded.add,
   );
   void expect(bool value, String message) {
     if (!value) throw StateError(message);
@@ -40,6 +43,8 @@ Future<void> checkTeams(Uri wasm, Uri worker) async {
       );
     });
     events.clear();
+    acquired.clear();
+    decoded.clear();
     final query = db.users
         .orderBy((u) => [u.id.asc()])
         .select(
@@ -54,6 +59,15 @@ Future<void> checkTeams(Uri wasm, Uri worker) async {
               )
               .many(),
         );
+    final plan = query.inspect();
+    expect(
+      plan.sqlTemplateCount == 2 && plan.loads.single.limitPerParent == 1,
+      'Inspection lost a batch or its per-parent limit',
+    );
+    expect(
+      events.isEmpty && acquired.isEmpty && decoded.isEmpty,
+      'Inspection performed execution work',
+    );
     final rows = await query.get();
     expect(
       rows[0].single == (team: 'Docs', role: MembershipRole.member),
@@ -67,6 +81,19 @@ Future<void> checkTeams(Uri wasm, Uri worker) async {
     expect(
       events.length == 2 && events[0].rowCount == 3 && events[1].rowCount == 2,
       'Relation counts or row volume differ',
+    );
+    expect(
+      acquired.length == 1 &&
+          !acquired.single.reusedConnection &&
+          acquired.single.error == null,
+      'Acquisition observation differs',
+    );
+    expect(
+      decoded.length == 2 &&
+          decoded[0].inputRows == 2 &&
+          decoded[1].inputRows == 3 &&
+          decoded.every((e) => e.error == null),
+      'Decoding observations differ',
     );
     await db.transaction((tx) async {
       await tx.teams.byId(10).patch(name: .set('Kernel'));

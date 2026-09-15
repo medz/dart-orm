@@ -118,6 +118,8 @@ final class QueryEvent {
 class Database<B extends Backend> {
   final Driver<B> driver;
   final void Function(QueryEvent)? onQuery;
+  final void Function(AcquisitionEvent)? onAcquire;
+  final void Function(DecodeEvent)? onDecode;
   final SqlConnection? _connection;
   final bool _transaction;
   final _TransactionControl? _control;
@@ -132,7 +134,7 @@ class Database<B extends Backend> {
   late final _ChangeHub _changes = _changeHubs[driver] ??= _ChangeHub();
   final Map<String, bool> _pendingChanges = {};
 
-  Database(this.driver, {this.onQuery})
+  Database(this.driver, {this.onQuery, this.onAcquire, this.onDecode})
     : _connection = null,
       _transaction = false,
       _control = null;
@@ -140,6 +142,8 @@ class Database<B extends Backend> {
     this.driver,
     this._connection,
     this.onQuery, {
+    this.onAcquire,
+    this.onDecode,
     this._transaction = true,
     this._control,
   });
@@ -204,26 +208,59 @@ class Database<B extends Backend> {
     _checkActive();
     acquire.check();
     final connection = _connection;
+    final observer = onAcquire;
+    final clock = observer == null || connection != null
+        ? null
+        : (Stopwatch()..start());
+    var entered = false;
+    void report(Object? error) {
+      clock?.stop();
+      try {
+        observer?.call(
+          AcquisitionEvent(
+            elapsed: clock?.elapsed ?? Duration.zero,
+            reusedConnection: connection != null,
+            error: error,
+          ),
+        );
+      } catch (_) {}
+    }
+
+    Future<R> enter(SqlConnection value) {
+      entered = true;
+      report(null);
+      return action(value);
+    }
+
+    Future<R> observed(Future<R> result) => observer == null
+        ? result
+        : result.onError((Object error, StackTrace stack) {
+            if (!entered) report(error);
+            Error.throwWithStackTrace(error, stack);
+          });
+    final callback = observer == null ? action : enter;
     if (connection == null &&
         (acquire.timeout != null || acquire.cancellation != null)) {
       final wait = _ConnectionWait(
         driver,
-        action,
+        callback,
         acquire,
         timeoutError: acquisitionTimeoutError,
       );
       _track(wait.drained);
-      return wait.result;
+      return observed(wait.result);
     }
     final result = connection != null
-        ? Future.sync(() => action(connection))
-        : driver.run(action);
+        ? Future.sync(() => callback(connection))
+        : observer == null
+        ? driver.run(action)
+        : Future.sync(() => driver.run(callback));
     final done = result.then<void>(
       (_) {},
       onError: (Object _, StackTrace _) {},
     );
     _track(done);
-    return result;
+    return observed(result);
   }
 
   void _track(Future<void> done) {
@@ -250,7 +287,7 @@ class Database<B extends Backend> {
         'Query exceeds the driver parameter limit.',
       );
     }
-    final watch = Stopwatch()..start();
+    final watch = onQuery == null ? null : (Stopwatch()..start());
     SqlResult? result;
     Object? error;
     try {
@@ -260,14 +297,14 @@ class Database<B extends Backend> {
       if (inTransaction) _statementFailed = true;
       rethrow;
     } finally {
-      watch.stop();
+      watch?.stop();
       // Instrumentation cannot turn a successful commit into an apparent failure.
       try {
         onQuery?.call(
           QueryEvent(
             sql: command.sql,
             parameterCount: command.parameters.length,
-            elapsed: watch.elapsed,
+            elapsed: watch!.elapsed,
             rowCount: result?.rows.length,
             error: error,
           ),
@@ -331,6 +368,8 @@ class Database<B extends Backend> {
         driver,
         connection,
         onQuery,
+        onAcquire: onAcquire,
+        onDecode: onDecode,
         transaction: false,
       );
       try {
@@ -462,7 +501,14 @@ class Database<B extends Backend> {
     final scoped = control == null
         ? connection
         : _TransactionConnection(connection, control);
-    final tx = Database<B>._(driver, scoped, onQuery, control: control);
+    final tx = Database<B>._(
+      driver,
+      scoped,
+      onQuery,
+      control: control,
+      onAcquire: onAcquire,
+      onDecode: onDecode,
+    );
     var committing = false;
     try {
       await _execute(scoped, SqlCommand(options?._begin ?? 'BEGIN'));
@@ -587,6 +633,8 @@ class Database<B extends Backend> {
         driver,
         connection,
         onQuery,
+        onAcquire: onAcquire,
+        onDecode: onDecode,
         control: _control,
       );
       try {

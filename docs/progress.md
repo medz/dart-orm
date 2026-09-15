@@ -5,6 +5,10 @@ This file records verified delivery, not planned capabilities presented as worki
 The [design acceptance map](acceptance.md) ties remaining gates to the original
 requirements and distinguishes direct coverage from missing evidence.
 
+Latest verification: 807 native tests pass in one invocation with PostgreSQL
+enabled; analysis reports no issues. Real Chrome JS and Dart WASM each pass 18
+scenarios. These checks include query plan inspection and phase observations.
+
 ## Completed
 
 - Reset the `next` branch contents, preserving the design research and license.
@@ -17,6 +21,7 @@ requirements and distinguishes direct coverage from missing evidence.
 - Real Chrome acceptance for JavaScript and Dart WASM clients, including persistent reopen, interrupted-transaction recovery and schema upgrades after page reload.
 - PostgreSQL driver with a single pool owner, TLS settings and explicit borrowed pools.
 - Transaction lifecycle, rollback, savepoints, pending work checks and query observation.
+- Non-executing SQL/column/key/join/batch inspection and optional acquisition/SQL/decode phase observations with immutable metadata and isolated observer failures.
 - Transaction-wide deadlines/cancellation with native SQL interruption, callback expiry and awaited cleanup.
 - SQLite actual transaction-state reporting, automatic rollback recovery and invalidated-savepoint protection.
 - Conservative server failure classification distinguishing known commit rejection from unknown outcome.
@@ -520,6 +525,32 @@ Real Chrome JS and Dart WASM each pass 18 scenarios. Both exercise the same team
 schema, checking association payloads, per-parent limits, two-statement reads,
 transaction updates and endpoint cascades. The browser report retains both runs.
 
+Twenty-seven new plan/observation checks pass against real SQLite and PostgreSQL.
+Inspection uses existing statement compilers, without acquiring a connection,
+decoding fabricated rows or invoking result mappers. It exposes root and one-key
+child SQL templates, projection/presence/key slots, joins, read dependencies,
+per-parent pagination and composite-key chunk capacity. Template count is distinct
+from data-dependent execution count. Bound values are omitted; literal SQL text
+is retained. Raw dependencies stay explicitly opaque.
+
+Optional acquisition and decoding hooks propagate into sessions, transactions
+and savepoints. Tests cover real pool/lease waiting, timeout/cancellation and
+late-lease draining, SQL versus mapper failures, nested row grouping, cursor
+batches and returning writes. Observer exceptions preserve commits and original
+errors. Hooks omitted means no observation events or measurement Stopwatches;
+inspection is only constructed when requested. These phase measurements exclude
+some client work and do not isolate server CPU or provide trace correlation IDs.
+See `docs/observability.md` for the exact scope and runnable example.
+
+Static analysis passes. The updated teams example executes two SQL statements,
+returns one root/two child rows and reports one acquisition/two decode batches.
+The full native invocation passes 807 checks with PostgreSQL enabled. Real Chrome
+JS and Dart WASM each pass 18 scenarios, including non-executing plan inspection,
+one acquisition and child/root decode observations for generated memberships,
+alongside OPFS persistence, reload recovery and upgrades. The captured browser
+report contains both runs. This establishes behavior, not throughput or allocation
+cost; native Flutter and the remaining acceptance gates are still open.
+
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
@@ -528,7 +559,7 @@ transaction updates and endpoint cascades. The browser report retains both runs.
 - Temporal column precision and timezone conversions.
 - Further backend capability coverage.
 - Native Flutter checks and remaining platform acceptance review.
-- Plan/cost inspection, separate acquisition/decoding evidence and the complete runtime cost comparison.
+- Complete runtime cost comparison, including latency, throughput, memory/allocation and pool wait.
 - User documentation, performance measurements and complete acceptance review.
 
 To-one projections join by default when declared keys prove uniqueness; otherwise

@@ -104,7 +104,7 @@ Future<void> main() async {
       return;
     }
     await check(
-      'many-to-many payloads, per-parent limits, transaction writes and cascade preserve query counts',
+      'many-to-many plans, phase observations, payloads, pagination and transaction writes preserve query counts',
       () => checkTeams(wasm, worker),
     );
     final db = await memory();

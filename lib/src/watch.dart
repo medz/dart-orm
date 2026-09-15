@@ -79,6 +79,8 @@ final class _ChangeHub {
 /// SQL compilation visits subqueries and CTE definitions with the same writer.
 /// Batch relationships are additional queries and must be visited separately.
 final class _ReadTables {
+  final bool includeRaw;
+  _ReadTables({this.includeRaw = false});
   bool opaque = false;
   final Set<TableSchema> tables = Set.identity();
   void query(Query<Object?, Fields> query) {

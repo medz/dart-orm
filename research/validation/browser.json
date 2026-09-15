@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-15T05:48:32.777905+00:00",
-  "scope": "Real isolated Chromium on macOS; application compiled to JS and WASM, dedicated JS database worker; correctness checks, not throughput benchmarks. Includes query-only relations, CHECK constraints, typed client defaults, computed fields and explicit many-to-many memberships with payloads, per-parent pagination and query/row counts.",
+  "capturedAt": "2026-09-15T06:19:55.831343+00:00",
+  "scope": "Real isolated Chromium on macOS; application compiled to JS and WASM, dedicated JS database worker; correctness checks, not throughput benchmarks. Includes query-only relations, CHECK constraints, typed client defaults, computed fields and explicit many-to-many memberships with payloads, per-parent pagination, non-executing plans, acquisition/decode observations and query/row counts.",
   "commands": [
     "dart run tool/test_browser.dart",
     "dart run tool/test_browser.dart --wasm"
@@ -13,8 +13,8 @@
       "passed": true,
       "checks": [
         {
-          "name": "many-to-many payloads, per-parent limits, transaction writes and cascade preserve query counts",
-          "milliseconds": 60
+          "name": "many-to-many plans, phase observations, payloads, pagination and transaction writes preserve query counts",
+          "milliseconds": 59
         },
         {
           "name": "memory migrations and verified foreign keys",
@@ -22,11 +22,11 @@
         },
         {
           "name": "client factories distinguish omission, explicit null and prepared batch values",
-          "milliseconds": 19
+          "milliseconds": 18
         },
         {
           "name": "computed stored and virtual fields recompute across CRUD and migrations",
-          "milliseconds": 33
+          "milliseconds": 34
         },
         {
           "name": "generated CHECK enforcement and atomic constraint migrations",
@@ -50,7 +50,7 @@
         },
         {
           "name": "exact BigInt, Decimal, blobs and calendar transport",
-          "milliseconds": 3
+          "milliseconds": 4
         },
         {
           "name": "explicit unsupported cancellation",
@@ -58,7 +58,7 @@
         },
         {
           "name": "large real values retain floating storage",
-          "milliseconds": 3
+          "milliseconds": 4
         },
         {
           "name": "instant microseconds are exact or explicitly rejected",
@@ -74,15 +74,15 @@
         },
         {
           "name": "OPFS commit survives a closed worker and new connection",
-          "milliseconds": 92
+          "milliseconds": 95
         },
         {
           "name": "page reload recovers committed rows and rolls back interrupted transaction",
-          "milliseconds": 2
+          "milliseconds": 3
         },
         {
           "name": "persistent schema upgrades after reload preserve existing data",
-          "milliseconds": 21
+          "milliseconds": 20
         }
       ],
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
@@ -95,8 +95,8 @@
       "passed": true,
       "checks": [
         {
-          "name": "many-to-many payloads, per-parent limits, transaction writes and cascade preserve query counts",
-          "milliseconds": 51
+          "name": "many-to-many plans, phase observations, payloads, pagination and transaction writes preserve query counts",
+          "milliseconds": 52
         },
         {
           "name": "memory migrations and verified foreign keys",
@@ -104,11 +104,11 @@
         },
         {
           "name": "client factories distinguish omission, explicit null and prepared batch values",
-          "milliseconds": 17
+          "milliseconds": 18
         },
         {
           "name": "computed stored and virtual fields recompute across CRUD and migrations",
-          "milliseconds": 28
+          "milliseconds": 27
         },
         {
           "name": "generated CHECK enforcement and atomic constraint migrations",
@@ -116,7 +116,7 @@
         },
         {
           "name": "generated records, projections and typed relation batches",
-          "milliseconds": 3
+          "milliseconds": 2
         },
         {
           "name": "rollback, savepoints and transaction lifetime",
@@ -132,7 +132,7 @@
         },
         {
           "name": "exact BigInt, Decimal, blobs and calendar transport",
-          "milliseconds": 3
+          "milliseconds": 2
         },
         {
           "name": "explicit unsupported cancellation",
@@ -148,15 +148,15 @@
         },
         {
           "name": "worker does not block the browser event loop",
-          "milliseconds": 156
+          "milliseconds": 158
         },
         {
           "name": "startup failures are bounded and release failed workers",
-          "milliseconds": 27
+          "milliseconds": 29
         },
         {
           "name": "OPFS commit survives a closed worker and new connection",
-          "milliseconds": 90
+          "milliseconds": 95
         },
         {
           "name": "page reload recovers committed rows and rolls back interrupted transaction",
@@ -164,7 +164,7 @@
         },
         {
           "name": "persistent schema upgrades after reload preserve existing data",
-          "milliseconds": 14
+          "milliseconds": 13
         }
       ],
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
