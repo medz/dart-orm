@@ -9,6 +9,11 @@ Latest verification: 834 native tests pass in one invocation with PostgreSQL
 enabled; analysis reports no issues. Real Chrome JS and Dart WASM each pass 19
 scenarios, including temporal column precision and extended date/instant ranges.
 
+Editor verification additionally covers real generated APIs at 10/100/1000 models:
+fifteen completion probes with 300 warm samples, twelve diagnostic checks matching
+exact codes/source ranges, and language-symbol rename responses. See the
+[captured protocol measurements and limits](generation.md#editor-completion-diagnostics-and-rename).
+
 The same-driver runtime cost baseline covers SQLite and PostgreSQL, including
 controlled TCP latency, concurrency and separate allocation traces. That baseline
 uses runtime source `94d24fe`; see [measurements](performance.md). Selection decoding
@@ -624,6 +629,32 @@ full native invocation then passes 834 checks with PostgreSQL enabled. Static
 analysis passes. Real JS and WASM each pass 19 browser scenarios, including the
 new precision worker scenario and existing persistence/reload upgrades. The
 captured browser report includes both runs; no native Flutter claim is added.
+
+## Editor protocol capture
+
+`tool/benchmark_editor.dart` launches the installed Dart 3.13.3 Analysis Server in
+isolated consumer packages against runtime `7eaab3b`. The checked report is
+`research/benchmarks/editor.json`; it retains harness hashes, every warm sample,
+startup/readiness costs, diagnostic ranges and applied rename edits. Independent
+readback checks all hashes, nearest-rank quantiles, current error ranges and rename
+edit counts. Final consumer analysis passes at all three scales. Root static
+analysis also passes; runtime sources are unchanged from the 834-native-check and
+19-per-browser-scenario capture above.
+
+At 1000 models, warm table-entry completion is 11.572 / 17.094 ms p50 / p95;
+query-field completion is 0.780 / 0.850 ms. Initial project readiness is 3.405 s,
+and the query-field probe has a separate 128.488 ms opening/diagnostic wait. These
+are stdio protocol observations with twenty warm samples per probe, not complete
+GUI latency or a declaration-frontend comparison.
+
+Record field rename returns null. Primary-constructor and table fields update
+their declaration and typed reference; typedef rename updates the alias and its
+two references. Rename probes run in a separate clean server: same-session class
+field rename after diagnostic recovery stalled during harness development and
+is not proven reliable here. A valid Dart arithmetic index selector passes CLI
+analysis but the generator rejects it with a source offset, demonstrating the
+boundary between Dart and ORM-specific rules. This closes the measured LSP slice,
+not the full three-authoring-frontend experiment or whole-product goal.
 
 ## Still required for the goal
 

@@ -139,3 +139,69 @@ Tests compare builder and CLI output, validate in-memory assets and prior-builde
 outputs, and run real build/watch processes for dependency changes, failure
 recovery and output cleanup. Static analysis of the generated consumer project
 is part of that process test.
+
+## Editor completion, diagnostics and rename
+
+Run `dart run tool/benchmark_editor.dart` to exercise the installed Dart Analysis
+Server over stdio LSP in disposable consumer projects. `--smoke` checks ten models
+with two warm samples and writes only under `.dart_tool/`. The full run writes
+[`editor.json`](../research/benchmarks/editor.json), including the runtime commit,
+harness hashes, raw samples, diagnostic ranges, rename edits and resulting source.
+The protocol is documented by the [Dart 3.13.3 SDK](https://github.com/dart-lang/sdk/blob/3.13.3/pkg/analysis_server/tool/lsp_spec/README.md).
+
+On Apple M3 Max / Dart 3.13.3, warm completion p50 / p95 in **milliseconds**:
+
+| Models | Table entries | Schema Record fields | Query fields | Create arguments | Projected Record fields |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 10 | 0.809 / 1.117 | 0.439 / 0.511 | 0.484 / 1.126 | 0.238 / 0.293 | 0.518 / 0.590 |
+| 100 | 1.497 / 2.812 | 0.428 / 0.492 | 0.484 / 0.559 | 0.250 / 0.315 | 0.568 / 0.600 |
+| 1000 | 11.572 / 17.094 | 0.705 / 0.788 | 0.780 / 0.850 | 0.226 / 0.307 | 1.330 / 2.863 |
+
+Each cell uses twenty unchanged-document requests after two unrecorded warmups;
+quantiles use nearest rank. These numbers include client transport/JSON handling
+but exclude editor UI/plugin rendering. Dependency installation is offline and
+outside timing; shared SDK/pub/OS caches are not cleared. They are local protocol
+measurements, not a ranking against another ORM or declaration frontend.
+
+Warm completion excludes opening/editing and analysis readiness. Initial server
+startup plus project analysis took 0.311 / 0.487 / 3.405 seconds respectively. At
+1000 models, the query-field probe waited 128.488 ms for a diagnostic after opening
+the incomplete expression, then its first completion took 4.109 ms. The schema
+field probe waited 165.844 ms. The report separates these observations from warm
+samples; they must not be described as sub-millisecond edit-to-suggestion latency.
+
+All fifteen probe shapes returned their required labels. A two-field named Record
+projection offered `id` and `title` but did not offer the unselected `score` or
+`status`. Each scale also checked four deliberate type errors: create input,
+predicate value, scalar result assignment and access to an unselected field. Each
+diagnostic must match both its code and the current token's exact source range.
+Changes are serialized because this SDK omits diagnostic document versions. A
+fresh diagnostic clears the repaired client error. A separate CLI analysis checks
+the final edited consumer, rather than treating an absent notification as success.
+
+The language-symbol rename results are the same at all three scales:
+
+| Declaration | Observed result |
+| --- | --- |
+| Named Record field | Both prepare and rename return `null`; unavailable |
+| Primary-constructor class field | Declaration and typed member reference updated |
+| Class-based table field | Dart field and typed reference updated; SQL column string retained |
+| Record typedef name | Declaration and both type references updated; separate Record alias retained |
+
+These are language-symbol probes. They do not compare three ORM authoring
+frontends generating identical APIs. Renames use a fresh server after the error
+probes. During harness development, class-field rename in the same session after
+the error/repair sequence stalled for 60 seconds; its cause is not established.
+This capture does not establish reliable mixed-session rename after error recovery.
+
+Record field edits therefore require reviewing declaration/selector references,
+regenerating, and repairing application references with the type checker. Do not
+edit generated files to perform a schema rename. To change only a Dart field name,
+keep its physical column explicit, for example
+`@ColumnName('name') String displayName`. A physical database rename still needs
+the reviewed [migration workflow](migrations.md).
+
+ORM selector rules are a separate diagnostic boundary: the valid Dart expression
+`rows0.index((r) => r.id + 1)` passes CLI analysis but fails generation with a
+direct-field-selector error and source offset. Stock LSP does not supply that ORM
+diagnostic. Keep generation/watch running for schema rule validation.
