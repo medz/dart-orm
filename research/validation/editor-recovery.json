@@ -1,0 +1,891 @@
+{
+  "capturedAt": "2026-09-15T09:49:44.135320+00:00",
+  "runtimeSourceCommit": "20ffee7",
+  "sameSession": {
+    "command": "dart run tool/benchmark_editor.dart --same-session",
+    "exitCode": 255,
+    "attemptedModels": 10,
+    "completedScales": 0,
+    "status": "rename_timeout",
+    "timeoutSeconds": 60,
+    "failedMethod": "textDocument/rename",
+    "symbol": "primary_constructor_field",
+    "completedBeforeTimeout": [
+      "five completion probes",
+      "four exact-code/range diagnostics",
+      "repair diagnostic",
+      "Record field rename unavailable"
+    ],
+    "log": "research/validation/editor-recovery.log",
+    "logSha256": "0bff8f1138af759bd52b8c46b9c312f9b6282f1202e20937319c3f47d0420690"
+  },
+  "restartRecovery": {
+    "recordedAt": "2026-09-15T09:47:50.614525Z",
+    "runtimeSourceCommit": "20ffee74ea8d8bcc37de43448cf28837503ebfb9",
+    "dart": "3.13.3 (stable) (Tue Sep 1 01:07:17 2026 -0700) on \"macos_arm64\"",
+    "os": "Version 26.6.2 (Build 25G83)",
+    "cpu": "Apple M3 Max",
+    "smoke": true,
+    "sameSession": false,
+    "samplesPerWarmProbe": 2,
+    "harnessSha256": {
+      "tool/benchmark_editor.dart": "d38e9ad45f1b72937a8b054ab02ba7e481cfdbb47426c5b245d60b04706db69b",
+      "tool/src/editor_server.dart": "00e3cf5e7675166979cdb03a9d333754ee7aeb2874d6940d5d5ab6cff43a9ff8",
+      "tool/src/build_fixture.dart": "03a5d875d608fd25245b5da268d66ce4c0913ed288ac05270ae9522a68bb0ea9"
+    },
+    "scope": "Direct stdio LSP client against the installed Dart Analysis Server, isolated consumer packages and real generated APIs; no database. Includes client transport/JSON costs, excludes GUI/plugin rendering and dependency download. Each scale uses one fresh server for completion/diagnostics and another for symbol renames. Startup and initial project analysis are measured separately from completion. First completion follows a fresh diagnostic for the incomplete source and is not a cold OS/cache measurement. Warm probes use unchanged documents after two unrecorded warmups. Diagnostic probes serialize changes and await a fresh notification; this SDK omits document versions. Final CLI analysis verifies the edited sources. Symbol-form probes compare language rename behavior only, not three ORM authoring frontends or identical generated APIs from each form.",
+    "limits": [
+      "This capture restarts the server for renames and does not establish mixed-session rename after diagnostic recovery.",
+      "The named Record field remains unavailable for automatic rename in this SDK. A successful bounded sequence does not establish every IDE/plugin workflow."
+    ],
+    "results": [
+      {
+        "models": 10,
+        "sessionPids": {
+          "diagnostics": 50960,
+          "renames": 50961
+        },
+        "sourceBytes": 1608,
+        "generatedBytes": 22953,
+        "initializeMicros": 33482,
+        "projectReadyMicros": 331734,
+        "completions": [
+          {
+            "probe": "table_entries",
+            "analysisReadyMicros": 8780,
+            "firstRequestMicros": 2558,
+            "warm": {
+              "samplesMicros": [
+                1076,
+                1142
+              ],
+              "p50Micros": 1076,
+              "p95Micros": 1142
+            },
+            "response": {
+              "isIncomplete": false,
+              "itemCount": 31,
+              "items": [
+                {
+                  "label": "rows0",
+                  "kind": 10,
+                  "detail": "Rows0TableSet",
+                  "labelDetails": {
+                    "detail": " Rows0TableSet"
+                  },
+                  "textEdit": {
+                    "newText": "rows0",
+                    "range": {
+                      "end": {
+                        "character": 51,
+                        "line": 3
+                      },
+                      "start": {
+                        "character": 51,
+                        "line": 3
+                      }
+                    }
+                  }
+                },
+                {
+                  "label": "rows9",
+                  "kind": 10,
+                  "detail": "Rows9TableSet",
+                  "labelDetails": {
+                    "detail": " Rows9TableSet"
+                  },
+                  "textEdit": {
+                    "newText": "rows9",
+                    "range": {
+                      "end": {
+                        "character": 51,
+                        "line": 3
+                      },
+                      "start": {
+                        "character": 51,
+                        "line": 3
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "requiredLabels": [
+              "rows0",
+              "rows9"
+            ],
+            "forbiddenLabels": []
+          },
+          {
+            "probe": "schema_record_fields",
+            "analysisReadyMicros": 9476,
+            "firstRequestMicros": 790,
+            "warm": {
+              "samplesMicros": [
+                502,
+                473
+              ],
+              "p50Micros": 473,
+              "p95Micros": 502
+            },
+            "response": {
+              "isIncomplete": false,
+              "itemCount": 8,
+              "items": [
+                {
+                  "label": "id",
+                  "kind": 6,
+                  "detail": "int",
+                  "labelDetails": {
+                    "detail": " int"
+                  },
+                  "textEdit": {
+                    "newText": "id",
+                    "range": {
+                      "end": {
+                        "character": 39,
+                        "line": 25
+                      },
+                      "start": {
+                        "character": 39,
+                        "line": 25
+                      }
+                    }
+                  }
+                },
+                {
+                  "label": "score",
+                  "kind": 6,
+                  "detail": "int",
+                  "labelDetails": {
+                    "detail": " int"
+                  },
+                  "textEdit": {
+                    "newText": "score",
+                    "range": {
+                      "end": {
+                        "character": 39,
+                        "line": 25
+                      },
+                      "start": {
+                        "character": 39,
+                        "line": 25
+                      }
+                    }
+                  }
+                },
+                {
+                  "label": "status",
+                  "kind": 6,
+                  "detail": "Status",
+                  "labelDetails": {
+                    "detail": " Status"
+                  },
+                  "textEdit": {
+                    "newText": "status",
+                    "range": {
+                      "end": {
+                        "character": 39,
+                        "line": 25
+                      },
+                      "start": {
+                        "character": 39,
+                        "line": 25
+                      }
+                    }
+                  }
+                },
+                {
+                  "label": "title",
+                  "kind": 6,
+                  "detail": "String",
+                  "labelDetails": {
+                    "detail": " String"
+                  },
+                  "textEdit": {
+                    "newText": "title",
+                    "range": {
+                      "end": {
+                        "character": 39,
+                        "line": 25
+                      },
+                      "start": {
+                        "character": 39,
+                        "line": 25
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "requiredLabels": [
+              "id",
+              "title",
+              "score",
+              "status"
+            ],
+            "forbiddenLabels": []
+          },
+          {
+            "probe": "query_fields",
+            "analysisReadyMicros": 8898,
+            "firstRequestMicros": 1580,
+            "warm": {
+              "samplesMicros": [
+                512,
+                476
+              ],
+              "p50Micros": 476,
+              "p95Micros": 512
+            },
+            "response": {
+              "isIncomplete": false,
+              "itemCount": 11,
+              "items": [
+                {
+                  "label": "id",
+                  "kind": 5,
+                  "detail": "Field<int>",
+                  "labelDetails": {
+                    "detail": " Field<int>"
+                  },
+                  "textEdit": {
+                    "newText": "id",
+                    "range": {
+                      "end": {
+                        "character": 72,
+                        "line": 3
+                      },
+                      "start": {
+                        "character": 72,
+                        "line": 3
+                      }
+                    }
+                  }
+                },
+                {
+                  "label": "title",
+                  "kind": 5,
+                  "detail": "Field<String>",
+                  "labelDetails": {
+                    "detail": " Field<String>"
+                  },
+                  "textEdit": {
+                    "newText": "title",
+                    "range": {
+                      "end": {
+                        "character": 72,
+                        "line": 3
+                      },
+                      "start": {
+                        "character": 72,
+                        "line": 3
+                      }
+                    }
+                  }
+                },
+                {
+                  "label": "score",
+                  "kind": 5,
+                  "detail": "Field<int>",
+                  "labelDetails": {
+                    "detail": " Field<int>"
+                  },
+                  "textEdit": {
+                    "newText": "score",
+                    "range": {
+                      "end": {
+                        "character": 72,
+                        "line": 3
+                      },
+                      "start": {
+                        "character": 72,
+                        "line": 3
+                      }
+                    }
+                  }
+                },
+                {
+                  "label": "status",
+                  "kind": 5,
+                  "detail": "Field<Status>",
+                  "labelDetails": {
+                    "detail": " Field<Status>"
+                  },
+                  "textEdit": {
+                    "newText": "status",
+                    "range": {
+                      "end": {
+                        "character": 72,
+                        "line": 3
+                      },
+                      "start": {
+                        "character": 72,
+                        "line": 3
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "requiredLabels": [
+              "id",
+              "title",
+              "score",
+              "status"
+            ],
+            "forbiddenLabels": []
+          },
+          {
+            "probe": "create_arguments",
+            "analysisReadyMicros": 5181,
+            "firstRequestMicros": 480,
+            "warm": {
+              "samplesMicros": [
+                295,
+                246
+              ],
+              "p50Micros": 246,
+              "p95Micros": 295
+            },
+            "response": {
+              "isIncomplete": false,
+              "itemCount": 5,
+              "items": [
+                {
+                  "label": "title:",
+                  "kind": 6,
+                  "detail": "String",
+                  "labelDetails": {
+                    "detail": " String"
+                  },
+                  "textEdit": {
+                    "newText": "title: ",
+                    "range": {
+                      "end": {
+                        "character": 70,
+                        "line": 3
+                      },
+                      "start": {
+                        "character": 70,
+                        "line": 3
+                      }
+                    }
+                  }
+                },
+                {
+                  "label": "status:",
+                  "kind": 6,
+                  "detail": "Status",
+                  "labelDetails": {
+                    "detail": " Status"
+                  },
+                  "textEdit": {
+                    "newText": "status: ",
+                    "range": {
+                      "end": {
+                        "character": 70,
+                        "line": 3
+                      },
+                      "start": {
+                        "character": 70,
+                        "line": 3
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "requiredLabels": [
+              "title:",
+              "status:"
+            ],
+            "forbiddenLabels": []
+          },
+          {
+            "probe": "projected_record_fields",
+            "analysisReadyMicros": 7614,
+            "firstRequestMicros": 665,
+            "warm": {
+              "samplesMicros": [
+                556,
+                553
+              ],
+              "p50Micros": 553,
+              "p95Micros": 556
+            },
+            "response": {
+              "isIncomplete": false,
+              "itemCount": 6,
+              "items": [
+                {
+                  "label": "id",
+                  "kind": 6,
+                  "detail": "int",
+                  "labelDetails": {
+                    "detail": " int"
+                  },
+                  "textEdit": {
+                    "newText": "id",
+                    "range": {
+                      "end": {
+                        "character": 180,
+                        "line": 3
+                      },
+                      "start": {
+                        "character": 180,
+                        "line": 3
+                      }
+                    }
+                  }
+                },
+                {
+                  "label": "title",
+                  "kind": 6,
+                  "detail": "String",
+                  "labelDetails": {
+                    "detail": " String"
+                  },
+                  "textEdit": {
+                    "newText": "title",
+                    "range": {
+                      "end": {
+                        "character": 180,
+                        "line": 3
+                      },
+                      "start": {
+                        "character": 180,
+                        "line": 3
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "requiredLabels": [
+              "id",
+              "title"
+            ],
+            "forbiddenLabels": [
+              "score",
+              "status"
+            ]
+          }
+        ],
+        "diagnostics": [
+          {
+            "probe": "create_type",
+            "micros": 5178,
+            "version": 5,
+            "expectedCode": "argument_type_not_assignable",
+            "expectedRange": {
+              "start": {
+                "line": 3,
+                "character": 77
+              },
+              "end": {
+                "line": 3,
+                "character": 80
+              }
+            },
+            "diagnostics": [
+              {
+                "code": "argument_type_not_assignable",
+                "message": "The argument type 'int' can't be assigned to the parameter type 'String'. ",
+                "range": {
+                  "end": {
+                    "character": 80,
+                    "line": 3
+                  },
+                  "start": {
+                    "character": 77,
+                    "line": 3
+                  }
+                },
+                "severity": 1,
+                "source": "dart"
+              }
+            ]
+          },
+          {
+            "probe": "predicate_type",
+            "micros": 6052,
+            "version": 6,
+            "expectedCode": "argument_type_not_assignable",
+            "expectedRange": {
+              "start": {
+                "line": 3,
+                "character": 81
+              },
+              "end": {
+                "line": 3,
+                "character": 88
+              }
+            },
+            "diagnostics": [
+              {
+                "code": "argument_type_not_assignable",
+                "message": "The argument type 'String' can't be assigned to the parameter type 'int'. ",
+                "range": {
+                  "end": {
+                    "character": 88,
+                    "line": 3
+                  },
+                  "start": {
+                    "character": 81,
+                    "line": 3
+                  }
+                },
+                "severity": 1,
+                "source": "dart"
+              },
+              {
+                "code": "unused_import",
+                "message": "Unused import: 'models.dart'.\nTry removing the import directive.",
+                "range": {
+                  "end": {
+                    "character": 20,
+                    "line": 2
+                  },
+                  "start": {
+                    "character": 7,
+                    "line": 2
+                  }
+                },
+                "severity": 2,
+                "source": "dart"
+              }
+            ]
+          },
+          {
+            "probe": "selected_result",
+            "micros": 5228,
+            "version": 7,
+            "expectedCode": "invalid_assignment",
+            "expectedRange": {
+              "start": {
+                "line": 3,
+                "character": 124
+              },
+              "end": {
+                "line": 3,
+                "character": 134
+              }
+            },
+            "diagnostics": [
+              {
+                "code": "invalid_assignment",
+                "message": "A value of type 'String' can't be assigned to a variable of type 'int'.\nTry changing the type of the variable, or casting the right-hand type to 'int'.",
+                "range": {
+                  "end": {
+                    "character": 134,
+                    "line": 3
+                  },
+                  "start": {
+                    "character": 124,
+                    "line": 3
+                  }
+                },
+                "severity": 1,
+                "source": "dart"
+              },
+              {
+                "code": "unused_import",
+                "message": "Unused import: 'models.dart'.\nTry removing the import directive.",
+                "range": {
+                  "end": {
+                    "character": 20,
+                    "line": 2
+                  },
+                  "start": {
+                    "character": 7,
+                    "line": 2
+                  }
+                },
+                "severity": 2,
+                "source": "dart"
+              }
+            ]
+          },
+          {
+            "probe": "missing_selected_field",
+            "micros": 6120,
+            "version": 8,
+            "expectedCode": "undefined_getter",
+            "expectedRange": {
+              "start": {
+                "line": 3,
+                "character": 169
+              },
+              "end": {
+                "line": 3,
+                "character": 174
+              }
+            },
+            "diagnostics": [
+              {
+                "code": "undefined_getter",
+                "message": "The getter 'score' isn't defined for the type '({int id, String title})'.\nTry importing the library that defines 'score', correcting the name to the name of an existing getter, or defining a getter or field named 'score'.",
+                "range": {
+                  "end": {
+                    "character": 174,
+                    "line": 3
+                  },
+                  "start": {
+                    "character": 169,
+                    "line": 3
+                  }
+                },
+                "severity": 1,
+                "source": "dart"
+              },
+              {
+                "code": "unused_import",
+                "message": "Unused import: 'models.dart'.\nTry removing the import directive.",
+                "range": {
+                  "end": {
+                    "character": 20,
+                    "line": 2
+                  },
+                  "start": {
+                    "character": 7,
+                    "line": 2
+                  }
+                },
+                "severity": 2,
+                "source": "dart"
+              }
+            ]
+          }
+        ],
+        "repairMicros": 4914,
+        "renameServerStartupMicros": 299474,
+        "symbolRenames": [
+          {
+            "probe": "record_field",
+            "status": "unavailable",
+            "micros": 10700,
+            "prepare": null,
+            "error": null,
+            "workspaceEdit": null,
+            "applied": null
+          },
+          {
+            "probe": "primary_constructor_field",
+            "status": "applied",
+            "micros": 1158280,
+            "prepare": {
+              "placeholder": "name",
+              "range": {
+                "end": {
+                  "character": 53,
+                  "line": 3
+                },
+                "start": {
+                  "character": 49,
+                  "line": 3
+                }
+              }
+            },
+            "error": null,
+            "workspaceEdit": {
+              "documentChanges": [
+                {
+                  "edits": [
+                    {
+                      "newText": "displayName",
+                      "range": {
+                        "end": {
+                          "character": 53,
+                          "line": 3
+                        },
+                        "start": {
+                          "character": 49,
+                          "line": 3
+                        }
+                      }
+                    },
+                    {
+                      "newText": "displayName",
+                      "range": {
+                        "end": {
+                          "character": 46,
+                          "line": 12
+                        },
+                        "start": {
+                          "character": 42,
+                          "line": 12
+                        }
+                      }
+                    }
+                  ],
+                  "textDocument": {
+                    "uri": "fixture/lib/symbols.dart",
+                    "version": 1
+                  }
+                }
+              ]
+            },
+            "applied": {
+              "lib/symbols.dart": {
+                "edits": 2,
+                "result": "import 'package:orm/orm.dart';\ntypedef RecordUser = ({int id, String name});\ntypedef OtherRecord = ({int id, String name});\nfinal class ClassUser(final int id, final String displayName);\nfinal class UserTable extends Fields {\n  UserTable(super.table);\n  late final id = column(Column('id', Codecs.integer));\n  late final name = column(Column('name', Codecs.text));\n}\nString recordLabel(RecordUser user) => user.name;\nString otherLabel(OtherRecord user) => user.name;\nRecordUser recordValue() => (id: 1, name: 'first');\nString classLabel(ClassUser user) => user.displayName;\nExpr<String> tableLabel(UserTable table) => table.name;\n"
+              }
+            }
+          },
+          {
+            "probe": "table_field",
+            "status": "applied",
+            "micros": 24433,
+            "prepare": {
+              "placeholder": "name",
+              "range": {
+                "end": {
+                  "character": 17,
+                  "line": 7
+                },
+                "start": {
+                  "character": 13,
+                  "line": 7
+                }
+              }
+            },
+            "error": null,
+            "workspaceEdit": {
+              "documentChanges": [
+                {
+                  "edits": [
+                    {
+                      "newText": "displayName",
+                      "range": {
+                        "end": {
+                          "character": 17,
+                          "line": 7
+                        },
+                        "start": {
+                          "character": 13,
+                          "line": 7
+                        }
+                      }
+                    },
+                    {
+                      "newText": "displayName",
+                      "range": {
+                        "end": {
+                          "character": 54,
+                          "line": 13
+                        },
+                        "start": {
+                          "character": 50,
+                          "line": 13
+                        }
+                      }
+                    }
+                  ],
+                  "textDocument": {
+                    "uri": "fixture/lib/symbols.dart",
+                    "version": 2
+                  }
+                }
+              ]
+            },
+            "applied": {
+              "lib/symbols.dart": {
+                "edits": 2,
+                "result": "import 'package:orm/orm.dart';\ntypedef RecordUser = ({int id, String name});\ntypedef OtherRecord = ({int id, String name});\nfinal class ClassUser(final int id, final String displayName);\nfinal class UserTable extends Fields {\n  UserTable(super.table);\n  late final id = column(Column('id', Codecs.integer));\n  late final displayName = column(Column('name', Codecs.text));\n}\nString recordLabel(RecordUser user) => user.name;\nString otherLabel(OtherRecord user) => user.name;\nRecordUser recordValue() => (id: 1, name: 'first');\nString classLabel(ClassUser user) => user.displayName;\nExpr<String> tableLabel(UserTable table) => table.displayName;\n"
+              }
+            }
+          },
+          {
+            "probe": "record_alias",
+            "status": "applied",
+            "micros": 4755,
+            "prepare": {
+              "placeholder": "RecordUser",
+              "range": {
+                "end": {
+                  "character": 18,
+                  "line": 1
+                },
+                "start": {
+                  "character": 8,
+                  "line": 1
+                }
+              }
+            },
+            "error": null,
+            "workspaceEdit": {
+              "documentChanges": [
+                {
+                  "edits": [
+                    {
+                      "newText": "RenamedUser",
+                      "range": {
+                        "end": {
+                          "character": 18,
+                          "line": 1
+                        },
+                        "start": {
+                          "character": 8,
+                          "line": 1
+                        }
+                      }
+                    },
+                    {
+                      "newText": "RenamedUser",
+                      "range": {
+                        "end": {
+                          "character": 29,
+                          "line": 9
+                        },
+                        "start": {
+                          "character": 19,
+                          "line": 9
+                        }
+                      }
+                    },
+                    {
+                      "newText": "RenamedUser",
+                      "range": {
+                        "end": {
+                          "character": 10,
+                          "line": 11
+                        },
+                        "start": {
+                          "character": 0,
+                          "line": 11
+                        }
+                      }
+                    }
+                  ],
+                  "textDocument": {
+                    "uri": "fixture/lib/symbols.dart",
+                    "version": 3
+                  }
+                }
+              ]
+            },
+            "applied": {
+              "lib/symbols.dart": {
+                "edits": 3,
+                "result": "import 'package:orm/orm.dart';\ntypedef RenamedUser = ({int id, String name});\ntypedef OtherRecord = ({int id, String name});\nfinal class ClassUser(final int id, final String displayName);\nfinal class UserTable extends Fields {\n  UserTable(super.table);\n  late final id = column(Column('id', Codecs.integer));\n  late final displayName = column(Column('name', Codecs.text));\n}\nString recordLabel(RenamedUser user) => user.name;\nString otherLabel(OtherRecord user) => user.name;\nRenamedUser recordValue() => (id: 1, name: 'first');\nString classLabel(ClassUser user) => user.displayName;\nExpr<String> tableLabel(UserTable table) => table.displayName;\n"
+              }
+            }
+          }
+        ],
+        "ormRule": {
+          "dartAnalysisMilliseconds": 117,
+          "dartAnalysisOutput": "Analyzing schema.dart...\nNo issues found!\n\n",
+          "generatorError": "Key selectors accept direct fields or positional records of fields only. (offset 1644)"
+        },
+        "finalAnalyzeMilliseconds": 461
+      }
+    ]
+  },
+  "limits": [
+    "The 10-model same-session run failed before larger scales were attempted.",
+    "A server restart completes the same bounded rename probes. The underlying SDK/harness interaction is not diagnosed.",
+    "Record field rename is unavailable even in the clean session; use explicit edits, regeneration and analyzer-guided reference repair.",
+    "This is direct LSP evidence, not GUI or all-editor certification."
+  ]
+}

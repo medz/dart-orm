@@ -1,10 +1,12 @@
 # Design acceptance map
 
-This is a requirement/evidence index for
-[`new-dart-orm-design.md`](../research/new-dart-orm-design.md), not a declaration
-that the goal is complete. A passing suite proves its checked scenarios; it does
-not close an item whose required evidence is missing. Current run results and
-platform limits are recorded in [progress](progress.md).
+The common ORM lifecycle in
+[`new-dart-orm-design.md`](../research/new-dart-orm-design.md) is implemented and
+accepted within the [reviewed capability boundaries](capabilities.md). The final
+native run passed 835 tests with both databases enabled; the documented usage
+run and static analysis also passed. This map identifies the checked scenarios
+and separately captured platforms, rather than certifying every database feature
+or deployment target. Historical measurements remain pinned to their source.
 
 ## Implementation with direct test coverage
 
@@ -30,7 +32,7 @@ platform limits are recorded in [progress](progress.md).
 | §§11–12: native Flutter | `example/flutter`, `tool/test_flutter.dart` and [Android capture](flutter.md): version 1 debug APK → version 2 AOT release APK → independent process restart; 4/17/11 assertions cover background SQLite, persistence, live migration/catalog, generated CRUD/relations, rollback/watch and cancellation/reuse |
 | §12: inspectable query structure and execution phases | `plan_test`, `observation_test` and real JS/WASM teams scenario: non-executing SQL/column/key/join/batch descriptions, composite parameter capacity, real acquisition waits/cancellation, decode/stream/RETURNING scopes and observer exception isolation; [measurement limits](observability.md) |
 | §13.3: runtime cost comparison | `tool/benchmark_runtime.dart`, captured `research/benchmarks/runtime.json` and [method/results](performance.md): same Driver/SQL/parameters/shape, four read workloads, 200 samples per lane, concurrent throughput, byte/row counts, acquisition distributions, live heap and selected allocation traces; native JIT with actual echo calibration of controlled TCP latency, not a remote deployment or total-allocation-byte census |
-| §13.3: editor protocol measurements | `tool/benchmark_editor.dart`, `research/benchmarks/editor.json` and [method/results](generation.md#editor-completion-diagnostics-and-rename): real generated APIs at 10/100/1000 models, 300 warm samples across five completion probes, twelve exact-code/range diagnostic checks, language-symbol rename edits and final consumer analysis; excludes GUI rendering and the mixed-session rename issue described there |
+| §13.3: editor protocol measurements | `tool/benchmark_editor.dart`, `research/benchmarks/editor.json` and [method/results](generation.md#editor-completion-diagnostics-and-rename): real generated APIs at 10/100/1000 models, 300 warm samples across five completion probes, twelve exact-code/range diagnostic checks, language-symbol rename edits and final consumer analysis; the subsequent `research/validation/editor-recovery.json` records a same-session timeout at ten models and a successful restart path, without claiming GUI or general IDE reliability |
 | §13.2: declaration-form experiment | `tool/compare_authoring.dart`, `research/benchmarks/authoring.json` and [scope/results](authoring.md): actual Record/primary-class/table inputs for User/Post/Profile/Follow, identical canonical schema/client/snapshot for base/type-edit/rename variants, six stale-consumer failures and repaired analyses, complex constraints, schema LSP edits and fourteen original-source error locations; experimental class/table adapters emit Record rows and do not implement nominal object materialization |
 
 The filenames in this table refer to `test/<name>.dart` unless another location
@@ -46,13 +48,35 @@ also documents the PostgreSQL protocol lifecycle tradeoff. `selection_test` adds
 direct coverage for deferred/ordered mapping, repeated fields, all typed arities,
 streaming, failures and dynamic field snapshots on both native backends.
 
-## Open implementation and acceptance gates
+## Final lifecycle audit
 
-| Gate from the design | Evidence still required |
+| Design §3 scenario / acceptance gate | Verification |
 | --- | --- |
-| §§5, 10–11: remaining type/catalog capability review | Verify supported types against imported precision, defaults, native representation and migration behavior. Timezone conversions and remaining temporal operations are open in [types](types.md). Unsupported extensions must stay explicit. |
-| §13.2–13.3: remaining editor workflow review | The named four-model declaration experiment and 10/100/1000-model measurements have direct evidence above. Record field rename is unavailable in the checked SDK and requires regeneration plus application-reference repair; this is documented. Mixed-session class-field rename after error recovery remains unverified; the captures use clean rename sessions and do not establish general IDE workflow reliability. |
-| §§3, 12–13: whole-product acceptance | Run the documented onboarding, generated CRUD/relations, persistent migration/recovery and compatibility workflow on final source. Reconcile this map and every pending item in progress before completing the goal. |
+| Add a defaulted field without rewriting existing create calls | Generated type/default tests and actual Android v1 → v2 migration preserve rows and populate the new field |
+| Select emails only, returning `List<String>` | Native projection/plan tests and executable cookbook scalar selection |
+| Root pagination plus each parent's latest three titles | Native relation checks, `three_posts` runtime workload and browser generated-relation scenario; actual SQL counts and parameter chunks |
+| Create a parent and children in one transaction | README and teams examples, native generated tests and actual Android relation write |
+| Clear a nullable field and increment atomically | Generated patch/expression-write tests, NULL/default negative type checks and transaction suites |
+| Separate Dart rename from physical column rename | Generated snapshot/authoring tests, CLI migration diff and real migration/recovery tests; Record field rename remains manual |
+| Switch SQLite memory/file/worker storage | Native persistence and read-only tests, Chrome JS/WASM OPFS reload/upgrade, Android APK upgrade/restart |
+| Keep database-specific configuration and ownership explicit | Separate typed driver inputs, wrong-backend compilation failures, borrowed PostgreSQL pools and cancellation/acquisition tests; unimplemented transports are not certified |
+| Process large results and release sessions | Real SQLite/PostgreSQL cursors, batching, early stream cancellation and post-failure connection reuse; browser stream/release scenario |
+| Check version, migration state and live structure before deployment | CLI/import/baseline tests, application-version tests, durable backfill and nontransactional recovery, Android bundled migration checks |
+| Review query, type and unmanaged catalog coverage | [Capability review](capabilities.md); final native suite includes real triggers and complete policy/RLS metadata checks |
+| Run documented onboarding and complex query usage | [Usage capture](../research/validation/usage.json): dependencies, generation, both existing examples, nine cookbook checks on each backend, migration-chain validation and clean analysis |
+
+The [full native capture](../research/validation/native.json) records the command,
+versions, source base plus changed-file hashes and exact [test log](../research/validation/native.log).
+Its 835 passing tests include real CLI and build_runner subprocess workflows,
+not just direct library calls. The later cookbook and documentation changes do
+not alter the tested runtime or test sources.
+
+The browser and Android captures precede the final PostgreSQL catalog metadata
+fix. That fix changes only the PostgreSQL SQL branch; the recorded SQLite worker,
+browser and Flutter execution paths are unchanged. Android proves the native
+Flutter lane on the recorded emulator, not Apple platforms or every type/scenario
+from the native server suite. See [Flutter scope](flutter.md) and
+[browser scope](sqlite-web.md) for exact assertions.
 
 ## Extension boundaries in the design
 
@@ -61,4 +85,6 @@ SQLite FTS expansion behind real demand. HTTP/serverless transports require
 their own session/capability verification. These are not silently provided by a
 native driver or raw-SQL escape hatch. Distributed transactions, synchronization,
 arbitrary object-graph tracking and a general optimizer remain separately scoped
-in the design. These boundaries do not excuse the open common ORM gates above.
+in the design. Calendar SQL arithmetic, timezone-rule conversion and additional
+native types also remain explicit extensions, as recorded in the capability
+review. They are not presented as working APIs or hidden behind silent fallbacks.

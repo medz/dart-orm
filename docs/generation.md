@@ -190,9 +190,17 @@ The language-symbol rename results are the same at all three scales:
 
 These are language-symbol probes. They do not compare three ORM authoring
 frontends generating identical APIs. Renames use a fresh server after the error
-probes. During harness development, class-field rename in the same session after
-the error/repair sequence stalled for 60 seconds; its cause is not established.
-This capture does not establish reliable mixed-session rename after error recovery.
+probes. A subsequent [recovery capture](../research/validation/editor-recovery.json)
+reproduces the same-session failure using `dart run tool/benchmark_editor.dart
+--same-session`: at ten models, five completion probes, four exact-code/range
+diagnostics and their repair finish, then `textDocument/rename` for the primary
+constructor field times out after 60 seconds. The process exits nonzero before
+attempting the larger scales; the [original log](../research/validation/editor-recovery.log)
+is retained. `--smoke` on the same harness restarts the server before rename and
+completes the class/table/alias edits plus final analysis. Server PIDs and source
+hashes are recorded. The underlying SDK/harness interaction is not diagnosed;
+this is a reproducible limitation with a checked restart path, not general IDE
+reliability or a claim that the SDK alone caused it.
 
 Record field edits therefore require reviewing declaration/selector references,
 regenerating, and repairing application references with the type checker. Do not

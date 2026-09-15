@@ -312,8 +312,10 @@ TEXT does not imply a calendar type. Changing text to a calendar type requires a
 reviewed migration; newly equivalent unique keys can make conversion fail and
 roll back. Historical backfills persist canonical text keys for resumable paging.
 
-SQL calendar arithmetic and timezone-aware conversions remain pending. Use local types when
-the domain value actually has no timezone; use DateTime for resolved instants.
+SQL calendar arithmetic and timezone-rule conversion have no typed API in this
+version; they are separate [extension boundaries](capabilities.md#values-and-physical-storage).
+Use local types when the domain value actually has no timezone; use DateTime for
+resolved instants.
 
 ## Temporal precision
 

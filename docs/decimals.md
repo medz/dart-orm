@@ -252,8 +252,10 @@ See the [generated fixture](../test/support/decimals/schema.dart),
 [division/window checks](../test/decimal_division_test.dart),
 [average checks](../test/decimal_average_test.dart) and the
 [native acceptance executable](../test/support/decimals/native.dart).
-These establish correctness on the tested native databases. Browser/Flutter
-acceptance remains open.
+These establish correctness on the tested native databases. The real
+[JS/WASM capture](sqlite-web.md) additionally checks exact Decimal transport.
+It does not rerun this complete arithmetic/precision suite, and the Android
+Flutter acceptance does not include Decimal-specific scenarios.
 
 ## Native cost probe
 

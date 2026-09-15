@@ -9,8 +9,9 @@ import 'src/editor_server.dart';
 
 Future<void> main(List<String> args) async {
   final smoke = args.contains('--smoke');
-  if (args.any((a) => a != '--smoke')) {
-    throw ArgumentError('Use --smoke or no arguments.');
+  final sameSession = args.contains('--same-session');
+  if (args.any((a) => a != '--smoke' && a != '--same-session')) {
+    throw ArgumentError('Use --smoke, --same-session, or no arguments.');
   }
   final samples = smoke ? 2 : 20;
   final results = <Map<String, Object?>>[];
@@ -29,6 +30,7 @@ Future<void> main(List<String> args) async {
       await fixture.write('lib/symbols.dart', _symbols);
       final start = Stopwatch()..start();
       server = await EditorServer.start(fixture.directory.path);
+      final diagnosticServerPid = server.process.pid;
       final initializeMicros = start.elapsedMicroseconds;
       await server.ready();
       final projectReadyMicros = start.elapsedMicroseconds;
@@ -225,11 +227,16 @@ Future<void> main(List<String> args) async {
       );
       final repairMicros = repair.elapsedMicroseconds;
       await fixture.write('lib/client.dart', clean);
-      await server.close();
       final renameStartup = Stopwatch()..start();
-      server = await EditorServer.start(fixture.directory.path);
-      await server.ready();
-      final renameStartupMicros = renameStartup.elapsedMicroseconds;
+      if (!sameSession) {
+        await server.close();
+        server = await EditorServer.start(fixture.directory.path);
+        await server.ready();
+      }
+      final renameStartupMicros = sameSession
+          ? 0
+          : renameStartup.elapsedMicroseconds;
+      final renameServerPid = server.process.pid;
       final symbols = fixture.file('lib/symbols.dart');
       server.open(symbols.path, _symbols);
       final renames = <Map<String, Object?>>[];
@@ -246,6 +253,7 @@ Future<void> main(List<String> args) async {
         }
         final watch = Stopwatch()..start();
         final location = editorLocation(symbols.path, text, offset);
+        stdout.writeln('  requesting rename: $name');
         Object? prepare, response;
         Map<String, Object?>? error;
         try {
@@ -308,6 +316,10 @@ Future<void> main(List<String> args) async {
       final analysis = await fixture.run(['analyze', 'lib']);
       results.add({
         'models': models,
+        'sessionPids': {
+          'diagnostics': diagnosticServerPid,
+          'renames': renameServerPid,
+        },
         'sourceBytes': utf8.encode(source).length,
         'generatedBytes': generatedBytes,
         'initializeMicros': initializeMicros,
@@ -341,6 +353,7 @@ Future<void> main(List<String> args) async {
     'os': Platform.operatingSystemVersion,
     'cpu': cpu.stdout.toString().trim(),
     'smoke': smoke,
+    'sameSession': sameSession,
     'samplesPerWarmProbe': samples,
     'harnessSha256': {
       for (final p in [
@@ -350,14 +363,18 @@ Future<void> main(List<String> args) async {
       ])
         p: sha256.convert(await File(p).readAsBytes()).toString(),
     },
-    'scope': 'Direct stdio LSP client against the installed Dart Analysis Server, isolated consumer packages and real generated APIs; no database. Includes client transport/JSON costs, excludes GUI/plugin rendering and dependency download. Each scale uses one fresh server for completion/diagnostics and another for symbol renames. Startup and initial project analysis are measured separately from completion. First completion follows a fresh diagnostic for the incomplete source and is not a cold OS/cache measurement. Warm probes use unchanged documents after two unrecorded warmups. Diagnostic probes serialize changes and await a fresh notification; this SDK omits document versions. Final CLI analysis verifies the edited sources. Symbol-form probes compare language rename behavior only, not three ORM authoring frontends or identical generated APIs from each form.',
+    'scope':
+        'Direct stdio LSP client against the installed Dart Analysis Server, isolated consumer packages and real generated APIs; no database. Includes client transport/JSON costs, excludes GUI/plugin rendering and dependency download. ${sameSession ? 'Each scale retains the same server across completion, deliberate errors, repair and symbol renames; PIDs are recorded.' : 'Each scale uses one fresh server for completion/diagnostics and another for symbol renames.'} Startup and initial project analysis are measured separately from completion. First completion follows a fresh diagnostic for the incomplete source and is not a cold OS/cache measurement. Warm probes use unchanged documents after two unrecorded warmups. Diagnostic probes serialize changes and await a fresh notification; this SDK omits document versions. Final CLI analysis verifies the edited sources. Symbol-form probes compare language rename behavior only, not three ORM authoring frontends or identical generated APIs from each form.',
     'limits': [
-      'During harness development, primary-constructor field rename after the error/repair sequence stalled for 60 seconds in the same server. A separate clean server completes the symbol probes; this report does not establish reliable mixed-session rename after diagnostic recovery.',
+      if (!sameSession) 'This capture restarts the server for renames and does not establish mixed-session rename after diagnostic recovery.',
+      'The named Record field remains unavailable for automatic rename in this SDK. A successful bounded sequence does not establish every IDE/plugin workflow.',
     ],
     'results': results,
   };
   final output = File(
-    smoke ? '.dart_tool/editor-smoke.json' : 'research/benchmarks/editor.json',
+    smoke
+        ? '.dart_tool/editor${sameSession ? '-recovery' : ''}-smoke.json'
+        : 'research/benchmarks/editor${sameSession ? '-recovery' : ''}.json',
   );
   await output.parent.create(recursive: true);
   await output.writeAsString(

@@ -1,12 +1,15 @@
 # Implementation status
 
-The active goal is the complete ORM described in `research/new-dart-orm-design.md`.
-This file records verified delivery, not planned capabilities presented as working.
-The [design acceptance map](acceptance.md) ties remaining gates to the original
-requirements and distinguishes direct coverage from missing evidence.
+The common lifecycle in `research/new-dart-orm-design.md` is implemented and
+accepted. The [design acceptance map](acceptance.md) connects each requirement to
+evidence; the [capability review](capabilities.md) states extensions and unverified
+targets. This is a local implementation, with no package publication or push.
 
-Latest verification: 834 native tests pass in one invocation with PostgreSQL
-enabled; analysis reports no issues. Real Chrome JS and Dart WASM each pass 19
+Latest verification: [835 native tests](../research/validation/native.json) pass
+in one invocation with PostgreSQL enabled. The [usage capture](../research/validation/usage.json)
+passes dependency resolution, generation, the README and teams examples, nine
+query cookbook checks on each backend, migration-chain validation and clean
+analysis. Real Chrome JS and Dart WASM each pass 19
 scenarios, including temporal column precision and extended date/instant ranges.
 An actual Android Flutter application additionally passes 4/17/11 checks across
 legacy installation, AOT release APK upgrade and process restart; see
@@ -122,6 +125,10 @@ intermediate List allocations; it does not establish a throughput improvement.
 7. CLI, examples, user documentation, real-database and platform acceptance checks.
 
 ## Validation
+
+The following paragraphs are the chronological implementation record. References
+to pending work describe that stage; the current acceptance decision and remaining
+extension boundaries are in the final review below.
 
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
@@ -711,15 +718,31 @@ browser scenarios remain separate runtime evidence.
 This closes the Android native Flutter gate, not physical-device, Apple-platform
 or power-loss acceptance. Reproduction and exact scope are in [Flutter](flutter.md).
 
-## Still required for the goal
+## Final acceptance review
 
-- Advanced-query capability and edge-case review.
-- Broader unmanaged-object catalog coverage.
-- Further native type coverage.
-- Timezone conversions and remaining temporal operations.
-- Further backend capability coverage.
-- Remaining platform acceptance review; Android native Flutter has direct evidence above.
-- User documentation, performance measurements and complete acceptance review.
+The final native run passes 835 tests in 7 minutes 44 seconds on Dart 3.13.3,
+SQLite 3.53.4 and PostgreSQL 18.4. The exact log, command and changed-source hashes
+are saved in [native validation](../research/validation/native.json). Subsequent
+documented usage and analysis passed without modifying the tested runtime.
+
+- Advanced queries are documented with an executable cookbook: filters, joined
+  ordering, relation counts, grouped CTEs, windows, subqueries and versioned
+  nullable cursors pass nine checks on each real backend.
+- Catalog review now preserves PostgreSQL policy roles/command/mode/expressions
+  and enabled/forced RLS flags. Import/baseline leave them unchanged. Actual
+  triggers on both backends continue to execute after import and verification.
+- Type, backend and migration behavior are reconciled against design §§5 and
+  10–12 in [capabilities](capabilities.md). Calendar SQL arithmetic, timezone-rule
+  conversion and additional native extensions remain outside the implemented
+  typed API; the design does not specify that function family.
+- Native Flutter has direct Android debug → release upgrade and restart evidence.
+  Browser JS/WASM have separate worker/OPFS evidence. Neither capture certifies
+  every platform or every native server test on that platform.
+- Generation, editor and runtime cost reports retain their actual sample scopes
+  and historical source revisions. The same-session editor rename timeout and
+  checked server-restart recovery are retained as an explicit limitation.
+- The documented onboarding, migration assets, examples and static analysis pass;
+  [acceptance](acceptance.md#final-lifecycle-audit) maps the complete usage lifecycle.
 
 To-one projections join by default when declared keys prove uniqueness; otherwise
 they batch and check cardinality. Collections use explicit parameter-aware batches.
@@ -728,7 +751,7 @@ keys, row CHECK constraints and simple indexes; its `unmanaged` objects require 
 Ordinary migration batches are atomic. Explicit backfills use durable per-step
 checkpoints and short data transactions on both databases. General recoverable
 autocommit SQL remains PostgreSQL-only; SQLite rejects `CheckedSql`. These are
-implementation stages, not a reduction of the active goal.
+documented backend boundaries, not silently substituted behavior.
 
 The full suite includes 52 shared SQLite/PostgreSQL query checks, 20 generated
 client/migration integration checks, 29 source generation checks, five codec
@@ -736,7 +759,7 @@ regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CL
 workflows, 37 streaming/execution checks, 28 relation strategy checks and three
 negative compilation checks covering 29 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks, 20 UTC instant checks, 24 named SQL checks, two explicit floating-parameter checks, 24 unconstrained-relation checks 17 CHECK-constraint checks and 17 client-default checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 18 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks, 20 UTC instant checks, 24 named SQL checks, two explicit floating-parameter checks, 24 unconstrained-relation checks, 17 CHECK-constraint checks and 17 client-default checks.
 
 Nineteen computed-column checks and additional generation/type checks are included
 in the current aggregate above.

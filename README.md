@@ -3,8 +3,9 @@
 A new Dart 3.13 ORM designed around record schemas, typed relationships,
 composable selections, and explicit database sessions.
 
-Development is in progress. See [the design](research/new-dart-orm-design.md)
-and [implementation status](docs/progress.md).
+The initial design is implemented and checked against real SQLite, PostgreSQL,
+Chrome and Android Flutter. See [design acceptance](docs/acceptance.md),
+[capability limits](docs/capabilities.md) and [verification history](docs/progress.md).
 
 One package, independent SQLite and PostgreSQL entry points, no runtime reflection.
 This branch is unrelated to earlier ORM implementations.
@@ -18,6 +19,7 @@ background SQLite, persistence and commit-driven query subscriptions.
 dart pub get
 dart run orm generate example/schema.dart
 dart run example/main.dart
+dart run example/queries.dart
 dart test
 ```
 
@@ -105,9 +107,13 @@ Transactions merge notifications; rollbacks do not notify. See
 [query subscriptions](docs/watch.md) for relation dependencies, pause/cancellation,
 and explicit notifications for raw SQL or external writers.
 
+The [query cookbook](example/queries.dart) runs filters, joined ordering, relation
+counts, grouped CTEs, windows, subqueries and cursor pagination. See
+[query usage](docs/queries.md) for the API and PostgreSQL example configuration.
+
 Combine scalar or `.row` projections with `union`/`unionAll`, then map the
 result to a Record or DTO. Sets support typed exported columns, CTEs, streaming
-and subscriptions. See [queries and SQL sets](docs/queries.md) for scope,
+and subscriptions. See [queries](docs/queries.md) for scope,
 nullability and codec requirements.
 
 Set `ORM_TEST_POSTGRES` to a **disposable** local PostgreSQL database to include
