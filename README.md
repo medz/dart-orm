@@ -84,6 +84,10 @@ cursor. Reads and mutations accept `ExecutionOptions` for connection acquisition
 limits, statement deadlines and cancellation. See [streaming and execution](docs/execution.md) for connection
 lifetime, batch sizing, transaction-wide deadlines and failure outcomes.
 
+The [runtime cost report](docs/performance.md) compares the same driver, SQL and
+result shapes across SQLite, local PostgreSQL and a controlled TCP delay. It
+separates normal timing from acquisition probes, live heap and allocation traces.
+
 Single relationships use JOINs when declared keys prove uniqueness; collections
 load in parameter-aware batches. Both support typed nested selections. See
 [relationship strategies](docs/relations.md) for composite keys, per-parent

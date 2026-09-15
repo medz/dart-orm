@@ -27,6 +27,7 @@ platform limits are recorded in [progress](progress.md).
 | §11: distinct PostgreSQL/native SQLite configuration and connection ownership | `lib/postgres.dart`, `lib/sqlite.dart`; native suites exercise both backends, capability rejection, borrowed pools and disposal |
 | §§11–12: worker/persistence, real cursor streaming and commit-driven observation | Native `stream_test`/`watch_test`; real JS and Dart WASM browser reports include OPFS reload recovery and upgrade |
 | §12: inspectable query structure and execution phases | `plan_test`, `observation_test` and real JS/WASM teams scenario: non-executing SQL/column/key/join/batch descriptions, composite parameter capacity, real acquisition waits/cancellation, decode/stream/RETURNING scopes and observer exception isolation; [measurement limits](observability.md) |
+| §13.3: runtime cost comparison | `tool/benchmark_runtime.dart`, captured `research/benchmarks/runtime.json` and [method/results](performance.md): same Driver/SQL/parameters/shape, four read workloads, 200 samples per lane, concurrent throughput, byte/row counts, acquisition distributions, live heap and selected allocation traces; native JIT with actual echo calibration of controlled TCP latency, not a remote deployment or total-allocation-byte census |
 
 The filenames in this table refer to `test/<name>.dart` unless another location
 is shown. The browser report is
@@ -38,7 +39,6 @@ commands and limits in [SQLite web](sqlite-web.md).
 | Gate from the design | Evidence still required |
 | --- | --- |
 | §§5, 10–11: remaining type/catalog capability review | Verify supported types against imported precision, defaults, native representation and migration behavior. Temporal column precision/conversion remains open in [types](types.md). Unsupported extensions must stay explicit. |
-| §13.3: runtime cost comparison | Same driver, SQL, values and output shape for raw versus ORM reads/projections/relations; query counts, returned volume, latency distribution, throughput, memory/allocation and pool wait, with explicit local/RTT conditions. Decimal microbenchmarks do not cover this gate. |
 | §13.2–13.3: authoring/editing costs | Generation report covers 10/100/1000 models, build/watch and analysis. Declaration-form comparison, editor rename/diagnostic behavior and actual completion measurements need direct evidence; no claim of superiority over class/table declarations. |
 | §§11–12: native Flutter | An actual Flutter application exercising background SQLite, persistence, older-schema upgrade and watch delivery. Standalone macOS JIT/AOT and Chrome are different evidence. |
 | §§3, 12–13: whole-product acceptance | Run the documented onboarding, generated CRUD/relations, persistent migration/recovery and compatibility workflow on final source. Reconcile this map and every pending item in progress before completing the goal. |

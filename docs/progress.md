@@ -9,6 +9,10 @@ Latest verification: 807 native tests pass in one invocation with PostgreSQL
 enabled; analysis reports no issues. Real Chrome JS and Dart WASM each pass 18
 scenarios. These checks include query plan inspection and phase observations.
 
+A later benchmark-only stage adds a verified same-driver runtime cost report for
+SQLite and PostgreSQL, including controlled TCP latency, concurrency and separate
+allocation traces. Runtime source remains `94d24fe`; see [measurements](performance.md).
+
 ## Completed
 
 - Reset the `next` branch contents, preserving the design research and license.
@@ -22,6 +26,7 @@ scenarios. These checks include query plan inspection and phase observations.
 - PostgreSQL driver with a single pool owner, TLS settings and explicit borrowed pools.
 - Transaction lifecycle, rollback, savepoints, pending work checks and query observation.
 - Non-executing SQL/column/key/join/batch inspection and optional acquisition/SQL/decode phase observations with immutable metadata and isolated observer failures.
+- Reproducible same-driver/SQL/result runtime comparisons with latency samples, concurrent throughput, logical/protocol bytes, lease distributions, live heap and separate selected allocation traces.
 - Transaction-wide deadlines/cancellation with native SQL interruption, callback expiry and awaited cleanup.
 - SQLite actual transaction-state reporting, automatic rollback recovery and invalidated-savepoint protection.
 - Conservative server failure classification distinguishing known commit rejection from unknown outcome.
@@ -551,6 +556,26 @@ alongside OPFS persistence, reload recovery and upgrades. The captured browser
 report contains both runs. This establishes behavior, not throughput or allocation
 cost; native Flutter and the remaining acceptance gates are still open.
 
+The runtime cost harness completes four workloads on SQLite WAL, local PostgreSQL
+and a delayed TCP relay, retaining 200 raw/ORM samples for both paired latency and
+eight-client throughput. Probes verify exact SQL/parameters, result shapes and row
+volumes; PostgreSQL protocol bytes and SQLite logical JSON byte counts have distinct
+labels. Independent echo calibration measured 26.410 ms p50 for the nominal 20 ms
+delay. This is a local controlled-latency experiment, not a remote-server deployment.
+
+Separate processes measure live isolate-group heap/RSS and selected main-isolate
+allocation traces. The SDK's current `accumulatedSize` implementation reports live
+size, so the harness does not misrepresent it as total allocation. Timing processes
+have hooks, VM service and profiler disabled. Captured tool hashes, sample counts,
+SQL/parameter equality and result volumes were independently read back. Analysis
+reports no issues; no runtime source changed in this stage, so the 807-test and
+JS/WASM correctness runs above remain the runtime baseline.
+
+The results identify intermediate List construction and PostgreSQL protocol
+round trips as concrete optimization candidates. There is no new performance
+percentage guarantee or claim of superiority over another ORM; detailed numbers,
+scope and reproduction commands are in `docs/performance.md`.
+
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
@@ -559,7 +584,7 @@ cost; native Flutter and the remaining acceptance gates are still open.
 - Temporal column precision and timezone conversions.
 - Further backend capability coverage.
 - Native Flutter checks and remaining platform acceptance review.
-- Complete runtime cost comparison, including latency, throughput, memory/allocation and pool wait.
+- Review measured intermediate collection allocation and protocol round-trip costs before final performance acceptance.
 - User documentation, performance measurements and complete acceptance review.
 
 To-one projections join by default when declared keys prove uniqueness; otherwise
