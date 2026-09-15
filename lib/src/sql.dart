@@ -16,6 +16,11 @@ sealed class _Node {
   String writeSql(_Writer w);
 }
 
+_Node _unwrapStorage(_Node node) => switch (node) {
+  _DecimalNode(:final child) || _TemporalNode(:final child) => child,
+  _ => node,
+};
+
 final class _ColumnNode(final TableRef table, final String name) extends _Node {
   @override
   String writeSql(_Writer w) {
@@ -45,6 +50,9 @@ final class _Parameter(final Object? value, {final String? sqlType})
       'real' => 'DOUBLE PRECISION',
       'boolean' => 'BOOLEAN',
       'timestamp' => 'TIMESTAMPTZ',
+      'date' => 'DATE',
+      'time' => 'TIME WITHOUT TIME ZONE',
+      'local_datetime' => 'TIMESTAMP WITHOUT TIME ZONE',
       'json' => 'JSONB',
       'blob' => 'BYTEA',
       _ => throw OrmException(
@@ -114,10 +122,17 @@ final class _Writer {
   final Set<TableRef> leftJoins = {};
   final _ReadTables? reads;
   final bool exactDecimal;
+  final bool localTemporal;
   bool unqualified = false;
   String? Function(_Node)? project;
   _AverageInputs? averageInputs;
-  _Writer(this.dialect, this.aliases, {this.reads, this.exactDecimal = false});
+  _Writer(
+    this.dialect,
+    this.aliases, {
+    this.reads,
+    this.exactDecimal = false,
+    this.localTemporal = false,
+  });
   String quote(String name) => '"${name.replaceAll('"', '""')}"';
   String parameter(Object? value) {
     parameters.add(switch ((dialect, value)) {
@@ -135,9 +150,12 @@ class Expr<T> extends Selection<T> {
   final _Node _node;
   final Codec<T> codec;
   Expr._(_Node node, this.codec)
-    : _node = codec.sqlType == 'decimal' && node is! _DecimalNode
-          ? _DecimalNode(node)
-          : node;
+    : _node = switch (codec.sqlType) {
+        'decimal' when node is! _DecimalNode => _DecimalNode(node),
+        'date' || 'time' || 'local_datetime' when node is! _TemporalNode =>
+          _TemporalNode(node, codec.sqlType),
+        _ => node,
+      };
 
   Expr<bool?> eq(T value) => value == null
       ? Expr._(
@@ -184,7 +202,7 @@ class Expr<T> extends Selection<T> {
     List<OrderTerm> orderBy = const [],
     WindowFrame? frame,
   }) {
-    final function = _unwrapDecimal(_node);
+    final function = _unwrapStorage(_node);
     if ((function is! _Function && function is! _DecimalAverage) ||
         !_aggregate(function)) {
       throw const OrmException(

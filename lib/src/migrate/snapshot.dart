@@ -56,6 +56,9 @@ final class SchemaSnapshot {
       'real' => Codecs.real,
       'boolean' => Codecs.boolean,
       'timestamp' => Codecs.dateTime,
+      'date' => Codecs.date,
+      'time' => Codecs.time,
+      'local_datetime' => Codecs.localDateTime,
       'blob' => Codecs.bytes,
       'json' => Codecs.json,
       _ => throw OrmException(

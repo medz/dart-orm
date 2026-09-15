@@ -343,6 +343,7 @@ final class _TypedRelationBinding<R, F extends Fields>(
       db.dialect,
       {},
       exactDecimal: db.capabilities.exactDecimal,
+      localTemporal: db.capabilities.localTemporal,
     );
     Expr<bool?> predicate = Expr._(
       _RelationKeys(relation._child, keys),
@@ -458,7 +459,12 @@ final class _RelationKey(final List<Object?> values) {
   }
 }
 
-Object? _relationValue(Expr<Object?> key, Object? value) =>
-    value != null && key.codec.sqlType == 'decimal'
-    ? Codecs.decimal.decode(value).toString()
-    : value;
+Object? _relationValue(Expr<Object?> key, Object? value) => value == null
+    ? null
+    : switch (key.codec.sqlType) {
+        'decimal' => Codecs.decimal.decode(value).toString(),
+        'date' => Codecs.date.decode(value).toString(),
+        'time' => Codecs.time.decode(value).toString(),
+        'local_datetime' => Codecs.localDateTime.decode(value).toString(),
+        _ => value,
+      };

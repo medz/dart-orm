@@ -5,6 +5,52 @@ import 'package:analyzer/dart/analysis/results.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('calendar APIs reject instants, strings and mixed temporal types', () async {
+    final directory = await Directory('.dart_tool/orm-temporal-type-tests')
+        .create(recursive: true);
+    final file = File('${directory.path}/negative.dart').absolute;
+    final invalid = [
+      "db.appointments.create(day: DateTime.utc(2024));",
+      "db.appointments.byId(1).patch(starts: const Change.set('2024-01-01'));",
+      "db.appointments.where((a) => a.time.eq(LocalDate(2024, 1, 1)));",
+      "db.appointments.where((a) => a.day.eq('2024-01-01'));",
+      "db.appointments.select((a) => a.day).union(db.appointments.select((a) => a.time));",
+    ];
+    await file.writeAsString(
+      "import 'package:orm/orm.dart';\nimport '../../test/support/temporals/schema.orm.dart';\nvoid wrong(Database<Sqlite> db) {\n${invalid.join('\n')}\n}\n",
+    );
+    final contexts = AnalysisContextCollection(includedPaths: [file.path]);
+    try {
+      final result =
+          await contexts
+                  .contextFor(file.path)
+                  .currentSession
+                  .getResolvedUnit(file.path)
+              as ResolvedUnitResult;
+      final errors = result.diagnostics
+          .where((e) => e.severity.name.toLowerCase() == 'error')
+          .toList();
+      expect(
+        errors.any(
+          (e) => e.diagnosticCode.lowerCaseName.contains('uri_does_not_exist'),
+        ),
+        false,
+      );
+      for (var i = 0; i < invalid.length; i++) {
+        expect(
+          errors.any(
+            (e) => result.lineInfo.getLocation(e.offset).lineNumber == i + 4,
+          ),
+          true,
+          reason: invalid[i],
+        );
+      }
+    } finally {
+      await contexts.dispose();
+      await directory.delete(recursive: true);
+    }
+  });
+
   test(
     'actual generated APIs reject wrong inputs, results and backend options',
     () async {

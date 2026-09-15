@@ -83,6 +83,9 @@ rows or a column name.
 | BLOB | BYTEA | Uint8List |
 | — | BOOLEAN | bool |
 | — | TIMESTAMPTZ | DateTime |
+| TEXT COLLATE orm_date_v1 | DATE | LocalDate |
+| TEXT COLLATE orm_time_v1 | TIME WITHOUT TIME ZONE | LocalTime |
+| TEXT COLLATE orm_local_datetime_v1 | TIMESTAMP WITHOUT TIME ZONE | LocalDateTime |
 | — | JSONB | SqlJson with Codecs.jsonDocument |
 
 Nullability is preserved. SQLite TEXT may contain timestamps, enums, bigints or

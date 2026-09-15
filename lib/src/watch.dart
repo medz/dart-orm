@@ -88,6 +88,7 @@ final class _ReadTables {
         {},
         reads: this,
         exactDecimal: query.database.capabilities.exactDecimal,
+        localTemporal: query.database.capabilities.localTemporal,
       ),
       plan,
     );

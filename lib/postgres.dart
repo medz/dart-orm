@@ -2,11 +2,14 @@
 library;
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:postgres/postgres.dart' as pg;
 
 import 'orm.dart';
 export 'orm.dart';
+
+part 'src/postgres/temporal.dart';
 
 enum PostgresTls { verifyFull, require, disable }
 
@@ -51,6 +54,7 @@ final class PostgresFailure implements SqlFailure {
 final class PostgresDriver implements Driver<Postgres> {
   final pg.Pool<void> _pool;
   final bool _ownsPool;
+  final bool _localTemporal;
   final Future<pg.Connection> Function()? _cancelConnection;
   final Expando<int> _backendIds = Expando();
   final Duration? _queryTimeout;
@@ -60,6 +64,7 @@ final class PostgresDriver implements Driver<Postgres> {
   PostgresDriver(PostgresOptions options)
     : _pool = _createPool(options),
       _ownsPool = true,
+      _localTemporal = true,
       _queryTimeout = options.queryTimeout,
       _connectTimeout = options.connectTimeout,
       _cancelConnection = (() => _openControl(options));
@@ -67,6 +72,8 @@ final class PostgresDriver implements Driver<Postgres> {
     pg.Pool<void> pool, {
     Future<pg.Connection> Function()? cancellationConnection,
     this._queryTimeout,
+    // Enable only when the pool uses postgresTypeRegistry().
+    this._localTemporal = false,
   }) : _pool = pool,
        _ownsPool = false,
        _connectTimeout = null,
@@ -140,6 +147,7 @@ final class PostgresDriver implements Driver<Postgres> {
         queryTimeout: null,
         applicationName: options.applicationName,
         timeZone: 'UTC',
+        typeRegistry: postgresTypeRegistry(),
         onOpen: options.schema == null
             ? null
             : (connection) async {
@@ -168,6 +176,7 @@ final class PostgresDriver implements Driver<Postgres> {
     streaming: true,
     cancellation: _cancelConnection != null,
     exactDecimal: true,
+    localTemporal: _localTemporal,
   );
   @override
   Future<R> run<R>(Future<R> Function(SqlConnection) action) async {

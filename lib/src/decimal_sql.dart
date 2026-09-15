@@ -18,8 +18,6 @@ final class _DecimalNode(final _Node child) extends _Node {
   }
 }
 
-_Node _unwrapDecimal(_Node node) => node is _DecimalNode ? node.child : node;
-
 final class _DecimalCast(
   final _Node child,
   final int precision,

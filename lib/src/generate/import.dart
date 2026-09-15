@@ -320,6 +320,15 @@ Future<ImportedSchema> _importCatalog(
         SqlDialect.postgres,
         'SMALLINT' || 'INTEGER' || 'BIGINT',
       ) => ('int', null),
+      (SqlDialect.sqlite, 'TEXT')
+          when column.collation?.toLowerCase() == 'orm_date_v1' =>
+        ('LocalDate', null),
+      (SqlDialect.sqlite, 'TEXT')
+          when column.collation?.toLowerCase() == 'orm_time_v1' =>
+        ('LocalTime', null),
+      (SqlDialect.sqlite, 'TEXT')
+          when column.collation?.toLowerCase() == 'orm_local_datetime_v1' =>
+        ('LocalDateTime', null),
       (_, 'TEXT') => ('String', null),
       (SqlDialect.sqlite, 'REAL') ||
       (SqlDialect.postgres, 'DOUBLE PRECISION') => ('double', null),
@@ -327,6 +336,12 @@ Future<ImportedSchema> _importCatalog(
       (SqlDialect.postgres, 'BYTEA') => ('Uint8List', null),
       (SqlDialect.postgres, 'BOOLEAN') => ('bool', null),
       (SqlDialect.postgres, 'TIMESTAMPTZ') => ('DateTime', null),
+      (SqlDialect.postgres, 'DATE') => ('LocalDate', null),
+      (SqlDialect.postgres, 'TIME WITHOUT TIME ZONE') => ('LocalTime', null),
+      (SqlDialect.postgres, 'TIMESTAMP WITHOUT TIME ZONE') => (
+        'LocalDateTime',
+        null,
+      ),
       (SqlDialect.postgres, 'JSONB') => ('SqlJson', 'Codecs.jsonDocument'),
       _ => null,
     };
@@ -371,6 +386,9 @@ final class _ImportNames {
     'Uint8List',
     'SqlJson',
     'Decimal',
+    'LocalDate',
+    'LocalTime',
+    'LocalDateTime',
     'DecimalDigits',
     'entity',
     'Id',

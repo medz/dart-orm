@@ -238,7 +238,7 @@ List<_SqliteCollation> _sqliteColumnCollations(String sql) {
   return result;
 }
 
-String _withoutDecimalCollations(String sql, List<ColumnInfo> columns) {
+String _withoutStorageCollations(String sql, List<ColumnInfo> columns) {
   final names = {
     for (final c in columns.where((c) => c.storageType == 'TEXT'))
       _sqliteName(c.name),
@@ -247,7 +247,12 @@ String _withoutDecimalCollations(String sql, List<ColumnInfo> columns) {
   var start = 0;
   for (final c in _sqliteColumnCollations(sql)) {
     if (!names.contains(_sqliteName(c.column)) ||
-        c.collation.toLowerCase() != 'orm_decimal_v1') {
+        !{
+          'orm_decimal_v1',
+          'orm_date_v1',
+          'orm_time_v1',
+          'orm_local_datetime_v1',
+        }.contains(c.collation.toLowerCase())) {
       continue;
     }
     result.write(sql.substring(start, c.start));

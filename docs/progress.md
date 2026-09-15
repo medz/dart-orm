@@ -46,6 +46,8 @@ This file records verified delivery, not planned capabilities presented as worki
 - Declared decimal precision/scale, consistent ORM write coercion, exact SQL precision casts, constrained defaults and width-preserving import/migrations.
 - Exact SQL decimal division and six explicit rounding modes, including full finite-range checks and window projections with preserved filtering/grouping/pagination.
 - Exact rounded decimal averages with bounded PostgreSQL component sums, incremental SQLite accumulation and shared window inputs.
+- LocalDate, LocalTime and LocalDateTime with microsecond precision and full finite native PostgreSQL ranges, independent of DateTime and session timezone.
+- Calendar generation/import, SQLite indexed collations, normalized relation keys, typed cursors and resumable historical date-key backfills.
 - Read-only application startup version checks with explicit compatibility ranges, full history validation and recovery-state rejection.
 - Unmodeled constraints, expression/partial indexes, triggers and policies are reported separately.
 - Reviewable migration diffs, explicit renames/conversions, destructive-change gates and checksum chains.
@@ -91,7 +93,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 600 checks with native SQLite
+Static analysis is clean. The complete suite passes 625 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -302,12 +304,34 @@ averages in `research/benchmarks/decimal-average.json`, together with read/divid
 round controls. It uses the same bounded single-client method and records returned
 row counts separately; it does not establish concurrency or large-coefficient cost.
 
+Twenty-four local temporal checks verify Gregorian era/leap boundaries, random
+full-range ordinal round trips, finite PostgreSQL endpoints, microseconds and
+24:00. Real SQLite/PostgreSQL checks cover generated writes, defaults and null
+patches, ordering/min/max/windows/grouping, CTEs, UNION, streams, equivalent
+relation keys, unique indexes, cursor transport, imported declarations and
+historical date-key backfill recovery. Reviewed text-to-time conversion rejects
+equivalent unique keys and rolls back. A reproduced PostgreSQL default comparison
+regression now retains expression casts that discard time. Invalid external dates
+and infinities fail typed decoding without damaging the connection. Borrowed
+PostgreSQL pools explicitly opt into the configured calendar registry; the
+unconfigured path rejects temporal queries before execution. A second negative
+compilation check rejects five calendar/instant/string mismatches.
+
+`test/support/temporals/native.dart` compiles and runs as a macOS AOT executable,
+covering endpoints, calendar order, bounded streams, equivalent relation keys and
+catalog/default verification. These checks do not establish browser behavior or
+temporal query throughput. Column precision, calendar SQL arithmetic and timezone
+conversion are still pending. The existing DateTime/SQLite instant path also needs
+an explicit storage/migration correction; its sub-millisecond ordering and
+zone-less default decoding are not covered by the new local calendar types.
+
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
 - Broader unmanaged-object catalog coverage.
 - Named SQL query generation.
 - Further native type coverage.
+- Temporal column precision and timezone conversions; migration-aware correction of the existing DateTime storage's SQLite chronological ordering and zone-less default decoding.
 - Further backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
 - User documentation, performance measurements and complete acceptance review.
@@ -324,10 +348,10 @@ implementation stages, not a reduction of the active goal.
 The full suite includes 52 shared SQLite/PostgreSQL query checks, 20 generated
 client/migration integration checks, 20 source generation checks, five codec
 regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CLI
-workflows, 37 streaming/execution checks, 28 relation strategy checks and one
-negative compilation suite covering 19 invalid API uses, plus 18 domain-codec
+workflows, 37 streaming/execution checks, 28 relation strategy checks and two
+negative compilation checks covering 24 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks.
 
 ## Environment
 

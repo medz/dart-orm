@@ -143,6 +143,9 @@ key support; use scalar IDs for relationships.
 | `text` | `String`, enums | `TEXT` | `TEXT` |
 | `boolean` | `bool` | `INTEGER` | `BOOLEAN` |
 | `timestamp` | UTC `DateTime` | ISO text | `TIMESTAMPTZ` |
+| `date` | `LocalDate` | collated `TEXT` | `DATE` |
+| `time` | `LocalTime` | collated `TEXT` | `TIME WITHOUT TIME ZONE` |
+| `local_datetime` | `LocalDateTime` | collated `TEXT` | `TIMESTAMP WITHOUT TIME ZONE` |
 | `blob` | `Uint8List` | `BLOB` | `BYTEA` |
 | `json` | JSON value or custom codec | JSON text | `JSONB` |
 
@@ -154,9 +157,91 @@ normal reviewed migration diff/conversion workflow.
 
 Storage semantics still belong to each database. In particular, SQLite `bigint`
 text retains exact digits but does not provide numeric text ordering/arithmetic.
-Precise-decimal query semantics, native enum types and browser numeric boundaries
-remain pending. Do not substitute `double`
+Native enum types and browser numeric boundaries remain pending. Use `Decimal`
 for exact decimal data.
+
+## Local calendar values
+
+```dart
+typedef Appointment = ({
+  @Id.generated() int id,
+  LocalDate day,
+  @Default.sql("'12:30'") LocalTime time,
+  LocalDateTime? starts,
+});
+final appointments = entity<Appointment>();
+
+// After generation:
+await db.appointments.create(
+  day: LocalDate(2024, 2, 29),
+  time: Change.set(LocalTime(12, 30)),
+  starts: LocalDateTime.parse('2024-02-29 12:30:00.000001'),
+);
+```
+
+These values have no timezone or implied UTC instant. `DateTime`, strings and
+other local temporal types cannot be substituted in generated predicates or
+writes. `LocalDateTime` combines a `LocalDate` and `LocalTime`. Its `add(Duration)`
+uses calendar days of exactly 24 hours; it does not perform timezone or daylight
+saving conversion. `LocalDate.addDays` and `daysUntil` operate on calendar dates.
+
+| Value | Supported finite range |
+| --- | --- |
+| LocalDate | 4714-11-24 BC through 5874897-12-31 |
+| LocalTime | 00:00:00 through 24:00:00, at microsecond resolution |
+| LocalDateTime | 4714-11-24 00:00:00 BC through 294276-12-31 23:59:59.999999 |
+
+Constructors use astronomical year numbers: year 0 is 1 BC, and year -1 is 2 BC.
+Text parsing accepts those year numbers or PostgreSQL's trailing ` BC` notation.
+Serialization uses era notation; times always include six fractional digits.
+Invalid calendar dates, offsets, leap seconds and excess fractional precision are
+rejected. `24:00` is a distinct time-of-day endpoint; combining it with a date
+normalizes to the next date at `00:00`. Addition beyond the finite range fails.
+The exact endpoints come from PostgreSQL's [timestamp constants](https://github.com/postgres/postgres/blob/REL_18_STABLE/src/include/datatype/timestamp.h).
+The Gregorian ordinal conversion uses March-based 400-year cycles, as described
+in [civil date algorithms](https://howardhinnant.github.io/date_algorithms.html).
+
+`Codecs.date`, `Codecs.time` and `Codecs.localDateTime` accept their corresponding
+value type or valid text, never a `DateTime`. An owned PostgreSQL pool uses native
+binary decoders, so it does not truncate these ranges to Dart's `DateTime` range.
+Binary reads remain independent of session DateStyle and timezone. Raw date and
+timestamp infinity values remain strings; typed calendar decoding rejects them.
+For a borrowed PostgreSQL pool, configure it before opening connections:
+
+```dart
+import 'package:orm/postgres.dart';
+import 'package:postgres/postgres.dart' as pg;
+
+final pool = pg.Pool<void>.withEndpoints(endpoints,
+  settings: pg.PoolSettings(typeRegistry: postgresTypeRegistry()),
+);
+final db = Database(PostgresDriver.borrow(pool, localTemporal: true));
+```
+
+The default borrowed-pool capability is false; local temporal queries fail before
+execution until explicitly enabled. The registry's text fallback accepts ISO
+DateStyle only. The capability covers these three scalar types; arrays, ranges,
+intervals, time with timezone and timezone conversions are still outside it.
+
+SQLite stores text with `orm_date_v1`, `orm_time_v1` or `orm_local_datetime_v1`
+collations. They compare parsed calendar values, including equivalent text forms,
+BC dates and extended years. Predicates, min/max, grouping, unique keys, foreign
+keys, relations and keyset cursors preserve that ordering, and column indexes
+use the same collation. External SQLite connections need matching registrations
+to use those tables and indexes. No calendar-validation CHECK is emitted:
+invalid external text sorts after valid values and fails typed decoding.
+
+Snapshots preserve distinct storage tags. Catalog import recognizes native
+PostgreSQL scalar types and the three managed SQLite collations. Plain SQLite
+TEXT does not imply a calendar type. Changing text to a calendar type requires a
+reviewed migration; newly equivalent unique keys can make conversion fail and
+roll back. Historical backfills persist canonical text keys for resumable paging.
+
+Column precision declarations (`TIME(p)` / `TIMESTAMP(p)`), SQL calendar
+arithmetic and timezone-aware conversions remain pending. The existing
+`DateTime`/`timestamp` path also needs a separate migration-aware correction for
+SQLite sub-millisecond chronological ordering and zone-less default decoding;
+use the new local types only when the domain value actually has no timezone.
 
 ## Signed integer column widths
 

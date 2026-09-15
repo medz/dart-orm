@@ -46,6 +46,33 @@ final class Codec<T> {
 }
 
 abstract final class Codecs {
+  static const date = Codec<LocalDate>('date', _decodeDate, _encodeDate);
+  static LocalDate _decodeDate(Object? value) => switch (value) {
+    LocalDate() => value,
+    String() => LocalDate.parse(value),
+    _ => throw const FormatException('Expected a local date or date text.'),
+  };
+  static String _encodeDate(LocalDate value) => value.toString();
+  static const time = Codec<LocalTime>('time', _decodeTime, _encodeTime);
+  static LocalTime _decodeTime(Object? value) => switch (value) {
+    LocalTime() => value,
+    String() => LocalTime.parse(value),
+    _ => throw const FormatException('Expected a local time or time text.'),
+  };
+  static String _encodeTime(LocalTime value) => value.toString();
+  static const localDateTime = Codec<LocalDateTime>(
+    'local_datetime',
+    _decodeLocalDateTime,
+    _encodeLocalDateTime,
+  );
+  static LocalDateTime _decodeLocalDateTime(Object? value) => switch (value) {
+    LocalDateTime() => value,
+    String() => LocalDateTime.parse(value),
+    _ => throw const FormatException(
+      'Expected a local timestamp or timestamp text.',
+    ),
+  };
+  static String _encodeLocalDateTime(LocalDateTime value) => value.toString();
   static const decimal = Codec<Decimal>(
     'decimal',
     _decodeDecimal,

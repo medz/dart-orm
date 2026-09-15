@@ -113,8 +113,9 @@ String _createTable(TableSchema table, SqlDialect dialect, {String? name}) {
 
 String _columnDefinition(Column<Object?> c, SqlDialect dialect) {
   final b = StringBuffer('${_quote(c.name)} ${_columnStorageType(c, dialect)}');
-  if (dialect == SqlDialect.sqlite && c.codec.sqlType == 'decimal') {
-    b.write(' COLLATE "orm_decimal_v1"');
+  if (dialect == SqlDialect.sqlite &&
+      _sqliteCollation(c.codec.sqlType) != 'binary') {
+    b.write(' COLLATE "${_sqliteCollation(c.codec.sqlType)}"');
   }
   if (c.generated) {
     b.write(
@@ -168,7 +169,14 @@ String _storageType(String type, SqlDialect dialect) =>
       (SqlDialect.sqlite, 'integer') => 'INTEGER',
       (
         SqlDialect.sqlite,
-        'bigint' || 'text' || 'timestamp' || 'json' || 'decimal',
+        'bigint' ||
+            'text' ||
+            'timestamp' ||
+            'json' ||
+            'decimal' ||
+            'date' ||
+            'time' ||
+            'local_datetime',
       ) =>
         'TEXT',
       (SqlDialect.sqlite, 'boolean') => 'INTEGER',
@@ -180,6 +188,9 @@ String _storageType(String type, SqlDialect dialect) =>
       (SqlDialect.postgres, 'real') => 'DOUBLE PRECISION',
       (SqlDialect.postgres, 'boolean') => 'BOOLEAN',
       (SqlDialect.postgres, 'timestamp') => 'TIMESTAMPTZ',
+      (SqlDialect.postgres, 'date') => 'DATE',
+      (SqlDialect.postgres, 'time') => 'TIME WITHOUT TIME ZONE',
+      (SqlDialect.postgres, 'local_datetime') => 'TIMESTAMP WITHOUT TIME ZONE',
       (SqlDialect.postgres, 'json') => 'JSONB',
       (SqlDialect.postgres, 'blob') => 'BYTEA',
       _ => throw OrmException('SCHEMA.TYPE', 'No $dialect mapping for $type.'),
@@ -390,7 +401,12 @@ Future<List<String>> verifyColumns(
 
 bool _matchesCollation(Column<Object?> expected, ColumnInfo actual) =>
     (actual.collation ?? 'BINARY').toLowerCase() ==
-    (expected.codec.sqlType == 'decimal' ? 'orm_decimal_v1' : 'binary');
+    _sqliteCollation(expected.codec.sqlType);
+
+String _sqliteCollation(String type) => switch (type) {
+  'decimal' || 'date' || 'time' || 'local_datetime' => 'orm_${type}_v1',
+  _ => 'binary',
+};
 
 bool _matchesDecimalDigits(Column<Object?> expected, ColumnInfo actual) =>
     expected.decimalPrecision == actual.decimalPrecision &&

@@ -109,7 +109,7 @@ non-idempotent updates.
 Primary keys must be non-null, unique across the scan and immutable throughout the
 operation, including application writes and triggers. Assigning a primary key is
 rejected. The runner checks updated/retained keys and rejects detected key movement.
-Integer, bigint, text, finite real, boolean, timestamp and binary cursors are
+Integer, bigint, text, finite real, boolean, timestamp, local date/time and binary cursors are
 supported, including composite keys. JSON keys are rejected because the current
 driver boundary cannot promise lossless cursor representation for every document.
 Ordering follows the actual database storage type and collation.

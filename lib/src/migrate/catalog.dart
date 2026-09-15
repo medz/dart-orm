@@ -134,7 +134,7 @@ Future<TableInfo> inspectTable(Database<Backend> db, String table) async {
     final sql = ddl.rows.firstOrNull?.first as String?;
     if (sql != null &&
         _sqlWords(
-          _withoutDecimalCollations(
+          _withoutStorageCollations(
             _withoutIntegerChecks(sql, columns),
             columns,
           ),
@@ -367,6 +367,18 @@ Future<SchemaVerification> verifySchema(
 
 String? _columnDefault(String? value, Column<Object?> column) {
   var normalized = _normalizeDefault(value);
+  if (normalized != null &&
+      normalized.startsWith("'") &&
+      normalized.endsWith("'")) {
+    final literal = normalized.substring(1, normalized.length - 1);
+    final parsed = switch (column.codec.sqlType) {
+      'date' => LocalDate.tryParse(literal),
+      'time' => LocalTime.tryParse(literal),
+      'local_datetime' => LocalDateTime.tryParse(literal),
+      _ => null,
+    };
+    if (parsed != null) return parsed.toString();
+  }
   if (normalized == null || column.codec.sqlType != 'decimal') {
     return normalized;
   }
@@ -390,6 +402,15 @@ String? _columnDefault(String? value, Column<Object?> column) {
 String? _normalizeDefault(String? value) {
   if (value == null) return null;
   var normalized = value.trim();
+  // Calendar casts can truncate an expression's time. Only remove them from
+  // a single quoted literal, whose value _columnDefault compares by type.
+  normalized = normalized.replaceFirstMapped(
+    RegExp(
+      r"^('(?:[^']|'')*')::(?:date|time without time zone|timestamp without time zone)$",
+      caseSensitive: false,
+    ),
+    (match) => match[1]!,
+  );
   // Remove only the trailing casts introduced for simple typed literals.
   normalized = normalized.replaceFirst(
     RegExp(
