@@ -44,6 +44,14 @@ Future<void> main() async {
       );
       final cases = {
         'read': db.entries.select((e) => e.amount),
+        'average_half_even_scale_2': db.entries.select(
+          (e) => e.amount.average(scale: 2, rounding: .halfEven),
+        ),
+        'window_average_half_even_scale_2': db.entries.select(
+          (e) => e.amount
+              .average(scale: 2, rounding: .halfEven)
+              .over(orderBy: [e.id.asc()], frame: .rowsToCurrent),
+        ),
         'divide_half_even_scale_2': db.entries.select(
           (e) => e.amount.divide(
             Decimal.parse('3'),
@@ -62,20 +70,26 @@ Future<void> main() async {
         ),
       };
       for (final entry in cases.entries) {
+        final expectedRows = entry.key == 'average_half_even_scale_2'
+            ? 1
+            : 10000;
         await entry.value.get();
         final samples = <double>[];
         for (var i = 0; i < 3; i++) {
           final timer = Stopwatch()..start();
           final rows = await entry.value.get();
           timer.stop();
-          if (rows.length != 10000) throw StateError('Incomplete sample');
+          if (rows.length != expectedRows) {
+            throw StateError('Incomplete sample');
+          }
           samples.add(timer.elapsedMicroseconds / 1000);
         }
         results.add({
           'backend': backend,
           'version': version,
           'case': entry.key,
-          'rows': 10000,
+          'inputRows': 10000,
+          'rows': expectedRows,
           'elapsedMs': samples,
           'sqlBytes': entry.value.compile().sql.length,
         });

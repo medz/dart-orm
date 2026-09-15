@@ -105,5 +105,7 @@ streaming are supported. `INTERSECT` and `EXCEPT` do not yet have typed methods.
 
 PostgreSQL returns `SUM(BIGINT)` and integer `AVG` as NUMERIC. Integer results are
 parsed exactly, with overflow or fractional values rejected rather than rounded
-through a double. `average()` returns an approximate `double?`, matching its Dart
-signature. This is not an arbitrary-precision decimal API.
+through a double. On `int`/`double` expressions, `average()` returns an approximate
+`double?`. On `Decimal` expressions, `average(scale: ..., rounding: ...)` returns
+an exact `Decimal?` rounded once to the requested scale, including when the total
+would overflow. See [decimal arithmetic and averages](decimals.md).

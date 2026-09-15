@@ -207,6 +207,13 @@ class Query<R, F extends Fields> {
       w.aliases[join.alias.fields.table] = 't${w.aliases.length}';
       if (join.left) w.leftJoins.add(join.alias.fields.table);
     }
+    final savedAverageInputs = w.averageInputs;
+    w.averageInputs = _AverageInputs(
+      w,
+      _state.source.schema.columns.isEmpty
+          ? w.quote(rootAlias)
+          : '${w.quote(rootAlias)}.${w.quote(_state.source.schema.columns.first.name)}',
+    );
     try {
       final buffer = StringBuffer();
       final ctes = <String, _CteDefinition>{};
@@ -233,7 +240,13 @@ class Query<R, F extends Fields> {
                 ...plan.columns.map((e) => e._node),
                 ..._state.order.map((o) => o.expression._node),
               ].any(_needsWindowStage)
-          ? _WindowStage(w)
+          ? _WindowStage(
+              w,
+              preWindow: [
+                ...plan.columns.map((e) => e._node),
+                ..._state.order.map((o) => o.expression._node),
+              ].any(_averageWindow),
+            )
           : null;
       final columns = <String>[];
       final order = <String>[];
@@ -244,8 +257,8 @@ class Query<R, F extends Fields> {
             '${plan.columns[i]._node.write(w)}${aliasColumns ? ' AS ${w.quote('c$i')}' : ''}',
           );
         }
-        if (stage != null) {
-          for (final term in _state.order) {
+        for (final term in _state.order) {
+          if (stage != null) {
             // PostgreSQL DISTINCT requires ORDER BY to reuse selected expressions.
             final match = plan.columns.indexWhere(
               (e) => _sameSqlNode(e._node, term.expression._node),
@@ -253,6 +266,8 @@ class Query<R, F extends Fields> {
             order.add(
               match < 0 ? term._write(w) : '${match + 1}${term._suffix}',
             );
+          } else {
+            order.add(term._write(w));
           }
         }
       } finally {
@@ -283,6 +298,7 @@ class Query<R, F extends Fields> {
           ' ${join.left ? 'LEFT JOIN' : 'JOIN'} $source AS ${w.quote(alias)} ON ${join.on._node.write(w)}',
         );
       }
+      final joinEnd = buffer.length;
       if (_state.predicate case final predicate?) {
         buffer.write(' WHERE ${predicate._node.write(w)}');
       }
@@ -294,17 +310,22 @@ class Query<R, F extends Fields> {
       if (_state.having case final having?) {
         buffer.write(' HAVING ${having._node.write(w)}');
       }
+      if (w.averageInputs!.joins.isNotEmpty) {
+        final text = buffer.toString();
+        buffer.clear();
+        buffer.write(
+          '${text.substring(0, joinEnd)}${w.averageInputs!.joins.join()}${text.substring(joinEnd)}',
+        );
+      }
       if (stage != null) {
-        final inner = buffer.toString();
+        final inner = stage.wrap(buffer.toString());
         buffer.clear();
         buffer.write(
           'SELECT ${_state.distinct ? 'DISTINCT ' : ''}${columns.join(', ')} FROM ($inner) AS ${w.quote(stage.alias)}',
         );
       }
       if (_state.order.isNotEmpty) {
-        buffer.write(
-          ' ORDER BY ${stage == null ? _state.order.map((o) => o._write(w)).join(', ') : order.join(', ')}',
-        );
+        buffer.write(' ORDER BY ${order.join(', ')}');
       }
       if (_state.limit case final limit?) {
         buffer.write(' LIMIT ${w.parameter(limit)}');
@@ -317,6 +338,7 @@ class Query<R, F extends Fields> {
       }
       return buffer.toString();
     } finally {
+      w.averageInputs = savedAverageInputs;
       w.aliases
         ..clear()
         ..addAll(saved);
@@ -410,25 +432,63 @@ class Query<R, F extends Fields> {
 // Evaluate its inputs in that query, then perform decimal division/rounding in
 // an outer projection. Filtering, grouping and windows stay inside; DISTINCT,
 // ordering and pagination apply to the final values. This remains one statement.
+// Window averages additionally share their input before the native component
+// windows run, including when the input is itself a grouped aggregate.
 bool _needsWindowStage(_Node node) =>
+    node is _WindowNode && node.function is _DecimalAverage ||
     node is _DecimalRatio && _children(node).any(_window) ||
     _children(node).any(_needsWindowStage);
 
-final class _WindowStage(final _Writer writer) {
+bool _averageWindow(_Node node) =>
+    node is _WindowNode && node.function is _DecimalAverage ||
+    _children(node).any(_averageWindow);
+bool _averageInput(_Node node) =>
+    node is _AverageInput || _children(node).any(_averageInput);
+
+final class _WindowStage(final _Writer writer, {final bool preWindow = false}) {
   late final String alias = '_orm_window_${writer.aliases.length}';
+  late final String inputAlias = '_orm_inputs_${writer.aliases.length}';
   final List<String> inputs = [];
+  final List<String> windows = [];
+  final Map<_AverageInput, String> _shared = {};
+
+  String wrap(String sql) => preWindow
+      ? 'SELECT ${windows.join(', ')} FROM ($sql) AS ${writer.quote(inputAlias)}'
+      : sql;
 
   String? capture(_Node node) {
     if (_needsWindowStage(node)) return null;
-    final index = inputs.length;
+    final output = preWindow ? windows : inputs;
+    final index = output.length;
     final saved = writer.project;
-    writer.project = null;
+    writer.project = preWindow ? _capturePre : null;
     try {
-      inputs.add('${node.writeSql(writer)} AS ${writer.quote('w$index')}');
+      final sql = preWindow ? node.write(writer) : node.writeSql(writer);
+      output.add('$sql AS ${writer.quote('w$index')}');
     } finally {
       writer.project = saved;
     }
     return '${writer.quote(alias)}.${writer.quote('w$index')}';
+  }
+
+  String? _capturePre(_Node node) {
+    if (node is _AverageInput) {
+      return _shared.putIfAbsent(node, () => _input(node.child));
+    }
+    if (node is _WindowNode || _averageInput(node)) return null;
+    return _input(node);
+  }
+
+  String _input(_Node node) {
+    final index = inputs.length;
+    final saved = writer.project;
+    writer.project = null;
+    try {
+      inputs.add('${node.writeSql(writer)} AS ${writer.quote('p$index')}');
+    } finally {
+      writer.project = saved;
+    }
+    return '${writer.quote(inputAlias)}.${writer.quote('p$index')}';
   }
 }
 

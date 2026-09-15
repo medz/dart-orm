@@ -58,12 +58,27 @@ Future<void> main() async {
     if (rounded.first != Decimal.parse('9007199254740993.12')) {
       throw StateError('Exact SQL rounding differs');
     }
+    final average = await db.entries
+        .select((e) => e.amount.average(scale: 20, rounding: .halfEven))
+        .single();
+    if (average != halves.last) throw StateError('Exact SQL average differs');
+    final runningMean = await db.entries
+        .orderBy((e) => [e.id.asc()])
+        .select(
+          (e) => e.amount
+              .average(scale: 20, rounding: .halfEven)
+              .over(orderBy: [e.id.asc()], frame: .rowsToCurrent),
+        )
+        .get();
+    if (runningMean.first != exact || runningMean.last != average) {
+      throw StateError('Exact window average differs');
+    }
     final verification = await verifySchema(db, SchemaSnapshot(appSchema));
     if (!verification.matches || verification.unmanaged.isNotEmpty) {
       throw StateError('Decimal catalog differs');
     }
     print(
-      'Native AOT: exact decimals, SQL division/rounding, numeric ordering, aggregate/window functions, canonical relation keys and catalog verification passed.',
+      'Native AOT: exact decimals, SQL division/rounding/averages, numeric ordering, aggregate/window functions, canonical relation keys and catalog verification passed.',
     );
   } finally {
     await db.close();

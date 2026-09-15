@@ -45,6 +45,7 @@ This file records verified delivery, not planned capabilities presented as worki
 - Decimal generation/import, catalog drift checks, reviewed conversion migrations and exact historical backfill keys.
 - Declared decimal precision/scale, consistent ORM write coercion, exact SQL precision casts, constrained defaults and width-preserving import/migrations.
 - Exact SQL decimal division and six explicit rounding modes, including full finite-range checks and window projections with preserved filtering/grouping/pagination.
+- Exact rounded decimal averages with bounded PostgreSQL component sums, incremental SQLite accumulation and shared window inputs.
 - Read-only application startup version checks with explicit compatibility ranges, full history validation and recovery-state rejection.
 - Unmodeled constraints, expression/partial indexes, triggers and policies are reported separately.
 - Reviewable migration diffs, explicit renames/conversions, destructive-change gates and checksum chains.
@@ -90,7 +91,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 577 checks with native SQLite
+Static analysis is clean. The complete suite passes 600 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -247,9 +248,9 @@ decimal SQL before execution. `test/support/decimals/native.dart` compiles and r
 as a macOS AOT executable, verifying exact values, sorting, aggregate/window
 functions, normalized relation keys and catalog checks. Invalid external SQLite
 text and PostgreSQL special numeric values fail typed decoding; no finite-decimal
-CHECK constraint or cross-client SQLite function installation is claimed. SQL
-averages and browser acceptance remain open; constrained columns and SQL
-division/rounding are covered by the additional acceptance checks below.
+CHECK constraint or cross-client SQLite function installation is claimed. Browser
+acceptance remains open; constrained columns, SQL division/rounding and averages
+are covered by the additional acceptance checks below.
 
 Nineteen precision checks cover signed ties, negative and excess scales, maximum
 precision/scale boundaries, nullable values, defaults, expression writes, wider
@@ -263,7 +264,7 @@ disabled trusted_schema setting. The current SQLite binding requires
 trusted_schema ON to evaluate the managed precision CHECK/default functions.
 Generator checks reject invalid/repeated annotations and preserve decimal-backed
 domain types. The precision fixture compiles and runs as a macOS AOT executable.
-Rounded SQL averages remain open.
+Exact SQL averages are covered by the additional acceptance checks below.
 
 Twenty-three division checks compare all signed rounding modes and positive/negative
 scales with exact integer arithmetic. They cover 16383 fractional digits, values
@@ -284,12 +285,29 @@ report is `research/benchmarks/decimal-division.json`; methodology and medians
 are in `docs/decimals.md`. This is a small single-client end-to-end cost probe,
 not the complete runtime performance acceptance or a high-precision stress benchmark.
 
+Twenty-three average checks cover exact integer fractions, empty/all-null/constant
+inputs, signed ties and every rounding mode, maximum fractional scale and explicit
+final-result overflow. Means remain valid when an intermediate total exceeds the
+finite NUMERIC range, including cancellation between extreme values. Real queries
+cover grouping, HAVING, unique-input CTEs, UNIONs, streaming, partitions, mixed
+windows, DISTINCT results, pagination and windows over grouped sums. Correlated
+averages update fields; failed exact rounding rolls back the containing transaction.
+Per-parent relation windows retain limits. PostgreSQL sequence tests prove one
+evaluation per contributing input/order row, including repeated source values;
+SQLite moving-frame tests remove values, reset empty frames and reject varying
+rounding policies. Illegal aggregate assignments and nested windows fail before
+execution. The updated decimal AOT fixture verifies ordinary and running averages.
+The expanded native benchmark records 10000-input-row averages and running
+averages in `research/benchmarks/decimal-average.json`, together with read/divide/
+round controls. It uses the same bounded single-client method and records returned
+row counts separately; it does not establish concurrency or large-coefficient cost.
+
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
 - Broader unmanaged-object catalog coverage.
 - Named SQL query generation.
-- Rounded SQL averages and further native type coverage.
+- Further native type coverage.
 - Further backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
 - User documentation, performance measurements and complete acceptance review.
@@ -309,7 +327,7 @@ regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CL
 workflows, 37 streaming/execution checks, 28 relation strategy checks and one
 negative compilation suite covering 19 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks and 23 decimal-division checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks.
 
 ## Environment
 

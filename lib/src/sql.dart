@@ -116,6 +116,7 @@ final class _Writer {
   final bool exactDecimal;
   bool unqualified = false;
   String? Function(_Node)? project;
+  _AverageInputs? averageInputs;
   _Writer(this.dialect, this.aliases, {this.reads, this.exactDecimal = false});
   String quote(String name) => '"${name.replaceAll('"', '""')}"';
   String parameter(Object? value) {
@@ -184,10 +185,20 @@ class Expr<T> extends Selection<T> {
     WindowFrame? frame,
   }) {
     final function = _unwrapDecimal(_node);
-    if (function is! _Function || !_aggregate(function)) {
+    if ((function is! _Function && function is! _DecimalAverage) ||
+        !_aggregate(function)) {
       throw const OrmException(
         'QUERY.WINDOW',
         'over() applies to an aggregate expression.',
+      );
+    }
+    if ([
+      ...partitionBy.map((e) => e._node),
+      ...orderBy.map((o) => o.expression._node),
+    ].any(_window)) {
+      throw const OrmException(
+        'QUERY.WINDOW',
+        'Window partition/order expressions cannot contain another window.',
       );
     }
     return Expr._(

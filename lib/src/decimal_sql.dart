@@ -61,6 +61,25 @@ final class _DecimalArithmetic(
 }
 
 extension DecimalExpression<T extends Decimal?> on Expr<T> {
+  /// Averages non-null inputs, rounding once at the requested result scale.
+  /// Empty/all-null input returns null; the default rejects lost digits.
+  Expr<Decimal?> average({
+    required int scale,
+    DecimalRounding rounding = DecimalRounding.exact,
+  }) {
+    Decimal._checkScale(scale);
+    if (_window(_node)) {
+      throw const OrmException(
+        'QUERY.WINDOW',
+        'Project a window result through a CTE before averaging it.',
+      );
+    }
+    return Expr._(
+      _DecimalAverage(_node, scale, rounding),
+      Codecs.decimal.nullable(),
+    );
+  }
+
   /// Rounds in SQL; [DecimalRounding.exact] rejects any lost nonzero digits.
   Expr<T> rounded(
     int scale, {

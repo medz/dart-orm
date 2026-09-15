@@ -1,6 +1,12 @@
 part of '../../sqlite.dart';
 
 void _registerDecimals(native.Database db) {
+  db.createAggregateFunction(
+    functionName: 'orm_decimal_avg_v1',
+    argumentCount: const native.AllowedArgumentCount(3),
+    deterministic: true,
+    function: const _DecimalAverage(),
+  );
   db.createFunction(
     functionName: 'orm_decimal_div_v1',
     argumentCount: const native.AllowedArgumentCount(4),
@@ -156,5 +162,65 @@ final class _DecimalSum implements native.WindowFunction<_DecimalTotal> {
       context.value.result();
   @override
   String? finalize(native.AggregateContext<_DecimalTotal> context) =>
+      value(context);
+}
+
+final class _AverageState {
+  final total = _DecimalTotal();
+  int? scale;
+  DecimalRounding? rounding;
+  void configure(native.SqliteArguments args) {
+    final nextScale = args[1] as int;
+    final nextRounding = DecimalRounding.values[args[2] as int];
+    if (scale != null && (scale != nextScale || rounding != nextRounding)) {
+      throw ArgumentError('Average scale and rounding must be constant.');
+    }
+    scale = nextScale;
+    rounding = nextRounding;
+  }
+
+  String? result() {
+    if (total.count == 0) return null;
+    final power = BigInt.from(10).pow(total.scale.abs());
+    return Decimal.fromFraction(
+      total.coefficient * (total.scale < 0 ? power : BigInt.one),
+      BigInt.from(total.count) * (total.scale > 0 ? power : BigInt.one),
+      scale: scale!,
+      rounding: rounding!,
+    ).toString();
+  }
+}
+
+final class _DecimalAverage implements native.WindowFunction<_AverageState> {
+  const _DecimalAverage();
+  @override
+  native.AggregateContext<_AverageState> createContext() =>
+      native.AggregateContext(_AverageState());
+  @override
+  void step(
+    native.SqliteArguments args,
+    native.AggregateContext<_AverageState> context,
+  ) {
+    context.value.configure(args);
+    if (args[0] != null) {
+      context.value.total.add(Codecs.decimal.decode(args[0]), 1);
+    }
+  }
+
+  @override
+  void inverse(
+    native.SqliteArguments args,
+    native.AggregateContext<_AverageState> context,
+  ) {
+    if (args[0] != null) {
+      context.value.total.add(Codecs.decimal.decode(args[0]), -1);
+    }
+  }
+
+  @override
+  String? value(native.AggregateContext<_AverageState> context) =>
+      context.value.result();
+  @override
+  String? finalize(native.AggregateContext<_AverageState> context) =>
       value(context);
 }

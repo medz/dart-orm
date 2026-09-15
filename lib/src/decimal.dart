@@ -132,6 +132,24 @@ final class Decimal implements Comparable<Decimal> {
     );
   }
 
+  /// Converts an integer fraction to a finite decimal at an explicit scale.
+  /// Only the rounded result must fit the finite Decimal range.
+  factory Decimal.fromFraction(
+    BigInt numerator,
+    BigInt denominator, {
+    required int scale,
+    DecimalRounding rounding = DecimalRounding.exact,
+  }) {
+    _checkScale(scale);
+    if (denominator == BigInt.zero) throw UnsupportedError('Division by zero');
+    return _quotient(
+      numerator * (scale > 0 ? _power(scale) : BigInt.one),
+      denominator * (scale < 0 ? _power(-scale) : BigInt.one),
+      scale,
+      rounding,
+    );
+  }
+
   Decimal rounded(
     int scale, {
     DecimalRounding rounding = DecimalRounding.exact,

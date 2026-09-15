@@ -123,6 +123,9 @@ final class _WindowNode(
 ) extends _Node {
   @override
   String writeSql(_Writer w) {
+    if (function case final _DecimalAverage average) {
+      return average.writeAverage(w, window: this);
+    }
     final clauses = <String>[];
     if (partition.isNotEmpty) {
       clauses.add(
@@ -142,12 +145,13 @@ final class _WindowNode(
           'RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW',
       });
     }
-    return '${function.write(w)} OVER (${clauses.join(' ')})';
+    return '${function.writeSql(w)} OVER (${clauses.join(' ')})';
   }
 }
 
 bool _aggregate(_Node node) => switch (node) {
   _WindowNode() || _Subquery() || _RelationSubquery() => false,
+  _DecimalAverage() => true,
   _Function(:final name)
       when {'COUNT', 'SUM', 'MIN', 'MAX', 'AVG'}.contains(name) =>
     true,
@@ -155,6 +159,7 @@ bool _aggregate(_Node node) => switch (node) {
 };
 bool _window(_Node node) => node is _WindowNode || _children(node).any(_window);
 List<_Node> _children(_Node node) => switch (node) {
+  _DecimalAverage(:final child) || _AverageInput(:final child) => [child],
   _DecimalRatio(:final numerator, :final divisor) => [numerator, ?divisor],
   _DecimalNode(:final child) => [child],
   _DecimalCast(:final child) => [child],
@@ -219,6 +224,7 @@ void _validateGrouping(_QueryState state, _SelectionPlan plan) {
   }
   bool grouped(_Node node) {
     if (state.group.any((g) => _sameSqlNode(g._node, node))) return true;
+    if (node is _DecimalAverage) return true;
     if (node is _Function &&
         {'COUNT', 'SUM', 'MIN', 'MAX', 'AVG'}.contains(node.name)) {
       return true;
@@ -268,6 +274,11 @@ bool _sameSqlNode(_Node a, _Node b) {
         });
   }
   return switch ((a, b)) {
+    (
+      _DecimalAverage(child: final ac, scale: final ax, rounding: final ar),
+      _DecimalAverage(child: final bc, scale: final bx, rounding: final br),
+    ) =>
+      ax == bx && ar == br && _sameSqlNode(ac, bc),
     (
       _DecimalRatio(
         numerator: final an,

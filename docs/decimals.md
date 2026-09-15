@@ -93,9 +93,63 @@ work than native limited-scale division; cost depends on row count, operand size
 and requested scale. SQLite calls the native worker's BigInt-based decimal
 functions. No floating-point fallback is used.
 
-Rounded SQL averages remain unfinished. There is no implicit conversion to
-approximate `AVG`. Trusted raw SQL remains the caller's responsibility, including
-its result type.
+Trusted raw SQL remains the caller's responsibility, including its result type.
+
+## Exact averages
+
+`average(scale: ..., rounding: ...)` returns `Expr<Decimal?>`. It ignores SQL NULL
+and returns null for empty/all-null input, following normal
+[aggregate semantics](https://www.postgresql.org/docs/current/functions-aggregate.html).
+Scale is required; the default `exact` rejects a nonzero discarded remainder.
+All six rounding modes work across the full supported scale range.
+
+```dart
+final average = await db.invoices.select(
+  (i) => i.total.average(scale: 2, rounding: .halfEven),
+).single();
+final running = await db.invoices.orderBy((i) => [i.id.asc()]).select(
+  (i) => i.total.average(scale: 2, rounding: .halfEven).over(
+    orderBy: [i.id.asc()],
+    frame: .rowsToCurrent,
+  ),
+).get();
+```
+
+The result rounds once. It does not use a previously rounded native AVG or require
+the total to fit Decimal first: averaging two `9e131071` values succeeds even
+though their sum is outside the finite range. PostgreSQL splits each input into
+an integer high part and a low remainder at base 10^20, sums those parts and counts
+non-null inputs, then computes the exact quotient/remainder before rounding.
+The base exceeds the maximum signed 64-bit count; both component sums fit NUMERIC.
+This uses three native aggregates and no array of input rows or installed server
+function. SQLite maintains one BigInt accumulator plus count and uses an integer
+fraction to produce the final value. Sliding frames remove values incrementally.
+
+An input expression is evaluated once per contributing row for each average,
+including volatile PostgreSQL expressions. Ordinary PostgreSQL aggregation uses
+a correlated lateral input; window averages share their input, partition and order
+values in a preceding projection. Grouping/HAVING happens before the window;
+DISTINCT, final ordering and pagination apply to final results. Averages also work
+in CTEs, correlated scalar subqueries, batched relation windows and streamed results.
+Use a scalar subquery when assigning an aggregate result in a mutation.
+
+To average unique values, deduplicate the input projection first:
+
+```dart
+final unique = db.invoices.select((i) => i.total).distinct().asCte('unique_totals');
+final mean = await unique.query.select(
+  (i) => i.ref((source) => source.total).average(scale: 2, rounding: .halfEven),
+).single();
+```
+
+`distinct()` after the average instead deduplicates result rows. Window results
+must similarly become CTE/subquery columns before another aggregate consumes them.
+
+For application-side integer fractions, use
+`Decimal.fromFraction(numerator, denominator, scale: ..., rounding: ...)`.
+The numerator and denominator are BigInt values; only the final rounded result
+must fit the Decimal range. A zero denominator is rejected. This avoids constructing
+an out-of-range Decimal just to divide it back into range.
 
 ## Column precision and scale
 
@@ -195,7 +249,8 @@ Historical backfills retain exact decimal keys in their resumable checkpoints.
 
 See the [generated fixture](../test/support/decimals/schema.dart),
 [database checks](../test/decimal_test.dart),
-[division/window checks](../test/decimal_division_test.dart) and
+[division/window checks](../test/decimal_division_test.dart),
+[average checks](../test/decimal_average_test.dart) and the
 [native acceptance executable](../test/support/decimals/native.dart).
 These establish correctness on the tested native databases. Browser/Flutter
 acceptance remains open.
@@ -214,6 +269,19 @@ recorded with a native macOS ARM64 AOT executable, Dart 3.13.3, in-memory SQLite
 | Divide by 3, scale 2, half-even | 30.09 | 32.63 |
 | Round to tens, half-even | 21.64 | 25.25 |
 | Running sum then divide by 3 | 48.17 | 36.85 |
+
+The expanded [average report](../research/benchmarks/decimal-average.json) uses
+the same native AOT method and database versions. All cases consume 10000 rows;
+the ordinary average returns one row, while the running average returns 10000:
+
+| Operation | Returned rows | SQLite ms | PostgreSQL ms |
+| --- | ---: | ---: | ---: |
+| Average, scale 2, half-even | 1 | 8.78 | 2.74 |
+| Running average, scale 2, half-even | 10000 | 29.12 | 47.25 |
+
+Both reports retain individual samples; the expanded script also reruns the
+read/divide/round controls. The earlier division table above refers to its original
+report, rather than mixing results from separate runs.
 
 These are single-client end-to-end samples, including query compilation, database
 work, row transport and Decimal decoding. They are not latency percentiles,

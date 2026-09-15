@@ -29,8 +29,15 @@ WITH orm_decimal_args(a, b) AS MATERIALIZED (
 ), orm_decimal_remainder AS MATERIALIZED (
   SELECT *, a - q * b AS r FROM orm_decimal_parts
 )''';
-    return scale >= 0 ? _positive(prefix) : _negative(prefix);
+    return _DecimalRoundSql(scale, rounding).write(prefix);
   }
+}
+
+// The input CTE exposes a nonnegative integer quotient q, remainder r < b,
+// positive denominator b, result sign sgn and empty/null marker nil.
+final class _DecimalRoundSql(final int scale, final DecimalRounding rounding) {
+  String write(String prefix) =>
+      scale >= 0 ? _positive(prefix) : _negative(prefix);
 
   String _positive(String prefix) {
     final factor = "NUMERIC '1e$scale'";

@@ -10,6 +10,7 @@ part 'src/codec.dart';
 part 'src/decimal.dart';
 part 'src/decimal_sql.dart';
 part 'src/decimal_division.dart';
+part 'src/decimal_average.dart';
 part 'src/sql.dart';
 part 'src/selection.dart';
 part 'src/table.dart';
