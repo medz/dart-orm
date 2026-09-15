@@ -518,15 +518,29 @@ class TableSet<R, F extends Fields> extends Query<R, F> {
     _fields,
     _state,
     _MutationKind.insert,
-    assignments(_fields),
+    _insertDefaults(assignments(_fields)),
     createFields: definition.createFields,
   );
   BatchInsert<F> insertMany<T>(
     Iterable<T> rows,
     List<Assignment> Function(F, T) values,
   ) => BatchInsert._(database, _fields, _state, [
-    for (final row in rows) List<Assignment>.unmodifiable(values(_fields, row)),
+    for (final row in rows)
+      List<Assignment>.unmodifiable(_insertDefaults(values(_fields, row))),
   ]);
+
+  List<Assignment> _insertDefaults(List<Assignment> assignments) {
+    final defaults = definition.schema._clientDefaults;
+    if (defaults.isEmpty) return assignments;
+    final assigned = {for (final a in assignments) a.field.definition.name};
+    return [
+      ...assignments,
+      for (final column in defaults)
+        if (!assigned.contains(column.name))
+          _fields.column(column).set(column.clientDefault!()),
+    ];
+  }
+
   Future<R> createRow(
     List<Assignment> Function(F) assignments, {
     ExecutionOptions options = const ExecutionOptions(),

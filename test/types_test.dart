@@ -5,6 +5,50 @@ import 'package:analyzer/dart/analysis/results.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('client-default create parameters preserve domain, nullable and timestamp types', () async {
+    final directory = await Directory('.dart_tool/orm-default-type-tests')
+        .create(recursive: true);
+    final file = File('${directory.path}/negative.dart').absolute;
+    final invalid = [
+      'db.tickets.create(id: const Change.set(1));',
+      'db.tickets.create(name: const Change.set(null));',
+      "db.tickets.create(createdAt: const Change.set('now'));",
+      "db.tickets.create(label: 'value');",
+    ];
+    await file.writeAsString(
+      "import 'package:orm/orm.dart';\nimport '../../test/support/defaults/schema.orm.dart';\nvoid wrong(Database<Sqlite> db) {\n${invalid.join('\n')}\n}\n",
+    );
+    final contexts = AnalysisContextCollection(includedPaths: [file.path]);
+    try {
+      final result =
+          await contexts
+                  .contextFor(file.path)
+                  .currentSession
+                  .getResolvedUnit(file.path)
+              as ResolvedUnitResult;
+      final errors = result.diagnostics
+          .where((e) => e.severity.name.toLowerCase() == 'error')
+          .toList();
+      expect(
+        errors.any(
+          (e) => e.diagnosticCode.lowerCaseName.contains('uri_does_not_exist'),
+        ),
+        false,
+      );
+      for (var i = 0; i < invalid.length; i++) {
+        expect(
+          errors.any(
+            (e) => result.lineInfo.getLocation(e.offset).lineNumber == i + 4,
+          ),
+          true,
+          reason: invalid[i],
+        );
+      }
+    } finally {
+      await contexts.dispose();
+      await directory.delete(recursive: true);
+    }
+  });
   test('query-only relation APIs retain result types and expose no graph writes', () async {
     final directory = await Directory('.dart_tool/orm-relation-type-tests')
         .create(recursive: true);

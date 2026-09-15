@@ -15,7 +15,7 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
     for (final f in entity.fields) {
       b.writeln(
         'final ${_columnSymbol(entity, f)} = Column<${f.type}>(${_literal(f.column)}, ${f.codec}, '
-        'nullable: ${f.nullable}, generated: ${f.generated}${f.defaultSql == null ? '' : ', defaultSql: ${_literal(f.defaultSql!)}'}${f.integerBits == null || f.integerBits == 64 ? '' : ', integerBits: ${f.integerBits}'}${f.decimalPrecision == null ? '' : ', decimalPrecision: ${f.decimalPrecision}'}${f.decimalScale == null || f.decimalScale == 0 ? '' : ', decimalScale: ${f.decimalScale}'});',
+        'nullable: ${f.nullable}, generated: ${f.generated}${f.defaultSql == null ? '' : ', defaultSql: ${_literal(f.defaultSql!)}'}${f.clientDefault == null ? '' : ', clientDefault: ${f.clientDefault}'}${f.integerBits == null || f.integerBits == 64 ? '' : ', integerBits: ${f.integerBits}'}${f.decimalPrecision == null ? '' : ', decimalPrecision: ${f.decimalPrecision}'}${f.decimalScale == null || f.decimalScale == 0 ? '' : ', decimalScale: ${f.decimalScale}'});',
       );
     }
     b.writeln(
@@ -58,7 +58,7 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
     final parameters = <String>[];
     final assignments = <String>[];
     for (final f in entity.fields) {
-      if (f.generated || f.defaultSql != null) {
+      if (f.generated || f.defaultSql != null || f.clientDefault != null) {
         parameters.add('Change<${f.type}> ${f.name} = const Change.keep()');
         assignments.add('...row.${f.name}.change(${f.name})');
       } else if (f.nullable) {

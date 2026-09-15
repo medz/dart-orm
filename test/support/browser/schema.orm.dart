@@ -23,6 +23,7 @@ final _usersNickname = Column<String?>(
   Codecs.text.nullable(),
   nullable: true,
   generated: false,
+  clientDefault: models.defaultNickname,
 );
 final usersSchema = TableSchema(
   "users",
@@ -68,12 +69,12 @@ final class UsersTableSet extends TableSet<models.User, UsersFields> {
   Future<models.User> create({
     Change<int> id = const Change.keep(),
     required String email,
-    String? nickname,
+    Change<String?> nickname = const Change.keep(),
   }) => createRow(
     (row) => [
       ...row.id.change(id),
       row.email.set(email),
-      row.nickname.set(nickname),
+      ...row.nickname.change(nickname),
     ],
   );
   Query<models.User, UsersFields> byId(int id) => where((row) => row.id.eq(id));

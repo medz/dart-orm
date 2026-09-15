@@ -8,6 +8,7 @@ import 'package:orm/sqlite_web.dart';
 import 'package:web/web.dart' as web;
 
 import 'schema.orm.dart';
+import 'schema.dart' as models;
 
 final checks = <Map<String, Object?>>[];
 final wasm = Uri.parse('/sqlite3.wasm');
@@ -110,6 +111,45 @@ Future<void> main() async {
           'Schema differs',
         );
         await rejects(() => db.posts.create(authorId: 999, title: 'invalid'));
+      });
+      await check('client factories distinguish omission, explicit null and prepared batch values', () async {
+        final isolated = await memory();
+        try {
+          await initialize(isolated);
+          final initialCalls = models.nicknameCalls;
+          final row = await isolated.users.create(email: 'default');
+          expect(
+            row.nickname == 'guest',
+            'Omitted value did not use Dart factory',
+          );
+          final explicit = await isolated.users.create(
+            email: 'explicit',
+            nickname: .set(null),
+          );
+          expect(explicit.nickname == null, 'Explicit null used Dart factory');
+          final batch = isolated.users.insertMany([
+            'batch-a',
+            'batch-b',
+          ], (u, email) => [u.email.set(email)]);
+          expect(
+            models.nicknameCalls == initialCalls + 3,
+            'Factory invocation count differs',
+          );
+          batch.compile();
+          batch.compile();
+          await batch.execute();
+          expect(
+            models.nicknameCalls == initialCalls + 3,
+            'Compiling or executing reran factories',
+          );
+          expect(
+            await isolated.users.where((u) => u.nickname.eq('guest')).count() ==
+                3,
+            'Batch defaults were not stored',
+          );
+        } finally {
+          await isolated.close();
+        }
       });
       await check(
         'generated CHECK enforcement and atomic constraint migrations',

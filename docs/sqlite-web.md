@@ -135,7 +135,8 @@ compilation mode and engine checksum. The captured results are in
 Run these separately from the native full suite: concurrent Dart CLI invocations
 can race while rewriting/codesigning the shared macOS native-asset cache. The
 acceptance checks cover memory migration/catalog checks, FK and CHECK enforcement,
-atomic constraint migration rollback, generated
+atomic constraint migration rollback, client defaults with explicit null and
+prepared batch values, generated
 relations, transactions/savepoints/lifetime, cursors, subscriptions, numeric and
 calendar codecs, unsupported interruption, event-loop responsiveness, startup
 failures, exclusive OPFS ownership, reopening, page reload recovery and upgrades.

@@ -11,6 +11,7 @@ final class _Field {
   final bool generated;
   final bool unique;
   final String? defaultSql;
+  final String? clientDefault;
   final int? integerBits;
   final int? decimalPrecision;
   final int? decimalScale;
@@ -25,6 +26,7 @@ final class _Field {
     this.generated = false,
     this.unique = false,
     this.defaultSql,
+    this.clientDefault,
     this.integerBits,
     this.decimalPrecision,
     this.decimalScale,

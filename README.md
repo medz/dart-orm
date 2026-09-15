@@ -62,6 +62,9 @@ Declare [row CHECK constraints](docs/checks.md) with explicit SQL and optional
 backend overrides; generated snapshots support catalog verification, import and
 reviewed constraint migrations.
 
+Use [client defaults](docs/defaults.md) for typed Dart value factories and SQL
+defaults for database-generated values, with explicit omission/value/default inputs.
+
 For complex SQL files, [generate named queries](docs/named-sql.md) with typed
 Record parameters/results, native database structure checks and the same query
 composition, transaction and streaming APIs.

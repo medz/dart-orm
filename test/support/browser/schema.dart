@@ -5,7 +5,7 @@ import 'package:orm/schema.dart';
 typedef User = ({
   @Id.generated() int id,
   @Unique() String email,
-  String? nickname,
+  @ClientDefault(defaultNickname) String? nickname,
 });
 typedef Post = ({@Id.generated() int id, int authorId, String title});
 typedef Reading = ({@Id() int id, double value});
@@ -33,3 +33,9 @@ final sameReading = readings
 final author = posts
     .key((p) => p.authorId)
     .references(users.key((u) => u.id), inverse: 'posts', onDelete: .cascade);
+
+int nicknameCalls = 0;
+String? defaultNickname() {
+  nicknameCalls++;
+  return 'guest';
+}

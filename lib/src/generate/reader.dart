@@ -231,7 +231,7 @@ final class _SchemaReader(
       );
     }
     var id = false, generated = false, unique = false;
-    String? column, defaultSql;
+    String? column, defaultSql, clientDefault;
     int? integerBits;
     int? decimalPrecision, decimalScale;
     Annotation? custom;
@@ -253,6 +253,35 @@ final class _SchemaReader(
           column = value!.getField('name')!.toStringValue();
         case 'Default':
           defaultSql = value!.getField('expression')!.toStringValue();
+        case 'ClientDefault':
+          if (clientDefault != null) {
+            _fail(annotation, 'ClientDefault may only appear once.');
+          }
+          final reference =
+              annotation.arguments!.arguments.single.argumentExpression;
+          final signature = reference.staticType;
+          if (signature is! FunctionType ||
+              signature.typeParameters.isNotEmpty ||
+              signature.formalParameters.any((p) => p.isRequired) ||
+              signature.returnType is DynamicType ||
+              !typeSystem.isSubtypeOf(signature.returnType, type)) {
+            _fail(
+              annotation,
+              'ClientDefault requires a synchronous, zero-required-argument factory returning $type.',
+            );
+          }
+          final function = value!.getField('factory')?.toFunctionValue();
+          if (function == null) {
+            _fail(
+              annotation,
+              'ClientDefault requires a constant function reference.',
+            );
+          }
+          clientDefault = names.factoryReference(
+            reference,
+            function,
+            signature,
+          );
         case 'IntegerBits':
           if (integerBits != null) {
             _fail(annotation, 'IntegerBits may only appear once.');
@@ -374,6 +403,7 @@ final class _SchemaReader(
       generated: generated,
       unique: unique,
       defaultSql: defaultSql,
+      clientDefault: clientDefault,
       integerBits: integerBits,
       decimalPrecision: decimalPrecision,
       decimalScale: decimalScale,

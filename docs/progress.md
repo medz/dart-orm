@@ -102,7 +102,7 @@ requirements and distinguishes direct coverage from missing evidence.
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 721 checks with native SQLite
+Static analysis is clean. The complete suite passes 740 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -376,8 +376,8 @@ when their source is deleted. The native named-query fixture compiles and runs a
 a macOS AOT executable with SQLite. See
 `docs/named-sql.md` for the API and validation limits.
 
-Fifteen browser acceptance scenarios pass in Chrome 153 with a JavaScript client,
-and the same fifteen pass with a Dart WASM client. Both use a separately compiled
+Sixteen browser acceptance scenarios pass in Chrome 153 with a JavaScript client,
+and the same sixteen pass with a Dart WASM client. Both use a separately compiled
 JavaScript database worker and the pinned sqlite3 3.6.0 WASM asset. They cover
 memory migrations/catalogs, FK enforcement, generated records and relations,
 rollback/savepoints/transaction lifetime, bounded cursors, watch snapshots, exact
@@ -452,9 +452,32 @@ Dart WASM runs each pass 15 scenarios, including generated CHECK enforcement,
 atomic constraint migration failure/retry and persistent upgrades. The browser
 report records both runs; these are correctness checks, not performance results.
 
+Seventeen client-default checks cover real SQLite/PostgreSQL creation, typed
+domain IDs, nullable values, DateTime constructors, optional static-method
+arguments, generic factories and const function references. Explicit values/null
+and database DEFAULT bypass the corresponding factory. Prepared inserts and
+batches call each omitted factory once and retain values through compilation,
+execution and conflict clauses. Updates do not apply insert defaults; database
+rollback does not undo Dart side effects. Explicit DEFAULT on a client-defaulted
+identity retains each backend's native sequence behavior.
+
+Generation and moved-output analysis do not execute application factories.
+Generator negatives reject incompatible/async scalar results, erased domain
+types, required arguments, private/nonconstant references and repeated annotations.
+Four invalid generated create calls fail static analysis. Snapshots and imports
+contain no client factories; physical defaults and migration checksums remain
+separate. Tables without client factories take a direct insertion path, while
+other tables cache their default-bearing columns. See `docs/defaults.md`.
+
+The complete native suite passes 740 checks in one invocation with PostgreSQL
+enabled, and static analysis reports no issues. Both real Chrome compilation
+modes pass 16 scenarios, adding client omission versus explicit null and prepared
+batch behavior. The browser schema snapshot itself is unchanged by adding a
+client factory. No throughput measurement is claimed by these correctness runs.
+
 ## Still required for the goal
 
-- Computed/read-only columns and explicit client-generated values from design sections 4.3, 5 and 8.
+- Computed/read-only columns from design sections 4.3, 5 and 8.
 - Explicit generated junction-table/many-to-many acceptance with payload fields and query-count checks.
 - Advanced-query capability and edge-case review.
 - Broader unmanaged-object catalog coverage.
@@ -475,12 +498,12 @@ autocommit SQL remains PostgreSQL-only; SQLite rejects `CheckedSql`. These are
 implementation stages, not a reduction of the active goal.
 
 The full suite includes 52 shared SQLite/PostgreSQL query checks, 20 generated
-client/migration integration checks, 28 source generation checks, five codec
+client/migration integration checks, 29 source generation checks, five codec
 regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CLI
 workflows, 37 streaming/execution checks, 28 relation strategy checks and three
 negative compilation checks covering 29 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks, 20 UTC instant checks, 24 named SQL checks, two explicit floating-parameter checks, 24 unconstrained-relation checks and 17 CHECK-constraint checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks, 20 UTC instant checks, 24 named SQL checks, two explicit floating-parameter checks, 24 unconstrained-relation checks 17 CHECK-constraint checks and 17 client-default checks.
 
 ## Environment
 

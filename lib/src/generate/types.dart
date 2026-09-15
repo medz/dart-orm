@@ -106,4 +106,57 @@ final class _DartNames(final Uri source, final String Function(Uri) importUri) {
     final symbol = name(element);
     return 'Codecs.enumeration<$symbol>({${values.entries.map((e) => '$symbol.${e.key}: ${_literal(e.value)}').join(', ')}})';
   }
+
+  String factoryReference(
+    Expression expression,
+    ExecutableElement function,
+    FunctionType signature,
+  ) {
+    final element = switch (expression) {
+      Identifier() => expression.element,
+      PropertyAccess() => expression.propertyName.element,
+      _ => null,
+    };
+    final variable = element is PropertyAccessorElement
+        ? element.variable
+        : element;
+    if (variable is VariableElement) {
+      if (!variable.isConst || !variable.isStatic || variable.isPrivate) {
+        throw const GenerationException(
+          'ClientDefault factory variables must be public const references.',
+        );
+      }
+      if (variable case FieldElement(:final enclosingElement)) {
+        return '${name(enclosingElement)}.${variable.name}';
+      }
+      return name(variable);
+    }
+    if (function.isPrivate) {
+      throw const GenerationException(
+        'ClientDefault requires a public factory.',
+      );
+    }
+    if (function is ConstructorElement) {
+      return '${type(signature.returnType)}.${function.name}';
+    }
+    final arguments = expression is FunctionReference
+        ? expression.typeArgumentTypes
+        : null;
+    if (function.typeParameters.isNotEmpty &&
+        (arguments == null || arguments.isEmpty)) {
+      throw const GenerationException(
+        'Instantiate generic ClientDefault factories explicitly.',
+      );
+    }
+    final suffix = arguments == null || arguments.isEmpty
+        ? ''
+        : '<${arguments.map(type).join(', ')}>';
+    if (function is TopLevelFunctionElement) return '${name(function)}$suffix';
+    if (function is MethodElement && function.isStatic) {
+      return '${name(function.enclosingElement!)}.${function.name}$suffix';
+    }
+    throw const GenerationException(
+      'ClientDefault requires a public top-level function, static method or constructor.',
+    );
+  }
 }

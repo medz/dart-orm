@@ -14,6 +14,7 @@ platform limits are recorded in [progress](progress.md).
 | §§4–5: compound keys, physical names, indexes, FK navigation, domain codecs | Generator, `relation_test`, `integer_test`, `custom_codec_test`, catalog/import tests |
 | §4.2: explicit navigation without database FKs | `relatesTo`; `unconstrained_relation_test` checks missing/duplicate targets, composite/self/inverse edges, no FK/index/cascade, watch and constraint transitions; generator/type negatives |
 | §12 declaration table: general CHECK constraints | `check_test`, generator/CLI tests and browser scenario: declaration, native enforcement/NULL, catalog/import, drift, add/change/remove/rename and atomic rollback; limits in [checks](checks.md) |
+| §§4.3, 5, 8: client-generated values separate from database defaults | `client_default_test`, generator/type negatives and browser scenario: typed factories, omission/value/null/DEFAULT, batches, conflicts, preparation/reuse and rollback; snapshots/imports exclude client code; [defaults](defaults.md) |
 | §6: scalar, positional/named Record and DTO projections; dynamic fields and lazy immutable queries | `database_test`, `generated_database_test`, `union_test`; mappings execute after rows arrive |
 | §6: joins, grouping/HAVING, subqueries, CTEs, windows and UNION | `union_test`, `relation_test`, `watch_test`, decimal/temporal query suites; exported-column and scope checks |
 | §6: named SQL with typed parameters/results and database structure checking | `named_sql_test`, `named_sql_generation_test`, real CLI/build_runner workflows |
@@ -33,7 +34,7 @@ commands and limits in [SQLite web](sqlite-web.md).
 
 | Gate from the design | Evidence still required |
 | --- | --- |
-| §§4.3, 5, 8: separate client-generated values, database DEFAULT and computed/read-only columns | Dedicated metadata and generation; omitted/explicit values; computation columns excluded from writes; SQL/catalog/snapshot/import/upgrade tests. Current `@Id.generated` and `@Default.sql` cover only identity and database defaults. |
+| §§4.3, 5, 8: database computed/read-only columns | Dedicated metadata and generation; computed columns excluded from writes; SQL/catalog/snapshot/import/upgrade tests. Identity, database defaults and client-generated values now have separate implemented contracts. |
 | §§4.2, 7, 12: many-to-many business records | A generated junction-table example with two FKs and payload fields; typed nested projections, per-parent limits, writes and query-count assertions on both databases. Existing nested relations are useful evidence but do not replace this named scenario. |
 | §§5, 10–11: remaining type/catalog capability review | Verify supported types against imported precision, defaults, native representation and migration behavior. Temporal column precision/conversion remains open in [types](types.md). Unsupported extensions must stay explicit. |
 | §12: inspectable cost | `compile` and `QueryEvent` expose SQL/counts/driver elapsed time. Separate acquisition/decoding measurements and a clearly non-executing plan-inspection path still need implementation/evidence. No claim that elapsed time isolates server CPU. |

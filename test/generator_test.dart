@@ -52,6 +52,7 @@ void main() {
         'test/support/instants/schema.dart',
         'test/support/unconstrained/schema.dart',
         'test/support/checks/schema.dart',
+        'test/support/defaults/schema.dart',
       ]) {
         final result = await generateSchema(source);
         final temporary = File('${fixtures.path}/deterministic.dart');
@@ -108,6 +109,66 @@ final key = users.primaryKey((u) => u.id + 1);
 '''),
       throwsA(isA<GenerationException>()),
     );
+  });
+
+  test('client defaults reject incompatible, asynchronous, private and ambiguous factories', () async {
+    for (final (name, declaration) in [
+      (
+        'erased_domain',
+        '''
+extension type const UserId(int value) {}
+const idCodec = Codec<UserId>('integer', decodeId, encodeId);
+UserId decodeId(Object? raw) => UserId(raw as int);
+Object? encodeId(UserId id) => id.value;
+int factory() => 1;
+typedef Item = ({@UseCodec(idCodec) @ClientDefault(factory) UserId id});
+''',
+      ),
+      (
+        'return_type',
+        'int factory() => 1; typedef Item = ({@ClientDefault(factory) String value});',
+      ),
+      (
+        'async',
+        "Future<String> factory() async => 'x'; typedef Item = ({@ClientDefault(factory) String value});",
+      ),
+      (
+        'nullable',
+        'String? factory() => null; typedef Item = ({@ClientDefault(factory) String value});',
+      ),
+      (
+        'dynamic',
+        "dynamic factory() => 'x'; typedef Item = ({@ClientDefault(factory) String value});",
+      ),
+      (
+        'arguments',
+        'String factory(String value) => value; typedef Item = ({@ClientDefault(factory) String value});',
+      ),
+      (
+        'private',
+        "String _factory() => 'x'; typedef Item = ({@ClientDefault(_factory) String value});",
+      ),
+      (
+        'private_owner',
+        "class _Defaults { static String make() => 'x'; } typedef Item = ({@ClientDefault(_Defaults.make) String value});",
+      ),
+      (
+        'duplicate',
+        "String factory() => 'x'; typedef Item = ({@ClientDefault(factory) @ClientDefault(factory) String value});",
+      ),
+      (
+        'variable',
+        "String make() => 'x'; final factory = make; typedef Item = ({@ClientDefault(factory) String value});",
+      ),
+    ]) {
+      await expectLater(
+        generate(
+          'client_default_$name',
+          '$declaration\nfinal items = entity<Item>();',
+        ),
+        throwsA(isA<GenerationException>()),
+      );
+    }
   });
 
   test('CHECK declarations reject dynamic SQL, empty overrides and duplicate names', () async {

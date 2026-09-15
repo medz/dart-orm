@@ -14,6 +14,10 @@ final class Column<T> {
   final bool generated;
   final String? defaultSql;
 
+  /// Called once for an omitted value when constructing an insert. Prepared
+  /// mutations retain that value; compilation and updates never call this.
+  final T Function()? clientDefault;
+
   /// Signed integer storage width (16, 32 or 64). The default is 64.
   /// This describes the column, not the result width of SQL arithmetic.
   final int? integerBits;
@@ -25,6 +29,7 @@ final class Column<T> {
     this.nullable = false,
     this.generated = false,
     this.defaultSql,
+    this.clientDefault,
     this.integerBits,
     this.decimalPrecision,
     this.decimalScale,
@@ -76,6 +81,7 @@ final class TableSchema {
   final List<ForeignKey> foreignKeys;
   final List<IndexSchema> indexes;
   final List<CheckSchema> checks;
+  final List<Column<Object?>> _clientDefaults;
   TableSchema(
     this.name, {
     required List<Column<Object?>> columns,
@@ -85,6 +91,9 @@ final class TableSchema {
     List<IndexSchema> indexes = const [],
     List<CheckSchema> checks = const [],
   }) : columns = List.unmodifiable(columns),
+       _clientDefaults = List.unmodifiable(
+         columns.where((c) => c.clientDefault != null),
+       ),
        primaryKey = List.unmodifiable(primaryKey),
        uniqueKeys = List.unmodifiable(
          uniqueKeys.map(List<String>.unmodifiable),

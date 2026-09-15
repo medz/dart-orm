@@ -47,6 +47,13 @@ final class Default {
   const Default.sql(this.expression);
 }
 
+/// Generates an omitted insert value in Dart. This never declares SQL DEFAULT.
+/// The factory is referenced during generation, not invoked.
+final class ClientDefault<T> {
+  final T Function() factory;
+  const ClientDefault(this.factory);
+}
+
 /// Signed integer column storage. SQL expression results retain the int codec.
 final class IntegerBits {
   final int value;
