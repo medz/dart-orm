@@ -4,6 +4,20 @@ const _microsecondsPerDay = 86400000000;
 int _floorDiv(int a, int b) => a ~/ b - (a < 0 && a % b != 0 ? 1 : 0);
 String _pad(int value, int length) => value.toString().padLeft(length, '0');
 
+int _gregorianJulianDay(int year, int month, int day) {
+  final y = year - (month <= 2 ? 1 : 0);
+  final cycle = _floorDiv(y, 400);
+  final within = y - cycle * 400, m = month + (month > 2 ? -3 : 9);
+  return cycle * 146097 +
+      within * 365 +
+      within ~/ 4 -
+      within ~/ 100 +
+      (153 * m + 2) ~/ 5 +
+      day -
+      1 +
+      1721120;
+}
+
 /// A Gregorian calendar date, without a time or timezone.
 /// Year 0 is 1 BC; negative years use astronomical numbering.
 final class LocalDate implements Comparable<LocalDate> {
@@ -21,18 +35,7 @@ final class LocalDate implements Comparable<LocalDate> {
         day > _monthDays(year, month)) {
       throw RangeError('Invalid Gregorian date.');
     }
-    final y = year - (month <= 2 ? 1 : 0);
-    final cycle = _floorDiv(y, 400);
-    final within = y - cycle * 400, m = month + (month > 2 ? -3 : 9);
-    final ordinal =
-        cycle * 146097 +
-        within * 365 +
-        within ~/ 4 -
-        within ~/ 100 +
-        (153 * m + 2) ~/ 5 +
-        day -
-        1 +
-        1721120;
+    final ordinal = _gregorianJulianDay(year, month, day);
     if (ordinal < minJulianDay || ordinal > maxJulianDay) {
       throw RangeError('Date exceeds the finite PostgreSQL DATE range.');
     }
@@ -260,10 +263,10 @@ final class LocalDateTime implements Comparable<LocalDateTime> {
 final class _TemporalNode(final _Node child, final String kind) extends _Node {
   @override
   String writeSql(_Writer w) {
-    if (!w.localTemporal) {
+    if (!w.temporal) {
       throw const OrmException(
         'CAPABILITY.TEMPORAL',
-        'This driver does not provide local date/time values.',
+        'This driver does not provide temporal values.',
       );
     }
     final text = child.write(w);

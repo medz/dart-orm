@@ -172,6 +172,7 @@ String _storageType(String type, SqlDialect dialect) =>
         'bigint' ||
             'text' ||
             'timestamp' ||
+            'instant' ||
             'json' ||
             'decimal' ||
             'date' ||
@@ -187,7 +188,7 @@ String _storageType(String type, SqlDialect dialect) =>
       (SqlDialect.postgres, 'text') => 'TEXT',
       (SqlDialect.postgres, 'real') => 'DOUBLE PRECISION',
       (SqlDialect.postgres, 'boolean') => 'BOOLEAN',
-      (SqlDialect.postgres, 'timestamp') => 'TIMESTAMPTZ',
+      (SqlDialect.postgres, 'timestamp' || 'instant') => 'TIMESTAMPTZ',
       (SqlDialect.postgres, 'date') => 'DATE',
       (SqlDialect.postgres, 'time') => 'TIME WITHOUT TIME ZONE',
       (SqlDialect.postgres, 'local_datetime') => 'TIMESTAMP WITHOUT TIME ZONE',
@@ -404,7 +405,11 @@ bool _matchesCollation(Column<Object?> expected, ColumnInfo actual) =>
     _sqliteCollation(expected.codec.sqlType);
 
 String _sqliteCollation(String type) => switch (type) {
-  'decimal' || 'date' || 'time' || 'local_datetime' => 'orm_${type}_v1',
+  'decimal' ||
+  'date' ||
+  'time' ||
+  'local_datetime' ||
+  'instant' => 'orm_${type}_v1',
   _ => 'binary',
 };
 

@@ -55,7 +55,9 @@ final class SchemaSnapshot {
       'text' => Codecs.text,
       'real' => Codecs.real,
       'boolean' => Codecs.boolean,
-      'timestamp' => Codecs.dateTime,
+      // Historical snapshots retain their original BINARY text storage.
+      'timestamp' => Codec<Object?>('timestamp', (v) => v, (v) => v),
+      'instant' => Codecs.dateTime,
       'date' => Codecs.date,
       'time' => Codecs.time,
       'local_datetime' => Codecs.localDateTime,

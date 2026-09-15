@@ -23,7 +23,7 @@ final class BatchInsert<F extends Fields> {
       database.dialect,
       {_state.source: 't0'},
       exactDecimal: database.capabilities.exactDecimal,
-      localTemporal: database.capabilities.localTemporal,
+      temporal: database.capabilities.temporal,
     );
     if (selection != null) {
       for (final column in selection.columns) {
@@ -54,7 +54,7 @@ final class BatchInsert<F extends Fields> {
         database.dialect,
         {_state.source: 't0'},
         exactDecimal: database.capabilities.exactDecimal,
-        localTemporal: database.capabilities.localTemporal,
+        temporal: database.capabilities.temporal,
       );
       for (final a in actual) {
         a._value!.write(writer);

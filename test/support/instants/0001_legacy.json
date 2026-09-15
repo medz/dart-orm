@@ -1,0 +1,47 @@
+{
+  "format": 2,
+  "id": "0001_legacy",
+  "snapshot": {
+    "format": 1,
+    "tables": [
+      {
+        "name": "moments",
+        "columns": [
+          {
+            "name": "at",
+            "type": "timestamp",
+            "nullable": false,
+            "generated": false
+          },
+          {
+            "name": "label",
+            "type": "text",
+            "nullable": false,
+            "generated": false,
+            "default": "'pending'"
+          }
+        ],
+        "primaryKey": [
+          "at"
+        ],
+        "uniqueKeys": [],
+        "indexes": [],
+        "foreignKeys": []
+      }
+    ]
+  },
+  "steps": {
+    "sqlite": [
+      {
+        "kind": "sql",
+        "sql": "CREATE TABLE \"moments\" (\"at\" TEXT NOT NULL, \"label\" TEXT NOT NULL DEFAULT ('pending'), PRIMARY KEY (\"at\"))"
+      }
+    ],
+    "postgres": [
+      {
+        "kind": "sql",
+        "sql": "CREATE TABLE \"moments\" (\"at\" TIMESTAMPTZ NOT NULL, \"label\" TEXT NOT NULL DEFAULT ('pending'), PRIMARY KEY (\"at\"))"
+      }
+    ]
+  }
+}

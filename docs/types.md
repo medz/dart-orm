@@ -142,7 +142,7 @@ key support; use scalar IDs for relationships.
 | `real` | `double` | `REAL` | `DOUBLE PRECISION` |
 | `text` | `String`, enums | `TEXT` | `TEXT` |
 | `boolean` | `bool` | `INTEGER` | `BOOLEAN` |
-| `timestamp` | UTC `DateTime` | ISO text | `TIMESTAMPTZ` |
+| `instant` | UTC `DateTime` | collated UTC text | `TIMESTAMPTZ` |
 | `date` | `LocalDate` | collated `TEXT` | `DATE` |
 | `time` | `LocalTime` | collated `TEXT` | `TIME WITHOUT TIME ZONE` |
 | `local_datetime` | `LocalDateTime` | collated `TEXT` | `TIMESTAMP WITHOUT TIME ZONE` |
@@ -159,6 +159,80 @@ Storage semantics still belong to each database. In particular, SQLite `bigint`
 text retains exact digits but does not provide numeric text ordering/arithmetic.
 Native enum types and browser numeric boundaries remain pending. Use `Decimal`
 for exact decimal data.
+
+## UTC instants
+
+Declare an instant as `DateTime`. Generated writes accept UTC or local DateTime
+objects and preserve their actual instant; reads return UTC. `Codecs.dateTime`
+is a constant codec with the `instant` storage tag. Its text representation has
+six fractional digits, a `+00` offset and an explicit BC suffix when applicable.
+
+SQLite uses `TEXT COLLATE orm_instant_v1`; comparisons operate on instants rather
+than lexicographic text. This preserves microsecond order, equivalent offsets,
+BC and extended years, uniqueness, relationship keys, window aggregates and
+stable cursors. The same collation backs column indexes. PostgreSQL uses native
+TIMESTAMPTZ and binary decoding independent of session DateStyle and timezone.
+
+Timestamp text may have a numeric UTC offset or `Z`. Zone-less database text is
+defined as UTC, including SQLite's CURRENT_TIMESTAMP default; it is never parsed
+using the process timezone. Invalid dates, leap seconds, excessive fractional
+precision and invalid offsets fail decoding. IANA timezone names are not parsed
+by this codec. Applications must explicitly resolve civil times and timezone rules
+before constructing the DateTime they store. SQLite's default itself has second
+resolution; precise application values retain their microseconds.
+
+Supported instants run from 4714-11-24 00:00:00 BC through 275760-09-13 00:00:00
+UTC. The upper bound follows [Dart DateTime's range](https://api.dart.dev/dart-core/DateTime-class.html),
+and the lower bound follows PostgreSQL. The PostgreSQL decoder checks bounds
+before adding epoch offsets, so larger native values cannot wrap through int64.
+Raw finite values beyond DateTime's range and infinities remain text; typed
+instant decoding rejects them. These range and precision guarantees are verified
+on native Dart, not JavaScript or browser storage.
+
+Native drivers advertise `Capabilities.temporal`, covering the local types below
+and UTC instants. Borrowed PostgreSQL pools must use `postgresTypeRegistry()` and
+`PostgresDriver.borrow(pool, temporal: true)`. Without that capability, typed
+temporal queries fail before execution. This replaces the earlier preview's
+`localTemporal` flag; no compatibility alias is provided.
+
+### Upgrading historical timestamp storage
+
+Previously generated `timestamp` snapshots retain their original storage meaning:
+SQLite TEXT with BINARY ordering, or PostgreSQL TIMESTAMPTZ. Their serialized
+snapshots, SQL and migration checksums remain unchanged. New generation emits
+`instant`, which produces a visible, reviewed type change. Do not recreate an
+applied migration from the current application schema.
+
+```dart
+final upgrade = Migration.diff(
+  '0002_instants',
+  from: previous.snapshot!,
+  to: SchemaSnapshot(currentSchema),
+  previous: previous.checksum,
+  using: {
+    SqlDialect.sqlite: {
+      'events': {'created_at': 'orm_instant_v1(created_at)'},
+    },
+    SqlDialect.postgres: {
+      'events': {'created_at': 'created_at'},
+    },
+  },
+);
+```
+
+The SQLite converter parses and canonicalizes each value with UTC semantics;
+the rebuild installs the new collation. Invalid timestamps or newly equivalent
+unique keys abort the migration and roll back its changes. Audit zone-less legacy
+text before conversion: if an external writer stored local civil time there,
+provide a reviewed conversion using its actual timezone. PostgreSQL already stores
+instants, so the shown conversion preserves values; existing infinities or values
+beyond DateTime's range still require separate data review. Old cursor tokens
+carry the old storage tag and cannot be reused under the new ordering contract.
+
+The [captured legacy migration](../test/support/instants/0001_legacy.json) is tested
+against its checksum from commit `00853b4`, including upgrade and rollback on real
+databases. Plain unmanaged SQLite TEXT still imports as String; the managed
+instant collation lets the importer infer DateTime without sampling data.
 
 ## Local calendar values
 
@@ -215,12 +289,12 @@ import 'package:postgres/postgres.dart' as pg;
 final pool = pg.Pool<void>.withEndpoints(endpoints,
   settings: pg.PoolSettings(typeRegistry: postgresTypeRegistry()),
 );
-final db = Database(PostgresDriver.borrow(pool, localTemporal: true));
+final db = Database(PostgresDriver.borrow(pool, temporal: true));
 ```
 
-The default borrowed-pool capability is false; local temporal queries fail before
+The default borrowed-pool capability is false; temporal queries fail before
 execution until explicitly enabled. The registry's text fallback accepts ISO
-DateStyle only. The capability covers these three scalar types; arrays, ranges,
+DateStyle only. The capability covers these three scalar types and UTC instants; arrays, ranges,
 intervals, time with timezone and timezone conversions are still outside it.
 
 SQLite stores text with `orm_date_v1`, `orm_time_v1` or `orm_local_datetime_v1`
@@ -238,10 +312,8 @@ reviewed migration; newly equivalent unique keys can make conversion fail and
 roll back. Historical backfills persist canonical text keys for resumable paging.
 
 Column precision declarations (`TIME(p)` / `TIMESTAMP(p)`), SQL calendar
-arithmetic and timezone-aware conversions remain pending. The existing
-`DateTime`/`timestamp` path also needs a separate migration-aware correction for
-SQLite sub-millisecond chronological ordering and zone-less default decoding;
-use the new local types only when the domain value actually has no timezone.
+arithmetic and timezone-aware conversions remain pending. Use local types when
+the domain value actually has no timezone; use DateTime for resolved instants.
 
 ## Signed integer column widths
 

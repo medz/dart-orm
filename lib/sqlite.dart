@@ -83,7 +83,7 @@ final class SqliteDriver implements Driver<Sqlite> {
         streaming: true,
         cancellation: worker.supportsCancellation,
         exactDecimal: true,
-        localTemporal: true,
+        temporal: true,
       ),
     );
   }

@@ -82,7 +82,7 @@ rows or a column name.
 | REAL | DOUBLE PRECISION | double |
 | BLOB | BYTEA | Uint8List |
 | — | BOOLEAN | bool |
-| — | TIMESTAMPTZ | DateTime |
+| TEXT COLLATE orm_instant_v1 | TIMESTAMPTZ | DateTime |
 | TEXT COLLATE orm_date_v1 | DATE | LocalDate |
 | TEXT COLLATE orm_time_v1 | TIME WITHOUT TIME ZONE | LocalTime |
 | TEXT COLLATE orm_local_datetime_v1 | TIMESTAMP WITHOUT TIME ZONE | LocalDateTime |

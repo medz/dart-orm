@@ -54,7 +54,7 @@ final class PostgresFailure implements SqlFailure {
 final class PostgresDriver implements Driver<Postgres> {
   final pg.Pool<void> _pool;
   final bool _ownsPool;
-  final bool _localTemporal;
+  final bool _temporal;
   final Future<pg.Connection> Function()? _cancelConnection;
   final Expando<int> _backendIds = Expando();
   final Duration? _queryTimeout;
@@ -64,7 +64,7 @@ final class PostgresDriver implements Driver<Postgres> {
   PostgresDriver(PostgresOptions options)
     : _pool = _createPool(options),
       _ownsPool = true,
-      _localTemporal = true,
+      _temporal = true,
       _queryTimeout = options.queryTimeout,
       _connectTimeout = options.connectTimeout,
       _cancelConnection = (() => _openControl(options));
@@ -73,7 +73,7 @@ final class PostgresDriver implements Driver<Postgres> {
     Future<pg.Connection> Function()? cancellationConnection,
     this._queryTimeout,
     // Enable only when the pool uses postgresTypeRegistry().
-    this._localTemporal = false,
+    this._temporal = false,
   }) : _pool = pool,
        _ownsPool = false,
        _connectTimeout = null,
@@ -176,7 +176,7 @@ final class PostgresDriver implements Driver<Postgres> {
     streaming: true,
     cancellation: _cancelConnection != null,
     exactDecimal: true,
-    localTemporal: _localTemporal,
+    temporal: _temporal,
   );
   @override
   Future<R> run<R>(Future<R> Function(SqlConnection) action) async {

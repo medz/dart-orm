@@ -250,6 +250,7 @@ String _withoutStorageCollations(String sql, List<ColumnInfo> columns) {
         !{
           'orm_decimal_v1',
           'orm_date_v1',
+          'orm_instant_v1',
           'orm_time_v1',
           'orm_local_datetime_v1',
         }.contains(c.collation.toLowerCase())) {

@@ -48,6 +48,8 @@ This file records verified delivery, not planned capabilities presented as worki
 - Exact rounded decimal averages with bounded PostgreSQL component sums, incremental SQLite accumulation and shared window inputs.
 - LocalDate, LocalTime and LocalDateTime with microsecond precision and full finite native PostgreSQL ranges, independent of DateTime and session timezone.
 - Calendar generation/import, SQLite indexed collations, normalized relation keys, typed cursors and resumable historical date-key backfills.
+- Explicit UTC instant storage, offset-equivalent SQLite indexing, strict process-independent decoding and overflow-checked native PostgreSQL DateTime decoding.
+- Reviewed legacy timestamp upgrades preserve captured migration checksums and roll back invalid values or newly equivalent SQLite unique keys.
 - Read-only application startup version checks with explicit compatibility ranges, full history validation and recovery-state rejection.
 - Unmodeled constraints, expression/partial indexes, triggers and policies are reported separately.
 - Reviewable migration diffs, explicit renames/conversions, destructive-change gates and checksum chains.
@@ -93,7 +95,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 625 checks with native SQLite
+Static analysis is clean. The complete suite passes 645 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -321,9 +323,31 @@ compilation check rejects five calendar/instant/string mismatches.
 covering endpoints, calendar order, bounded streams, equivalent relation keys and
 catalog/default verification. These checks do not establish browser behavior or
 temporal query throughput. Column precision, calendar SQL arithmetic and timezone
-conversion are still pending. The existing DateTime/SQLite instant path also needs
-an explicit storage/migration correction; its sub-millisecond ordering and
-zone-less default decoding are not covered by the new local calendar types.
+conversion are still pending. The local-type checks are distinct from the UTC
+instant corrections verified below.
+
+Twenty UTC instant checks reproduce and correct the prior SQLite microsecond
+ordering and process-timezone decoding failures. Native SQLite/PostgreSQL tests
+cover common DateTime endpoints, microsecond round trips, offset-equivalent
+predicates/unique keys/relations, indexed lookups, grouping/windows/CTEs/UNION,
+streaming, cursors, imported DateTime declarations, literal defaults and expression
+cast drift. Instant-key backfills resume across BC and sub-millisecond boundaries.
+Out-of-DateTime PostgreSQL values retain raw text and fail typed decoding without
+integer overflow or connection damage.
+
+The captured `test/support/instants/0001_legacy.json` was emitted using commit
+`00853b4`. Its original checksum is asserted after decoding with the current
+migration reader. Both databases upgrade it through a reviewed timestamp-to-instant
+change; SQLite tests prove rollback on equivalent keys and invalid calendar text.
+The new instant storage tag leaves old snapshot/DDL meaning unchanged. Native
+drivers use one `temporal` capability for local calendar values and UTC instants;
+borrowed PostgreSQL pools require the configured registry before opting in.
+
+`test/support/instants/native.dart` passes JIT in a Shanghai-timezone subprocess
+and as a compiled macOS AOT executable under UTC, Asia/Shanghai and America/New_York.
+It checks UTC defaults, local DateTime input conversion, microsecond sorting and
+relations. These checks do not prove browser precision, timezone-name resolution,
+column precision policies or temporal throughput.
 
 ## Still required for the goal
 
@@ -331,7 +355,7 @@ zone-less default decoding are not covered by the new local calendar types.
 - Broader unmanaged-object catalog coverage.
 - Named SQL query generation.
 - Further native type coverage.
-- Temporal column precision and timezone conversions; migration-aware correction of the existing DateTime storage's SQLite chronological ordering and zone-less default decoding.
+- Temporal column precision and timezone conversions.
 - Further backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
 - User documentation, performance measurements and complete acceptance review.
@@ -351,7 +375,7 @@ regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CL
 workflows, 37 streaming/execution checks, 28 relation strategy checks and two
 negative compilation checks covering 24 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks and 20 UTC instant checks.
 
 ## Environment
 

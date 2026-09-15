@@ -155,7 +155,7 @@ class Query<R, F extends Fields> {
       database.dialect,
       {},
       exactDecimal: database.capabilities.exactDecimal,
-      localTemporal: database.capabilities.localTemporal,
+      temporal: database.capabilities.temporal,
     );
     return SqlCommand(_write(w, plan), w.parameters);
   }
@@ -292,7 +292,7 @@ class Query<R, F extends Fields> {
           w.dialect,
           visible,
           exactDecimal: w.exactDecimal,
-          localTemporal: w.localTemporal,
+          temporal: w.temporal,
         )..leftJoins.addAll(w.leftJoins.where(visible.containsKey));
         join.on._node.write(check);
         final table = w.quote(ref.schema.name);

@@ -372,6 +372,7 @@ String? _columnDefault(String? value, Column<Object?> column) {
       normalized.endsWith("'")) {
     final literal = normalized.substring(1, normalized.length - 1);
     final parsed = switch (column.codec.sqlType) {
+      'instant' => _instantDefault(literal),
       'date' => LocalDate.tryParse(literal),
       'time' => LocalTime.tryParse(literal),
       'local_datetime' => LocalDateTime.tryParse(literal),
@@ -402,23 +403,6 @@ String? _columnDefault(String? value, Column<Object?> column) {
 String? _normalizeDefault(String? value) {
   if (value == null) return null;
   var normalized = value.trim();
-  // Calendar casts can truncate an expression's time. Only remove them from
-  // a single quoted literal, whose value _columnDefault compares by type.
-  normalized = normalized.replaceFirstMapped(
-    RegExp(
-      r"^('(?:[^']|'')*')::(?:date|time without time zone|timestamp without time zone)$",
-      caseSensitive: false,
-    ),
-    (match) => match[1]!,
-  );
-  // Remove only the trailing casts introduced for simple typed literals.
-  normalized = normalized.replaceFirst(
-    RegExp(
-      r'::(text|bigint|integer|boolean|double precision|numeric|timestamp with time zone)$',
-      caseSensitive: false,
-    ),
-    '',
-  );
   while (normalized.startsWith('(') && normalized.endsWith(')')) {
     var depth = 0;
     var whole = true;
@@ -441,5 +425,21 @@ String? _normalizeDefault(String? value) {
     if (!whole) break;
     normalized = normalized.substring(1, normalized.length - 1).trim();
   }
-  return normalized;
+  // Strip casts only from literals. Expression casts can discard time or
+  // precision and must remain visible to drift verification.
+  return normalized.replaceFirstMapped(
+    RegExp(
+      r"^('(?:[^']|'')*'|[-+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?|true|false)::(?:text|bigint|integer|boolean|double precision|numeric|timestamp with time zone|date|time without time zone|timestamp without time zone)$",
+      caseSensitive: false,
+    ),
+    (match) => match[1]!,
+  );
+}
+
+String? _instantDefault(String literal) {
+  try {
+    return Codecs.dateTime.encode(Codecs.dateTime.decode(literal)) as String;
+  } on FormatException {
+    return null;
+  }
 }

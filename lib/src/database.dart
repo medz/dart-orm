@@ -20,7 +20,7 @@ final class Capabilities {
   final bool streaming;
   final bool cancellation;
   final bool exactDecimal;
-  final bool localTemporal;
+  final bool temporal;
   const Capabilities({
     required this.dialect,
     required this.maxParameters,
@@ -29,7 +29,7 @@ final class Capabilities {
     this.streaming = false,
     this.cancellation = false,
     this.exactDecimal = false,
-    this.localTemporal = false,
+    this.temporal = false,
   });
 }
 

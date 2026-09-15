@@ -141,7 +141,7 @@ final class Mutation<F extends Fields> {
       database.dialect,
       {_state.source: 't0'},
       exactDecimal: database.capabilities.exactDecimal,
-      localTemporal: database.capabilities.localTemporal,
+      temporal: database.capabilities.temporal,
     );
     void validate(List<Assignment> assignments) {
       final names = <String>{};

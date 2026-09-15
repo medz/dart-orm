@@ -49,7 +49,7 @@ final class _Parameter(final Object? value, {final String? sqlType})
       'text' => 'TEXT',
       'real' => 'DOUBLE PRECISION',
       'boolean' => 'BOOLEAN',
-      'timestamp' => 'TIMESTAMPTZ',
+      'timestamp' || 'instant' => 'TIMESTAMPTZ',
       'date' => 'DATE',
       'time' => 'TIME WITHOUT TIME ZONE',
       'local_datetime' => 'TIMESTAMP WITHOUT TIME ZONE',
@@ -122,7 +122,7 @@ final class _Writer {
   final Set<TableRef> leftJoins = {};
   final _ReadTables? reads;
   final bool exactDecimal;
-  final bool localTemporal;
+  final bool temporal;
   bool unqualified = false;
   String? Function(_Node)? project;
   _AverageInputs? averageInputs;
@@ -131,7 +131,7 @@ final class _Writer {
     this.aliases, {
     this.reads,
     this.exactDecimal = false,
-    this.localTemporal = false,
+    this.temporal = false,
   });
   String quote(String name) => '"${name.replaceAll('"', '""')}"';
   String parameter(Object? value) {
@@ -152,7 +152,8 @@ class Expr<T> extends Selection<T> {
   Expr._(_Node node, this.codec)
     : _node = switch (codec.sqlType) {
         'decimal' when node is! _DecimalNode => _DecimalNode(node),
-        'date' || 'time' || 'local_datetime' when node is! _TemporalNode =>
+        'date' || 'time' || 'local_datetime' || 'instant'
+            when node is! _TemporalNode =>
           _TemporalNode(node, codec.sqlType),
         _ => node,
       };

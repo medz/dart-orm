@@ -67,6 +67,8 @@ final class Backfill extends MigrationStep {
         'integer' => (row[i] as int).toString(),
         'bigint' => row[i].toString(),
         'decimal' => Codecs.decimal.decode(row[i]).toString(),
+        'instant' =>
+          Codecs.dateTime.encode(Codecs.dateTime.decode(row[i])) as String,
         'date' => Codecs.date.decode(row[i]).toString(),
         'time' => Codecs.time.decode(row[i]).toString(),
         'local_datetime' => Codecs.localDateTime.decode(row[i]).toString(),

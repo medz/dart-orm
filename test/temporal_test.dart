@@ -35,9 +35,7 @@ void main() {
               typeRegistry: enabled ? postgresTypeRegistry() : null,
             ),
           );
-          final db = Database(
-            PostgresDriver.borrow(pool, localTemporal: enabled),
-          );
+          final db = Database(PostgresDriver.borrow(pool, temporal: enabled));
           try {
             if (!enabled) {
               expect(

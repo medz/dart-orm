@@ -138,10 +138,10 @@ abstract final class Codecs {
     },
     (v) => v,
   );
-  static final dateTime = Codec<DateTime>(
-    'timestamp',
-    (v) => (v is DateTime ? v : DateTime.parse(v as String)).toUtc(),
-    (v) => v.toUtc(),
+  static const dateTime = Codec<DateTime>(
+    'instant',
+    _decodeInstant,
+    _encodeInstant,
   );
   static final bytes = Codec<Uint8List>(
     'blob',

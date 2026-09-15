@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 part 'src/codec.dart';
 part 'src/temporal.dart';
+part 'src/instant.dart';
 part 'src/decimal.dart';
 part 'src/decimal_sql.dart';
 part 'src/decimal_division.dart';

@@ -329,6 +329,9 @@ Future<ImportedSchema> _importCatalog(
       (SqlDialect.sqlite, 'TEXT')
           when column.collation?.toLowerCase() == 'orm_local_datetime_v1' =>
         ('LocalDateTime', null),
+      (SqlDialect.sqlite, 'TEXT')
+          when column.collation?.toLowerCase() == 'orm_instant_v1' =>
+        ('DateTime', null),
       (_, 'TEXT') => ('String', null),
       (SqlDialect.sqlite, 'REAL') ||
       (SqlDialect.postgres, 'DOUBLE PRECISION') => ('double', null),

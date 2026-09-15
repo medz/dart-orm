@@ -1,6 +1,15 @@
 part of '../../sqlite.dart';
 
 void _registerTemporals(native.Database db) {
+  db.createFunction(
+    functionName: 'orm_instant_v1',
+    argumentCount: const native.AllowedArgumentCount(1),
+    deterministic: true,
+    directOnly: false,
+    function: (args) => args[0] == null
+        ? null
+        : Codecs.dateTime.encode(Codecs.dateTime.decode(args[0])),
+  );
   void register<T extends Comparable<T>>(
     String kind,
     T? Function(String) parse,
@@ -25,4 +34,11 @@ void _registerTemporals(native.Database db) {
   register('date', LocalDate.tryParse);
   register('time', LocalTime.tryParse);
   register('local_datetime', LocalDateTime.tryParse);
+  register<DateTime>('instant', (text) {
+    try {
+      return Codecs.dateTime.decode(text);
+    } on FormatException {
+      return null;
+    }
+  });
 }
