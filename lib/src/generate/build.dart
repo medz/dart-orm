@@ -10,6 +10,53 @@ builder.Builder ormBuilder(builder.BuilderOptions options) {
   return const _OrmBuilder();
 }
 
+/// Fixed SQL files are read as build assets so their edits invalidate output.
+builder.Builder ormQueryBuilder(builder.BuilderOptions options) {
+  if (options.config.isNotEmpty) {
+    throw ArgumentError('Select named SQL libraries with generate_for.');
+  }
+  return const _OrmQueryBuilder();
+}
+
+final class _OrmQueryBuilder implements builder.Builder {
+  const _OrmQueryBuilder();
+  @override
+  Map<String, List<String>> get buildExtensions => const {
+    '.dart': ['.queries.dart', '.queries.json'],
+  };
+  @override
+  Future<void> build(builder.BuildStep step) async {
+    final input = step.inputId;
+    if (!await step.resolver.isLibrary(input)) {
+      throw const GenerationException(
+        'Select a query library, not a part file.',
+      );
+    }
+    final output = input.changeExtension('.queries.dart');
+    final (unit, library) = await const _OrmBuilder()._resolveSchema(step);
+    final result = await _generateQueries(
+      unit,
+      library,
+      p.url.relative(input.path, from: p.url.dirname(output.path)),
+      (uri) {
+        if (uri.scheme != 'asset') return uri.toString();
+        final asset = builder.AssetId.resolve(uri);
+        if (asset.package != input.package) {
+          throw GenerationException('Put public domain types under lib/: $uri');
+        }
+        return p.url.relative(asset.path, from: p.url.dirname(output.path));
+      },
+      (path) => step.readAsString(
+        builder.AssetId.resolve(Uri.parse(path), from: input),
+      ),
+    );
+    final manifest =
+        '${const JsonEncoder.withIndent('  ').convert(result.manifest)}\n';
+    await step.writeAsString(output, result.dart);
+    await step.writeAsString(input.changeExtension('.queries.json'), manifest);
+  }
+}
+
 final class _OrmBuilder implements builder.Builder {
   const _OrmBuilder();
   @override

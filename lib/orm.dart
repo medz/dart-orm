@@ -14,6 +14,7 @@ part 'src/decimal_sql.dart';
 part 'src/decimal_division.dart';
 part 'src/decimal_average.dart';
 part 'src/sql.dart';
+part 'src/named_sql.dart';
 part 'src/selection.dart';
 part 'src/table.dart';
 part 'src/database.dart';

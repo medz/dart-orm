@@ -55,6 +55,10 @@ For an existing database, [import a Record declaration](docs/importing.md), revi
 its report, generate the client, and baseline the current schema without copying
 existing rows.
 
+For complex SQL files, [generate named queries](docs/named-sql.md) with typed
+Record parameters/results, native database structure checks and the same query
+composition, transaction and streaming APIs.
+
 Use `query.stream(batchSize: 128)` with `await for` to read through a database
 cursor. Reads and mutations accept `ExecutionOptions` for connection acquisition
 limits, statement deadlines and cancellation. See [streaming and execution](docs/execution.md) for connection

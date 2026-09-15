@@ -26,6 +26,7 @@ part 'src/generate/types.dart';
 part 'src/generate/emitter.dart';
 part 'src/generate/build.dart';
 part 'src/generate/import.dart';
+part 'src/generate/queries.dart';
 
 final class GenerationException implements Exception {
   final String message;

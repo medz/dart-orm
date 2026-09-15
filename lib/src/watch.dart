@@ -79,6 +79,7 @@ final class _ChangeHub {
 /// SQL compilation visits subqueries and CTE definitions with the same writer.
 /// Batch relationships are additional queries and must be visited separately.
 final class _ReadTables {
+  bool opaque = false;
   final Set<TableSchema> tables = Set.identity();
   void query(Query<Object?, Fields> query) {
     final (plan, _) = query._plan();
@@ -143,6 +144,12 @@ final class _QueryWatch<R, F extends Fields> {
         throw const OrmException('SESSION.CLOSED', 'Database is closed.');
       }
       final reads = _ReadTables()..query(query);
+      if (reads.opaque && extraReads.isEmpty) {
+        throw const OrmException(
+          'WATCH.READS',
+          'Named SQL requires explicit physical tables in watch(reads: ...).',
+        );
+      }
       for (final table in [...reads.tables, ...extraReads]) {
         tables.add(table.name);
         db._changes.registerTable(table);

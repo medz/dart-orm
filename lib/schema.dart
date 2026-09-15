@@ -62,6 +62,16 @@ final class DecimalDigits {
 
 enum ReferentialAction { restrict, cascade, setNull, setDefault, noAction }
 
+/// A fixed SQL file with declared result and parameter Record types.
+/// Run query generation, then check the manifest against each target database.
+SqlDeclaration<R, P> sqlQuery<R, P>({String? sqlite, String? postgres}) =>
+    SqlDeclaration(sqlite, postgres);
+
+final class SqlDeclaration<R, P> {
+  final String? sqlite, postgres;
+  const SqlDeclaration(this.sqlite, this.postgres);
+}
+
 Entity<M> entity<M>({String? table}) => Entity<M>(table);
 
 final class Entity<M> {

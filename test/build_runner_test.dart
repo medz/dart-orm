@@ -10,10 +10,26 @@ void main() {
     final fixture = await BuildFixture.create(ormPath: Directory.current.path);
     BuildWatch? watcher;
     try {
+      await fixture.file('build.yaml').writeAsString('''
+      orm:queries:
+        enabled: true
+        generate_for:
+          - lib/queries.dart
+''', mode: FileMode.append);
+      await fixture.write('lib/queries.dart', '''
+import 'package:orm/schema.dart';
+import 'models.dart';
+typedef QueryRow = ({String title, Status status});
+final namedRows = sqlQuery<QueryRow, ({int minimum})>(sqlite: 'rows.sql');
+''');
+      const sql = 'SELECT title, status FROM rows_0 WHERE score >= :minimum';
+      await fixture.write('lib/rows.sql', sql);
       final client = fixture.file('lib/schema.orm.dart');
       final snapshot = fixture.file('lib/schema.orm.json');
+      final queries = fixture.file('lib/queries.queries.dart');
       final first = await fixture.run(['run', 'build_runner', 'build']);
-      expect(first.output, contains('wrote 2 outputs'));
+      expect(first.output, contains('wrote 4 outputs'));
+      expect(await queries.readAsString(), contains('NamedRowsFields'));
       expect(await client.exists(), true);
       expect(
         (jsonDecode(await snapshot.readAsString()) as Map)['tables'],
@@ -39,6 +55,7 @@ void main() {
       );
       await watcher.next();
       expect(await client.readAsString(), contains('"ready-now"'));
+      expect(await queries.readAsString(), contains('"ready-now"'));
       final json =
           jsonDecode(await snapshot.readAsString()) as Map<String, Object?>;
       final tables = json['tables'] as List<Object?>;
@@ -55,6 +72,18 @@ void main() {
       await fixture.write('lib/unrelated.dart', 'const unrelated = 2;\n');
       await watcher.quiet();
       expect((await client.stat()).modified, stable.modified);
+
+      await fixture.write('lib/rows.sql', '$sql ORDER BY title');
+      await watcher.next();
+      expect(await queries.readAsString(), contains('ORDER BY title'));
+      await fixture.write(
+        'lib/rows.sql',
+        'SELECT :unknown AS title, status FROM rows_0',
+      );
+      await watcher.next(success: false);
+      await fixture.write('lib/rows.sql', sql);
+      await watcher.next();
+      expect(await queries.readAsString(), isNot(contains('ORDER BY title')));
 
       await fixture.write(
         'lib/schema.dart',
@@ -76,6 +105,10 @@ void main() {
       await watcher.next();
       expect(await client.exists(), true);
       expect(await snapshot.exists(), true);
+      await fixture.file('lib/queries.dart').delete();
+      await watcher.next();
+      expect(await queries.exists(), false);
+      expect(await fixture.file('lib/queries.queries.json').exists(), false);
     } finally {
       await watcher?.close();
       await fixture.dispose();

@@ -9,6 +9,8 @@ import 'package:path/path.dart' as p;
 
 const _usage = '''Usage: dart run orm <command>
   generate <schema.dart> [output.orm.dart]
+  queries generate <queries.dart> [output.queries.dart]
+  queries check --manifest queries.queries.json <database>
   migration create <id> --schema snapshot.json [--dir migrations]
     [--renames renames.json] [--using conversions.json] [--allow-destructive]
   migration check [--dir migrations] [--dialect sqlite|postgres]
@@ -51,6 +53,21 @@ Future<void> main(List<String> arguments) async {
       throw const FormatException('Expected a subcommand.');
     }
     final command = '${arguments[0]} ${arguments[1]}';
+    if (command == 'queries generate') {
+      if (arguments.length < 3 || arguments.length > 4) {
+        throw const FormatException(
+          'queries generate expects a source and optional output path.',
+        );
+      }
+      await writeGeneratedQueries(
+        arguments[2],
+        output: arguments.length == 4 ? arguments[3] : null,
+      );
+      stdout.writeln(
+        'Generated ${arguments.length == 4 ? arguments[3] : p.setExtension(arguments[2], '.queries.dart')}',
+      );
+      return;
+    }
     final common = {'sqlite', 'postgres-env', 'tls', 'database-schema'};
     final flags = switch (command) {
       'migration create' => {
@@ -67,6 +84,7 @@ Future<void> main(List<String> arguments) async {
       'db verify' => {...common, 'schema'},
       'db inspect' => {...common, 'table'},
       'db import' => {...common, 'output', 'tables'},
+      'queries check' => {...common, 'manifest'},
       _ => throw FormatException('Unknown command: $command'),
     };
     final (positionals, options) = _parse(arguments.skip(2).toList(), flags);
@@ -157,6 +175,9 @@ Future<void> main(List<String> arguments) async {
       return;
     }
     // Validate inputs before opening a database or creating a SQLite file.
+    final queries = command == 'queries check'
+        ? await readGeneratedQueries(_required(options, 'manifest'))
+        : null;
     final snapshot = command == 'db verify'
         ? SchemaSnapshot.fromJson(await _jsonFile(_required(options, 'schema')))
         : null;
@@ -213,11 +234,14 @@ Future<void> main(List<String> arguments) async {
       'db inspect',
       'db verify',
       'db import',
+      'queries check',
     }.contains(command);
     final db = await _open(options, readOnly: readOnly);
     try {
       final migrator = Migrator(db);
       switch (command) {
+        case 'queries check':
+          _print({'queries': await checkSqlQueries(db, queries!)});
         case 'migrate plan':
           final pending = await migrator.plan(migrations);
           _print({

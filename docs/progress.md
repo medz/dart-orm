@@ -18,6 +18,8 @@ This file records verified delivery, not planned capabilities presented as worki
 - Conservative server failure classification distinguishing known commit rejection from unknown outcome.
 - Opt-in transaction replay and SQLite COMMIT-only retry with shared attempt/time budgets and cancellable backoff.
 - Analyzer-based record generator, scalar annotations, composite keys, indexes and FK validation.
+- Named SQL files with generated Record parameters/results, dialect-specific methods, native structure checks and stale-output detection.
+- Explicit named-query build_runner assets, CLI generation/checking and shared query/transaction/stream/watch execution.
 - Generated table accessors, named create parameters, byId, typed patches and schema snapshots.
 - Batched and nested relation projections, per-parent SQL window pagination, optional/required relations.
 - Correlated relation any/none/every/count; UNKNOWN fails every, and empty sets satisfy it.
@@ -95,7 +97,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 645 checks with native SQLite
+Static analysis is clean. The complete suite passes 669 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -349,11 +351,31 @@ It checks UTC defaults, local DateTime input conversion, microsecond sorting and
 relations. These checks do not prove browser precision, timezone-name resolution,
 column precision policies or temporal throughput.
 
+Twenty-four named SQL checks cover deterministic generation, bound/repeated/nullable
+parameters, injection strings, SQL quotes/comments, typed projections, CTEs, UNION,
+scalar subqueries, Decimal/calendar/instant codecs, streaming, transaction rollback,
+explicit watch dependencies, and native structure failures. Seven additional
+invalid API uses fail Dart analysis, including wrong result types and calling a
+PostgreSQL-only query on SQLite. The CLI refuses stale generated files and opens
+SQLite checks read-only without creating missing database files.
+
+SQLite EXPLAIN and PostgreSQL PREPARE checks do not execute the application SELECT;
+throwing expressions and an unchanged PostgreSQL sequence verify that boundary.
+PostgreSQL prepared statements are deallocated after storage checks. Result
+nullability, value ranges and custom codec semantics remain explicit declarations
+with runtime decoding, rather than claimed database inference.
+
+The real build_runner build/watch process also tracks named SQL assets and imported
+enum changes, recovers from SQL parameter errors, and removes both query outputs
+when their source is deleted. The native named-query fixture compiles and runs as
+a macOS AOT executable with SQLite. The complete suite passes 669 checks in this
+run; this is correctness evidence, not a throughput measurement. See
+`docs/named-sql.md` for the API and validation limits.
+
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
 - Broader unmanaged-object catalog coverage.
-- Named SQL query generation.
 - Further native type coverage.
 - Temporal column precision and timezone conversions.
 - Further backend capability coverage.
@@ -375,7 +397,7 @@ regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CL
 workflows, 37 streaming/execution checks, 28 relation strategy checks and two
 negative compilation checks covering 24 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks and 20 UTC instant checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks, 20 UTC instant checks and 24 named SQL checks.
 
 ## Environment
 
