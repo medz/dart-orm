@@ -227,12 +227,42 @@ class Query<R, F extends Fields> {
           'WITH ${ctes.values.map((c) => c._writeDefinition(w)).join(', ')} ',
         );
       }
-      buffer.write('SELECT ${_state.distinct ? 'DISTINCT ' : ''}');
-      buffer.write(
-        [
-          for (var i = 0; i < plan.columns.length; i++)
+      final stage =
+          w.dialect == SqlDialect.postgres &&
+              [
+                ...plan.columns.map((e) => e._node),
+                ..._state.order.map((o) => o.expression._node),
+              ].any(_needsWindowStage)
+          ? _WindowStage(w)
+          : null;
+      final columns = <String>[];
+      final order = <String>[];
+      if (stage != null) w.project = stage.capture;
+      try {
+        for (var i = 0; i < plan.columns.length; i++) {
+          columns.add(
             '${plan.columns[i]._node.write(w)}${aliasColumns ? ' AS ${w.quote('c$i')}' : ''}',
-        ].join(', '),
+          );
+        }
+        if (stage != null) {
+          for (final term in _state.order) {
+            // PostgreSQL DISTINCT requires ORDER BY to reuse selected expressions.
+            final match = plan.columns.indexWhere(
+              (e) => _sameSqlNode(e._node, term.expression._node),
+            );
+            order.add(
+              match < 0 ? term._write(w) : '${match + 1}${term._suffix}',
+            );
+          }
+        }
+      } finally {
+        w.project = null;
+      }
+      buffer.write(
+        'SELECT ${stage == null && _state.distinct ? 'DISTINCT ' : ''}',
+      );
+      buffer.write(
+        stage == null ? columns.join(', ') : stage.inputs.join(', '),
       );
       buffer.write(
         ' FROM ${_state.union == null ? w.quote(_state.source.schema.name) : '(${_state.union!.write(w)})'} AS ${w.quote(rootAlias)}',
@@ -264,9 +294,16 @@ class Query<R, F extends Fields> {
       if (_state.having case final having?) {
         buffer.write(' HAVING ${having._node.write(w)}');
       }
+      if (stage != null) {
+        final inner = buffer.toString();
+        buffer.clear();
+        buffer.write(
+          'SELECT ${_state.distinct ? 'DISTINCT ' : ''}${columns.join(', ')} FROM ($inner) AS ${w.quote(stage.alias)}',
+        );
+      }
       if (_state.order.isNotEmpty) {
         buffer.write(
-          ' ORDER BY ${_state.order.map((o) => o._write(w)).join(', ')}',
+          ' ORDER BY ${stage == null ? _state.order.map((o) => o._write(w)).join(', ') : order.join(', ')}',
         );
       }
       if (_state.limit case final limit?) {
@@ -367,6 +404,32 @@ class Query<R, F extends Fields> {
   );
   Mutation<F> delete() =>
       Mutation._(database, _fields, _state, _MutationKind.delete, const []);
+}
+
+// A scalar SQL subquery cannot contain an enclosing query's window function.
+// Evaluate its inputs in that query, then perform decimal division/rounding in
+// an outer projection. Filtering, grouping and windows stay inside; DISTINCT,
+// ordering and pagination apply to the final values. This remains one statement.
+bool _needsWindowStage(_Node node) =>
+    node is _DecimalRatio && _children(node).any(_window) ||
+    _children(node).any(_needsWindowStage);
+
+final class _WindowStage(final _Writer writer) {
+  late final String alias = '_orm_window_${writer.aliases.length}';
+  final List<String> inputs = [];
+
+  String? capture(_Node node) {
+    if (_needsWindowStage(node)) return null;
+    final index = inputs.length;
+    final saved = writer.project;
+    writer.project = null;
+    try {
+      inputs.add('${node.writeSql(writer)} AS ${writer.quote('w$index')}');
+    } finally {
+      writer.project = saved;
+    }
+    return '${writer.quote(alias)}.${writer.quote('w$index')}';
+  }
 }
 
 class TableSet<R, F extends Fields> extends Query<R, F> {

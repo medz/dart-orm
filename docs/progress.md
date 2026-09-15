@@ -44,6 +44,7 @@ This file records verified delivery, not planned capabilities presented as worki
 - Finite exact Decimal values, typed SQL arithmetic, numeric SQLite collation and native PostgreSQL NUMERIC, including keys, relations, aggregates and windows.
 - Decimal generation/import, catalog drift checks, reviewed conversion migrations and exact historical backfill keys.
 - Declared decimal precision/scale, consistent ORM write coercion, exact SQL precision casts, constrained defaults and width-preserving import/migrations.
+- Exact SQL decimal division and six explicit rounding modes, including full finite-range checks and window projections with preserved filtering/grouping/pagination.
 - Read-only application startup version checks with explicit compatibility ranges, full history validation and recovery-state rejection.
 - Unmodeled constraints, expression/partial indexes, triggers and policies are reported separately.
 - Reviewable migration diffs, explicit renames/conversions, destructive-change gates and checksum chains.
@@ -89,7 +90,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 554 checks with native SQLite
+Static analysis is clean. The complete suite passes 577 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -247,8 +248,8 @@ as a macOS AOT executable, verifying exact values, sorting, aggregate/window
 functions, normalized relation keys and catalog checks. Invalid external SQLite
 text and PostgreSQL special numeric values fail typed decoding; no finite-decimal
 CHECK constraint or cross-client SQLite function installation is claimed. SQL
-rounding/division and browser acceptance remain open; constrained columns are
-covered by the additional acceptance checks below.
+averages and browser acceptance remain open; constrained columns and SQL
+division/rounding are covered by the additional acceptance checks below.
 
 Nineteen precision checks cover signed ties, negative and excess scales, maximum
 precision/scale boundaries, nullable values, defaults, expression writes, wider
@@ -262,14 +263,33 @@ disabled trusted_schema setting. The current SQLite binding requires
 trusted_schema ON to evaluate the managed precision CHECK/default functions.
 Generator checks reject invalid/repeated annotations and preserve decimal-backed
 domain types. The precision fixture compiles and runs as a macOS AOT executable.
-General SQL division, configurable SQL rounding and rounded averages remain open.
+Rounded SQL averages remain open.
+
+Twenty-three division checks compare all signed rounding modes and positive/negative
+scales with exact integer arithmetic. They cover 16383 fractional digits, values
+around rounding ties, nulls, zero divisors, finite-range overflow and enormous
+remainders whose naive intermediate products overflow PostgreSQL NUMERIC. Exact
+defaults reject lost digits. Real queries combine division/rounding with grouped
+aggregates, windows, HAVING, DISTINCT, ordering, pagination, outer joins, CTEs,
+UNIONs, correlated subqueries and per-parent batched relation pagination. Window
+expressions retain frame/partition/order identity when referenced through CTEs.
+Volatile PostgreSQL operands are evaluated once each; failed expression writes
+roll back their transaction. The updated decimal fixture compiles and runs as a
+macOS AOT executable, including exact SQL/window division and configurable rounding.
+PostgreSQL uses scalar quotient/remainder stages and an additional projection for
+window operands; native arithmetic throughput is not implied.
+The reproducible decimal benchmark separately records native AOT 10000-row
+read/divide/round/window queries on SQLite 3.51.0 and PostgreSQL 18.4. Its raw
+report is `research/benchmarks/decimal-division.json`; methodology and medians
+are in `docs/decimals.md`. This is a small single-client end-to-end cost probe,
+not the complete runtime performance acceptance or a high-precision stress benchmark.
 
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
 - Broader unmanaged-object catalog coverage.
 - Named SQL query generation.
-- Explicit SQL division/general rounding/rounded averages and further native type coverage.
+- Rounded SQL averages and further native type coverage.
 - Further backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
 - User documentation, performance measurements and complete acceptance review.
@@ -289,7 +309,7 @@ regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CL
 workflows, 37 streaming/execution checks, 28 relation strategy checks and one
 negative compilation suite covering 19 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks and 19 decimal-precision checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks and 23 decimal-division checks.
 
 ## Environment
 

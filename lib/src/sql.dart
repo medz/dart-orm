@@ -12,12 +12,13 @@ final class SqlCommand {
 
 sealed class _Node {
   const _Node();
-  String write(_Writer writer);
+  String write(_Writer w) => w.project?.call(this) ?? writeSql(w);
+  String writeSql(_Writer w);
 }
 
 final class _ColumnNode(final TableRef table, final String name) extends _Node {
   @override
-  String write(_Writer w) {
+  String writeSql(_Writer w) {
     final alias = w.aliases[table];
     if (alias == null) {
       throw const OrmException(
@@ -32,7 +33,7 @@ final class _ColumnNode(final TableRef table, final String name) extends _Node {
 final class _Parameter(final Object? value, {final String? sqlType})
     extends _Node {
   @override
-  String write(_Writer w) {
+  String writeSql(_Writer w) {
     final parameter = w.parameter(value);
     // A standalone SELECT parameter has no column context in PostgreSQL and
     // otherwise resolves to text, including inside a UNION operand.
@@ -58,7 +59,7 @@ final class _Parameter(final Object? value, {final String? sqlType})
 final class _Binary(final _Node left, final String op, final _Node right)
     extends _Node {
   @override
-  String write(_Writer w) => '(${left.write(w)} $op ${right.write(w)})';
+  String writeSql(_Writer w) => '(${left.write(w)} $op ${right.write(w)})';
 }
 
 final class _Unary(
@@ -67,7 +68,7 @@ final class _Unary(
   final bool postfix = false,
 }) extends _Node {
   @override
-  String write(_Writer w) =>
+  String writeSql(_Writer w) =>
       postfix ? '(${child.write(w)} $op)' : '($op ${child.write(w)})';
 }
 
@@ -78,7 +79,7 @@ final class _Function(
   final bool decimal = false,
 }) extends _Node {
   @override
-  String write(_Writer w) =>
+  String writeSql(_Writer w) =>
       '${decimal && w.dialect == SqlDialect.sqlite ? 'orm_decimal_${name.toLowerCase()}_v1' : name}(${distinct ? 'DISTINCT ' : ''}'
       '${arguments.map((e) => e.write(w)).join(', ')})';
 }
@@ -86,7 +87,7 @@ final class _Function(
 final class _In(final _Node expression, final List<_Node> values)
     extends _Node {
   @override
-  String write(_Writer w) => values.isEmpty
+  String writeSql(_Writer w) => values.isEmpty
       ? 'FALSE'
       : '(${expression.write(w)} IN (${values.map((v) => v.write(w)).join(', ')}))';
 }
@@ -95,7 +96,7 @@ final class _In(final _Node expression, final List<_Node> values)
 final class _Raw(final List<String> parts, final List<_Node> values)
     extends _Node {
   @override
-  String write(_Writer w) {
+  String writeSql(_Writer w) {
     final result = StringBuffer(parts.first);
     for (var i = 0; i < values.length; i++) {
       result
@@ -114,6 +115,7 @@ final class _Writer {
   final _ReadTables? reads;
   final bool exactDecimal;
   bool unqualified = false;
+  String? Function(_Node)? project;
   _Writer(this.dialect, this.aliases, {this.reads, this.exactDecimal = false});
   String quote(String name) => '"${name.replaceAll('"', '""')}"';
   String parameter(Object? value) {
@@ -257,7 +259,8 @@ final class OrderTerm {
   final bool descending;
   final NullOrder? nulls;
   const OrderTerm._(this.expression, this.descending, [this.nulls]);
-  String _write(_Writer writer) =>
-      '${expression._node.write(writer)} ${descending ? 'DESC' : 'ASC'}'
+  String _write(_Writer writer) => '${expression._node.write(writer)}$_suffix';
+  String get _suffix =>
+      ' ${descending ? 'DESC' : 'ASC'}'
       '${nulls == null ? '' : ' NULLS ${nulls!.name.toUpperCase()}'}';
 }

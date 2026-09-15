@@ -39,12 +39,31 @@ Future<void> main() async {
     if (window.last != Decimal.parse('9007199254740993.123456789012345679')) {
       throw StateError('Window sum differs');
     }
+    final halves = await db.entries
+        .orderBy((e) => [e.id.asc()])
+        .select(
+          (e) => e.amount
+              .sum()
+              .over(orderBy: [e.id.asc()], frame: .rowsToCurrent)
+              .divide(Decimal.parse('2'), scale: 20, rounding: .halfEven),
+        )
+        .get();
+    if (halves.last != Decimal.parse('4503599627370496.5617283945061728395')) {
+      throw StateError('Exact window division differs');
+    }
+    final rounded = await db.entries
+        .orderBy((e) => [e.id.asc()])
+        .select((e) => e.amount.rounded(2, rounding: .halfEven))
+        .get();
+    if (rounded.first != Decimal.parse('9007199254740993.12')) {
+      throw StateError('Exact SQL rounding differs');
+    }
     final verification = await verifySchema(db, SchemaSnapshot(appSchema));
     if (!verification.matches || verification.unmanaged.isNotEmpty) {
       throw StateError('Decimal catalog differs');
     }
     print(
-      'Native AOT: exact decimals, numeric ordering, aggregate/window functions, canonical relation keys and catalog verification passed.',
+      'Native AOT: exact decimals, SQL division/rounding, numeric ordering, aggregate/window functions, canonical relation keys and catalog verification passed.',
     );
   } finally {
     await db.close();

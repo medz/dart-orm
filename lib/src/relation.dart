@@ -199,7 +199,7 @@ final class _RelationSubquery(
   final bool count,
 ) extends _Node {
   @override
-  String write(_Writer w) {
+  String writeSql(_Writer w) {
     if (relation._state.limit != null || relation._state.offset != null) {
       throw const OrmException(
         'RELATION.AGGREGATE',
@@ -423,7 +423,7 @@ final class _RelationKeys(
   final List<_RelationKey> keys,
 ) extends _Node {
   @override
-  String write(_Writer w) {
+  String writeSql(_Writer w) {
     if (columns.length == 1) {
       return _In(columns.single._node, [
         for (final key in keys) _Parameter(key.values.single),

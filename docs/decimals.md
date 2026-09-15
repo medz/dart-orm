@@ -58,10 +58,44 @@ before a valid final result; range checks apply when producing the result. `min`
 with the existing query API. Predicates, IN/subqueries, computed CTE references,
 UNIONs, streaming and transported cursors preserve decimal comparison semantics.
 
-SQL division, general SQL rounding modes and rounded SQL averages remain
-unfinished. There is no implicit conversion to approximate `AVG` or `/`. When
-working with values already fetched, use `divide` or `rounded` explicitly.
-Trusted raw SQL remains the caller's responsibility, including its result type.
+SQL expressions also provide `divide`, `divideExpression` and `rounded`, with the
+same explicit scale and six rounding modes as values:
+
+```dart
+final installments = await db.invoices.select(
+  (i) => i.total.divide(
+    Decimal.parse('3'),
+    scale: 2,
+    rounding: .halfEven,
+  ),
+).get();
+final roundedTotal = await db.invoices.select(
+  (i) => i.total.sum().rounded(2, rounding: .halfEven),
+).single();
+```
+
+Scale is -131072..16383. The default `exact` rejects discarded nonzero digits;
+division by zero and a result outside the finite range fail the statement.
+`divideExpression` accepts a nullable decimal expression and returns a nullable
+result. SQL NULL propagates, including a null numerator with a zero divisor.
+Each operand is evaluated once for a division evaluation, including volatile
+PostgreSQL expressions. Expression assignments participate in ordinary transaction
+rollback. These methods also compose with grouping, windows, CTEs, sets, streamed
+results and per-parent relationship pagination.
+
+PostgreSQL division uses [integer quotients and exact remainders](https://www.postgresql.org/docs/current/functions-math.html), rather than
+rounding native `/`, whose chosen result scale can already have discarded digits.
+Large remainders use a bounded decomposition to avoid overflowing an intermediate
+product. Scalar stages use `MATERIALIZED` CTEs (PostgreSQL 12+); window operands
+are evaluated in the original query before the final scalar projection. This
+remains one statement and installs no database functions. It requires more SQL
+work than native limited-scale division; cost depends on row count, operand size
+and requested scale. SQLite calls the native worker's BigInt-based decimal
+functions. No floating-point fallback is used.
+
+Rounded SQL averages remain unfinished. There is no implicit conversion to
+approximate `AVG`. Trusted raw SQL remains the caller's responsibility, including
+its result type.
 
 ## Column precision and scale
 
@@ -160,7 +194,39 @@ rolls back data, structure and history together. Repair the data before retrying
 Historical backfills retain exact decimal keys in their resumable checkpoints.
 
 See the [generated fixture](../test/support/decimals/schema.dart),
-[database checks](../test/decimal_test.dart) and
+[database checks](../test/decimal_test.dart),
+[division/window checks](../test/decimal_division_test.dart) and
 [native acceptance executable](../test/support/decimals/native.dart).
-These establish correctness on the tested native databases, not performance or
-browser/Flutter acceptance.
+These establish correctness on the tested native databases. Browser/Flutter
+acceptance remains open.
+
+## Native cost probe
+
+The [benchmark script](../tool/benchmark_decimal.dart) fetches and decodes 10000
+integer-valued Decimal rows. Each case has one warmup and three measured runs.
+The checked-in [raw report](../research/benchmarks/decimal-division.json) was
+recorded with a native macOS ARM64 AOT executable, Dart 3.13.3, in-memory SQLite
+3.51.0 and local PostgreSQL 18.4. Median elapsed milliseconds:
+
+| Operation | SQLite | PostgreSQL |
+| --- | ---: | ---: |
+| Read Decimal values | 10.13 | 22.72 |
+| Divide by 3, scale 2, half-even | 30.09 | 32.63 |
+| Round to tens, half-even | 21.64 | 25.25 |
+| Running sum then divide by 3 | 48.17 | 36.85 |
+
+These are single-client end-to-end samples, including query compilation, database
+work, row transport and Decimal decoding. They are not latency percentiles,
+concurrency measurements, or estimates for large coefficients/high scales.
+No other ORM test/build workload ran during measurement.
+
+```sh
+dart compile exe tool/benchmark_decimal.dart -o /tmp/orm-decimal-benchmark
+/tmp/orm-decimal-benchmark > /tmp/decimal-division.json
+```
+
+Set `ORM_TEST_POSTGRES` to an accessible disposable local PostgreSQL URL to include
+PostgreSQL. The script disables TLS for that local connection, creates a uniquely
+named schema and drops its schema afterward; the account needs schema-creation
+permission. Without the variable it measures SQLite only. Run separately from
+tests and builds. Compilation happens before timing.

@@ -34,7 +34,7 @@ final class _Join(
 
 final class _Presence(final TableAlias<Object?, Fields> alias) extends _Node {
   @override
-  String write(_Writer w) {
+  String writeSql(_Writer w) {
     if (!w.leftJoins.contains(alias.fields.table)) {
       throw const OrmException(
         'QUERY.OUTER_JOIN',
@@ -70,7 +70,7 @@ final class _Subquery(
   final bool exists = false,
 }) extends _Node {
   @override
-  String write(_Writer w) {
+  String writeSql(_Writer w) {
     final (plan, _) = query._plan();
     if (plan.relations.isNotEmpty) {
       throw const OrmException(
@@ -122,7 +122,7 @@ final class _WindowNode(
   final WindowFrame? frame,
 ) extends _Node {
   @override
-  String write(_Writer w) {
+  String writeSql(_Writer w) {
     final clauses = <String>[];
     if (partition.isNotEmpty) {
       clauses.add(
@@ -155,6 +155,7 @@ bool _aggregate(_Node node) => switch (node) {
 };
 bool _window(_Node node) => node is _WindowNode || _children(node).any(_window);
 List<_Node> _children(_Node node) => switch (node) {
+  _DecimalRatio(:final numerator, :final divisor) => [numerator, ?divisor],
   _DecimalNode(:final child) => [child],
   _DecimalCast(:final child) => [child],
   _DecimalArithmetic(:final left, :final right) => [left, right],
@@ -251,7 +252,40 @@ bool _outerNullable(_Node node, Set<TableRef> optional) => switch (node) {
 
 bool _sameSqlNode(_Node a, _Node b) {
   if (identical(a, b)) return true;
+  if (a is _WindowNode && b is _WindowNode) {
+    return a.frame == b.frame &&
+        _sameSqlNode(a.function, b.function) &&
+        a.partition.length == b.partition.length &&
+        a.partition.indexed.every(
+          (e) => _sameSqlNode(e.$2._node, b.partition[e.$1]._node),
+        ) &&
+        a.order.length == b.order.length &&
+        a.order.indexed.every((e) {
+          final other = b.order[e.$1];
+          return e.$2.descending == other.descending &&
+              e.$2.nulls == other.nulls &&
+              _sameSqlNode(e.$2.expression._node, other.expression._node);
+        });
+  }
   return switch ((a, b)) {
+    (
+      _DecimalRatio(
+        numerator: final an,
+        divisor: final ad,
+        scale: final ax,
+        rounding: final ar,
+      ),
+      _DecimalRatio(
+        numerator: final bn,
+        divisor: final bd,
+        scale: final bx,
+        rounding: final br,
+      ),
+    ) =>
+      ax == bx &&
+          ar == br &&
+          _sameSqlNode(an, bn) &&
+          (ad == null ? bd == null : bd != null && _sameSqlNode(ad, bd)),
     (
       _DecimalCast(child: final ac, precision: final ap, scale: final asc),
       _DecimalCast(child: final bc, precision: final bp, scale: final bs),

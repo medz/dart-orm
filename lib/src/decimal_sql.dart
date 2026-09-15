@@ -4,7 +4,7 @@ part of '../orm.dart';
 // CTE references and UNION outputs. Native PostgreSQL NUMERIC needs no wrapper.
 final class _DecimalNode(final _Node child) extends _Node {
   @override
-  String write(_Writer w) {
+  String writeSql(_Writer w) {
     if (!w.exactDecimal) {
       throw const OrmException(
         'CAPABILITY.DECIMAL',
@@ -26,7 +26,7 @@ final class _DecimalCast(
   final int scale,
 ) extends _Node {
   @override
-  String write(_Writer w) {
+  String writeSql(_Writer w) {
     Decimal._checkDigits(precision, scale);
     if (!w.exactDecimal) {
       throw const OrmException(
@@ -47,7 +47,7 @@ final class _DecimalArithmetic(
   final _Node right,
 ) extends _Node {
   @override
-  String write(_Writer w) {
+  String writeSql(_Writer w) {
     final a = left.write(w), b = right.write(w);
     if (w.dialect == SqlDialect.postgres) return '($a $op $b)';
     final name = switch (op) {
@@ -61,6 +61,46 @@ final class _DecimalArithmetic(
 }
 
 extension DecimalExpression<T extends Decimal?> on Expr<T> {
+  /// Rounds in SQL; [DecimalRounding.exact] rejects any lost nonzero digits.
+  Expr<T> rounded(
+    int scale, {
+    DecimalRounding rounding = DecimalRounding.exact,
+  }) {
+    Decimal._checkScale(scale);
+    return Expr._(_DecimalRatio(_node, null, scale, rounding), codec);
+  }
+
+  /// Divides in SQL to an explicit scale without a floating-point intermediate.
+  Expr<T> divide(
+    Decimal divisor, {
+    required int scale,
+    DecimalRounding rounding = DecimalRounding.exact,
+  }) {
+    Decimal._checkScale(scale);
+    return Expr._(
+      _DecimalRatio(
+        _node,
+        value(divisor, Codecs.decimal)._node,
+        scale,
+        rounding,
+      ),
+      codec,
+    );
+  }
+
+  /// Divides two SQL expressions. A null operand produces null.
+  Expr<Decimal?> divideExpression(
+    Expr<Decimal?> divisor, {
+    required int scale,
+    DecimalRounding rounding = DecimalRounding.exact,
+  }) {
+    Decimal._checkScale(scale);
+    return Expr._(
+      _DecimalRatio(_node, divisor._node, scale, rounding),
+      Codecs.decimal.nullable(),
+    );
+  }
+
   Expr<T> constrained(int precision, int scale) {
     Decimal._checkDigits(precision, scale);
     return Expr._(_DecimalCast(_node, precision, scale), codec);
