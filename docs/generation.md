@@ -205,3 +205,9 @@ ORM selector rules are a separate diagnostic boundary: the valid Dart expression
 `rows0.index((r) => r.id + 1)` passes CLI analysis but fails generation with a
 direct-field-selector error and source offset. Stock LSP does not supply that ORM
 diagnostic. Keep generation/watch running for schema rule validation.
+
+The separate [declaration-form experiment](authoring.md) now compares Record,
+primary-constructor and table-class inputs for the same four related models.
+It checks identical generated APIs/snapshots across field edits and renames,
+stale-client type errors, schema refactor propagation and original error locations.
+Its class/table adapters are experimental tools, not supported package entrypoints.

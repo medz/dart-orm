@@ -656,6 +656,32 @@ analysis but the generator rejects it with a source offset, demonstrating the
 boundary between Dart and ORM-specific rules. This closes the measured LSP slice,
 not the full three-authoring-frontend experiment or whole-product goal.
 
+## Declaration-form comparison
+
+`tool/compare_authoring.dart` now executes the design's User/Post/Profile/Follow
+experiment using actual Record, primary-constructor and typed table declarations.
+Experimental adapters resolve each input, preserve field metadata and map it to a
+common Record schema before using the unchanged production generator. The base,
+field-type edit and physical-name-preserving field rename each produce identical
+canonical source, generated client and physical snapshot across the three forms.
+Four composite FKs, compound keys/uniqueness, identity/default/nullability, index
+order and CHECK contents are verified independently from the report.
+
+All forms compile the same generated create/patch and nested relation consumer.
+The six stale-consumer checks fail after type edits/renames and pass after their
+references/types are repaired. Fourteen negative cases locate Dart, generator or
+adapter errors in original source; constructor logic and custom table codecs are
+rejected instead of silently lost. Class/table schema rename updates the field and
+typed constraint reference through real LSP edits. Record field rename is manual.
+
+The captured model declarations occupy 487 / 585 / 1,574 bytes and 24 / 24 / 43
+formatted lines respectively. These are fixture observations, not a universal
+Record superiority claim. Stage timings have fixed-order JIT/cache bias and are
+not a frontend speed comparison. The [report and interpretation](authoring.md)
+preserve the distinction between schema-only adapters and nominal runtime rows.
+Root static analysis passes. Runtime sources remain unchanged; this work does not
+claim additional database or native Flutter validation.
+
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
@@ -696,3 +722,8 @@ Xcode reports 27.0 (27A266a), but `xcodebuild -license check` exits 69 and expli
 reports that its license has not been accepted. Native Flutter verification needs
 the user's own license review/acceptance and any remaining Xcode initialization.
 No license was accepted on the user's behalf; other development can continue.
+
+The host also contains Android Studio, an Android SDK with API 35/36/36.1 platforms
+and an installed API 35 arm64 emulator image. Android provides another candidate
+for native Flutter verification without relying on Xcode. Existence checks alone
+do not prove emulator startup, a Flutter build, or application behavior.
