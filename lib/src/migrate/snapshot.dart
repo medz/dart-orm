@@ -71,6 +71,8 @@ final class SchemaSnapshot {
       generated: json['generated'] as bool,
       defaultSql: json['default'] as String?,
       integerBits: json['integerBits'] as int?,
+      decimalPrecision: json['decimalPrecision'] as int?,
+      decimalScale: json['decimalScale'] as int?,
     );
   }
 
@@ -95,6 +97,12 @@ Map<String, Object?> _columnJson(Column<Object?> column) => {
   if (column.defaultSql != null) 'default': column.defaultSql,
   if (column.integerBits != null && column.integerBits != 64)
     'integerBits': column.integerBits,
+  if (column.decimalPrecision != null)
+    'decimalPrecision': column.decimalPrecision,
+  if (column.decimalPrecision != null &&
+      column.decimalScale != null &&
+      column.decimalScale != 0)
+    'decimalScale': column.decimalScale,
 };
 Map<String, Object?> _indexJson(IndexSchema index) => {
   'name': index.name,

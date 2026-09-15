@@ -78,7 +78,7 @@ rows or a column name.
 |---|---|---|
 | INTEGER | SMALLINT / INTEGER / BIGINT | int, with width metadata where needed |
 | TEXT | TEXT | String |
-| TEXT COLLATE orm_decimal_v1 | unconstrained NUMERIC | Decimal |
+| TEXT COLLATE orm_decimal_v1, optional precision CHECK | NUMERIC, NUMERIC(p,s) | Decimal, optional DecimalDigits |
 | REAL | DOUBLE PRECISION | double |
 | BLOB | BYTEA | Uint8List |
 | — | BOOLEAN | bool |
@@ -87,11 +87,13 @@ rows or a column name.
 
 Nullability is preserved. SQLite TEXT may contain timestamps, enums, bigints or
 JSON, and INTEGER may hold application booleans. Add reviewed codecs when needed;
-the catalog does not establish those meanings. Unconstrained PostgreSQL NUMERIC
-imports as finite `Decimal`, never as BigInt. Import does not sample values;
+the catalog does not establish those meanings. PostgreSQL NUMERIC
+imports as finite `Decimal`, never as BigInt; constrained columns retain
+`@DecimalDigits(precision, scale)`. Import does not sample values;
 existing NaN or Infinity values will fail typed decoding. SQLite requires the
-recognized column collation to establish decimal storage. NUMERIC(p, s), varchar,
-arrays, domains and other native types still need explicit support. See
+recognized column collation to establish decimal storage and recognizes only the
+emitted precision CHECK. Varchar, arrays, domains and other native types still
+need explicit support. See
 [decimal boundaries](decimals.md) before reviewing a draft.
 
 SQLite rowid integer primary keys and PostgreSQL BY DEFAULT integer primary-key

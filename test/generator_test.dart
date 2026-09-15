@@ -47,6 +47,7 @@ void main() {
         'test/support/codecs/schema.dart',
         'test/support/integers/schema.dart',
         'test/support/decimals/schema.dart',
+        'test/support/precision/schema.dart',
       ]) {
         final result = await generateSchema(source);
         final temporary = File('${fixtures.path}/deterministic.dart');

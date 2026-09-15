@@ -156,6 +156,7 @@ bool _aggregate(_Node node) => switch (node) {
 bool _window(_Node node) => node is _WindowNode || _children(node).any(_window);
 List<_Node> _children(_Node node) => switch (node) {
   _DecimalNode(:final child) => [child],
+  _DecimalCast(:final child) => [child],
   _DecimalArithmetic(:final left, :final right) => [left, right],
   _Binary(:final left, :final right) => [left, right],
   _Unary(:final child) => [child],
@@ -251,6 +252,11 @@ bool _outerNullable(_Node node, Set<TableRef> optional) => switch (node) {
 bool _sameSqlNode(_Node a, _Node b) {
   if (identical(a, b)) return true;
   return switch ((a, b)) {
+    (
+      _DecimalCast(child: final ac, precision: final ap, scale: final asc),
+      _DecimalCast(child: final bc, precision: final bp, scale: final bs),
+    ) =>
+      ap == bp && asc == bs && _sameSqlNode(ac, bc),
     (_DecimalNode(child: final ac), _DecimalNode(child: final bc)) =>
       _sameSqlNode(ac, bc),
     (

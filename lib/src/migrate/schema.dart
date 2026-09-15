@@ -11,6 +11,19 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
     }
     final columns = <String>{};
     for (final column in table.columns) {
+      if (column.decimalPrecision != null || column.decimalScale != null) {
+        if (column.codec.sqlType != 'decimal' ||
+            column.decimalPrecision == null ||
+            column.decimalPrecision! < 1 ||
+            column.decimalPrecision! > 1000 ||
+            (column.decimalScale ?? 0) < -1000 ||
+            (column.decimalScale ?? 0) > 1000) {
+          throw const OrmException(
+            'SCHEMA.DECIMAL_DIGITS',
+            'Decimal precision must be 1..1000 and scale -1000..1000 on a decimal column.',
+          );
+        }
+      }
       if (column.integerBits != null &&
           (column.codec.sqlType != 'integer' ||
               !{16, 32, 64}.contains(column.integerBits))) {
@@ -111,7 +124,14 @@ String _columnDefinition(Column<Object?> c, SqlDialect dialect) {
     );
   }
   if (!c.nullable) b.write(' NOT NULL');
-  if (c.defaultSql case final value?) b.write(' DEFAULT ($value)');
+  if (c.defaultSql case final value?) {
+    b.write(' DEFAULT (${_coerceColumn(value, c, dialect)})');
+  }
+  if (dialect == SqlDialect.sqlite && c.decimalPrecision != null) {
+    b.write(
+      ' CHECK (${_decimalCheck(c.name, c.decimalPrecision!, c.decimalScale ?? 0)})',
+    );
+  }
   if (dialect == SqlDialect.sqlite &&
       c.integerBits != null &&
       c.integerBits != 64) {
@@ -166,7 +186,11 @@ String _storageType(String type, SqlDialect dialect) =>
     };
 
 String _columnStorageType(Column<Object?> column, SqlDialect dialect) =>
-    dialect == SqlDialect.postgres && column.codec.sqlType == 'integer'
+    dialect == SqlDialect.postgres &&
+        column.codec.sqlType == 'decimal' &&
+        column.decimalPrecision != null
+    ? 'NUMERIC(${column.decimalPrecision},${column.decimalScale ?? 0})'
+    : dialect == SqlDialect.postgres && column.codec.sqlType == 'integer'
     ? switch (column.integerBits ?? 64) {
         16 => 'SMALLINT',
         32 => 'INTEGER',
@@ -176,7 +200,20 @@ String _columnStorageType(Column<Object?> column, SqlDialect dialect) =>
 
 bool _sameStorage(Column<Object?> a, Column<Object?> b) =>
     a.codec.sqlType == b.codec.sqlType &&
-    (a.integerBits ?? 64) == (b.integerBits ?? 64);
+    (a.integerBits ?? 64) == (b.integerBits ?? 64) &&
+    a.decimalPrecision == b.decimalPrecision &&
+    (a.decimalScale ?? 0) == (b.decimalScale ?? 0);
+
+String _coerceColumn(
+  String expression,
+  Column<Object?> column,
+  SqlDialect dialect,
+) => dialect == SqlDialect.sqlite && column.decimalPrecision != null
+    ? 'orm_decimal_cast_v1($expression, ${column.decimalPrecision}, ${column.decimalScale ?? 0})'
+    : expression;
+
+String _decimalCheck(String name, int precision, int scale) =>
+    '${_quote(name)} IS NULL OR orm_decimal_fits_v1(${_quote(name)}, $precision, $scale)';
 
 String _integerCheck(String name, int bits) {
   final column = _quote(name), max = bits == 16 ? 32767 : 2147483647;
@@ -192,6 +229,8 @@ final class ColumnInfo {
   final bool generated;
   final int? integerBits;
   final String? collation;
+  final int? decimalPrecision;
+  final int? decimalScale;
   const ColumnInfo({
     required this.name,
     required this.storageType,
@@ -200,7 +239,20 @@ final class ColumnInfo {
     this.generated = false,
     this.integerBits,
     this.collation,
+    this.decimalPrecision,
+    this.decimalScale,
   });
+
+  /// Removes the managed SQLite default coercion when drafting a declaration.
+  String? get declarationDefaultSql =>
+      defaultSql != null && storageType == 'TEXT' && decimalPrecision != null
+      ? _uncoerceDecimalDefault(
+              _normalizeDefault(defaultSql)!,
+              decimalPrecision!,
+              decimalScale ?? 0,
+            ) ??
+            defaultSql
+      : defaultSql;
 }
 
 Future<List<ColumnInfo>> inspectColumns(
@@ -227,21 +279,34 @@ Future<List<ColumnInfo>> inspectColumns(
       for (final c in _sqliteColumnCollations(sql))
         _sqliteName(c.column): c.collation,
     };
-    return [
-      for (final row in rows.rows)
+    final columns = <ColumnInfo>[];
+    for (final row in rows.rows) {
+      final name = row[1] as String;
+      final type = (row[2] as String).toUpperCase();
+      final collation = collations[_sqliteName(name)] ?? 'BINARY';
+      final digits =
+          type == 'TEXT' && collation.toLowerCase() == 'orm_decimal_v1'
+          ? _sqliteDecimalDigits(name, checks)
+          : null;
+      columns.add(
         ColumnInfo(
-          name: row[1] as String,
-          storageType: (row[2] as String).toUpperCase(),
-          collation: collations[_sqliteName(row[1] as String)] ?? 'BINARY',
+          name: name,
+          storageType: type,
+          collation: collation,
+          decimalPrecision: digits?.$1,
+          decimalScale: digits?.$2,
           nullable: row[3] == 0 && !(row[5] != 0 && rowidPrimaryKey),
           defaultSql: row[4] as String?,
           generated: (row[6] as int) > 0,
-          integerBits: (row[2] as String).toUpperCase() == 'INTEGER'
-              ? _sqliteIntegerBits(row[1] as String, checks)
+          integerBits: type == 'INTEGER'
+              ? _sqliteIntegerBits(name, checks)
               : null,
         ),
-    ];
+      );
+    }
+    return columns;
   }
+
   final result = await db.execute(
     SqlCommand(
       '''
@@ -268,6 +333,8 @@ ORDER BY a.attnum''',
         nullable: row[2] as bool,
         defaultSql: row[3] as String?,
         generated: row[4] as bool,
+        decimalPrecision: _postgresDecimalDigits(row[1] as String)?.$1,
+        decimalScale: _postgresDecimalDigits(row[1] as String)?.$2,
         integerBits: switch ((row[1] as String).toUpperCase()) {
           'SMALLINT' => 16,
           'INTEGER' => 32,
@@ -302,6 +369,9 @@ Future<List<String>> verifyColumns(
       if (column.nullable != expected.nullable) {
         differences.add('$path nullability differs');
       }
+      if (!_matchesDecimalDigits(expected, column)) {
+        differences.add('$path decimal precision/scale differs');
+      }
       if (db.dialect == SqlDialect.sqlite &&
           !_matchesCollation(expected, column)) {
         differences.add('$path collation differs');
@@ -321,3 +391,15 @@ Future<List<String>> verifyColumns(
 bool _matchesCollation(Column<Object?> expected, ColumnInfo actual) =>
     (actual.collation ?? 'BINARY').toLowerCase() ==
     (expected.codec.sqlType == 'decimal' ? 'orm_decimal_v1' : 'binary');
+
+bool _matchesDecimalDigits(Column<Object?> expected, ColumnInfo actual) =>
+    expected.decimalPrecision == actual.decimalPrecision &&
+    (expected.decimalScale ?? 0) == (actual.decimalScale ?? 0);
+
+(int, int)? _postgresDecimalDigits(String type) {
+  final match = RegExp(
+    r'^numeric\((\d+),(-?\d+)\)$',
+    caseSensitive: false,
+  ).firstMatch(type.replaceAll(' ', ''));
+  return match == null ? null : (int.parse(match[1]!), int.parse(match[2]!));
+}

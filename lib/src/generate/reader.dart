@@ -197,6 +197,7 @@ final class _SchemaReader(
     var id = false, generated = false, unique = false;
     String? column, defaultSql;
     int? integerBits;
+    int? decimalPrecision, decimalScale;
     Annotation? custom;
     for (final annotation in field.metadata) {
       final value = annotation.elementAnnotation?.computeConstantValue();
@@ -226,6 +227,12 @@ final class _SchemaReader(
             _fail(annotation, 'UseCodec may only appear once.');
           }
           custom = annotation;
+        case 'DecimalDigits':
+          if (decimalPrecision != null) {
+            _fail(annotation, 'DecimalDigits may only appear once.');
+          }
+          decimalPrecision = value!.getField('precision')!.toIntValue();
+          decimalScale = value.getField('scale')!.toIntValue();
         default:
           _fail(annotation, 'Unsupported ORM annotation.');
       }
@@ -296,6 +303,17 @@ final class _SchemaReader(
       storage = mapping.$1;
       codec = 'Codecs.${mapping.$2}${nullable ? '.nullable()' : ''}';
     }
+    if (decimalPrecision != null &&
+        (storage != 'decimal' ||
+            decimalPrecision < 1 ||
+            decimalPrecision > 1000 ||
+            decimalScale! < -1000 ||
+            decimalScale > 1000)) {
+      _fail(
+        field,
+        'DecimalDigits requires decimal storage, precision 1..1000 and scale -1000..1000.',
+      );
+    }
     if (integerBits != null &&
         (storage != 'integer' || !{16, 32, 64}.contains(integerBits))) {
       _fail(
@@ -315,6 +333,8 @@ final class _SchemaReader(
       unique: unique,
       defaultSql: defaultSql,
       integerBits: integerBits,
+      decimalPrecision: decimalPrecision,
+      decimalScale: decimalScale,
     );
   }
 

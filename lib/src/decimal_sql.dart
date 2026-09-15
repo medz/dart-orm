@@ -20,6 +20,27 @@ final class _DecimalNode(final _Node child) extends _Node {
 
 _Node _unwrapDecimal(_Node node) => node is _DecimalNode ? node.child : node;
 
+final class _DecimalCast(
+  final _Node child,
+  final int precision,
+  final int scale,
+) extends _Node {
+  @override
+  String write(_Writer w) {
+    Decimal._checkDigits(precision, scale);
+    if (!w.exactDecimal) {
+      throw const OrmException(
+        'CAPABILITY.DECIMAL',
+        'This driver does not provide exact decimal SQL.',
+      );
+    }
+    final expression = child.write(w);
+    return w.dialect == SqlDialect.postgres
+        ? 'CAST($expression AS NUMERIC($precision,$scale))'
+        : 'orm_decimal_cast_v1($expression, $precision, $scale)';
+  }
+}
+
 final class _DecimalArithmetic(
   final _Node left,
   final String op,
@@ -40,6 +61,11 @@ final class _DecimalArithmetic(
 }
 
 extension DecimalExpression<T extends Decimal?> on Expr<T> {
+  Expr<T> constrained(int precision, int scale) {
+    Decimal._checkDigits(precision, scale);
+    return Expr._(_DecimalCast(_node, precision, scale), codec);
+  }
+
   Expr<T> plus(Decimal n) => _arithmetic('+', value(n, Codecs.decimal));
   Expr<T> minus(Decimal n) => _arithmetic('-', value(n, Codecs.decimal));
   Expr<T> times(Decimal n) => _arithmetic('*', value(n, Codecs.decimal));

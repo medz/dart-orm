@@ -43,6 +43,7 @@ This file records verified delivery, not planned capabilities presented as worki
 - Width-aware generation, catalog import, immutable snapshots, rename/type migrations, identity sequences and historical backfills.
 - Finite exact Decimal values, typed SQL arithmetic, numeric SQLite collation and native PostgreSQL NUMERIC, including keys, relations, aggregates and windows.
 - Decimal generation/import, catalog drift checks, reviewed conversion migrations and exact historical backfill keys.
+- Declared decimal precision/scale, consistent ORM write coercion, exact SQL precision casts, constrained defaults and width-preserving import/migrations.
 - Read-only application startup version checks with explicit compatibility ranges, full history validation and recovery-state rejection.
 - Unmodeled constraints, expression/partial indexes, triggers and policies are reported separately.
 - Reviewable migration diffs, explicit renames/conversions, destructive-change gates and checksum chains.
@@ -88,7 +89,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 535 checks with native SQLite
+Static analysis is clean. The complete suite passes 554 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -246,21 +247,36 @@ as a macOS AOT executable, verifying exact values, sorting, aggregate/window
 functions, normalized relation keys and catalog checks. Invalid external SQLite
 text and PostgreSQL special numeric values fail typed decoding; no finite-decimal
 CHECK constraint or cross-client SQLite function installation is claimed. SQL
-rounding/division, constrained precision/scale and browser acceptance remain open.
+rounding/division and browser acceptance remain open; constrained columns are
+covered by the additional acceptance checks below.
+
+Nineteen precision checks cover signed ties, negative and excess scales, maximum
+precision/scale boundaries, nullable values, defaults, expression writes, wider
+aggregates, SQL casts, CTEs, batches and upserts. Rounded keys participate in real
+foreign-key relationships. Catalogs, snapshots, generated/imported declarations,
+renames, default changes and historical backfills retain column constraints.
+Scale reduction with duplicate rounded keys rolls back structure and history;
+repairing data allows the same migration to resume. SQLite rejects raw values
+that do not fit, detects missing default coercion and retains an explicitly
+disabled trusted_schema setting. The current SQLite binding requires
+trusted_schema ON to evaluate the managed precision CHECK/default functions.
+Generator checks reject invalid/repeated annotations and preserve decimal-backed
+domain types. The precision fixture compiles and runs as a macOS AOT executable.
+General SQL division, configurable SQL rounding and rounded averages remain open.
 
 ## Still required for the goal
 
 - Advanced-query capability and edge-case review.
 - Broader unmanaged-object catalog coverage.
 - Named SQL query generation.
-- Decimal precision/scale declarations, explicit SQL division/rounded averages and further native type coverage.
+- Explicit SQL division/general rounding/rounded averages and further native type coverage.
 - Further backend capability coverage.
 - Browser worker/persistence adapter and real browser verification; native Flutter checks.
 - User documentation, performance measurements and complete acceptance review.
 
 To-one projections join by default when declared keys prove uniqueness; otherwise
 they batch and check cardinality. Collections use explicit parameter-aware batches.
-`verifyColumns` checks column names/types/nullability, integer widths and SQLite collations. `verifySchema` additionally compares defaults,
+`verifyColumns` checks column names/types/nullability, integer widths, decimal precision/scale and SQLite collations. `verifySchema` additionally compares defaults,
 keys and simple indexes; its `unmanaged` objects require separate review.
 Ordinary migration batches are atomic. Explicit backfills use durable per-step
 checkpoints and short data transactions on both databases. General recoverable
@@ -273,7 +289,7 @@ regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CL
 workflows, 37 streaming/execution checks, 28 relation strategy checks and one
 negative compilation suite covering 19 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks and 29 exact-decimal checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks and 19 decimal-precision checks.
 
 ## Environment
 

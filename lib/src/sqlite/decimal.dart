@@ -1,6 +1,31 @@
 part of '../../sqlite.dart';
 
 void _registerDecimals(native.Database db) {
+  db.createFunction(
+    functionName: 'orm_decimal_cast_v1',
+    argumentCount: const native.AllowedArgumentCount(3),
+    deterministic: true,
+    directOnly: false,
+    function: (args) => args[0] == null
+        ? null
+        : Codecs.decimal
+              .decode(args[0])
+              .constrained(args[1] as int, args[2] as int)
+              .toString(),
+  );
+  db.createFunction(
+    functionName: 'orm_decimal_fits_v1',
+    argumentCount: const native.AllowedArgumentCount(3),
+    deterministic: true,
+    directOnly: false,
+    function: (args) =>
+        args[0] is String &&
+            (Decimal.tryParse(args[0] as String)
+                    ?.fits(args[1] as int, args[2] as int) ??
+                false)
+        ? 1
+        : 0,
+  );
   db.createCollation(
     name: 'orm_decimal_v1',
     function: (a, b) {

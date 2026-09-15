@@ -284,6 +284,10 @@ Future<void> main(List<String> arguments) async {
                   'default': c.defaultSql,
                   'generated': c.generated,
                   if (c.integerBits != null) 'integerBits': c.integerBits,
+                  if (c.decimalPrecision != null)
+                    'decimalPrecision': c.decimalPrecision,
+                  if (c.decimalPrecision != null)
+                    'decimalScale': c.decimalScale ?? 0,
                   if (c.collation != null) 'collation': c.collation,
                 },
             ],

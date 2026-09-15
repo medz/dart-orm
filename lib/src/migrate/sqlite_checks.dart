@@ -108,6 +108,8 @@ int _sqliteIntegerBits(String name, List<_SqliteCheck> checks) {
 
 String _withoutIntegerChecks(String sql, List<ColumnInfo> columns) {
   final known = {
+    for (final c in columns.where((c) => c.decimalPrecision != null))
+      _decimalSignature(c.name, c.decimalPrecision!, c.decimalScale ?? 0),
     for (final c in columns.where((c) => c.storageType == 'INTEGER'))
       for (final bits in [16, 32]) _integerSignature(c.name, bits),
   };
@@ -119,6 +121,65 @@ String _withoutIntegerChecks(String sql, List<ColumnInfo> columns) {
     start = check.end;
   }
   return (result..write(sql.substring(start))).toString();
+}
+
+String _decimalSignature(String name, int precision, int scale) => jsonEncode(
+  _sqliteTokens(_decimalCheck(name, precision, scale))
+      .map((t) => t.text)
+      .toList(),
+);
+
+(int, int)? _sqliteDecimalDigits(String name, List<_SqliteCheck> checks) {
+  for (final check in checks) {
+    final tokens = (jsonDecode(check.signature) as List).cast<String>();
+    final index = tokens.indexOf('ORM_DECIMAL_FITS_V1');
+    if (index < 0 || index + 7 >= tokens.length) continue;
+    final precision = int.tryParse(tokens[index + 4]);
+    final end = tokens.indexOf(')', index + 6);
+    if (end < 0) continue;
+    final scale = int.tryParse(tokens.sublist(index + 6, end).join());
+    if (precision == null ||
+        precision < 1 ||
+        precision > 1000 ||
+        scale == null ||
+        scale < -1000 ||
+        scale > 1000) {
+      continue;
+    }
+    if (check.signature == _decimalSignature(name, precision, scale)) {
+      return (precision, scale);
+    }
+  }
+  return null;
+}
+
+String? _uncoerceDecimalDefault(String sql, int precision, int scale) {
+  final tokens = _sqliteTokens(sql);
+  if (tokens.length < 8 ||
+      tokens[0].text != 'ORM_DECIMAL_CAST_V1' ||
+      tokens[1].text != '(' ||
+      tokens.last.text != ')') {
+    return null;
+  }
+  final separators = <int>[];
+  var depth = 0;
+  for (var i = 2; i < tokens.length - 1; i++) {
+    if (tokens[i].text == '(') depth++;
+    if (tokens[i].text == ')') depth--;
+    if (depth < 0) return null;
+    if (depth == 0 && tokens[i].text == ',') separators.add(i);
+  }
+  if (separators.length != 2 || depth != 0) return null;
+  final [a, b] = separators;
+  if (int.tryParse(tokens.sublist(a + 1, b).map((t) => t.text).join()) !=
+          precision ||
+      int.tryParse(
+            tokens.sublist(b + 1, tokens.length - 1).map((t) => t.text).join(),
+          ) !=
+          scale) {
+    return null;
+  }
+  return sql.substring(tokens[2].start, tokens[a].start).trim();
 }
 
 typedef _SqliteCollation = ({

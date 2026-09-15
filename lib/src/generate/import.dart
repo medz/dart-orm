@@ -311,6 +311,10 @@ Future<ImportedSchema> _importCatalog(
           when column.collation?.toLowerCase() == 'orm_decimal_v1' =>
         ('Decimal', null),
       (SqlDialect.postgres, 'NUMERIC') => ('Decimal', null),
+      (SqlDialect.postgres, _) when column.decimalPrecision != null => (
+        'Decimal',
+        null,
+      ),
       (SqlDialect.sqlite, 'INTEGER') ||
       (
         SqlDialect.postgres,
@@ -367,6 +371,7 @@ final class _ImportNames {
     'Uint8List',
     'SqlJson',
     'Decimal',
+    'DecimalDigits',
     'entity',
     'Id',
     'Unique',
@@ -460,9 +465,14 @@ ImportedSchema _importDeclarations(
       if (c.integerBits != null && c.integerBits != 64) {
         b.writeln('@IntegerBits(${c.integerBits})');
       }
+      if (c.decimalPrecision != null) {
+        b.writeln(
+          '@DecimalDigits(${c.decimalPrecision}, ${c.decimalScale ?? 0})',
+        );
+      }
       if (generated[info.name]!.contains(c.name)) b.writeln('@Id.generated()');
-      if (c.defaultSql != null) {
-        b.writeln('@Default.sql(${_literal(c.defaultSql!)})');
+      if (c.declarationDefaultSql != null) {
+        b.writeln('@Default.sql(${_literal(c.declarationDefaultSql!)})');
       }
       if (type.$2 != null) b.writeln('@UseCodec(${type.$2})');
       b.writeln(

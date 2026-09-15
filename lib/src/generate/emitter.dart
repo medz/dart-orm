@@ -15,7 +15,7 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
     for (final f in entity.fields) {
       b.writeln(
         'final ${_columnSymbol(entity, f)} = Column<${f.type}>(${_literal(f.column)}, ${f.codec}, '
-        'nullable: ${f.nullable}, generated: ${f.generated}${f.defaultSql == null ? '' : ', defaultSql: ${_literal(f.defaultSql!)}'}${f.integerBits == null || f.integerBits == 64 ? '' : ', integerBits: ${f.integerBits}'});',
+        'nullable: ${f.nullable}, generated: ${f.generated}${f.defaultSql == null ? '' : ', defaultSql: ${_literal(f.defaultSql!)}'}${f.integerBits == null || f.integerBits == 64 ? '' : ', integerBits: ${f.integerBits}'}${f.decimalPrecision == null ? '' : ', decimalPrecision: ${f.decimalPrecision}'}${f.decimalScale == null || f.decimalScale == 0 ? '' : ', decimalScale: ${f.decimalScale}'});',
       );
     }
     b.writeln(

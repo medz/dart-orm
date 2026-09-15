@@ -307,6 +307,9 @@ Future<SchemaVerification> verifySchema(
       if (found.nullable != column.nullable) {
         differences.add('$path nullability differs');
       }
+      if (!_matchesDecimalDigits(column, found)) {
+        differences.add('$path decimal precision/scale differs');
+      }
       if (db.dialect == SqlDialect.sqlite &&
           !_matchesCollation(column, found)) {
         differences.add('$path collation differs');
@@ -316,7 +319,12 @@ Future<SchemaVerification> verifySchema(
         differences.add('$path integer width differs');
       }
       if (_columnDefault(found.defaultSql, column) !=
-          _columnDefault(column.defaultSql, column)) {
+          _columnDefault(
+            column.defaultSql == null
+                ? null
+                : _coerceColumn(column.defaultSql!, column, db.dialect),
+            column,
+          )) {
         differences.add('$path default differs');
       }
       if (db.dialect == SqlDialect.postgres &&
@@ -358,16 +366,25 @@ Future<SchemaVerification> verifySchema(
 }
 
 String? _columnDefault(String? value, Column<Object?> column) {
-  final normalized = _normalizeDefault(value);
+  var normalized = _normalizeDefault(value);
   if (normalized == null || column.codec.sqlType != 'decimal') {
     return normalized;
   }
+  final unwrapped = column.decimalPrecision == null
+      ? null
+      : _uncoerceDecimalDefault(
+          normalized,
+          column.decimalPrecision!,
+          column.decimalScale ?? 0,
+        );
+  final prefix = unwrapped == null ? '' : 'decimal cast:';
+  normalized = unwrapped == null ? normalized : _normalizeDefault(unwrapped)!;
   // PostgreSQL removes the quotes from a NUMERIC literal. Compare finite
   // literals by value, leaving arbitrary SQL expressions unchanged.
   final literal = normalized.startsWith("'") && normalized.endsWith("'")
       ? normalized.substring(1, normalized.length - 1)
       : normalized;
-  return Decimal.tryParse(literal)?.toString() ?? normalized;
+  return '$prefix${Decimal.tryParse(literal)?.toString() ?? normalized}';
 }
 
 String? _normalizeDefault(String? value) {

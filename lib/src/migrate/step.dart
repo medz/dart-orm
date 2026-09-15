@@ -216,7 +216,7 @@ Future<void> _rebuild(Database<Backend> db, RebuildTable step) async {
   await db.execute(
     SqlCommand(
       'INSERT INTO ${_quote(temporary)} (${step.copy.keys.map(_quote).join(', ')}) '
-      'SELECT ${step.copy.values.join(', ')} FROM ${_quote(name)}',
+      'SELECT ${step.copy.entries.map((e) => _coerceColumn(e.value, after.columns.firstWhere((c) => c.name == e.key), db.dialect)).join(', ')} FROM ${_quote(name)}',
     ),
   );
   await db.execute(SqlCommand('DROP TABLE ${_quote(name)}'));

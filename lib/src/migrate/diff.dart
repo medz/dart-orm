@@ -88,6 +88,8 @@ Migration _diff(
               generated: c.generated,
               defaultSql: c.defaultSql,
               integerBits: c.integerBits,
+              decimalPrecision: c.decimalPrecision,
+              decimalScale: c.decimalScale,
             ),
         ],
         primaryKey: table.primaryKey

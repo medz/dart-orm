@@ -152,6 +152,34 @@ final class Decimal implements Comparable<Decimal> {
     }
   }
 
+  /// Whether the value already fits a NUMERIC column without rounding.
+  bool fits(int precision, int scale) {
+    _checkDigits(precision, scale);
+    return coefficient == BigInt.zero ||
+        this.scale <= scale &&
+            coefficient.abs().toString().length - this.scale <=
+                precision - scale;
+  }
+
+  /// PostgreSQL-style column coercion: round ties away from zero, then check
+  /// precision. Expression result codecs do not inherit column constraints.
+  Decimal constrained(int precision, int scale) {
+    _checkDigits(precision, scale);
+    final result = rounded(scale, rounding: DecimalRounding.halfAwayFromZero);
+    if (!result.fits(precision, scale)) {
+      throw RangeError('Decimal does not fit NUMERIC($precision, $scale).');
+    }
+    return result;
+  }
+
+  static void _checkDigits(int precision, int scale) {
+    if (precision < 1 || precision > 1000 || scale < -1000 || scale > 1000) {
+      throw ArgumentError(
+        'Decimal precision must be 1..1000 and scale -1000..1000.',
+      );
+    }
+  }
+
   static Decimal _quotient(
     BigInt a,
     BigInt b,

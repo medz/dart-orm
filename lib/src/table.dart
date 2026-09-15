@@ -17,6 +17,8 @@ final class Column<T> {
   /// Signed integer storage width (16, 32 or 64). The default is 64.
   /// This describes the column, not the result width of SQL arithmetic.
   final int? integerBits;
+  final int? decimalPrecision;
+  final int? decimalScale;
   const Column(
     this.name,
     this.codec, {
@@ -24,6 +26,8 @@ final class Column<T> {
     this.generated = false,
     this.defaultSql,
     this.integerBits,
+    this.decimalPrecision,
+    this.decimalScale,
   });
 }
 
@@ -96,10 +100,18 @@ final class Field<T> extends Expr<T> {
   final Column<T> definition;
   Field._(this.table, this.definition)
     : super._(_ColumnNode(table, definition.name), definition.codec);
-  Assignment set(T value) =>
-      Assignment._(this, _Parameter(codec.encode(value)));
-  Assignment setExpression(Expr<T> expression) =>
-      Assignment._(this, expression._node);
+  Assignment set(T value) => _assign(_Parameter(codec.encode(value)));
+  Assignment setExpression(Expr<T> expression) => _assign(expression._node);
+  Assignment _assign(_Node node) => Assignment._(
+    this,
+    definition.decimalPrecision == null
+        ? node
+        : _DecimalCast(
+            node,
+            definition.decimalPrecision!,
+            definition.decimalScale ?? 0,
+          ),
+  );
   Assignment defaultValue() => Assignment._(this, null);
 }
 

@@ -44,6 +44,13 @@ final class IntegerBits {
   const IntegerBits(this.value);
 }
 
+/// Decimal column precision and scale, matching PostgreSQL NUMERIC(p, s).
+final class DecimalDigits {
+  final int precision;
+  final int scale;
+  const DecimalDigits(this.precision, [this.scale = 0]);
+}
+
 enum ReferentialAction { restrict, cascade, setNull, setDefault, noAction }
 
 Entity<M> entity<M>({String? table}) => Entity<M>(table);

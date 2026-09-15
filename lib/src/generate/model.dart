@@ -12,6 +12,8 @@ final class _Field {
   final bool unique;
   final String? defaultSql;
   final int? integerBits;
+  final int? decimalPrecision;
+  final int? decimalScale;
   const _Field({
     required this.name,
     required this.column,
@@ -24,6 +26,8 @@ final class _Field {
     this.unique = false,
     this.defaultSql,
     this.integerBits,
+    this.decimalPrecision,
+    this.decimalScale,
   });
   Map<String, Object?> snapshot() => {
     'name': column,
@@ -32,6 +36,9 @@ final class _Field {
     'generated': generated,
     if (defaultSql != null) 'default': defaultSql,
     if (integerBits != null && integerBits != 64) 'integerBits': integerBits,
+    if (decimalPrecision != null) 'decimalPrecision': decimalPrecision,
+    if (decimalPrecision != null && decimalScale != null && decimalScale != 0)
+      'decimalScale': decimalScale,
   };
 }
 
