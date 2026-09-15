@@ -377,6 +377,25 @@ Future<void> main() async {
         await db.execute(
           SqlCommand('CREATE VIEW labels AS SELECT label FROM records'),
         );
+        if (backend == 'sqlite') {
+          await db.execute(
+            SqlCommand('''
+CREATE TRIGGER label_normalize AFTER INSERT ON records BEGIN
+  UPDATE records SET label = upper(NEW.label) WHERE id = NEW.id;
+END'''),
+          );
+        } else {
+          await db.execute(
+            SqlCommand(r'''
+CREATE FUNCTION normalize_label() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN NEW.label := upper(NEW.label); RETURN NEW; END $$'''),
+          );
+          await db.execute(
+            SqlCommand('''
+CREATE TRIGGER label_normalize BEFORE INSERT ON records
+FOR EACH ROW EXECUTE FUNCTION normalize_label()'''),
+          );
+        }
         if (backend == 'postgres') {
           await db.execute(
             SqlCommand(
@@ -406,6 +425,10 @@ Future<void> main() async {
           true,
         );
         expect(draft.issues.any((i) => i.object.contains('labels')), true);
+        expect(
+          draft.issues.any((i) => i.object.contains('label_normalize')),
+          true,
+        );
         expect(draft.hasBlockingIssues, false);
         if (backend == 'postgres') {
           for (final name in [
@@ -428,6 +451,21 @@ Future<void> main() async {
             SchemaSnapshot.fromJson(result.snapshot),
           )).differences,
           isEmpty,
+        );
+        // Read-only import and verification must leave the trigger operational.
+        await db.execute(
+          SqlCommand(
+            backend == 'sqlite'
+                ? 'INSERT INTO records(id, label) VALUES (?1, ?2)'
+                : r'INSERT INTO records(id, label) VALUES ($1, $2)',
+            [1, 'kept'],
+          ),
+        );
+        expect(
+          (await db.execute(
+            SqlCommand('SELECT label FROM records WHERE id = 1'),
+          )).rows.single.single,
+          'KEPT',
         );
       });
 
@@ -468,6 +506,77 @@ Future<void> main() async {
           },
         );
       } else {
+        test(
+          'policy reports retain roles, commands, mode and row-security state',
+          () async {
+            await db.execute(
+              SqlCommand(
+                'CREATE TABLE protected (id BIGINT NOT NULL PRIMARY KEY)',
+              ),
+            );
+            await db.execute(
+              SqlCommand('''
+CREATE POLICY positive ON protected AS RESTRICTIVE FOR ALL TO PUBLIC
+USING (id > 0) WITH CHECK (id < 100)'''),
+            );
+            Future<Map<String, Object?>> security() async {
+              final table = await inspectTable(db, 'protected');
+              final policy = jsonDecode(
+                table.unmanaged
+                    .singleWhere((o) => o.kind == 'policy')
+                    .definition,
+              ) as Map<String, Object?>;
+              expect(policy, {
+                'permissive': 'RESTRICTIVE',
+                'roles': ['public'],
+                'command': 'ALL',
+                'using': '(id > 0)',
+                'withCheck': '(id < 100)',
+              });
+              return jsonDecode(
+                table.unmanaged
+                    .singleWhere((o) => o.kind == 'row_security')
+                    .definition,
+              ) as Map<String, Object?>;
+            }
+
+            expect(await security(), {'enabled': false, 'forced': false});
+            await db.execute(
+              SqlCommand('ALTER TABLE protected ENABLE ROW LEVEL SECURITY'),
+            );
+            await db.execute(
+              SqlCommand('ALTER TABLE protected FORCE ROW LEVEL SECURITY'),
+            );
+            expect(await security(), {'enabled': true, 'forced': true});
+            final draft = await importSchema(db);
+            expect(draft.hasBlockingIssues, false);
+            expect(
+              draft.issues.where((i) => i.object.contains('protected')),
+              hasLength(2),
+            );
+            final generated = await generate(draft);
+            final expected = SchemaSnapshot.fromJson(generated.snapshot);
+            final baseline = await Migrator(db).baseline([
+              Migration.create('0001_protected', expected.tables),
+            ], expected: expected);
+            expect(baseline.matches, true);
+            expect(
+              baseline.unmanaged.map((o) => o.kind),
+              containsAll(['policy', 'row_security']),
+            );
+            expect(await security(), {'enabled': true, 'forced': true});
+            await db.execute(
+              SqlCommand('ALTER TABLE protected DISABLE ROW LEVEL SECURITY'),
+            );
+            expect(await security(), {'enabled': false, 'forced': true});
+            await db.execute(
+              SqlCommand('ALTER TABLE protected NO FORCE ROW LEVEL SECURITY'),
+            );
+            await db.execute(SqlCommand('DROP POLICY positive ON protected'));
+            expect((await inspectTable(db, 'protected')).unmanaged, isEmpty);
+          },
+        );
+
         test('always identity and inherited tables are not flattened into ordinary writable models', () async {
           await db.execute(
             SqlCommand(

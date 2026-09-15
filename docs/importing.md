@@ -130,6 +130,18 @@ PostgreSQL nondefault operator classes, collation overrides, storage options and
 NULLS NOT DISTINCT. These differ from plain unique keys; see the
 [PostgreSQL index catalog](https://www.postgresql.org/docs/current/catalog-pg-index.html).
 
+PostgreSQL policy objects stay unmanaged. Their `definition` is JSON containing
+`permissive`, `roles`, `command`, `using` and `withCheck`, preserving the fields in
+[`pg_policies`](https://www.postgresql.org/docs/18/view-pg-policies.html).
+A separate `row_security` object contains the table's `enabled` and `forced`
+flags from [`pg_class`](https://www.postgresql.org/docs/18/catalog-pg-class.html).
+It is reported when either flag is set or a policy exists, including disabled
+policies. These metadata descriptions are not executable migration SQL.
+`verifySchema` and baseline return them for review without claiming that the
+Record snapshot models access-control policy. Neither operation changes those
+settings. Trigger definitions likewise remain unmanaged; import/verification
+tests exercise real triggers on both databases and verify they still execute.
+
 ## Tooling API
 
 ```dart

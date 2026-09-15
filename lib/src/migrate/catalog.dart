@@ -286,8 +286,16 @@ AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.indexrelid AN
 SELECT 'trigger', t.tgname, pg_get_triggerdef(t.oid)
 FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE c.relname = $1 AND n.nspname = current_schema() AND NOT t.tgisinternal
-UNION ALL SELECT 'policy', policyname, coalesce(qual, '') || ' / ' || coalesce(with_check, '')
-FROM pg_policies WHERE schemaname = current_schema() AND tablename = $1''',
+UNION ALL SELECT 'policy', policyname,
+ jsonb_build_object('permissive', permissive, 'roles', roles, 'command', cmd,
+   'using', qual, 'withCheck', with_check)::text
+FROM pg_policies WHERE schemaname = current_schema() AND tablename = $1
+UNION ALL SELECT 'row_security', c.relname,
+ jsonb_build_object('enabled', c.relrowsecurity, 'forced', c.relforcerowsecurity)::text
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relname = $1 AND n.nspname = current_schema()
+AND (c.relrowsecurity OR c.relforcerowsecurity
+ OR EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid))''',
         [table],
       ),
     );
