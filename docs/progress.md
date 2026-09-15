@@ -2,6 +2,8 @@
 
 The active goal is the complete ORM described in `research/new-dart-orm-design.md`.
 This file records verified delivery, not planned capabilities presented as working.
+The [design acceptance map](acceptance.md) ties remaining gates to the original
+requirements and distinguishes direct coverage from missing evidence.
 
 ## Completed
 
@@ -24,6 +26,7 @@ This file records verified delivery, not planned capabilities presented as worki
 - Explicit named-query build_runner assets, CLI generation/checking and shared query/transaction/stream/watch execution.
 - Generated table accessors, named create parameters, byId, typed patches and schema snapshots.
 - Batched and nested relation projections, per-parent SQL window pagination, optional/required relations.
+- Explicit `relatesTo` query navigation without a database FK, including nonunique/composite/self/inverse edges and unchanged physical snapshots.
 - Correlated relation any/none/every/count; UNKNOWN fails every, and empty sets satisfy it.
 - Dialect DDL, cyclic PostgreSQL FK creation, immutable migration checksums and atomic history.
 - Concurrent migration serialization, read-only planning, column inspection and column drift checks.
@@ -99,7 +102,7 @@ This file records verified delivery, not planned capabilities presented as worki
 The research type proof was analyzed and ran with JIT and AOT; JavaScript compilation
 also passed. These checks do not constitute a working ORM or browser validation.
 
-Static analysis is clean. The complete suite passes 671 checks with native SQLite
+Static analysis is clean. The complete suite passes 703 checks with native SQLite
 and a disposable PostgreSQL 18.4 instance enabled. It exercises generation,
 composite-key source validation, projections, relations, per-parent pagination,
 transactions, migration rollback/history and the generated application client.
@@ -406,16 +409,37 @@ and codesign the shared SQLite native-asset cache before application code starts
 Explicit concurrent database operations inside tests remain enabled. Browser
 acceptance commands run separately from the native suite.
 
+Twenty-four unconstrained-relation checks cover real SQLite/PostgreSQL catalogs,
+missing/nullable targets, nonunique cardinality, per-parent pagination, self and
+inverse navigation, correlated predicates, streaming, transactions and watch
+dependencies. The declaration adds no FK, index, uniqueness promise or cascade.
+Adding a real FK over dangling data fails and rolls back; repairing rows permits
+the same reviewed migration to proceed. Removing it preserves rows and permits
+unmatched references again.
+
+Seven generator checks distinguish query navigation from physical constraints
+and reject invalid selectors, types, codecs, names and referential actions.
+Five additional invalid generated API calls fail static analysis. Existing FK
+fixtures remain byte-for-byte deterministic. Browser JS and Dart WASM acceptance
+also covers generated query-only relations with single and composite REAL keys.
+This reproduced a missing floating binding tag in relationship batches; grouping
+now retains comparable storage values and binding restores SQL floating intent.
+See `docs/relations.md` for declaration and integrity semantics.
+The complete native suite passes all 703 checks in one invocation after these
+changes, with PostgreSQL enabled. Both complete browser runs and static analysis
+also pass. The design acceptance map records the remaining product gates.
+
 ## Still required for the goal
 
 - General CHECK declarations, computed/read-only columns and explicit client-generated values from design sections 4.3, 5 and 8.
-- Explicit read-only relation declarations without database foreign keys from design section 4.2.
+- Explicit generated junction-table/many-to-many acceptance with payload fields and query-count checks.
 - Advanced-query capability and edge-case review.
 - Broader unmanaged-object catalog coverage.
 - Further native type coverage.
 - Temporal column precision and timezone conversions.
 - Further backend capability coverage.
 - Native Flutter checks and remaining platform acceptance review.
+- Plan/cost inspection, separate acquisition/decoding evidence and the complete runtime cost comparison.
 - User documentation, performance measurements and complete acceptance review.
 
 To-one projections join by default when declared keys prove uniqueness; otherwise
@@ -428,12 +452,12 @@ autocommit SQL remains PostgreSQL-only; SQLite rejects `CheckedSql`. These are
 implementation stages, not a reduction of the active goal.
 
 The full suite includes 52 shared SQLite/PostgreSQL query checks, 20 generated
-client/migration integration checks, 20 source generation checks, five codec
+client/migration integration checks, 27 source generation checks, five codec
 regressions, 19 migration evolution/catalog checks, 13 recovery checks, three CLI
-workflows, 37 streaming/execution checks, 28 relation strategy checks and two
-negative compilation checks covering 24 invalid API uses, plus 18 domain-codec
+workflows, 37 streaming/execution checks, 28 relation strategy checks and three
+negative compilation checks covering 29 invalid API uses, plus 18 domain-codec
 integration checks, 41 subscription checks, eight asset-builder checks and one
-build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks, 20 UTC instant checks, 24 named SQL checks and two explicit floating-parameter checks.
+build_runner process workflow, plus 32 real-database set-query checks and 24 acquisition checks, plus 41 transaction-control checks, 29 retry checks, 19 application-version checks, 56 backfill checks, 17 catalog-import checks, two import CLI workflows, 20 integer-width checks, 29 exact-decimal checks, 19 decimal-precision checks, 23 decimal-division checks and 23 decimal-average checks, plus 24 local temporal checks, 20 UTC instant checks, 24 named SQL checks, two explicit floating-parameter checks and 24 unconstrained-relation checks.
 
 ## Environment
 

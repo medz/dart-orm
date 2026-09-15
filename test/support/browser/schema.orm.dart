@@ -337,6 +337,17 @@ final class ReadingsFields extends Fields {
   ReadingsFields(super.table);
   late final id = column(_readingsId);
   late final value = column(_readingsValue);
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Reading, ReadingsFields> get peers =>
+      Relation(readingsTable, parent: [value], child: (row) => [row.value]);
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Reading, ReadingsFields> get sameReading => Relation(
+    readingsTable,
+    parent: [value, id],
+    child: (row) => [row.value, row.id],
+  );
 }
 
 final readingsTable = Table<models.Reading, ReadingsFields>(

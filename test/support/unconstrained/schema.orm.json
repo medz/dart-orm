@@ -1,0 +1,99 @@
+{
+  "format": 1,
+  "tables": [
+    {
+      "name": "accounts",
+      "columns": [
+        {
+          "name": "tenant",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "display_label",
+          "type": "text",
+          "nullable": true,
+          "generated": false
+        },
+        {
+          "name": "manager_id",
+          "type": "integer",
+          "nullable": true,
+          "generated": false
+        }
+      ],
+      "primaryKey": [
+        "tenant",
+        "id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [],
+      "foreignKeys": []
+    },
+    {
+      "name": "entries",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "tenant",
+          "type": "integer",
+          "nullable": true,
+          "generated": false
+        },
+        {
+          "name": "owner",
+          "type": "integer",
+          "nullable": true,
+          "generated": false
+        },
+        {
+          "name": "lookup_label",
+          "type": "text",
+          "nullable": true,
+          "generated": false
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [],
+      "foreignKeys": []
+    },
+    {
+      "name": "readings",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "generated": false
+        },
+        {
+          "name": "value",
+          "type": "real",
+          "nullable": false,
+          "generated": false
+        }
+      ],
+      "primaryKey": [
+        "id"
+      ],
+      "uniqueKeys": [],
+      "indexes": [],
+      "foreignKeys": []
+    }
+  ]
+}

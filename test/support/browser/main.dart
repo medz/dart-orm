@@ -288,6 +288,27 @@ Future<void> main() async {
           next.length == 2 && next[0].id == 2 && next[1].id == 3,
           'REAL cursor lost its value or stable tie breaker',
         );
+        final peers = await db.readings
+            .orderBy((r) => [r.id.asc()])
+            .select(
+              (r) => r.peers
+                  .orderBy((p) => [p.id.asc()])
+                  .select((p) => p.id)
+                  .many(),
+            )
+            .get();
+        expect(
+          peers.toString() == '[[1, 2], [1, 2], [3]]',
+          'Query-only REAL relation keys lost their storage intent or equality',
+        );
+        final same = await db.readings
+            .orderBy((r) => [r.id.asc()])
+            .select((r) => r.sameReading.select((p) => p.id).many())
+            .get();
+        expect(
+          same.toString() == '[[1], [2], [3]]',
+          'Composite REAL relation keys lost their storage intent',
+        );
       });
       await check(
         'instant microseconds are exact or explicitly rejected',

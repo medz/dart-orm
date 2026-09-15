@@ -82,7 +82,7 @@ final class _Entity {
     ],
     'foreignKeys': [
       for (final edge in edges)
-        if (!edge.inverse)
+        if (edge.isForeignKey)
           {
             'columns': columns(edge.parentKeys),
             'target': edge.target.table,
@@ -100,14 +100,17 @@ final class _Index(
   final List<String> keys,
   final bool unique,
 );
+
 final class _Edge(
   final String name,
   final _Entity target,
   final List<String> parentKeys,
   final List<String> childKeys,
-  final String onDelete, {
+  final String? onDelete, {
   final bool inverse = false,
-});
+}) {
+  bool get isForeignKey => !inverse && onDelete != null;
+}
 
 String _snake(String value) => value
     .replaceAllMapped(RegExp(r'([a-z0-9])([A-Z])'), (m) => '${m[1]}_${m[2]}')

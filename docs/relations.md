@@ -11,6 +11,50 @@ final cards = await db.posts.select((p) => (
 ).map((title, author) => (title: title, author: author))).get();
 ```
 
+## Navigation without foreign keys
+
+Use `relatesTo()` for a read-only navigation edge when the database does not
+enforce a foreign key. It uses the same checked key selectors and generated
+query API as `references()`:
+
+```dart
+typedef Account = ({int tenant, int id, String? label});
+typedef Entry = ({@Id() int id, int? tenant, int? owner});
+final accounts = entity<Account>();
+final entries = entity<Entry>();
+final accountKey = accounts.primaryKey((a) => (a.tenant, a.id));
+final ownerAccount = entries.key((e) => (e.tenant, e.owner))
+    .relatesTo(accounts.key((a) => (a.tenant, a.id)), inverse: 'entries');
+```
+
+After generation, `e.ownerAccount.one()` returns an optional Account and
+`a.entries.many()` returns a list of Entry records. Normal projections, filters,
+correlated predicates, per-parent pagination, transactions, streams and watches
+apply. Generated getter documentation identifies the unconstrained edge.
+
+Matching rows may be missing, and lookup keys may be nonunique. `relatesTo()`
+does not infer a unique constraint or an index. Only an independently declared
+primary/unique key permits automatic to-one JOIN loading; otherwise `one()`
+uses a batch and checks cardinality. `required()` still reports missing matches.
+SQL equality does not match a composite key containing NULL. The key selectors
+must retain matching Dart and storage types, column order and arity.
+
+The edge itself exposes query operations. Create or change stored key values
+through the normal table write API, using a transaction when needed. There is no
+implicit connect, disconnect, cascade or existence validation, and `relatesTo()`
+has no `onDelete` option. Deleting a target can leave stored references dangling.
+`watch()` tracks the tables read by a selection, including joined or batched
+targets, without inventing foreign-key write effects.
+
+Adding, renaming or removing a query-only edge does not change the physical
+schema snapshot or emit migration DDL. Replacing an existing `references()` with
+`relatesTo()` does change the snapshot: removing that database constraint must
+go through a reviewed migration. Switching back can fail on dangling data; repair
+the data before retrying. Catalog import cannot discover unconstrained navigation
+rules, so declare them explicitly in the imported schema. This API covers
+same-database key equality, including self relations; it does not implement
+cross-database queries or arbitrary relationship predicate declarations.
+
 ## Single relationships
 
 `one()` returns an optional related result. `required()` checks that a related

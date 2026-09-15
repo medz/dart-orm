@@ -425,13 +425,19 @@ final class _RelationKeys(
 ) extends _Node {
   @override
   String writeSql(_Writer w) {
+    // Keys stay comparable storage values while grouping. Restore floating SQL
+    // intent only when binding them (JS cannot identify an integral double).
+    Object? parameter(int index, Object? value) =>
+        value != null && columns[index].codec.sqlType == 'real'
+        ? Codecs.real.encode(Codecs.real.decode(value))
+        : value;
     if (columns.length == 1) {
       return _In(columns.single._node, [
-        for (final key in keys) _Parameter(key.values.single),
+        for (final key in keys) _Parameter(parameter(0, key.values.single)),
       ]).write(w);
     }
     return '(${columns.map((c) => c._node.write(w)).join(', ')}) IN (${w.dialect == SqlDialect.sqlite ? 'VALUES ' : ''}'
-        '${keys.map((key) => '(${key.values.map(w.parameter).join(', ')})').join(', ')})';
+        '${keys.map((key) => '(${[for (var i = 0; i < key.values.length; i++) w.parameter(parameter(i, key.values[i]))].join(', ')})').join(', ')})';
   }
 }
 

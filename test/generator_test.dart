@@ -50,6 +50,7 @@ void main() {
         'test/support/precision/schema.dart',
         'test/support/temporals/schema.dart',
         'test/support/instants/schema.dart',
+        'test/support/unconstrained/schema.dart',
       ]) {
         final result = await generateSchema(source);
         final temporary = File('${fixtures.path}/deterministic.dart');
@@ -301,6 +302,117 @@ final author = posts.key((p) => p.authorId).references(users.key((u) => u.id));
       throwsA(isA<GenerationException>()),
     );
   });
+
+  test('query-only edges do not alter physical snapshots or require unique targets', () async {
+    const source = '''
+typedef User = ({@Id() int id, @ColumnName('lookup_name') String label});
+typedef Event = ({@Id() int id, String label});
+final users = entity<User>();
+final events = entity<Event>();
+''';
+    final before = await generate('without_navigation', source);
+    final after = await generate('with_navigation', '''
+$source
+final matchingUsers = events.key((e) => e.label).relatesTo(users.key((u) => u.label), inverse: 'events');
+''');
+    expect(after.snapshot, before.snapshot);
+    expect(after.dart, contains('get matchingUsers'));
+    expect(after.dart, contains('get events'));
+    expect(
+      after.dart,
+      contains('Read-only navigation; no database foreign key'),
+    );
+    expect(after.dart, isNot(contains('ForeignKey(')));
+  });
+
+  test(
+    'constrained and unconstrained edges retain separate migration meaning',
+    () async {
+      final result = await generate('mixed_navigation', '''
+typedef User = ({@Id() int id});
+typedef Event = ({@Id() int id, int owner, int lookup});
+final users = entity<User>();
+final events = entity<Event>();
+final ownerAccount = events.key((e) => e.owner).references(users.key((u) => u.id));
+final lookupAccount = events.key((e) => e.lookup).relatesTo(users.key((u) => u.id));
+''');
+      final table = (result.snapshot['tables'] as List).last as Map;
+      expect(table['foreignKeys'], [
+        {
+          'columns': ['owner'],
+          'target': 'users',
+          'targetColumns': ['id'],
+          'onDelete': 'RESTRICT',
+        },
+      ]);
+      expect(result.dart, contains('get ownerAccount'));
+      expect(result.dart, contains('get lookupAccount'));
+    },
+  );
+
+  for (final (name, source, expected) in [
+    (
+      'lookup_computed',
+      '''
+typedef Row = ({@Id() int id});
+final rows = entity<Row>();
+final peers = rows.key((r) => r.id + 1).relatesTo(rows.key((r) => r.id));
+''',
+      'direct fields',
+    ),
+    (
+      'lookup_codec',
+      '''
+int decode(Object? raw) => int.parse(raw as String);
+String encode(int value) => value.toString();
+const textInt = Codec<int>('text', decode, encode);
+typedef Row = ({@Id() int id, @UseCodec(textInt) int label});
+final rows = entity<Row>();
+final peers = rows.key((r) => r.id).relatesTo(rows.key((r) => r.label));
+''',
+      'Relationship storage types differ',
+    ),
+    (
+      'lookup_inverse',
+      '''
+typedef Row = ({@Id() int id});
+final rows = entity<Row>();
+final peers = rows.key((r) => r.id).relatesTo(rows.key((r) => r.id), inverse: 'id');
+''',
+      'relationship name',
+    ),
+    (
+      'lookup_type',
+      '''
+typedef Row = ({@Id() int id, String label});
+final rows = entity<Row>();
+final peers = rows.key((r) => r.id).relatesTo(rows.key((r) => r.label));
+''',
+      "isn't returnable",
+    ),
+    (
+      'lookup_delete',
+      '''
+typedef Row = ({@Id() int id});
+final rows = entity<Row>();
+final peers = rows.key((r) => r.id).relatesTo(rows.key((r) => r.id), onDelete: ReferentialAction.cascade);
+''',
+      'onDelete',
+    ),
+  ]) {
+    test('invalid query-only relation: $name', () async {
+      await expectLater(
+        generate(name, source),
+        throwsA(
+          isA<GenerationException>().having(
+            (e) => e.message,
+            'message',
+            contains(expected),
+          ),
+        ),
+      );
+    });
+  }
 
   test('Dart type errors stop generation', () async {
     await expectLater(

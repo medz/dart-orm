@@ -98,6 +98,11 @@ final class EntityKey<M, K> {
     String? inverse,
     ReferentialAction onDelete = ReferentialAction.restrict,
   }) => const SchemaConstraint();
+
+  /// Read-only query navigation without a database foreign key. Matching rows
+  /// may be absent or duplicated; this declaration creates no write effects.
+  SchemaConstraint relatesTo<N>(EntityKey<N, K> target, {String? inverse}) =>
+      const SchemaConstraint();
 }
 
 final class SchemaConstraint {

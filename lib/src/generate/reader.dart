@@ -98,18 +98,23 @@ final class _SchemaReader(
     }
     for (final variable in variables) {
       final call = variable.initializer;
-      if (call is! MethodInvocation || call.methodName.name != 'references') {
+      if (call is! MethodInvocation ||
+          !{'references', 'relatesTo'}.contains(call.methodName.name) ||
+          call.methodName.element?.library?.uri.toString() !=
+              'package:orm/schema.dart') {
         continue;
       }
+      final foreignKey = call.methodName.name == 'references';
+      final kind = foreignKey ? 'Foreign key' : 'Relationship';
       if (call.target is! MethodInvocation) {
-        _fail(call, 'references must follow entity.key().');
+        _fail(call, '${call.methodName.name} must follow entity.key().');
       }
       final (source, local) = _key(call.target!);
       final (target, remote) = _key(
         call.argumentList.arguments.first.argumentExpression,
       );
       if (local.length != remote.length) {
-        _fail(call, 'Foreign key arity mismatch.');
+        _fail(call, '$kind arity mismatch.');
       }
       final targets = [
         target.primaryKey,
@@ -117,7 +122,7 @@ final class _SchemaReader(
         for (final i in target.indexes)
           if (i.unique) i.keys,
       ];
-      if (!targets.any((key) => _same(key, remote))) {
+      if (foreignKey && !targets.any((key) => _same(key, remote))) {
         _fail(
           call,
           'Foreign key target must be a primary or unique key in the same column order.',
@@ -125,21 +130,23 @@ final class _SchemaReader(
       }
       for (var i = 0; i < local.length; i++) {
         if (source.field(local[i]).storage != target.field(remote[i]).storage) {
-          _fail(call, 'Foreign key storage types differ.');
+          _fail(call, '$kind storage types differ.');
         }
       }
       final action =
           _named(call, 'onDelete')?.toSource().split('.').last ?? 'restrict';
-      final onDelete = switch (action) {
-        'restrict' => 'RESTRICT',
-        'cascade' => 'CASCADE',
-        'setNull' => 'SET NULL',
-        'setDefault' => 'SET DEFAULT',
-        'noAction' => 'NO ACTION',
-        _ => throw GenerationException(
-          'Unsupported referential action $action.',
-        ),
-      };
+      final onDelete = !foreignKey
+          ? null
+          : switch (action) {
+              'restrict' => 'RESTRICT',
+              'cascade' => 'CASCADE',
+              'setNull' => 'SET NULL',
+              'setDefault' => 'SET DEFAULT',
+              'noAction' => 'NO ACTION',
+              _ => throw GenerationException(
+                'Unsupported referential action $action.',
+              ),
+            };
       if (action == 'setNull' &&
           local.any((key) => !source.field(key).nullable)) {
         _fail(call, 'SET NULL requires nullable foreign key columns.');

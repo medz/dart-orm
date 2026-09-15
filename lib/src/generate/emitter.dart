@@ -24,7 +24,7 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
       'primaryKey: ${_strings(entity.columns(entity.primaryKey))}, '
       'uniqueKeys: [${entity.uniqueKeys.map((k) => _strings(entity.columns(k))).join(', ')}], '
       'indexes: [${entity.indexes.map((i) => 'IndexSchema(${_literal(i.name)}, ${_strings(entity.columns(i.keys))}, unique: ${i.unique})').join(', ')}], '
-      'foreignKeys: [${entity.edges.where((e) => !e.inverse).map((e) => 'ForeignKey(${_strings(entity.columns(e.parentKeys))}, ${_literal(e.target.table)}, ${_strings(e.target.columns(e.childKeys))}, onDelete: ${_literal(e.onDelete)})').join(', ')}]);',
+      'foreignKeys: [${entity.edges.where((e) => e.isForeignKey).map((e) => 'ForeignKey(${_strings(entity.columns(e.parentKeys))}, ${_literal(e.target.table)}, ${_strings(e.target.columns(e.childKeys))}, onDelete: ${_literal(e.onDelete!)})').join(', ')}]);',
     );
     b.writeln(
       'final class ${entity.fieldsType} extends Fields {\n ${entity.fieldsType}(super.table);',
@@ -33,6 +33,11 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
       b.writeln('late final ${f.name} = column(${_columnSymbol(entity, f)});');
     }
     for (final edge in entity.edges) {
+      if (edge.onDelete == null) {
+        b.writeln(
+          '/// Read-only navigation; no database foreign key or write effects.',
+        );
+      }
       b.writeln(
         'Relation<${edge.target.rowType}, ${edge.target.fieldsType}> get ${edge.name} => '
         'Relation(${edge.target.name}Table, parent: [${edge.parentKeys.join(', ')}], '

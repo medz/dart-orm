@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-15T03:18:00.782402+00:00",
-  "scope": "Real isolated Chromium on macOS; application compiled to JS and WASM, dedicated JS database worker; correctness checks, not throughput benchmarks.",
+  "capturedAt": "2026-09-15T03:36:04.635886+00:00",
+  "scope": "Real isolated Chromium on macOS; application compiled to JS and WASM, dedicated JS database worker; correctness checks, not throughput benchmarks. Includes generated query-only relations with single and composite REAL keys.",
   "commands": [
     "dart run tool/test_browser.dart",
     "dart run tool/test_browser.dart --wasm"
@@ -26,7 +26,7 @@
         },
         {
           "name": "stream cursor batches and early release",
-          "milliseconds": 2
+          "milliseconds": 3
         },
         {
           "name": "commit invalidation and watch snapshots",
@@ -42,7 +42,7 @@
         },
         {
           "name": "large real values retain floating storage",
-          "milliseconds": 2
+          "milliseconds": 4
         },
         {
           "name": "instant microseconds are exact or explicitly rejected",
@@ -50,15 +50,15 @@
         },
         {
           "name": "worker does not block the browser event loop",
-          "milliseconds": 161
+          "milliseconds": 162
         },
         {
           "name": "startup failures are bounded and release failed workers",
-          "milliseconds": 29
+          "milliseconds": 32
         },
         {
           "name": "OPFS commit survives a closed worker and new connection",
-          "milliseconds": 95
+          "milliseconds": 94
         },
         {
           "name": "page reload recovers committed rows and rolls back interrupted transaction",
@@ -80,7 +80,7 @@
       "checks": [
         {
           "name": "memory migrations and verified foreign keys",
-          "milliseconds": 20
+          "milliseconds": 25
         },
         {
           "name": "generated records, projections and typed relation batches",
@@ -116,15 +116,15 @@
         },
         {
           "name": "worker does not block the browser event loop",
-          "milliseconds": 158
+          "milliseconds": 165
         },
         {
           "name": "startup failures are bounded and release failed workers",
-          "milliseconds": 29
+          "milliseconds": 30
         },
         {
           "name": "OPFS commit survives a closed worker and new connection",
-          "milliseconds": 91
+          "milliseconds": 106
         },
         {
           "name": "page reload recovers committed rows and rolls back interrupted transaction",
@@ -132,7 +132,7 @@
         },
         {
           "name": "persistent schema upgrades after reload preserve existing data",
-          "milliseconds": 15
+          "milliseconds": 16
         }
       ],
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",

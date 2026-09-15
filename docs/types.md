@@ -157,8 +157,9 @@ normal reviewed migration diff/conversion workflow.
 
 Storage semantics still belong to each database. In particular, SQLite `bigint`
 text retains exact digits but does not provide numeric text ordering/arithmetic.
-Native enum types and browser numeric boundaries remain pending. Use `Decimal`
-for exact decimal data.
+Native enum types remain a backend extension. Browser numeric limits and tested
+transport are described in [SQLite web](sqlite-web.md). Use `Decimal` for exact
+decimal data.
 
 ## UTC instants
 
@@ -367,8 +368,8 @@ the associated sequence type. Backfills use their saved width metadata when
 verifying the historical schema.
 
 Native JIT and AOT checks include integer values beyond JavaScript's exact-number
-range. They do not establish browser-safe 64-bit transport. Browser numeric
-boundaries remain a separate acceptance requirement.
+range. Browser int values use the safe-number range; verified wider transport
+uses BigInt. See [SQLite web](sqlite-web.md) for the boundaries and browser checks.
 
 ## Verification
 

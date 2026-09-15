@@ -5,6 +5,52 @@ import 'package:analyzer/dart/analysis/results.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('query-only relation APIs retain result types and expose no graph writes', () async {
+    final directory = await Directory('.dart_tool/orm-relation-type-tests')
+        .create(recursive: true);
+    final file = File('${directory.path}/negative.dart').absolute;
+    final invalid = [
+      'db.entries.select((e) => e.ownerAccount.update((a) => [a.id.set(1)]));',
+      'db.entries.select((e) => e.ownerAccount.delete());',
+      'db.entries.select((e) => e.ownerAccount.connect(1));',
+      'final Future<List<int>> values = db.entries.select((e) => e.ownerAccount.select((a) => a.id).one()).get();',
+      'final Future<List<String>> rows = db.entries.select((e) => e.matchingAccounts.select((a) => a.id).many()).get();',
+    ];
+    await file.writeAsString(
+      "import 'package:orm/orm.dart';\nimport '../../test/support/unconstrained/schema.orm.dart';\nvoid wrong(Database<Sqlite> db) {\n${invalid.join('\n')}\n}\n",
+    );
+    final contexts = AnalysisContextCollection(includedPaths: [file.path]);
+    try {
+      final result =
+          await contexts
+                  .contextFor(file.path)
+                  .currentSession
+                  .getResolvedUnit(file.path)
+              as ResolvedUnitResult;
+      final errors = result.diagnostics
+          .where((e) => e.severity.name.toLowerCase() == 'error')
+          .toList();
+      expect(
+        errors.any(
+          (e) => e.diagnosticCode.lowerCaseName.contains('uri_does_not_exist'),
+        ),
+        false,
+      );
+      for (var i = 0; i < invalid.length; i++) {
+        expect(
+          errors.any(
+            (e) => result.lineInfo.getLocation(e.offset).lineNumber == i + 4,
+          ),
+          true,
+          reason: invalid[i],
+        );
+      }
+    } finally {
+      await contexts.dispose();
+      await directory.delete(recursive: true);
+    }
+  });
+
   test('calendar APIs reject instants, strings and mixed temporal types', () async {
     final directory = await Directory('.dart_tool/orm-temporal-type-tests')
         .create(recursive: true);
