@@ -404,10 +404,15 @@ Future<List<List<Object?>>> _expandRelations(
   ExecutionOptions options = const ExecutionOptions(),
 }) async {
   if (plan.relations.isEmpty || source.isEmpty) return source;
-  final rows = [
-    for (final row in source)
-      [...row, ...List<Object?>.filled(plan.relations.length, null)],
-  ];
+  final rows = List<List<Object?>>.generate(source.length, (i) {
+    final row = source[i];
+    final expanded = List<Object?>.filled(
+      row.length + plan.relations.length,
+      null,
+    );
+    expanded.setRange(0, row.length, row);
+    return expanded;
+  }, growable: false);
   for (var i = 0; i < plan.relations.length; i++) {
     final values = await plan.relations[i].load(
       db,

@@ -12,6 +12,8 @@ It does not alter the application's tables. `--smoke` uses five timing samples
 and writes `.dart_tool/runtime-smoke.json`; it validates the harness and is not
 a performance result. The normal run records
 [`research/benchmarks/runtime.json`](../research/benchmarks/runtime.json).
+Use `--output <path>` to retain a subsequent measurement separately from that
+baseline, for example `--output research/benchmarks/runtime-selection.json`.
 
 ## Comparison contract
 

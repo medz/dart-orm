@@ -5,13 +5,14 @@ This file records verified delivery, not planned capabilities presented as worki
 The [design acceptance map](acceptance.md) ties remaining gates to the original
 requirements and distinguishes direct coverage from missing evidence.
 
-Latest verification: 807 native tests pass in one invocation with PostgreSQL
+Latest verification: 813 native tests pass in one invocation with PostgreSQL
 enabled; analysis reports no issues. Real Chrome JS and Dart WASM each pass 18
 scenarios. These checks include query plan inspection and phase observations.
 
-A later benchmark-only stage adds a verified same-driver runtime cost report for
-SQLite and PostgreSQL, including controlled TCP latency, concurrency and separate
-allocation traces. Runtime source remains `94d24fe`; see [measurements](performance.md).
+The same-driver runtime cost baseline covers SQLite and PostgreSQL, including
+controlled TCP latency, concurrency and separate allocation traces. That baseline
+uses runtime source `94d24fe`; see [measurements](performance.md). Selection decoding
+has since been optimized and is awaiting a separate cost capture.
 
 ## Completed
 
@@ -575,6 +576,20 @@ The results identify intermediate List construction and PostgreSQL protocol
 round trips as concrete optimization candidates. There is no new performance
 percentage guarantee or claim of superiority over another ORM; detailed numbers,
 scope and reproduction commands are in `docs/performance.md`.
+
+Selection decoding now binds field readers once and passes their results directly
+to each typed mapper. Dynamic field maps also avoid an intermediate value list.
+Related rows are expanded into fixed-length buffers with one copy, retaining
+separate storage from driver rows. Public API, SQL, result shapes and mapping order
+remain the existing contract. Six new backend checks cover all two-to-six-field
+arities, repeated columns, deferred/ordered evaluation, streaming, first-error
+propagation and dynamic field snapshots/nulls. The focused selection, relation,
+observation, inspection and UNION invocation passes 93 checks. The full native
+invocation passes 813 checks with PostgreSQL enabled, and analysis reports no
+issues. Real Chrome JS and Dart WASM each pass 18 scenarios; the teams scenario
+additionally checks a six-field mixed-type projection and deferred/ordered mapping.
+The browser report retains both runs. A new cost capture is still pending for
+this optimization; the benchmark accepts `--output` to preserve the prior report.
 
 ## Still required for the goal
 

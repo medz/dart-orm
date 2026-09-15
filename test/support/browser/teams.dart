@@ -95,6 +95,51 @@ Future<void> checkTeams(Uri wasm, Uri worker) async {
           decoded.every((e) => e.error == null),
       'Decoding observations differ',
     );
+    final calls = <String>[];
+    T mark<T>(String label, T value) {
+      calls.add(label);
+      return value;
+    }
+
+    final mixed = db.users
+        .where((u) => u.id.eq(1))
+        .select(
+          (u) =>
+              (
+                u.id.map((v) => mark('id', v)),
+                u.name.map((v) => mark('name', v)),
+                u.id.map((v) => mark('active', v > 0)),
+                u.name.map<String?>((_) => mark('nullable', null)),
+                u.id.map((v) => mark('fraction', v + .5)),
+                u.name.map((v) => mark('tags', [v])),
+              ).map((id, name, active, nullable, fraction, tags) {
+                calls.add('result');
+                return (
+                  id: id,
+                  name: name,
+                  active: active,
+                  nullable: nullable,
+                  fraction: fraction,
+                  tags: tags,
+                );
+              }),
+        );
+    mixed.inspect();
+    expect(calls.isEmpty, 'Inspection invoked a mixed projection mapper');
+    final value = await mixed.single();
+    expect(
+      value.id == 1 &&
+          value.name == 'Ada' &&
+          value.active &&
+          value.nullable == null &&
+          value.fraction == 1.5 &&
+          value.tags.single == 'Ada',
+      'Six-field mixed projection differs',
+    );
+    expect(
+      calls.join(',') == 'id,name,active,nullable,fraction,tags,result',
+      'Mixed projection evaluation order differs',
+    );
     await db.transaction((tx) async {
       await tx.teams.byId(10).patch(name: .set('Kernel'));
       await tx.memberships

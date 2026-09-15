@@ -21,7 +21,21 @@ Future<void> main(List<String> args) async {
     await _worker(args[1]);
     return;
   }
-  final smoke = args.contains('--smoke');
+  var smoke = false;
+  String? outputPath;
+  for (var i = 0; i < args.length; i++) {
+    switch (args[i]) {
+      case '--smoke':
+        smoke = true;
+      case '--output':
+        if (++i == args.length) {
+          throw ArgumentError('--output requires a path.');
+        }
+        outputPath = args[i];
+      default:
+        throw ArgumentError('Use --smoke and/or --output <path>.');
+    }
+  }
   final samples = smoke ? 5 : 200, warmup = smoke ? 2 : 20;
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url == null) {
@@ -221,9 +235,10 @@ Future<void> main(List<String> args) async {
     'results': results,
   };
   final output = File(
-    smoke
-        ? '.dart_tool/runtime-smoke.json'
-        : 'research/benchmarks/runtime.json',
+    outputPath ??
+        (smoke
+            ? '.dart_tool/runtime-smoke.json'
+            : 'research/benchmarks/runtime.json'),
   );
   await output.parent.create(recursive: true);
   await output.writeAsString(

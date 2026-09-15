@@ -40,44 +40,62 @@ final class _Mapped<T, R>(final Selection<T> source, final R Function(T) mapper)
 
 final class _Combined<T>(
   final List<Selection<Object?>> sources,
-  final T Function(List<Object?>) mapper,
+  final _Decoder<T> Function(List<_Decoder<Object?>>) combine,
 ) extends Selection<T> {
   @override
-  _Decoder<T> _bind(_SelectionPlan plan) {
-    final readers = [for (final source in sources) source._bind(plan)];
-    return (row) => mapper([for (final read in readers) read(row)]);
-  }
+  _Decoder<T> _bind(_SelectionPlan plan) => combine(
+    List.generate(
+      sources.length,
+      (i) => sources[i]._bind(plan),
+      growable: false,
+    ),
+  );
 }
 
 extension Selection2<A, B> on (Selection<A>, Selection<B>) {
-  Selection<R> map<R>(R Function(A, B) mapper) =>
-      _Combined([$1, $2], (v) => mapper(v[0] as A, v[1] as B));
+  Selection<R> map<R>(R Function(A, B) mapper) => _Combined(
+    [$1, $2],
+    (read) =>
+        (row) => mapper(read[0](row) as A, read[1](row) as B),
+  );
 }
 
 extension Selection3<A, B, C> on (Selection<A>, Selection<B>, Selection<C>) {
-  Selection<R> map<R>(R Function(A, B, C) mapper) =>
-      _Combined([$1, $2, $3], (v) => mapper(v[0] as A, v[1] as B, v[2] as C));
+  Selection<R> map<R>(R Function(A, B, C) mapper) => _Combined(
+    [$1, $2, $3],
+    (read) =>
+        (row) =>
+            mapper(read[0](row) as A, read[1](row) as B, read[2](row) as C),
+  );
 }
 
 extension Selection4<A, B, C, D>
     on (Selection<A>, Selection<B>, Selection<C>, Selection<D>) {
-  Selection<R> map<R>(R Function(A, B, C, D) mapper) => _Combined([
-    $1,
-    $2,
-    $3,
-    $4,
-  ], (v) => mapper(v[0] as A, v[1] as B, v[2] as C, v[3] as D));
+  Selection<R> map<R>(R Function(A, B, C, D) mapper) => _Combined(
+    [$1, $2, $3, $4],
+    (read) =>
+        (row) => mapper(
+          read[0](row) as A,
+          read[1](row) as B,
+          read[2](row) as C,
+          read[3](row) as D,
+        ),
+  );
 }
 
 extension Selection5<A, B, C, D, E>
     on (Selection<A>, Selection<B>, Selection<C>, Selection<D>, Selection<E>) {
-  Selection<R> map<R>(R Function(A, B, C, D, E) mapper) => _Combined([
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-  ], (v) => mapper(v[0] as A, v[1] as B, v[2] as C, v[3] as D, v[4] as E));
+  Selection<R> map<R>(R Function(A, B, C, D, E) mapper) => _Combined(
+    [$1, $2, $3, $4, $5],
+    (read) =>
+        (row) => mapper(
+          read[0](row) as A,
+          read[1](row) as B,
+          read[2](row) as C,
+          read[3](row) as D,
+          read[4](row) as E,
+        ),
+  );
 }
 
 extension Selection6<A, B, C, D, E, F>
@@ -92,14 +110,15 @@ extension Selection6<A, B, C, D, E, F>
         ) {
   Selection<R> map<R>(R Function(A, B, C, D, E, F) mapper) => _Combined(
     [$1, $2, $3, $4, $5, $6],
-    (v) => mapper(
-      v[0] as A,
-      v[1] as B,
-      v[2] as C,
-      v[3] as D,
-      v[4] as E,
-      v[5] as F,
-    ),
+    (read) =>
+        (row) => mapper(
+          read[0](row) as A,
+          read[1](row) as B,
+          read[2](row) as C,
+          read[3](row) as D,
+          read[4](row) as E,
+          read[5](row) as F,
+        ),
   );
 }
 
@@ -110,8 +129,9 @@ Selection<Map<String, Object?>> fields(
   final entries = selected.entries.toList(growable: false);
   return _Combined(
     [for (final e in entries) e.value],
-    (values) => {
-      for (var i = 0; i < entries.length; i++) entries[i].key: values[i],
-    },
+    (read) =>
+        (row) => {
+          for (var i = 0; i < entries.length; i++) entries[i].key: read[i](row),
+        },
   );
 }
