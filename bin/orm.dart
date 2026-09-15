@@ -9,7 +9,7 @@ import 'package:path/path.dart' as p;
 
 const _usage = '''Usage: dart run orm <command>
   generate <schema.dart> [output.orm.dart]
-  migration registry <directory>
+  migration registry <directory> [--dialect sqlite|postgres]
   queries generate <queries.dart> [output.queries.dart]
   queries check --source queries.dart [--output queries.queries.dart] <database>
   db inspect --table name <database>
@@ -47,10 +47,20 @@ Future<void> main(List<String> arguments) async {
     }
     final command = '${arguments[0]} ${arguments[1]}';
     if (command == 'migration registry') {
-      if (arguments.length != 3) {
+      if (arguments.length != 3 &&
+          !(arguments.length == 5 &&
+              arguments[3] == '--dialect' &&
+              {'sqlite', 'postgres'}.contains(arguments[4]))) {
         throw const FormatException('migration registry expects a directory.');
       }
-      _print({'registry': await writeMigrationRegistry(arguments[2])});
+      _print({
+        'registry': await writeMigrationRegistry(
+          arguments[2],
+          dialect: arguments.length == 5
+              ? SqlDialect.values.byName(arguments[4])
+              : null,
+        ),
+      });
       return;
     }
     if (command == 'queries generate') {

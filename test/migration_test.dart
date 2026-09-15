@@ -84,7 +84,12 @@ void main() {
     final from = SchemaSnapshot([accounts()]);
     final renamed = SchemaSnapshot([accounts(name: 'members')]);
     expect(
-      () => Migration.diff('0002_change', from: from, to: renamed),
+      () => Migration.diff(
+        '0002_change',
+        from: from,
+        to: renamed,
+        dialect: SqlDialect.sqlite,
+      ),
       throwsA(
         isA<OrmException>().having(
           (e) => e.code,
@@ -98,6 +103,7 @@ void main() {
         '0002_change',
         from: from,
         to: SchemaSnapshot([accounts(textScore: true)]),
+        dialect: SqlDialect.sqlite,
       ),
       throwsA(
         isA<OrmException>().having((e) => e.code, 'code', 'MIGRATION.CAST'),
@@ -116,6 +122,7 @@ void main() {
         '0002_change',
         from: from,
         to: SchemaSnapshot([required]),
+        dialect: SqlDialect.sqlite,
       ),
       throwsA(
         isA<OrmException>().having((e) => e.code, 'code', 'MIGRATION.BACKFILL'),
@@ -126,7 +133,8 @@ void main() {
         '0002_same',
         from: from,
         to: from,
-      ).steps.values.every((s) => s.isEmpty),
+        dialect: SqlDialect.sqlite,
+      ).steps.isEmpty,
       true,
     );
   });
@@ -150,7 +158,11 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
         await db.execute(SqlCommand('DROP TABLE IF EXISTS "$table"'));
       }
       start = SchemaSnapshot([accounts(), notes()]);
-      initial = Migration.create('0001_initial', start.tables);
+      initial = Migration.create(
+        '0001_initial',
+        start.tables,
+        dialect: db.dialect,
+      );
       await Migrator(db).apply([initial]);
       await db.execute(
         SqlCommand(
@@ -186,6 +198,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
               'members': {'nickname': 'label'},
             },
           ),
+          dialect: db.dialect,
         );
         await Migrator(db).apply([initial, migration]);
         expect(
@@ -213,6 +226,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
         from: start,
         to: target,
         previous: initial.checksum,
+        dialect: db.dialect,
       );
       await Migrator(db).apply([initial, migration]);
       expect((await verifySchema(db, target)).differences, isEmpty);
@@ -238,6 +252,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
           from: start,
           to: target,
           previous: initial.checksum,
+          dialect: db.dialect,
         );
         await expectLater(
           Migrator(db).apply([initial, migration]),
@@ -261,17 +276,18 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
             1,
           );
         }
-        final fill = Migration('0002_backfill', {
-          for (final d in SqlDialect.values)
-            d: [
-              "UPDATE accounts SET nickname = 'Seven' WHERE nickname IS NULL",
-            ],
-        }, previous: initial.checksum);
+        final fill = Migration(
+          '0002_backfill',
+          ["UPDATE accounts SET nickname = 'Seven' WHERE nickname IS NULL"],
+          previous: initial.checksum,
+          dialect: db.dialect,
+        );
         final required = Migration.diff(
           '0003_required',
           from: start,
           to: target,
           previous: fill.checksum,
+          dialect: db.dialect,
         );
         await Migrator(db).apply([initial, fill, required]);
         expect((await verifySchema(db, target)).differences, isEmpty);
@@ -296,11 +312,9 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
         to: target,
         previous: initial.checksum,
         using: {
-          for (final d in SqlDialect.values)
-            d: {
-              'accounts': {'score': 'CAST(score AS TEXT)'},
-            },
+          'accounts': {'score': 'CAST(score AS TEXT)'},
         },
+        dialect: db.dialect,
       );
       await Migrator(db).apply([initial, migration]);
       expect(
@@ -320,8 +334,9 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
         from: start,
         to: target,
         previous: initial.checksum,
+        dialect: db.dialect,
       );
-      expect(migration.steps[db.dialect]!.whereType<RebuildTable>(), isEmpty);
+      expect(migration.steps.whereType<RebuildTable>(), isEmpty);
       await Migrator(db).apply([initial, migration]);
       expect((await verifySchema(db, target)).differences, isEmpty);
       expect(
@@ -345,6 +360,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
           from: start,
           to: restricted,
           previous: initial.checksum,
+          dialect: db.dialect,
         );
         await Migrator(db).apply([initial, change]);
         final remove = Migration.diff(
@@ -353,6 +369,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
           to: SchemaSnapshot([]),
           previous: change.checksum,
           allowDestructive: true,
+          dialect: db.dialect,
         );
         await Migrator(db).apply([initial, change, remove]);
         expect(await inspectColumns(db, 'accounts'), isEmpty);
@@ -376,6 +393,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
         from: start,
         to: SchemaSnapshot([accounts(extra: true), notes()]),
         previous: 'wrong',
+        dialect: db.dialect,
       );
       await expectLater(
         Migrator(db).apply([initial, migration]),
@@ -426,6 +444,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
               from: start,
               to: target,
               previous: initial.checksum,
+              dialect: db.dialect,
             ),
           ]);
           await db.execute(
@@ -460,9 +479,12 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
             'score': 'score',
           },
         );
-        final bad = Migration.steps('0002_invalid', {
-          SqlDialect.sqlite: [rebuilt],
-        }, previous: initial.checksum);
+        final bad = Migration.steps(
+          '0002_invalid',
+          [rebuilt],
+          previous: initial.checksum,
+          dialect: SqlDialect.sqlite,
+        );
         await expectLater(
           Migrator(db).apply([initial, bad]),
           throwsA(
@@ -531,6 +553,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
           from: SchemaSnapshot([old, notes()]),
           to: SchemaSnapshot([next, notes()]),
           previous: initial.checksum,
+          dialect: db.dialect,
         );
         await expectLater(
           Migrator(db).apply([initial, migration]),

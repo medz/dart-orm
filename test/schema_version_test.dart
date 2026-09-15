@@ -9,16 +9,27 @@ import 'support/tables.dart';
 
 Matcher code(String value) =>
     isA<OrmException>().having((e) => e.code, 'code', value);
-final initial = Migration.create('0001_initial', [usersSchema]);
-final expand = Migration('0002_expand', {
-  for (final dialect in SqlDialect.values)
-    dialect: ['ALTER TABLE users ADD COLUMN label TEXT'],
-}, previous: initial.checksum);
-final contract = Migration('0003_contract', {
-  for (final dialect in SqlDialect.values)
-    dialect: ['ALTER TABLE users DROP COLUMN nickname'],
-}, previous: expand.checksum);
-final history = [initial, expand, contract];
+List<Migration> versionHistory(SqlDialect dialect) {
+  final initial = Migration.create('0001_initial', [
+    usersSchema,
+  ], dialect: dialect);
+  final expand = Migration(
+    '0002_expand',
+    ['ALTER TABLE users ADD COLUMN label TEXT'],
+    previous: initial.checksum,
+    dialect: dialect,
+  );
+  final contract = Migration(
+    '0003_contract',
+    ['ALTER TABLE users DROP COLUMN nickname'],
+    previous: expand.checksum,
+    dialect: dialect,
+  );
+  return [initial, expand, contract];
+}
+
+final history = versionHistory(SqlDialect.sqlite);
+final initial = history[0], expand = history[1], contract = history[2];
 
 void main() {
   runTests('sqlite', () => sqlite(const SqliteOptions.memory()));
@@ -67,6 +78,8 @@ void main() {
 
 void runTests(String name, Future<Database<Backend>> Function() open) {
   group('schema version $name', () {
+    final history = versionHistory(SqlDialect.values.byName(name));
+    final [initial, expand, contract] = history;
     late Database<Backend> db;
     late Migrator runner;
     final commands = <String>[];
@@ -293,8 +306,9 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
     );
 
     if (name == 'postgres') {
-      final pending = Migration.steps('0002_index', {
-        SqlDialect.postgres: [
+      final pending = Migration.steps(
+        '0002_index',
+        [
           CheckedSql(
             'UPDATE users SET score = score + 1',
             readyWhen: 'SELECT EXISTS(SELECT 1 FROM users WHERE score = 0)',
@@ -302,7 +316,9 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
           ),
           ExecuteSql("INSERT INTO users(email) VALUES ('retained')"),
         ],
-      }, previous: initial.checksum);
+        previous: initial.checksum,
+        dialect: SqlDialect.postgres,
+      );
 
       test('unfinished recoverable migration blocks startup until repaired and completed', () async {
         await seed([initial]);

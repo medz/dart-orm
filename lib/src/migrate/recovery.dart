@@ -150,21 +150,20 @@ void _validateProgress(
       );
     }
     if (row.step < 0 ||
-        row.step >= migration.steps[dialect]!.length ||
+        row.step >= migration.steps.length ||
         (!finished.contains(row.id) && row.id != next)) {
       throw const OrmException(
         'MIGRATION.HISTORY',
         'Migration checkpoint does not match the next pending migration.',
       );
     }
-    if (row.backfill != null &&
-        migration.steps[dialect]![row.step] is! Backfill) {
+    if (row.backfill != null && migration.steps[row.step] is! Backfill) {
       throw const OrmException(
         'MIGRATION.HISTORY',
         'Backfill cursor belongs to a different step kind.',
       );
     }
-    final step = migration.steps[dialect]![row.step];
+    final step = migration.steps[row.step];
     if (step is Backfill &&
         ((row.state == .complete && row.backfill == null) ||
             row.backfill?.upperKey != null &&
@@ -192,7 +191,7 @@ void _validateProgress(
       }
     }
     if (finished.contains(entry.key) &&
-        (rows.length != local[entry.key]!.steps[dialect]!.length ||
+        (rows.length != local[entry.key]!.steps.length ||
             rows.last.state != .complete)) {
       throw const OrmException(
         'MIGRATION.HISTORY',
@@ -210,11 +209,28 @@ Future<R> _migrationSession<R>(
   if (lockTimeout.isNegative) {
     throw ArgumentError.value(lockTimeout, 'lockTimeout');
   }
-  Future<R> run(Database<Backend> session) =>
-      session.dialect == SqlDialect.postgres
-      ? _withMigrationLock(session, lockTimeout, () => action(session))
-      : action(session);
+  Future<R> run(Database<Backend> session) async {
+    await _checkMigrationVersion(session);
+    return session.dialect == SqlDialect.postgres
+        ? _withMigrationLock(session, lockTimeout, () => action(session))
+        : action(session);
+  }
+
   return database.inSession ? run(database) : database.session(run);
+}
+
+// Generated PostgreSQL DDL/catalog behavior is supported on 18+. Check the
+// actual server before locks, journal creation or recoverable partial commits.
+Future<void> _checkMigrationVersion(Database<Backend> db) async {
+  if (db.dialect != SqlDialect.postgres) return; // SQLite driver checks 3.35+.
+  final result = await db.execute(SqlCommand('SHOW server_version_num'));
+  final version = int.tryParse('${result.rows.single.single}');
+  if (version == null || version < 180000) {
+    throw const OrmException(
+      'CAPABILITY.VERSION',
+      'PostgreSQL migrations require server version 18 or newer.',
+    );
+  }
 }
 
 Future<R> _withMigrationLock<R>(
@@ -306,7 +322,7 @@ Future<List<String>> _applyRecoverable(
     if (atomic.isEmpty) return;
     await session.transaction((tx) async {
       for (final migration in atomic) {
-        for (final step in migration.steps[SqlDialect.postgres]!) {
+        for (final step in migration.steps) {
           await _executeStep(tx, step);
         }
         await _recordMigration(tx, migration);
@@ -317,7 +333,7 @@ Future<List<String>> _applyRecoverable(
   }
 
   for (final migration in pending) {
-    final steps = migration.steps[SqlDialect.postgres]!;
+    final steps = migration.steps;
     if (!steps.any((s) => s is CheckedSql || s is Backfill)) {
       atomic.add(migration);
       continue;
@@ -409,7 +425,7 @@ Future<List<String>> _applyRecoverable(
 bool _needsRebuild(List<Migration> migrations, SqlDialect dialect) =>
     dialect == SqlDialect.sqlite &&
     migrations.any(
-      (m) => m.steps[dialect]!.any((s) => s is RebuildTable || s is DropTable),
+      (m) => m.steps.any((s) => s is RebuildTable || s is DropTable),
     );
 
 Future<R> _migrationTransaction<R>(
@@ -503,7 +519,7 @@ Future<List<String>> _applyRecoverableSqlite(
       final applied = <String>[];
       for (final migration in atomic) {
         if (!pending.contains(migration.id)) continue;
-        for (final step in migration.steps[SqlDialect.sqlite]!) {
+        for (final step in migration.steps) {
           await _executeStep(tx, step);
         }
         await _recordMigration(tx, migration);
@@ -516,7 +532,7 @@ Future<List<String>> _applyRecoverableSqlite(
   }
 
   for (final migration in migrations) {
-    final steps = migration.steps[SqlDialect.sqlite]!;
+    final steps = migration.steps;
     if (!steps.any((s) => s is Backfill)) {
       atomic.add(migration);
       continue;

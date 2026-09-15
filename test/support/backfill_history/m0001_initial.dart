@@ -3,19 +3,18 @@ import 'package:orm/orm.dart';
 import 'package:orm/migrate.dart';
 
 const migrationChecksum =
-    "1128370fc398415be97d11f7d44184eb3ec9b2d8e9fce8e7106e1a3cb6b68026";
-final migration = Migration.steps("0001_initial", {
-  SqlDialect.sqlite: [
+    "6ae96fc86455fff28e371472abe7df745f461f67cd4a6fd1fb0600b7cb5dcccb";
+final migration = Migration.steps(
+  "0001_initial",
+  [
     ExecuteSql(
       "CREATE TABLE \"payload\" (\"id\" INTEGER NOT NULL, \"source\" TEXT, \"value\" TEXT, \"touches\" INTEGER NOT NULL DEFAULT (0), PRIMARY KEY (\"id\"))",
     ),
   ],
-  SqlDialect.postgres: [
-    ExecuteSql(
-      "CREATE TABLE \"payload\" (\"id\" BIGINT NOT NULL, \"source\" TEXT, \"value\" TEXT, \"touches\" BIGINT NOT NULL DEFAULT (0), PRIMARY KEY (\"id\"))",
-    ),
-  ],
-}, snapshot: _schema);
+  dialect: SqlDialect.sqlite,
+
+  snapshot: _schema,
+);
 
 final _schema = SchemaSnapshot([
   TableSchema(

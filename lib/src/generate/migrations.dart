@@ -1,12 +1,19 @@
 part of '../../generate.dart';
 
 /// Regenerates only static imports. Fingerprints stay in the migration files.
-Future<String> writeMigrationRegistry(String directory) async {
+Future<String> writeMigrationRegistry(
+  String directory, {
+  SqlDialect? dialect,
+}) async {
+  dialect = await _registryDialect(directory, dialect);
   final root = Directory(directory);
   await root.create(recursive: true);
   final ids = await _migrationIds(root);
   final path = p.join(directory, 'migrations.g.dart');
-  await _replaceSource(path, _formatMigration(migrationHistorySource(ids)));
+  await _replaceSource(
+    path,
+    _formatMigration(migrationHistorySource(ids, dialect: dialect)),
+  );
   return path;
 }
 
@@ -18,13 +25,14 @@ Future<String> writeMigration(
 }) async {
   final previous = history.checked;
   final all = [...previous, migration];
-  validateMigrationHistory(all);
+  validateMigrations(all, dialect: history.dialect);
+  await _registryDialect(directory, history.dialect);
   final root = Directory(directory);
   await root.create(recursive: true);
   await _checkMigrationFiles(root, previous);
   final source = _formatMigration(migrationSource(migration));
   final registry = _formatMigration(
-    migrationHistorySource(all.map((m) => m.id)),
+    migrationHistorySource(all.map((m) => m.id), dialect: history.dialect),
   );
   final file = File(p.join(directory, 'm${migration.id}.dart'));
   if (await FileSystemEntity.type(file.path, followLinks: false) !=
@@ -55,9 +63,13 @@ Future<String> recordMigration(
       'Only the latest unpublished migration can be recorded.',
     );
   }
-  MigrationHistory(history.entries.take(history.entries.length - 1)).checked;
+  MigrationHistory(
+    history.entries.take(history.entries.length - 1),
+    dialect: history.dialect,
+  ).checked;
   final migrations = history.entries.map((e) => e.$1).toList();
-  validateMigrationHistory(migrations);
+  validateMigrations(migrations, dialect: history.dialect);
+  await _registryDialect(directory, history.dialect);
   await _checkMigrationFiles(Directory(directory), migrations);
   final path = p.join(directory, 'm$id.dart');
   final file = File(path);
@@ -137,4 +149,42 @@ Future<void> _replaceSource(String path, String source) async {
   } finally {
     if (await temporary.exists()) await temporary.delete();
   }
+}
+
+/// A saved target is never changed by registry regeneration, including when empty.
+Future<SqlDialect> _registryDialect(
+  String directory,
+  SqlDialect? requested,
+) async {
+  final file = File(p.join(directory, 'migrations.g.dart'));
+  final kind = await FileSystemEntity.type(file.path, followLinks: false);
+  if (kind == FileSystemEntityType.notFound) {
+    return requested ??
+        (throw const GenerationException(
+          'Choose --dialect sqlite or --dialect postgres when initializing a migration registry.',
+        ));
+  }
+  if (kind != FileSystemEntityType.file) {
+    throw GenerationException('Expected a regular source file: ${file.path}');
+  }
+  final unit = parseString(content: await file.readAsString()).unit;
+  final values = [
+    for (final d in unit.declarations.whereType<TopLevelVariableDeclaration>())
+      if (d.variables.isConst)
+        for (final v in d.variables.variables)
+          if (v.name.lexeme == 'migrationDialect') v.initializer?.toSource(),
+  ];
+  final saved = values.length == 1
+      ? switch (values.single) {
+          'SqlDialect.sqlite' => SqlDialect.sqlite,
+          'SqlDialect.postgres' => SqlDialect.postgres,
+          _ => null,
+        }
+      : null;
+  if (saved == null || requested != null && requested != saved) {
+    throw const GenerationException(
+      'Migration registry has a different or invalid database target. Use a separate history for another engine.',
+    );
+  }
+  return saved;
 }

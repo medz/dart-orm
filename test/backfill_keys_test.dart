@@ -75,7 +75,9 @@ void main() {
             ],
             primaryKey: ['key'],
           );
-          final initial = Migration.create('0001_keys', [table]);
+          final initial = Migration.create('0001_keys', [
+            table,
+          ], dialect: db.dialect);
           final runner = Migrator(db);
           await runner.apply([initial]);
           for (final key in sample.value.$2) {
@@ -91,8 +93,9 @@ void main() {
               ),
             );
           }
-          final migration = Migration.steps('0002_backfill', {
-            db.dialect: [
+          final migration = Migration.steps(
+            '0002_backfill',
+            [
               Backfill(
                 table,
                 set: {'touches': 'touches + 1'},
@@ -100,7 +103,9 @@ void main() {
                 batchSize: 1,
               ),
             ],
-          }, previous: initial.checksum);
+            previous: initial.checksum,
+            dialect: db.dialect,
+          );
           await runner.apply([initial, migration], maxBackfillBatches: 1);
           final cursor = (await runner.progress()).single.backfill!;
           expect(cursor.lastKey, hasLength(1));
@@ -128,7 +133,9 @@ void main() {
           ],
           primaryKey: ['tenant', 'id'],
         );
-        final initial = Migration.create('0001_keys', [table]);
+        final initial = Migration.create('0001_keys', [
+          table,
+        ], dialect: db.dialect);
         final runner = Migrator(limited);
         await runner.apply([initial]);
         for (var i = 0; i < 20; i++) {
@@ -139,8 +146,9 @@ void main() {
             ),
           );
         }
-        final migration = Migration.steps('0002_backfill', {
-          db.dialect: [
+        final migration = Migration.steps(
+          '0002_backfill',
+          [
             Backfill(
               table,
               set: {'touches': 'touches + 1'},
@@ -149,7 +157,9 @@ void main() {
               batchSize: 1000,
             ),
           ],
-        }, previous: initial.checksum);
+          previous: initial.checksum,
+          dialect: db.dialect,
+        );
         await runner.apply([initial, migration], maxBackfillBatches: 2);
         expect((await runner.progress()).single.backfill!.rows, 12);
         expect((await runner.progress()).single.backfill!.lastKey, [

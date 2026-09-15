@@ -8,7 +8,9 @@ import 'types.dart';
 Future<void> main() async {
   final db = await sqlite(const SqliteOptions.memory());
   try {
-    await Migrator(db).apply([Migration.create('0001_initial', appSchema)]);
+    await Migrator(
+      db,
+    ).apply([Migration.create('0001_initial', appSchema, dialect: db.dialect)]);
     final first = await db.people.create(
       email: const Email('aot@example.com'),
       membership: .pending,

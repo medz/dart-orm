@@ -1,77 +1,99 @@
 part of '../../migrate.dart';
 
+/// One reviewed plan for one database engine. A history cannot change engines.
 final class Migration {
   final String id;
-  final Map<SqlDialect, List<MigrationStep>> steps;
+  final SqlDialect dialect;
+  final List<MigrationStep> steps;
   final SchemaSnapshot? snapshot;
   final String? previous;
   Migration(
     String id,
-    Map<SqlDialect, List<String>> statements, {
+    List<String> statements, {
+    required SqlDialect dialect,
     SchemaSnapshot? snapshot,
     String? previous,
   }) : this.steps(
          id,
-         {
-           for (final entry in statements.entries)
-             entry.key: entry.value.map(ExecuteSql.new).toList(),
-         },
+         statements.map(ExecuteSql.new).toList(),
+         dialect: dialect,
          snapshot: snapshot,
          previous: previous,
        );
+
   Migration.steps(
     this.id,
-    Map<SqlDialect, List<MigrationStep>> steps, {
-    this.snapshot,
+    List<MigrationStep> steps, {
+    required this.dialect,
+    SchemaSnapshot? snapshot,
     this.previous,
-  }) : steps = Map.unmodifiable(
-         steps.map(
-           (key, value) =>
-               MapEntry(key, List<MigrationStep>.unmodifiable(value)),
-         ),
-       ) {
+  }) : steps = List.unmodifiable(steps.map((s) => _targetStep(s, dialect))),
+       snapshot = snapshot?.forDialect(dialect) {
     if (!RegExp(r'^[0-9]+_[a-z][a-z0-9_]*$').hasMatch(id)) {
       throw ArgumentError(
         'Migration IDs use a numeric prefix and lowercase name.',
       );
     }
   }
-  factory Migration.create(String id, List<TableSchema> schema) =>
-      Migration(id, {
-        for (final dialect in SqlDialect.values)
-          dialect: [
-            for (final command in createSchema(schema, dialect)) command.sql,
-          ],
-      }, snapshot: SchemaSnapshot(schema));
+
+  factory Migration.create(
+    String id,
+    List<TableSchema> schema, {
+    required SqlDialect dialect,
+  }) => Migration(
+    id,
+    [for (final command in createSchema(schema, dialect)) command.sql],
+    dialect: dialect,
+    snapshot: SchemaSnapshot(schema),
+  );
+
   factory Migration.diff(
     String id, {
+    required SqlDialect dialect,
     required SchemaSnapshot from,
     required SchemaSnapshot to,
     SchemaRenames renames = const SchemaRenames(),
     String? previous,
     bool allowDestructive = false,
-    Map<SqlDialect, Map<String, Map<String, String>>> using = const {},
+    Map<String, Map<String, String>> using = const {},
   }) => _diff(
     id,
-    from: from,
-    to: to,
+    dialect: dialect,
+    from: from.forDialect(dialect),
+    to: to.forDialect(dialect),
     renames: renames,
     previous: previous,
     allowDestructive: allowDestructive,
     using: using,
   );
+
   Map<String, Object?> toJson() => {
-    'format': 2,
+    'format': 3,
     'id': id,
+    'dialect': dialect.name,
     if (snapshot != null) 'snapshot': snapshot!.toJson(),
     if (previous != null) 'previous': previous,
-    'steps': {
-      for (final entry in steps.entries)
-        entry.key.name: [for (final step in entry.value) step.toJson()],
-    },
+    'steps': [for (final step in steps) step.toJson()],
   };
   late final String checksum = _hash(toJson());
 }
+
+MigrationStep _targetStep(MigrationStep step, SqlDialect dialect) =>
+    switch (step) {
+      RebuildTable() => RebuildTable(
+        _targetTable(step.before, dialect),
+        _targetTable(step.after, dialect),
+        copy: step.copy,
+      ),
+      Backfill() => Backfill(
+        _targetTable(step.table, dialect),
+        set: step.set,
+        where: step.where,
+        doneWhen: step.doneWhen,
+        batchSize: step.batchSize,
+      ),
+      _ => step,
+    };
 
 final class MigrationStatus {
   final String id;
@@ -100,7 +122,8 @@ final class Migrator {
       );
     }
     if (migrations.isEmpty ||
-        migrations.last.snapshot?.checksum != expected.checksum) {
+        migrations.last.snapshot?.checksum !=
+            expected.forDialect(database.dialect).checksum) {
       throw const OrmException(
         'MIGRATION.BASELINE',
         'The final migration must carry the expected baseline snapshot.',
@@ -158,6 +181,7 @@ final class Migrator {
 
   Future<List<Migration>> plan(List<Migration> migrations) async {
     validateMigrations(migrations, dialect: database.dialect);
+    if (!database.inSession) await _checkMigrationVersion(database);
     final applied = await history();
     _validateApplied(migrations, applied);
     _validateProgress(migrations, applied, await progress(), database.dialect);
@@ -260,9 +284,7 @@ final class Migrator {
     validateMigrations(migrations, dialect: database.dialect);
     Future<List<String>> run(Database<Backend> session) async {
       if (migrations.any(
-        (m) => m.steps[session.dialect]!.any(
-          (s) => s is CheckedSql || s is Backfill,
-        ),
+        (m) => m.steps.any((s) => s is CheckedSql || s is Backfill),
       )) {
         return session.dialect == SqlDialect.sqlite
             ? _applyRecoverableSqlite(
@@ -280,7 +302,7 @@ final class Migrator {
         await tx.execute(SqlCommand(_historyDdl));
         final pending = await Migrator(tx).plan(migrations);
         for (final migration in pending) {
-          for (final step in migration.steps[tx.dialect]!) {
+          for (final step in migration.steps) {
             await _executeStep(tx, step);
           }
           await _recordMigration(tx, migration);
@@ -314,23 +336,6 @@ void _validateApplied(
   }
 }
 
-/// Validates every target supported by the whole history. A PostgreSQL-only step
-/// narrows the history to PostgreSQL; it does not need a fake SQLite equivalent.
-void validateMigrationHistory(List<Migration> migrations) {
-  final targets = SqlDialect.values
-      .where((dialect) => migrations.every((m) => m.steps.containsKey(dialect)))
-      .toList();
-  if (targets.isEmpty) {
-    throw const OrmException(
-      'MIGRATION.TARGET',
-      'Migration history has no common database target.',
-    );
-  }
-  for (final dialect in targets) {
-    validateMigrations(migrations, dialect: dialect);
-  }
-}
-
 /// Validates local ordering, checksum links and operations without opening a database.
 void validateMigrations(
   List<Migration> migrations, {
@@ -353,15 +358,17 @@ void validateMigrations(
       );
     }
     previousChecksum = migration.checksum;
-    final steps = migration.steps[dialect];
-    if (steps == null) {
+    if (migration.dialect != dialect) {
       throw OrmException(
         'MIGRATION.TARGET',
-        '${migration.id} has no SQL for ${dialect.name}.',
+        '${migration.id} targets ${migration.dialect.name}, but this history requires ${dialect.name}.',
       );
     }
-    for (final step in steps) {
-      if (step is Backfill) continue;
+    for (final step in migration.steps) {
+      if (step is Backfill) {
+        _validateSchema([step.table], dialect);
+        continue;
+      }
       if (step is CheckedSql) {
         if (dialect != SqlDialect.postgres) {
           throw const OrmException(
@@ -388,6 +395,8 @@ void validateMigrations(
             'Table rebuilds are SQLite operations.',
           );
         }
+        _validateSchema([step.before], dialect);
+        _validateSchema([step.after], dialect);
         continue;
       }
       if (step is DropConstraint) {

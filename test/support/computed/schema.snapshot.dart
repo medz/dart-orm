@@ -15,9 +15,8 @@ final schema = SchemaSnapshot([
         "total",
         Codecs.integer,
 
-        computed: ComputedColumn.forDialects(
-          sqlite: "price * quantity",
-          postgres: "price * quantity",
+        computed: ComputedColumn(
+          "price * quantity",
           storage: ComputedStorage.stored,
         ),
       ),
@@ -36,9 +35,8 @@ final schema = SchemaSnapshot([
         Codecs.text.nullable(),
         nullable: true,
 
-        computed: ComputedColumn.forDialects(
-          sqlite: "upper(note)",
-          postgres: "upper(note)",
+        computed: ComputedColumn(
+          "upper(note)",
           storage: ComputedStorage.stored,
         ),
       ),
@@ -49,13 +47,7 @@ final schema = SchemaSnapshot([
       IndexSchema("by_total", ["total"], unique: false),
     ],
 
-    checks: [
-      CheckSchema.forDialects(
-        "nonnegative",
-        sqlite: "price >= 0 AND quantity >= 0",
-        postgres: "price >= 0 AND quantity >= 0",
-      ),
-    ],
+    checks: [CheckSchema("nonnegative", "price >= 0 AND quantity >= 0")],
   ),
   TableSchema(
     "bands",

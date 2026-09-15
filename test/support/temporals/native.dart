@@ -6,7 +6,9 @@ import 'schema.orm.dart';
 Future<void> main() async {
   final db = await sqlite(const SqliteOptions.memory());
   try {
-    await Migrator(db).apply([Migration.create('0001_local', appSchema)]);
+    await Migrator(
+      db,
+    ).apply([Migration.create('0001_local', appSchema, dialect: db.dialect)]);
     final last = LocalDate.fromJulianDay(LocalDate.maxJulianDay);
     final stamp = LocalDateTime.parse('294276-12-31 23:59:59.999999');
     final row = await db.appointments.create(

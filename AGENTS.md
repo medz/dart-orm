@@ -11,6 +11,8 @@ This branch is a new implementation. The design reference is
 - SQLite and PostgreSQL have separate driver configuration and capability checks.
 - Verify behavior against real databases. Mark unverified platforms explicitly.
 - Preserve immutable migration history and never infer destructive renames.
+- Each migration history fixes one database engine. Save only that engine's SQL,
+  steps and frozen schema; reject mixed histories and mismatched connections.
 - Prefer small Conventional Commits. Do not push without explicit authorization.
 - Keep `docs/progress.md` accurate, including unfinished work and validation limits.
 - Schema snapshots and saved migrations are Dart source. Retire the old JSON file

@@ -69,7 +69,9 @@ void main() {
             SqlCommand('CREATE SCHEMA orm_decimal_average_tests'),
           );
         }
-        await Migrator(db).apply([Migration.create('0001_average', appSchema)]);
+        await Migrator(db).apply([
+          Migration.create('0001_average', appSchema, dialect: db.dialect),
+        ]);
       });
       tearDown(() => db.close());
       Future<void> rows(List<String> values, {String bucket = 'a'}) async {

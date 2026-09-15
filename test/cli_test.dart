@@ -159,14 +159,17 @@ void main() {
         expect((await project.run(['apply']))['applied'], ['0001_initial']);
         expect((await project.run(['verify']))['matches'], true);
         await project.append(
-          Migration.steps('0002_index', {
-            .postgres: [
+          Migration.steps(
+            '0002_index',
+            [
               CheckedSql.createIndex(
                 'users',
                 const IndexSchema('nickname_lookup', ['nickname']),
               ),
             ],
-          }, previous: first['checksum'] as String),
+            previous: first['checksum'] as String,
+            dialect: SqlDialect.postgres,
+          ),
         );
         expect((await project.run(['plan']))['atomic'], false);
         expect((await project.run(['apply']))['applied'], ['0002_index']);

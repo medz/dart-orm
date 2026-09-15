@@ -37,7 +37,11 @@ void main() {
 void runCodecTests(String name, Future<Database<Backend>> Function() open) {
   group('custom codecs $name', () {
     late Database<Backend> db;
-    final initial = Migration.create('0001_initial', appSchema);
+    final initial = Migration.create(
+      '0001_initial',
+      appSchema,
+      dialect: SqlDialect.values.byName(name),
+    );
     setUp(() async {
       db = await open();
       for (final table in ['notes', 'people', '_orm_migrations']) {

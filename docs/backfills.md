@@ -11,19 +11,16 @@ final historical = expand.snapshot!;
 final users = historical.tables.singleWhere((t) => t.name == 'users');
 final backfill = Migration.steps(
   '0003_display_names',
-  {
-    for (final dialect in SqlDialect.values)
-      dialect: [
-        Backfill(
-          users,
-          set: {'display_name': 'name'},
-          where: 'display_name IS NULL',
-          doneWhen:
-              'SELECT NOT EXISTS(SELECT 1 FROM users WHERE display_name IS NULL)',
-          batchSize: 1000,
-        ),
-      ],
-  },
+  [
+    Backfill(
+      users,
+      set: {'display_name': 'name'},
+      where: 'display_name IS NULL',
+      doneWhen: 'SELECT NOT EXISTS(SELECT 1 FROM users WHERE display_name IS NULL)',
+      batchSize: 1000,
+    ),
+  ],
+  dialect: expand.dialect,
   previous: expand.checksum,
   snapshot: historical,
 );
@@ -32,7 +29,7 @@ final backfill = Migration.steps(
 Save this migration with `writeMigration` from `package:orm/generate.dart`, review
 the emitted Dart file, and import it through the static history on subsequent runs. Its table definition, assignments, filter, completion SQL and
 batch size are covered by the migration checksum. Expressions are trusted migration
-SQL, so write separate expressions for each dialect when their behavior differs.
+SQL for this history's chosen database.
 No latest generated client or application codec callback is needed to resume.
 
 ## Running a bounded amount of work

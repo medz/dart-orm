@@ -43,8 +43,9 @@ void main() {
         }
       });
       tearDown(() => db.close());
-      Future<void> create() =>
-          Migrator(db).apply([Migration.create('0001_precision', appSchema)]);
+      Future<void> create() => Migrator(db).apply([
+        Migration.create('0001_precision', appSchema, dialect: db.dialect),
+      ]);
       Future<models.Moment> sample() => db.moments.create(
         clock: t('12:00:00.1235'),
         local: dt('1999-12-31 23:59:59.9995'),
@@ -286,7 +287,9 @@ void main() {
             [column],
           ],
         );
-        final first = Migration.create('0001_before', [schema(6)]);
+        final first = Migration.create('0001_before', [
+          schema(6),
+        ], dialect: db.dialect);
         final oldChecksum = first.checksum;
         await Migrator(db).apply([first]);
         await db.execute(
@@ -300,6 +303,7 @@ void main() {
             from: first.snapshot!,
             to: SchemaSnapshot([schema(3)]),
             previous: first.checksum,
+            dialect: db.dialect,
           ),
           throwsA(isA<OrmException>()),
         );
@@ -314,11 +318,9 @@ void main() {
             },
           ),
           using: {
-            for (final d in SqlDialect.values)
-              d: {
-                'narrow': {'recorded': 'recorded'},
-              },
+            'narrow': {'recorded': 'recorded'},
           },
+          dialect: db.dialect,
         );
         await expectLater(
           Migrator(db).apply([first, next]),
@@ -367,7 +369,7 @@ void main() {
             ],
           );
           await Migrator(db).apply([
-            Migration.create('0001_defaults', [table]),
+            Migration.create('0001_defaults', [table], dialect: db.dialect),
           ]);
           await db.execute(SqlCommand('INSERT INTO defaults DEFAULT VALUES'));
           final row = (await db.execute(SqlCommand('SELECT * FROM defaults')))
@@ -504,8 +506,12 @@ void main() {
       'old',
       columns: [Column('clock', Codecs.time, temporalPrecision: p)],
     );
-    final before = Migration.create('0001_legacy', [schema(null)]),
-        after = Migration.create('0001_legacy', [schema(6)]);
+    final before = Migration.create('0001_legacy', [
+          schema(null),
+        ], dialect: SqlDialect.sqlite),
+        after = Migration.create('0001_legacy', [
+          schema(6),
+        ], dialect: SqlDialect.sqlite);
     expect(before.checksum, after.checksum);
     expect(
       jsonEncode(before.snapshot!.toJson()),

@@ -69,29 +69,43 @@ void main() {
       primaryKey: ['id'],
     );
     final snapshot = SchemaSnapshot([other, table]);
-    final migration = Migration.steps('0001_literals', {
-      .sqlite: [
-        ExecuteSql("SELECT 'quote\" and dollar\$ and \\ slash'\n-- retained"),
-        RebuildTable(table, table, copy: {'id': 'id'}),
-        DropTable('gone'),
-      ],
-      .postgres: [
-        ExecuteSql('SELECT 1'),
-        DropConstraint('other', {
-          'kind': 'u',
-          'columns': ['id'],
-        }),
-        CheckedSql(
-          'CREATE INDEX CONCURRENTLY foo ON other(id)',
-          readyWhen: 'SELECT true',
-          doneWhen: 'SELECT false',
-        ),
-        Backfill(other, set: {'label': "'done'"}, doneWhen: 'SELECT true'),
-      ],
-    }, snapshot: snapshot);
-    await fixture.write('lib/frozen.dart', schemaSource(snapshot));
-    await fixture.write('lib/m0001_literals.dart', migrationSource(migration));
-    await fixture.write('bin/check.dart', '''
+    for (final dialect in SqlDialect.values) {
+      final migration = Migration.steps(
+        '0001_literals',
+        dialect == SqlDialect.sqlite
+            ? [
+                ExecuteSql(
+                  "SELECT 'quote\" and dollar\$ and \\ slash'\n-- retained",
+                ),
+                RebuildTable(table, table, copy: {'id': 'id'}),
+                DropTable('gone'),
+              ]
+            : [
+                ExecuteSql('SELECT 1'),
+                DropConstraint('other', {
+                  'kind': 'u',
+                  'columns': ['id'],
+                }),
+                CheckedSql(
+                  'CREATE INDEX CONCURRENTLY foo ON other(id)',
+                  readyWhen: 'SELECT true',
+                  doneWhen: 'SELECT false',
+                ),
+                Backfill(
+                  other,
+                  set: {'label': "'done'"},
+                  doneWhen: 'SELECT true',
+                ),
+              ],
+        snapshot: snapshot,
+        dialect: dialect,
+      );
+      await fixture.write('lib/frozen.dart', schemaSource(snapshot));
+      await fixture.write(
+        'lib/m0001_literals.dart',
+        migrationSource(migration),
+      );
+      await fixture.write('bin/check.dart', '''
 import '../lib/frozen.dart' as s;
 import '../lib/m0001_literals.dart' as m;
 void main() {
@@ -100,18 +114,21 @@ void main() {
   if (m.migration.checksum != m.migrationChecksum) throw StateError('fingerprint');
 }
 ''');
-    final source = await fixture.file('lib/m0001_literals.dart').readAsString();
-    expect(source, isNot(contains('fromJson')));
-    expect(source, isNot(contains('schema.orm.dart')));
-    final result = await fixture.run(['run', 'bin/check.dart']);
-    expect(result.output, contains(snapshot.checksum));
-    expect(result.output, contains(migration.checksum));
-    await fixture.run([
-      'analyze',
-      'lib/frozen.dart',
-      'lib/m0001_literals.dart',
-      'bin/check.dart',
-    ]);
+      final source = await fixture
+          .file('lib/m0001_literals.dart')
+          .readAsString();
+      expect(source, isNot(contains('fromJson')));
+      expect(source, isNot(contains('schema.orm.dart')));
+      final result = await fixture.run(['run', 'bin/check.dart']);
+      expect(result.output, contains(snapshot.checksum));
+      expect(result.output, contains(migration.checksum));
+      await fixture.run([
+        'analyze',
+        'lib/frozen.dart',
+        'lib/m0001_literals.dart',
+        'bin/check.dart',
+      ]);
+    }
   });
 
   test('project CLI creates Dart history, upgrades a database and preserves recorded fingerprints', () async {
@@ -124,7 +141,10 @@ void main() {
       'lib/target.dart',
       schemaSource(SchemaSnapshot([initial])),
     );
-    await writeMigrationRegistry('${fixture.directory.path}/lib/migrations');
+    await writeMigrationRegistry(
+      '${fixture.directory.path}/lib/migrations',
+      dialect: SqlDialect.sqlite,
+    );
     await fixture.write('bin/migrate.dart', r'''
 import 'package:orm/migrate_cli.dart';
 import 'package:orm/sqlite.dart';
@@ -210,7 +230,10 @@ Future<void> main(List<String> args) => runMigrationCli(args,
     final source = await latest.readAsString();
     await latest.writeAsString(source.replaceAll('ADD COLUMN', 'ADD  COLUMN'));
     await command(['check'], code: 1);
-    await writeMigrationRegistry('${fixture.directory.path}/lib/migrations');
+    await writeMigrationRegistry(
+      '${fixture.directory.path}/lib/migrations',
+      dialect: SqlDialect.sqlite,
+    );
     await command(['check'], code: 1);
     await command(['record', '0001_people'], code: 1);
     await command(['record', '0002_nickname']);
@@ -229,18 +252,20 @@ Future<void> main(List<String> args) => runMigrationCli(args,
           primaryKey: ['id'],
         ),
       ]);
-      final initial = Migration('0001_initial', {
-        for (final dialect in SqlDialect.values)
-          dialect: [
-            ...createSchema(schema.tables, dialect).map((s) => s.sql),
-            "INSERT INTO people(id, name) VALUES (7, 'retained')",
-          ],
-      }, snapshot: schema);
+      final initial = Migration(
+        '0001_initial',
+        [
+          ...createSchema(schema.tables, SqlDialect.sqlite).map((s) => s.sql),
+          "INSERT INTO people(id, name) VALUES (7, 'retained')",
+        ],
+        snapshot: schema,
+        dialect: SqlDialect.sqlite,
+      );
       await fixture.write('lib/target.dart', schemaSource(schema));
       await writeMigration(
         initial,
         directory: '${fixture.directory.path}/lib/migrations',
-        history: MigrationHistory([]),
+        history: MigrationHistory([], dialect: SqlDialect.sqlite),
       );
       await fixture.write('bin/migrate.dart', """
 import 'package:orm/migrate_cli.dart';

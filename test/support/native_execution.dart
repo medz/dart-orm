@@ -9,15 +9,22 @@ Future<void> main() async {
   final db = await sqlite(const SqliteOptions.memory());
   try {
     if (!db.capabilities.cancellation) throw StateError('No native interrupt');
-    final initial = Migration.create('0001_initial', appSchema);
+    final initial = Migration.create(
+      '0001_initial',
+      appSchema,
+      dialect: db.dialect,
+    );
     await Migrator(db).apply([initial]);
     if ((await Migrator(db).requireVersion([initial])).checksum !=
         initial.checksum) {
       throw StateError('Schema version compatibility failed');
     }
-    final pending = Migration('0002_pending', {
-      SqlDialect.sqlite: ['SELECT 1'],
-    }, previous: initial.checksum);
+    final pending = Migration(
+      '0002_pending',
+      ['SELECT 1'],
+      previous: initial.checksum,
+      dialect: SqlDialect.sqlite,
+    );
     try {
       await Migrator(db).requireVersion([initial, pending]);
       throw StateError('Schema version requirement was ignored');

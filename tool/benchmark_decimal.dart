@@ -29,7 +29,9 @@ Future<void> main() async {
         await db.execute(SqlCommand('CREATE SCHEMA $schema'));
         created = true;
       }
-      await Migrator(db).apply([Migration.create('0001_decimal', appSchema)]);
+      await Migrator(db).apply([
+        Migration.create('0001_decimal', appSchema, dialect: db.dialect),
+      ]);
       final version = (await db.execute(
         SqlCommand(
           backend == 'sqlite'

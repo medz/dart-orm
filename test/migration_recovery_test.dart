@@ -13,15 +13,13 @@ void main() {
     () async {
       final db = await sqlite(const SqliteOptions.memory());
       try {
-        final migration = Migration.steps('0001_invalid', {
-          SqlDialect.sqlite: [
-            const CheckedSql(
-              'VACUUM',
-              readyWhen: 'SELECT true',
-              doneWhen: 'SELECT true',
-            ),
-          ],
-        });
+        final migration = Migration.steps('0001_invalid', [
+          const CheckedSql(
+            'VACUUM',
+            readyWhen: 'SELECT true',
+            doneWhen: 'SELECT true',
+          ),
+        ], dialect: SqlDialect.sqlite);
         await expectLater(
           Migrator(db).apply([migration]),
           throwsA(isA<OrmException>()),
@@ -29,15 +27,13 @@ void main() {
         expect(await Migrator(db).history(), isEmpty);
         expect(
           () => validateMigrations([
-            Migration.steps('0001_control', {
-              SqlDialect.postgres: [
-                const CheckedSql(
-                  'COMMIT',
-                  readyWhen: 'SELECT true',
-                  doneWhen: 'SELECT true',
-                ),
-              ],
-            }),
+            Migration.steps('0001_control', [
+              const CheckedSql(
+                'COMMIT',
+                readyWhen: 'SELECT true',
+                doneWhen: 'SELECT true',
+              ),
+            ], dialect: SqlDialect.postgres),
           ], dialect: SqlDialect.postgres),
           throwsA(isA<OrmException>()),
         );
@@ -50,19 +46,20 @@ void main() {
   if (url == null) return;
   const schema = 'orm_recovery_tests';
   late Database<Postgres> admin, db;
-  final initial = Migration('0001_initial', {
-    SqlDialect.postgres: [
-      'CREATE TABLE payload (id BIGINT PRIMARY KEY, value TEXT NOT NULL, touches BIGINT NOT NULL DEFAULT 0)',
-      "INSERT INTO payload (id, value) VALUES (1, 'one'), (2, 'two')",
-    ],
-  });
+  final initial = Migration('0001_initial', [
+    'CREATE TABLE payload (id BIGINT PRIMARY KEY, value TEXT NOT NULL, touches BIGINT NOT NULL DEFAULT 0)',
+    "INSERT INTO payload (id, value) VALUES (1, 'one'), (2, 'two')",
+  ], dialect: SqlDialect.postgres);
   final index = CheckedSql.createIndex(
     'payload',
     const IndexSchema('value_lookup', ['value'], unique: true),
   );
-  Migration build(List<MigrationStep> steps) => Migration.steps('0002_index', {
-    SqlDialect.postgres: steps,
-  }, previous: initial.checksum);
+  Migration build(List<MigrationStep> steps) => Migration.steps(
+    '0002_index',
+    steps,
+    previous: initial.checksum,
+    dialect: SqlDialect.postgres,
+  );
   setUpAll(() async {
     admin = postgres(PostgresOptions(url: Uri.parse(url), tls: .disable));
     await admin.execute(SqlCommand('CREATE SCHEMA IF NOT EXISTS $schema'));
@@ -212,7 +209,11 @@ void main() {
       // Even an empty applied history cannot hide an attempted migration.
       await db.execute(SqlCommand('DELETE FROM "_orm_migrations"'));
       final snapshot = SchemaSnapshot([]);
-      final baseline = Migration.create('0001_baseline', snapshot.tables);
+      final baseline = Migration.create(
+        '0001_baseline',
+        snapshot.tables,
+        dialect: db.dialect,
+      );
       await expectLater(
         Migrator(db).baseline([baseline], expected: snapshot),
         throwsA(
@@ -396,7 +397,7 @@ void main() {
               ? [ExecuteSql(update), index]
               : [index, ExecuteSql(update)],
         );
-        final project = await MigrationProject.create();
+        final project = await MigrationProject.create(postgresSchema: schema);
         try {
           for (final m in [initial, migration]) {
             await project.append(m);

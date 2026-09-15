@@ -11,26 +11,30 @@ final payload = TableSchema(
   ],
   primaryKey: ['id'],
 );
-final initial = Migration.create('0001_initial', [payload]);
+Migration initialFor(SqlDialect dialect) =>
+    Migration.create('0001_initial', [payload], dialect: dialect);
 Migration fill({
+  required SqlDialect dialect,
   int batchSize = 3,
   String? doneWhen,
   Map<String, String>? set,
-}) => Migration.steps('0002_fill', {
-  for (final dialect in SqlDialect.values)
-    dialect: [
-      Backfill(
-        payload,
-        set: set ?? {'value': 'upper(source)', 'touches': 'touches + 1'},
-        where: 'value IS NULL',
-        batchSize: batchSize,
-        doneWhen: doneWhen ?? 'SELECT NOT EXISTS(SELECT 1 FROM payload WHERE value IS NULL OR touches <> 1)',
-      ),
-    ],
-}, previous: initial.checksum);
+}) => Migration.steps(
+  '0002_fill',
+  [
+    Backfill(
+      payload,
+      set: set ?? {'value': 'upper(source)', 'touches': 'touches + 1'},
+      where: 'value IS NULL',
+      batchSize: batchSize,
+      doneWhen: doneWhen ?? 'SELECT NOT EXISTS(SELECT 1 FROM payload WHERE value IS NULL OR touches <> 1)',
+    ),
+  ],
+  previous: initialFor(dialect).checksum,
+  dialect: dialect,
+);
 
 Future<void> seed(Database<Backend> db, {int count = 8}) async {
-  await Migrator(db).apply([initial]);
+  await Migrator(db).apply([initialFor(db.dialect)]);
   for (var i = 1; i <= count; i++) {
     await db.execute(
       SqlCommand(

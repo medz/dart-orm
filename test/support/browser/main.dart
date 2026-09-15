@@ -39,10 +39,11 @@ Future<void> check(String name, Future<void> Function() body) async {
 
 Future<Database<Sqlite>> memory() =>
     sqliteWeb(SqliteWebOptions.memory(wasm: wasm, worker: worker));
-Future<void> initialize(Database<Sqlite> db) =>
-    Migrator(db)
-        .apply([Migration.create('0001_browser', appSchema)])
-        .then((_) {});
+Future<void> initialize(Database<Sqlite> db) => Migrator(db)
+    .apply([
+      Migration.create('0001_browser', appSchema, dialect: SqlDialect.sqlite),
+    ])
+    .then((_) {});
 
 Future<void> main() async {
   try {
@@ -73,7 +74,11 @@ Future<void> main() async {
         await check(
           'persistent schema upgrades after reload preserve existing data',
           () async {
-            final first = Migration.create('0001_browser', appSchema);
+            final first = Migration.create(
+              '0001_browser',
+              appSchema,
+              dialect: SqlDialect.sqlite,
+            );
             final target = SchemaSnapshot([
               ...appSchema,
               TableSchema(
@@ -86,6 +91,7 @@ Future<void> main() async {
               from: SchemaSnapshot(appSchema),
               to: target,
               previous: first.checksum,
+              dialect: SqlDialect.sqlite,
             );
             await Migrator(recovered).apply([first, second]);
             expect(
@@ -179,7 +185,11 @@ Future<void> main() async {
             'Computed update differs',
           );
           final start = SchemaSnapshot(appSchema);
-          final initial = Migration.create('0001_browser', appSchema);
+          final initial = Migration.create(
+            '0001_browser',
+            appSchema,
+            dialect: SqlDialect.sqlite,
+          );
           final target = SchemaSnapshot([
             for (final table in appSchema)
               if (table.name != 'users')
@@ -210,6 +220,7 @@ Future<void> main() async {
             from: start,
             to: target,
             previous: initial.checksum,
+            dialect: SqlDialect.sqlite,
           );
           await Migrator(isolated).apply([initial, migration]);
           expect(
@@ -240,7 +251,11 @@ Future<void> main() async {
               checks: constraints,
             );
             final start = SchemaSnapshot([table(const [])]);
-            final first = Migration.create('0001_initial', start.tables);
+            final first = Migration.create(
+              '0001_initial',
+              start.tables,
+              dialect: SqlDialect.sqlite,
+            );
             await Migrator(isolated).apply([first]);
             await isolated.execute(
               SqlCommand('INSERT INTO scores VALUES (-1)'),
@@ -253,6 +268,7 @@ Future<void> main() async {
               from: start,
               to: target,
               previous: first.checksum,
+              dialect: SqlDialect.sqlite,
             );
             await rejects(() => Migrator(isolated).apply([first, second]));
             expect(

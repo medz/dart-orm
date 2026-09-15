@@ -22,7 +22,7 @@ Future<void> runMigrationCli(
   SchemaSnapshot? schema,
   MigrationConnection? connect,
   SchemaRenames renames = const SchemaRenames(),
-  Map<SqlDialect, Map<String, Map<String, String>>> using = const {},
+  Map<String, Map<String, String>> using = const {},
 }) async {
   void report(Object? value) =>
       stdout.writeln(const JsonEncoder.withIndent('  ').convert(value));
@@ -91,6 +91,7 @@ Rebuild static imports with: dart run orm migration registry <directory>''');
     if (command == 'check') {
       report({
         'valid': true,
+        'dialect': history.dialect.name,
         'migrations': migrations.map((m) => m.id).toList(),
       });
       return;
@@ -109,6 +110,7 @@ Rebuild static imports with: dart run orm migration registry <directory>''');
       }
       final change = Migration.diff(
         rest.single,
+        dialect: history.dialect,
         from: previous?.snapshot ?? SchemaSnapshot([]),
         to: schema,
         previous: previous?.checksum,
@@ -116,7 +118,7 @@ Rebuild static imports with: dart run orm migration registry <directory>''');
         using: using,
         allowDestructive: destructive,
       );
-      if (change.steps.values.every((steps) => steps.isEmpty)) {
+      if (change.steps.isEmpty) {
         report({'created': null, 'reason': 'Schema is unchanged.'});
       } else {
         final path = await writeMigration(
@@ -146,22 +148,26 @@ Rebuild static imports with: dart run orm migration registry <directory>''');
       readOnly: !{'apply', 'baseline'}.contains(command),
     );
     try {
+      if (db.dialect != history.dialect) {
+        throw OrmException(
+          'MIGRATION.TARGET',
+          'History targets ${history.dialect.name}, connection is ${db.dialect.name}.',
+        );
+      }
       final migrator = Migrator(db);
       switch (command) {
         case 'plan':
           final pending = await migrator.plan(migrations);
           report({
             'atomic': !pending.any(
-              (m) => m.steps[db.dialect]!.any(
-                (s) => s is CheckedSql || s is Backfill,
-              ),
+              (m) => m.steps.any((s) => s is CheckedSql || s is Backfill),
             ),
             'pending': [
               for (final m in pending)
                 {
                   'id': m.id,
                   'checksum': m.checksum,
-                  'steps': m.steps[db.dialect]!.map((s) => s.toJson()).toList(),
+                  'steps': m.steps.map((s) => s.toJson()).toList(),
                 },
             ],
             'progress': (await migrator.progress())

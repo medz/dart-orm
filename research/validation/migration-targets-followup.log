@@ -1,0 +1,32 @@
+Running build hooks...Running build hooks...00:00 +0: loading test/migration_target_test.dart
+00:00 +0: test/migration_target_test.dart: history requires a single engine even when empty or SQL is portable
+00:00 +1: test/migration_target_test.dart: unselected expressions cannot change a saved plan, hash or source
+00:00 +2: test/migration_target_test.dart: SQLite virtual indexes and computed mode changes ignore PostgreSQL limits
+00:00 +3: test/migration_target_test.dart: replacing stored values with computed values requires explicit review
+00:00 +4: test/migration_target_test.dart: older PostgreSQL is rejected before locks, journals or partial execution
+00:00 +5: test/migration_target_test.dart: registry fixes its engine at initialization and refuses retargeting
+00:00 +6: test/migration_target_test.dart: wrong engine fails before any migration SQL for runner and every connected CLI command
+OrmException(MIGRATION.TARGET): History targets postgres, connection is sqlite.
+OrmException(MIGRATION.TARGET): History targets postgres, connection is sqlite.
+OrmException(MIGRATION.TARGET): History targets postgres, connection is sqlite.
+OrmException(MIGRATION.TARGET): History targets postgres, connection is sqlite.
+OrmException(MIGRATION.TARGET): History targets postgres, connection is sqlite.
+OrmException(MIGRATION.TARGET): History targets postgres, connection is sqlite.
+00:00 +7: test/migration_target_test.dart: PostgreSQL applies only its own generated conversion and rejects a SQLite history before SQL
+00:00 +8: loading test/migration_recovery_test.dart
+00:00 +8: test/migration_recovery_test.dart: (setUpAll)
+00:00 +8: test/migration_recovery_test.dart: SQLite and transaction controls reject recoverable autocommit steps
+00:00 +9: test/migration_recovery_test.dart: mixed migrations checkpoint SQL and verify concurrent indexes
+00:00 +10: test/migration_recovery_test.dart: same-name wrong-definition indexes are never accepted as completion
+00:00 +11: test/migration_recovery_test.dart: failed unique builds leave INVALID indexes and require explicit repair
+00:00 +12: test/migration_recovery_test.dart: failed attempts freeze migration checksums and block baseline
+00:00 +13: test/migration_recovery_test.dart: failed postconditions report their actual failing stage
+00:00 +14: test/migration_recovery_test.dart: recovery probes must produce one boolean value
+00:00 +15: test/migration_recovery_test.dart: concurrent runners serialize normal and autocommit steps under one lock
+00:01 +16: test/migration_recovery_test.dart: runner lock timeout leaves history untouched and the connection reusable
+00:01 +17: test/migration_recovery_test.dart: ordinary SQL inside a mixed migration rolls back only its failed step and resumes
+00:01 +18: test/migration_recovery_test.dart: completion checks reject partial and NULLS NOT DISTINCT definitions
+00:01 +19: test/migration_recovery_test.dart: real process exit after concurrent DDL resumes without replay
+00:11 +20: test/migration_recovery_test.dart: real process exit after transaction commit resumes without replay
+00:19 +21: test/migration_recovery_test.dart: (tearDownAll)
+00:19 +21: All tests passed!

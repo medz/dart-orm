@@ -10,12 +10,13 @@ final class SchemaRenames {
 
 Migration _diff(
   String id, {
+  required SqlDialect dialect,
   required SchemaSnapshot from,
   required SchemaSnapshot to,
   required SchemaRenames renames,
   required String? previous,
   required bool allowDestructive,
-  required Map<SqlDialect, Map<String, Map<String, String>>> using,
+  required Map<String, Map<String, String>> using,
 }) {
   final renameSql = <MigrationStep>[];
   final oldNames = from.tables.map((t) => t.name).toSet();
@@ -176,7 +177,18 @@ Migration _diff(
           '$name.${c.name} identity changes require a manual migration.',
         );
       }
-      if (prior != null &&
+      if (dialect == SqlDialect.sqlite &&
+          prior != null &&
+          prior.computed == null &&
+          c.computed != null &&
+          !allowDestructive) {
+        throw OrmException(
+          'MIGRATION.DESTRUCTIVE',
+          '$name.${c.name} replaces stored values with a computed expression; review and allowDestructive explicitly.',
+        );
+      }
+      if (dialect == SqlDialect.postgres &&
+          prior != null &&
           ((prior.computed == null && c.computed != null) ||
               (prior.computed != null &&
                   c.computed != null &&
@@ -189,312 +201,314 @@ Migration _diff(
         );
       }
       if (prior != null && c.computed == null && !_sameStorage(prior, c)) {
-        for (final dialect in SqlDialect.values) {
-          if (using[dialect]?[name]?[c.name] == null) {
-            throw OrmException(
-              'MIGRATION.CAST',
-              '$name.${c.name} needs an explicit ${dialect.name} conversion expression.',
-            );
-          }
-        }
-      }
-    }
-  }
-  for (final dialect in using.entries) {
-    for (final table in dialect.value.entries) {
-      for (final entry in table.value.entries) {
-        final old = before[table.key]?.columns
-            .where((c) => c.name == entry.key)
-            .firstOrNull;
-        final next = after[table.key]?.columns
-            .where((c) => c.name == entry.key)
-            .firstOrNull;
-        if (old == null ||
-            next == null ||
-            next.computed != null ||
-            _sameStorage(old, next) ||
-            entry.value.trim().isEmpty) {
+        if (using[name]?[c.name] == null) {
           throw OrmException(
             'MIGRATION.CAST',
-            '${table.key}.${entry.key} conversion must correspond to an actual type change.',
+            '$name.${c.name} needs an explicit ${dialect.name} conversion expression.',
           );
         }
       }
     }
   }
-  final plans = <SqlDialect, List<MigrationStep>>{};
-  for (final dialect in SqlDialect.values) {
-    final steps = <MigrationStep>[];
-    for (final table in {
-      ...checkedRenames,
-      if (dialect == SqlDialect.sqlite) ...computedRenames,
-    }) {
-      if (dialect == SqlDialect.sqlite) {
-        var target = _withChecks(table, const []);
-        if (computedRenames.contains(table)) {
-          target = _materializedColumns(target);
-        }
+  for (final table in using.entries) {
+    for (final entry in table.value.entries) {
+      final old = before[table.key]?.columns
+          .where((c) => c.name == entry.key)
+          .firstOrNull;
+      final next = after[table.key]?.columns
+          .where((c) => c.name == entry.key)
+          .firstOrNull;
+      if (old == null ||
+          next == null ||
+          next.computed != null ||
+          _sameStorage(old, next) ||
+          entry.value.trim().isEmpty) {
+        throw OrmException(
+          'MIGRATION.CAST',
+          '${table.key}.${entry.key} conversion must correspond to an actual type change.',
+        );
+      }
+    }
+  }
+  final steps = <MigrationStep>[];
+  for (final table in {
+    ...checkedRenames,
+    if (dialect == SqlDialect.sqlite) ...computedRenames,
+  }) {
+    if (dialect == SqlDialect.sqlite) {
+      var target = _withChecks(table, const []);
+      if (computedRenames.contains(table)) {
+        target = _materializedColumns(target);
+      }
+      steps.add(
+        RebuildTable(
+          table,
+          target,
+          copy: {for (final c in table.columns) c.name: _quote(c.name)},
+        ),
+      );
+    } else {
+      for (final check in table.checks) {
         steps.add(
-          RebuildTable(
-            table,
-            target,
-            copy: {for (final c in table.columns) c.name: _quote(c.name)},
+          DropConstraint(table.name, {
+            'kind': 'c',
+            'name': check.name,
+            'expression': check.expression(dialect),
+          }),
+        );
+      }
+    }
+  }
+  steps.addAll(renameSql);
+  final addedForeignKeys = <(String, ForeignKey)>[];
+  if (dialect == SqlDialect.postgres) {
+    bool keysChanged(String name) {
+      final a = before[name], b = after[name];
+      return a == null ||
+          b == null ||
+          _hash([
+                a.primaryKey,
+                a.uniqueKeys,
+                a.indexes.where((i) => i.unique).map(_indexJson).toList(),
+              ]) !=
+              _hash([
+                b.primaryKey,
+                b.uniqueKeys,
+                b.indexes.where((i) => i.unique).map(_indexJson).toList(),
+              ]);
+    }
+
+    bool typesChanged(String name) {
+      final a = before[name], b = after[name];
+      return a == null ||
+          b == null ||
+          a.columns.any(
+            (c) =>
+                b.columns.any((n) => c.name == n.name && !_sameStorage(c, n)),
+          );
+    }
+
+    for (final old in before.values) {
+      final next = after[old.name];
+      for (final key in old.foreignKeys) {
+        final retained =
+            next?.foreignKeys.any((k) => _sameForeignKey(k, key)) ?? false;
+        if (!retained ||
+            keysChanged(key.target) ||
+            typesChanged(key.target) ||
+            typesChanged(old.name)) {
+          steps.add(
+            DropConstraint(old.name, {'kind': 'f', ..._foreignKeyJson(key)}),
+          );
+          if (retained) addedForeignKeys.add((old.name, key));
+        }
+      }
+      if (next != null) {
+        for (final key in next.foreignKeys) {
+          if (!old.foreignKeys.any((k) => _sameForeignKey(k, key))) {
+            addedForeignKeys.add((old.name, key));
+          }
+        }
+      }
+    }
+  }
+  for (final name in removedTables) {
+    steps.add(DropTable(name));
+  }
+  for (final name in addedTables) {
+    final table = after[name]!;
+    steps.add(ExecuteSql(_createTable(table, dialect)));
+    for (final index in table.indexes) {
+      steps.add(ExecuteSql(_createIndex(name, index)));
+    }
+    if (dialect == SqlDialect.postgres) {
+      addedForeignKeys.addAll(table.foreignKeys.map((k) => (name, k)));
+    }
+  }
+  for (final name in shared) {
+    var old = before[name]!;
+    if (dialect == SqlDialect.sqlite &&
+        computedRenames.any((t) => tableName(t.name) == name)) {
+      old = _materializedColumns(old);
+    }
+    final next = after[name]!;
+    final oldColumns = {for (final c in old.columns) c.name: c};
+    final newColumns = {for (final c in next.columns) c.name: c};
+    final removed = oldColumns.keys.toSet().difference(newColumns.keys.toSet());
+    final added = newColumns.keys.toSet().difference(oldColumns.keys.toSet());
+    final changed = oldColumns.keys
+        .toSet()
+        .intersection(newColumns.keys.toSet())
+        .where(
+          (c) =>
+              _hash(_columnJson(oldColumns[c]!)) !=
+              _hash(_columnJson(newColumns[c]!)),
+        )
+        .toList();
+    final keysChanged =
+        _hash([
+          old.primaryKey,
+          old.uniqueKeys,
+          old.foreignKeys.map(_foreignKeyJson).toList(),
+        ]) !=
+        _hash([
+          next.primaryKey,
+          next.uniqueKeys,
+          next.foreignKeys.map(_foreignKeyJson).toList(),
+        ]);
+    final checks = _checkDelta(old.checks, next.checks, dialect);
+    if (dialect == SqlDialect.sqlite &&
+        (removed.isNotEmpty ||
+            changed.isNotEmpty ||
+            keysChanged ||
+            checks.removed.isNotEmpty ||
+            checks.added.isNotEmpty ||
+            added.any((c) => !_canAddSqlite(newColumns[c]!)))) {
+      steps.add(
+        RebuildTable(
+          old,
+          next,
+          copy: {
+            for (final column in newColumns.keys.where(
+              (c) =>
+                  oldColumns.containsKey(c) && newColumns[c]!.computed == null,
+            ))
+              column: using[name]?[column] ?? _quote(column),
+          },
+        ),
+      );
+      continue;
+    }
+    if (dialect == SqlDialect.postgres) {
+      for (final check in checks.removed) {
+        steps.add(
+          DropConstraint(name, {
+            'kind': 'c',
+            'name': check.name,
+            'expression': check.expression(dialect),
+          }),
+        );
+      }
+      if (_hash(old.primaryKey) != _hash(next.primaryKey) &&
+          old.primaryKey.isNotEmpty) {
+        steps.add(
+          DropConstraint(name, {'kind': 'p', 'columns': old.primaryKey}),
+        );
+      }
+      for (final key in old.uniqueKeys) {
+        if (!next.uniqueKeys.any((k) => _hash(k) == _hash(key))) {
+          steps.add(DropConstraint(name, {'kind': 'u', 'columns': key}));
+        }
+      }
+    }
+    for (final index in old.indexes) {
+      if (!next.indexes.any(
+        (i) => _hash(_indexJson(i)) == _hash(_indexJson(index)),
+      )) {
+        steps.add(ExecuteSql('DROP INDEX ${_quote(index.name)}'));
+      }
+    }
+    for (final column in removed) {
+      steps.add(
+        ExecuteSql('ALTER TABLE ${_quote(name)} DROP COLUMN ${_quote(column)}'),
+      );
+    }
+    for (final column in added) {
+      steps.add(
+        ExecuteSql(
+          'ALTER TABLE ${_quote(name)} ADD COLUMN ${_columnDefinition(newColumns[column]!, dialect)}',
+        ),
+      );
+    }
+    for (final column in changed) {
+      final a = oldColumns[column]!, b = newColumns[column]!;
+      final prefix =
+          'ALTER TABLE ${_quote(name)} ALTER COLUMN ${_quote(column)}';
+      final typeChanged = !_sameStorage(a, b);
+      if (a.computed != null && b.computed == null) {
+        steps.add(ExecuteSql('$prefix DROP EXPRESSION'));
+      }
+      if (typeChanged && a.defaultSql != null) {
+        steps.add(ExecuteSql('$prefix DROP DEFAULT'));
+      }
+      if (typeChanged) {
+        steps.add(
+          ExecuteSql(
+            '$prefix TYPE ${_columnStorageType(b, dialect)}'
+            '${b.computed != null ? '' : ' USING (${using[name]![column]})'}',
           ),
         );
-      } else {
-        for (final check in table.checks) {
+      }
+      if (b.computed != null &&
+          (a.computed?.expression(dialect) != b.computed!.expression(dialect) ||
+              typeChanged)) {
+        steps.add(
+          ExecuteSql(
+            '$prefix SET EXPRESSION AS (${_coerceColumn(b.computed!.expression(dialect), b, dialect)}\n)',
+          ),
+        );
+      }
+      if (a.nullable != b.nullable) {
+        steps.add(
+          ExecuteSql('$prefix ${b.nullable ? 'DROP' : 'SET'} NOT NULL'),
+        );
+      }
+      if (a.defaultSql != b.defaultSql ||
+          (typeChanged && b.defaultSql != null)) {
+        steps.add(
+          ExecuteSql(
+            '$prefix ${b.defaultSql == null ? 'DROP DEFAULT' : 'SET DEFAULT (${b.defaultSql})'}',
+          ),
+        );
+      }
+    }
+    if (dialect == SqlDialect.postgres) {
+      if (checks.added.isNotEmpty) {
+        steps.add(
+          ExecuteSql(
+            'ALTER TABLE ${_quote(name)} '
+            '${checks.added.map((c) => 'ADD ${_checkDefinition(c, dialect)}').join(', ')}',
+          ),
+        );
+      }
+      if (_hash(old.primaryKey) != _hash(next.primaryKey) &&
+          next.primaryKey.isNotEmpty) {
+        steps.add(
+          ExecuteSql(
+            'ALTER TABLE ${_quote(name)} ADD PRIMARY KEY (${next.primaryKey.map(_quote).join(', ')})',
+          ),
+        );
+      }
+      for (final key in next.uniqueKeys) {
+        if (!old.uniqueKeys.any((k) => _hash(k) == _hash(key))) {
           steps.add(
-            DropConstraint(table.name, {'kind': 'c', ..._checkJson(check)}),
+            ExecuteSql(
+              'ALTER TABLE ${_quote(name)} ADD UNIQUE (${key.map(_quote).join(', ')})',
+            ),
           );
         }
       }
     }
-    steps.addAll(renameSql);
-    final addedForeignKeys = <(String, ForeignKey)>[];
-    if (dialect == SqlDialect.postgres) {
-      bool keysChanged(String name) {
-        final a = before[name], b = after[name];
-        return a == null ||
-            b == null ||
-            _hash([
-                  a.primaryKey,
-                  a.uniqueKeys,
-                  a.indexes.where((i) => i.unique).map(_indexJson).toList(),
-                ]) !=
-                _hash([
-                  b.primaryKey,
-                  b.uniqueKeys,
-                  b.indexes.where((i) => i.unique).map(_indexJson).toList(),
-                ]);
-      }
-
-      bool typesChanged(String name) {
-        final a = before[name], b = after[name];
-        return a == null ||
-            b == null ||
-            a.columns.any(
-              (c) =>
-                  b.columns.any((n) => c.name == n.name && !_sameStorage(c, n)),
-            );
-      }
-
-      for (final old in before.values) {
-        final next = after[old.name];
-        for (final key in old.foreignKeys) {
-          final retained =
-              next?.foreignKeys.any((k) => _sameForeignKey(k, key)) ?? false;
-          if (!retained ||
-              keysChanged(key.target) ||
-              typesChanged(key.target) ||
-              typesChanged(old.name)) {
-            steps.add(
-              DropConstraint(old.name, {'kind': 'f', ..._foreignKeyJson(key)}),
-            );
-            if (retained) addedForeignKeys.add((old.name, key));
-          }
-        }
-        if (next != null) {
-          for (final key in next.foreignKeys) {
-            if (!old.foreignKeys.any((k) => _sameForeignKey(k, key))) {
-              addedForeignKeys.add((old.name, key));
-            }
-          }
-        }
-      }
-    }
-    for (final name in removedTables) {
-      steps.add(DropTable(name));
-    }
-    for (final name in addedTables) {
-      final table = after[name]!;
-      steps.add(ExecuteSql(_createTable(table, dialect)));
-      for (final index in table.indexes) {
+    for (final index in next.indexes) {
+      if (!old.indexes.any(
+        (i) => _hash(_indexJson(i)) == _hash(_indexJson(index)),
+      )) {
         steps.add(ExecuteSql(_createIndex(name, index)));
       }
-      if (dialect == SqlDialect.postgres) {
-        addedForeignKeys.addAll(table.foreignKeys.map((k) => (name, k)));
-      }
     }
-    for (final name in shared) {
-      var old = before[name]!;
-      if (dialect == SqlDialect.sqlite &&
-          computedRenames.any((t) => tableName(t.name) == name)) {
-        old = _materializedColumns(old);
-      }
-      final next = after[name]!;
-      final oldColumns = {for (final c in old.columns) c.name: c};
-      final newColumns = {for (final c in next.columns) c.name: c};
-      final removed = oldColumns.keys.toSet().difference(
-        newColumns.keys.toSet(),
-      );
-      final added = newColumns.keys.toSet().difference(oldColumns.keys.toSet());
-      final changed = oldColumns.keys
-          .toSet()
-          .intersection(newColumns.keys.toSet())
-          .where(
-            (c) =>
-                _hash(_columnJson(oldColumns[c]!)) !=
-                _hash(_columnJson(newColumns[c]!)),
-          )
-          .toList();
-      final keysChanged =
-          _hash([
-            old.primaryKey,
-            old.uniqueKeys,
-            old.foreignKeys.map(_foreignKeyJson).toList(),
-          ]) !=
-          _hash([
-            next.primaryKey,
-            next.uniqueKeys,
-            next.foreignKeys.map(_foreignKeyJson).toList(),
-          ]);
-      final checks = _checkDelta(old.checks, next.checks, dialect);
-      if (dialect == SqlDialect.sqlite &&
-          (removed.isNotEmpty ||
-              changed.isNotEmpty ||
-              keysChanged ||
-              checks.removed.isNotEmpty ||
-              checks.added.isNotEmpty ||
-              added.any((c) => !_canAddSqlite(newColumns[c]!)))) {
-        steps.add(
-          RebuildTable(
-            old,
-            next,
-            copy: {
-              for (final column in newColumns.keys.where(
-                (c) =>
-                    oldColumns.containsKey(c) &&
-                    newColumns[c]!.computed == null,
-              ))
-                column: using[dialect]?[name]?[column] ?? _quote(column),
-            },
-          ),
-        );
-        continue;
-      }
-      if (dialect == SqlDialect.postgres) {
-        for (final check in checks.removed) {
-          steps.add(DropConstraint(name, {'kind': 'c', ..._checkJson(check)}));
-        }
-        if (_hash(old.primaryKey) != _hash(next.primaryKey) &&
-            old.primaryKey.isNotEmpty) {
-          steps.add(
-            DropConstraint(name, {'kind': 'p', 'columns': old.primaryKey}),
-          );
-        }
-        for (final key in old.uniqueKeys) {
-          if (!next.uniqueKeys.any((k) => _hash(k) == _hash(key))) {
-            steps.add(DropConstraint(name, {'kind': 'u', 'columns': key}));
-          }
-        }
-      }
-      for (final index in old.indexes) {
-        if (!next.indexes.any(
-          (i) => _hash(_indexJson(i)) == _hash(_indexJson(index)),
-        )) {
-          steps.add(ExecuteSql('DROP INDEX ${_quote(index.name)}'));
-        }
-      }
-      for (final column in removed) {
-        steps.add(
-          ExecuteSql(
-            'ALTER TABLE ${_quote(name)} DROP COLUMN ${_quote(column)}',
-          ),
-        );
-      }
-      for (final column in added) {
-        steps.add(
-          ExecuteSql(
-            'ALTER TABLE ${_quote(name)} ADD COLUMN ${_columnDefinition(newColumns[column]!, dialect)}',
-          ),
-        );
-      }
-      for (final column in changed) {
-        final a = oldColumns[column]!, b = newColumns[column]!;
-        final prefix =
-            'ALTER TABLE ${_quote(name)} ALTER COLUMN ${_quote(column)}';
-        final typeChanged = !_sameStorage(a, b);
-        if (a.computed != null && b.computed == null) {
-          steps.add(ExecuteSql('$prefix DROP EXPRESSION'));
-        }
-        if (typeChanged && a.defaultSql != null) {
-          steps.add(ExecuteSql('$prefix DROP DEFAULT'));
-        }
-        if (typeChanged) {
-          steps.add(
-            ExecuteSql(
-              '$prefix TYPE ${_columnStorageType(b, dialect)}'
-              '${b.computed != null ? '' : ' USING (${using[dialect]![name]![column]})'}',
-            ),
-          );
-        }
-        if (b.computed != null &&
-            (a.computed?.expression(dialect) !=
-                    b.computed!.expression(dialect) ||
-                typeChanged)) {
-          steps.add(
-            ExecuteSql(
-              '$prefix SET EXPRESSION AS (${_coerceColumn(b.computed!.expression(dialect), b, dialect)}\n)',
-            ),
-          );
-        }
-        if (a.nullable != b.nullable) {
-          steps.add(
-            ExecuteSql('$prefix ${b.nullable ? 'DROP' : 'SET'} NOT NULL'),
-          );
-        }
-        if (a.defaultSql != b.defaultSql ||
-            (typeChanged && b.defaultSql != null)) {
-          steps.add(
-            ExecuteSql(
-              '$prefix ${b.defaultSql == null ? 'DROP DEFAULT' : 'SET DEFAULT (${b.defaultSql})'}',
-            ),
-          );
-        }
-      }
-      if (dialect == SqlDialect.postgres) {
-        if (checks.added.isNotEmpty) {
-          steps.add(
-            ExecuteSql(
-              'ALTER TABLE ${_quote(name)} '
-              '${checks.added.map((c) => 'ADD ${_checkDefinition(c, dialect)}').join(', ')}',
-            ),
-          );
-        }
-        if (_hash(old.primaryKey) != _hash(next.primaryKey) &&
-            next.primaryKey.isNotEmpty) {
-          steps.add(
-            ExecuteSql(
-              'ALTER TABLE ${_quote(name)} ADD PRIMARY KEY (${next.primaryKey.map(_quote).join(', ')})',
-            ),
-          );
-        }
-        for (final key in next.uniqueKeys) {
-          if (!old.uniqueKeys.any((k) => _hash(k) == _hash(key))) {
-            steps.add(
-              ExecuteSql(
-                'ALTER TABLE ${_quote(name)} ADD UNIQUE (${key.map(_quote).join(', ')})',
-              ),
-            );
-          }
-        }
-      }
-      for (final index in next.indexes) {
-        if (!old.indexes.any(
-          (i) => _hash(_indexJson(i)) == _hash(_indexJson(index)),
-        )) {
-          steps.add(ExecuteSql(_createIndex(name, index)));
-        }
-      }
-    }
-    for (final (name, key) in addedForeignKeys) {
-      steps.add(
-        ExecuteSql('ALTER TABLE ${_quote(name)} ADD ${_foreignKey(key)}'),
-      );
-    }
-    plans[dialect] = steps;
   }
-  return Migration.steps(id, plans, snapshot: to, previous: previous);
+  for (final (name, key) in addedForeignKeys) {
+    steps.add(
+      ExecuteSql('ALTER TABLE ${_quote(name)} ADD ${_foreignKey(key)}'),
+    );
+  }
+  return Migration.steps(
+    id,
+    steps,
+    dialect: dialect,
+    snapshot: to,
+    previous: previous,
+  );
 }
 
 bool _sameForeignKey(ForeignKey a, ForeignKey b) =>

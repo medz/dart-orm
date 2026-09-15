@@ -6,7 +6,9 @@ import 'schema.orm.dart';
 Future<void> main() async {
   final db = await sqlite(const SqliteOptions.memory());
   try {
-    await Migrator(db).apply([Migration.create('0001_instant', appSchema)]);
+    await Migrator(
+      db,
+    ).apply([Migration.create('0001_instant', appSchema, dialect: db.dialect)]);
     final expected = DateTime.utc(2024);
     if (Codecs.dateTime.decode('2024-01-01 00:00:00') != expected) {
       throw StateError('UTC storage used process timezone');

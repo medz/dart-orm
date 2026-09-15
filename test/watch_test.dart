@@ -26,7 +26,9 @@ void main() {
       );
       _Snapshots<String>? result;
       try {
-        await Migrator(db).apply([Migration.create('0001_initial', appSchema)]);
+        await Migrator(db).apply([
+          Migration.create('0001_initial', appSchema, dialect: db.dialect),
+        ]);
         final user = await db.users.create(email: 'before');
         result = _Snapshots(db.users.select((u) => u.email).watch());
         expect(await result.next(), ['before']);
@@ -92,7 +94,9 @@ void runTests(
       for (final table in ['posts', 'users', '_orm_migrations']) {
         await db.execute(SqlCommand('DROP TABLE IF EXISTS "$table"'));
       }
-      await Migrator(db).apply([Migration.create('0001_initial', appSchema)]);
+      await Migrator(db).apply([
+        Migration.create('0001_initial', appSchema, dialect: db.dialect),
+      ]);
       events.clear();
     });
     tearDown(() async {

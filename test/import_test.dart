@@ -78,7 +78,13 @@ void main() {
         final client = await generate(draft);
         final snapshot = client.snapshot;
         expect((await verifySchema(db, snapshot)).differences, isEmpty);
-        final history = [Migration.create('0001_baseline', snapshot.tables)];
+        final history = [
+          Migration.create(
+            '0001_baseline',
+            snapshot.tables,
+            dialect: db.dialect,
+          ),
+        ];
         await Migrator(db).baseline(history, expected: snapshot);
         expect(
           (await db.execute(SqlCommand('SELECT email FROM accounts'))).rows,
@@ -536,7 +542,11 @@ USING (id > 0) WITH CHECK (id < 100)'''),
             final generated = await generate(draft);
             final expected = generated.snapshot;
             final baseline = await Migrator(db).baseline([
-              Migration.create('0001_protected', expected.tables),
+              Migration.create(
+                '0001_protected',
+                expected.tables,
+                dialect: db.dialect,
+              ),
             ], expected: expected);
             expect(baseline.matches, true);
             expect(

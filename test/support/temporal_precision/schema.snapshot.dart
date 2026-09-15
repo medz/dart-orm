@@ -29,11 +29,7 @@ final schema = SchemaSnapshot([
         "rounded",
         Codecs.time,
 
-        computed: ComputedColumn.forDialects(
-          sqlite: "\"clock\"",
-          postgres: "\"clock\"",
-          storage: ComputedStorage.stored,
-        ),
+        computed: ComputedColumn("\"clock\"", storage: ComputedStorage.stored),
 
         temporalPrecision: 0,
       ),

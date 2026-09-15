@@ -12,7 +12,9 @@ Future<void> checkTemporalPrecision(Uri wasm, Uri worker) async {
   }
 
   try {
-    await Migrator(db).apply([Migration.create('0001_precision', appSchema)]);
+    await Migrator(db).apply([
+      Migration.create('0001_precision', appSchema, dialect: db.dialect),
+    ]);
     final moment = await db.moments.create(
       clock: LocalTime.parse('23:59:59.9995'),
       local: LocalDateTime.parse('0001-01-01 00:00:00.0005 BC'),

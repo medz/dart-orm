@@ -43,7 +43,7 @@ Import the generated client and a driver:
 
 ```dart
 final db = await sqlite(const SqliteOptions.memory());
-await Migrator(db).apply([Migration.create('0001_initial', appSchema)]);
+await Migrator(db).apply([Migration.create('0001_initial', appSchema, dialect: db.dialect)]);
 final user = await db.users.create(email: 'seven@example.com');
 await db.users.byId(user.id).patch(nickname: .set('Seven'));
 final emails = await db.users.select((u) => u.email).get(); // List<String>

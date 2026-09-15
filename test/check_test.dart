@@ -34,8 +34,9 @@ void main() {
         tearDown(() => db.close());
 
         test('generated named and unnamed constraints enforce values and permit NULL', () async {
-          await Migrator(db)
-              .apply([Migration.create('0001_initial', appSchema)]);
+          await Migrator(db).apply([
+            Migration.create('0001_initial', appSchema, dialect: db.dialect),
+          ]);
           final row = await db.products.create(price: 10, state: 'draft');
           expect(row.stock, 0);
           expect(row.discount, isNull);
@@ -70,8 +71,9 @@ void main() {
         test(
           'import preserves names and SQL then generates a matching snapshot',
           () async {
-            await Migrator(db)
-                .apply([Migration.create('0001_initial', appSchema)]);
+            await Migrator(db).apply([
+              Migration.create('0001_initial', appSchema, dialect: db.dialect),
+            ]);
             await db.products.create(price: 10, state: 'draft');
             final directory = await Directory(
               '.dart_tool/orm-check-import-${dialect.name}',
@@ -92,7 +94,11 @@ void main() {
               await db.execute(SqlCommand('DROP TABLE _orm_migrations'));
               final snapshot = generated.snapshot;
               await Migrator(db).baseline([
-                Migration.create('0001_imported', snapshot.tables),
+                Migration.create(
+                  '0001_imported',
+                  snapshot.tables,
+                  dialect: db.dialect,
+                ),
               ], expected: snapshot);
               expect(await db.products.count(), 1);
             } finally {
@@ -119,7 +125,11 @@ void main() {
           'add, change and remove constraints validate old rows atomically',
           () async {
             final start = SchemaSnapshot([scores(const [])]);
-            final initial = Migration.create('0001_initial', start.tables);
+            final initial = Migration.create(
+              '0001_initial',
+              start.tables,
+              dialect: db.dialect,
+            );
             await Migrator(db).apply([initial]);
             await db.execute(SqlCommand('INSERT INTO scores VALUES (1, -2)'));
             final positive = SchemaSnapshot([
@@ -130,6 +140,7 @@ void main() {
               from: start,
               to: positive,
               previous: initial.checksum,
+              dialect: db.dialect,
             );
             await expectLater(
               Migrator(db).apply([initial, add]),
@@ -160,6 +171,7 @@ void main() {
               from: positive,
               to: stricter,
               previous: add.checksum,
+              dialect: db.dialect,
             );
             await expectLater(
               Migrator(db).apply([initial, add, change]),
@@ -173,6 +185,7 @@ void main() {
               from: stricter,
               to: start,
               previous: change.checksum,
+              dialect: db.dialect,
             );
             await Migrator(db).apply([initial, add, change, remove]);
             await db.execute(SqlCommand('UPDATE scores SET value = -4'));
@@ -189,7 +202,11 @@ void main() {
                 CheckSchema(null, 'value >= 0'),
               ]),
             ]);
-            final initial = Migration.create('0001_initial', start.tables);
+            final initial = Migration.create(
+              '0001_initial',
+              start.tables,
+              dialect: db.dialect,
+            );
             await Migrator(db).apply([initial]);
             expect((await verifySchema(db, start)).differences, isEmpty);
             final target = SchemaSnapshot([
@@ -200,6 +217,7 @@ void main() {
               from: start,
               to: target,
               previous: initial.checksum,
+              dialect: db.dialect,
             );
             await Migrator(db).apply([initial, migration]);
             expect((await inspectTable(db, 'scores')).checks, hasLength(1));
@@ -223,7 +241,11 @@ void main() {
             scores(const [CheckSchema('nonnegative', 'value >= 0')]),
             notes('scores'),
           ]);
-          final initial = Migration.create('0001_initial', start.tables);
+          final initial = Migration.create(
+            '0001_initial',
+            start.tables,
+            dialect: db.dialect,
+          );
           await Migrator(db).apply([initial]);
           await db.execute(SqlCommand('INSERT INTO scores VALUES (1, 3)'));
           await db.execute(SqlCommand('INSERT INTO notes VALUES (1)'));
@@ -259,12 +281,10 @@ void main() {
                 'rankings': {'value': 'points'},
               },
             ),
+            dialect: db.dialect,
           );
           if (dialect == SqlDialect.sqlite) {
-            expect(
-              migration.steps[dialect]!.whereType<RebuildTable>(),
-              hasLength(2),
-            );
+            expect(migration.steps.whereType<RebuildTable>(), hasLength(2));
           }
           await Migrator(db).apply([initial, migration]);
           expect((await verifySchema(db, target)).differences, isEmpty);
@@ -307,8 +327,9 @@ void main() {
               CheckSchema('valid', 'value / 2 > 0 -- trailing comment'),
             ]),
           ]);
-          await Migrator(db)
-              .apply([Migration.create('0001_initial', start.tables)]);
+          await Migrator(db).apply([
+            Migration.create('0001_initial', start.tables, dialect: db.dialect),
+          ]);
           expect((await verifySchema(db, start)).differences, isEmpty);
           for (final sql in [
             'value / (2 + 1) > 0',
@@ -363,7 +384,9 @@ void main() {
                 checks: [CheckSchema('valid', expression)],
               );
               await Migrator(db).apply([
-                Migration.create('0001_initial', [table('"Ä" > 0')]),
+                Migration.create('0001_initial', [
+                  table('"Ä" > 0'),
+                ], dialect: db.dialect),
               ]);
               expect(
                 (await verifySchema(
@@ -405,9 +428,9 @@ void main() {
               );
               await expectLater(
                 Migrator(db).apply([
-                  Migration.steps('0001_rebuild', {
-                    SqlDialect.sqlite: [step],
-                  }),
+                  Migration.steps('0001_rebuild', [
+                    step,
+                  ], dialect: SqlDialect.sqlite),
                 ]),
                 throwsA(
                   isA<OrmException>().having(
@@ -429,7 +452,9 @@ void main() {
             'catalog excludes unvalidated and NO INHERIT constraints',
             () async {
               await Migrator(db).apply([
-                Migration.create('0001_initial', [scores(const [])]),
+                Migration.create('0001_initial', [
+                  scores(const []),
+                ], dialect: db.dialect),
               ]);
               await db.execute(
                 SqlCommand(
@@ -473,8 +498,13 @@ void main() {
                   CheckSchema('counter', "nextval('check_counter') > 0"),
                 ]),
               ]);
-              await Migrator(db)
-                  .apply([Migration.create('0001_initial', start.tables)]);
+              await Migrator(db).apply([
+                Migration.create(
+                  '0001_initial',
+                  start.tables,
+                  dialect: db.dialect,
+                ),
+              ]);
               await db.execute(SqlCommand('INSERT INTO scores VALUES (1, 3)'));
               expect((await verifySchema(db, start)).differences, isEmpty);
               expect(
@@ -512,9 +542,22 @@ void main() {
         ),
       ),
     ]);
-    final diff = Migration.diff('0002_change', from: before, to: after);
-    expect(diff.steps[SqlDialect.sqlite], isEmpty);
-    expect(diff.steps[SqlDialect.postgres], isNotEmpty);
+    final diff = Migration.diff(
+      '0002_change',
+      from: before,
+      to: after,
+      dialect: SqlDialect.sqlite,
+    );
+    expect(diff.steps, isEmpty);
+    expect(
+      Migration.diff(
+        '0002_change',
+        from: before,
+        to: after,
+        dialect: SqlDialect.postgres,
+      ).steps,
+      isNotEmpty,
+    );
     final legacy = SchemaSnapshot([
       TableSchema('legacy', columns: [Column('id', Codecs.integer)]),
     ]).toJson();

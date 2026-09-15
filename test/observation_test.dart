@@ -42,7 +42,9 @@ void main() {
             );
             await db.execute(SqlCommand('CREATE SCHEMA orm_observation_tests'));
           }
-          await Migrator(db).apply([Migration.create('0001_teams', appSchema)]);
+          await Migrator(db).apply([
+            Migration.create('0001_teams', appSchema, dialect: db.dialect),
+          ]);
           await db.users.create(id: 1, name: 'Ada');
           await db.teams.create(id: 10, name: 'Core');
           await db.memberships.create(

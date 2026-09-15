@@ -2,8 +2,8 @@
 
 The common ORM lifecycle in
 [`new-dart-orm-design.md`](../research/new-dart-orm-design.md) is implemented and
-accepted within the [reviewed capability boundaries](capabilities.md). The final
-native run passed 835 tests with both databases enabled; the documented usage
+accepted within the [reviewed capability boundaries](capabilities.md). The original
+native baseline passed 835 tests with both databases enabled; the documented usage
 run and static analysis also passed. This map identifies the checked scenarios
 and separately captured platforms, rather than certifying every database feature
 or deployment target. Historical measurements remain pinned to their source.
@@ -26,7 +26,7 @@ or deployment target. Historical measurements remain pinned to their source.
 | §§4.2, 7, 12: many-to-many business records | `example/teams`, `many_to_many_test`, generated-type negatives and browser scenario: two FKs, composite membership keys, role/time payloads, bidirectional and nested projections, per-parent limits, parameter chunks, transaction/upsert/cascade/watch and actual query/row counts; [usage](relations.md#many-to-many-with-business-fields) |
 | §8: create/patch/delete, absent versus NULL/default, atomic expression writes, batch/upsert/returning | Generated client and `database_test`; later-chunk failure rolls back earlier chunks |
 | §9: explicit sessions, savepoints, lifetime, cancellation, unknown commits, retries and acquisition limits | `transaction_test`, `retry_test`, `acquisition_test`, `stream_test`; real database interruption and state readback |
-| §10: reviewed snapshots/diffs, explicit rename/conversion, history, baseline/drift and recoverable migrations | `migration_test`, `migration_recovery_test`, `backfill_test`, `schema_version_test`, import and CLI suites |
+| §10: reviewed snapshots/diffs, explicit rename/conversion, history, baseline/drift and recoverable migrations | `migration_test`, `migration_target_test`, `migration_recovery_test`, `backfill_test`, `schema_version_test`, import and CLI suites |
 | §11: distinct PostgreSQL/native SQLite configuration and connection ownership | `lib/postgres.dart`, `lib/sqlite.dart`; native suites exercise both backends, capability rejection, borrowed pools and disposal |
 | §§11–12: worker/persistence, real cursor streaming and commit-driven observation | Native `stream_test`/`watch_test`; real JS and Dart WASM browser reports include OPFS reload recovery and upgrade |
 | §§11–12: native Flutter | `example/flutter`, `tool/test_flutter.dart` and [Android capture](flutter.md): version 1 debug APK → version 2 AOT release APK → independent process restart; 4/17/11 assertions cover background SQLite, persistence, live migration/catalog, generated CRUD/relations, rollback/watch and cancellation/reuse |
@@ -65,6 +65,14 @@ streaming, failures and dynamic field snapshots on both native backends.
 | Review query, type and unmanaged catalog coverage | [Capability review](capabilities.md); final native suite includes real triggers and complete policy/RLS metadata checks |
 | Run documented onboarding and complex query usage | [Usage capture](../research/validation/usage.json): dependencies, generation, both existing examples, nine cookbook checks on each backend, migration-chain validation and clean analysis |
 
+The [single-engine migration correction](../research/validation/migration-targets.md)
+records a full run with 845 passes and two incorrectly configured crash-test
+registries, then 21 passing target/recovery tests after correcting them. It also
+verifies native AOT bundles, real Chrome JS/WASM and the public CLI workflow.
+Each history now fixes one engine, selected expressions alone affect fingerprints,
+and wrong connections fail before migration SQL. The latest Android runtime was
+not rerun; its earlier capture remains tied to its original revision.
+
 The [Dart migration acceptance](../research/validation/dart-migrations.json) records
 the replacement of JSON artifacts with Dart snapshots, fixed history and static
 registration. Its full native run passed 837 tests and found one old fixture path;
@@ -74,7 +82,7 @@ checks execute compiled history without consumer source files and resume histori
 backfills. The original [835-test capture](../research/validation/native.json)
 remains a historical baseline.
 
-Current Chrome JS/WASM and Android APK captures use the Dart workflow source.
+The earlier Chrome JS/WASM and Android APK captures use the original Dart workflow source.
 Android proves the native Flutter lane on its recorded emulator, including compiled
 migration definitions, upgrade and process restart; it does not certify Apple
 platforms or every server type/scenario. See [Flutter scope](flutter.md) and

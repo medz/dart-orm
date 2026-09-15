@@ -6,7 +6,9 @@ import 'schema.orm.dart';
 Future<void> main() async {
   final db = await sqlite(const SqliteOptions.memory());
   try {
-    await Migrator(db).apply([Migration.create('0001_precision', appSchema)]);
+    await Migrator(db).apply([
+      Migration.create('0001_precision', appSchema, dialect: db.dialect),
+    ]);
     final row = await db.wallets.create(
       amount: Decimal.parse('1.235'),
       hundreds: Decimal.parse('-12350'),

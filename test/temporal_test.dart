@@ -200,8 +200,9 @@ void main() {
         }
       });
       tearDown(() => db.close());
-      Future<void> create() =>
-          Migrator(db).apply([Migration.create('0001_local', appSchema)]);
+      Future<void> create() => Migrator(
+        db,
+      ).apply([Migration.create('0001_local', appSchema, dialect: db.dialect)]);
 
       if (backend == 'postgres') {
         test(
@@ -217,7 +218,9 @@ void main() {
                 ),
               ],
             );
-            final first = Migration.create('0001_default', [schema]);
+            final first = Migration.create('0001_default', [
+              schema,
+            ], dialect: db.dialect);
             await Migrator(db).apply([first]);
             expect(
               (await verifySchema(db, first.snapshot!)).differences,
@@ -506,7 +509,9 @@ void main() {
             ['clock'],
           ],
         );
-        final first = Migration.create('0001_text', [schema(Codecs.text)]);
+        final first = Migration.create('0001_text', [
+          schema(Codecs.text),
+        ], dialect: db.dialect);
         await Migrator(db).apply([first]);
         await db.execute(
           SqlCommand(
@@ -518,14 +523,16 @@ void main() {
           from: first.snapshot!,
           to: SchemaSnapshot([schema(Codecs.time)]),
           previous: first.checksum,
-          using: {
-            SqlDialect.sqlite: {
-              'converted': {'clock': 'clock'},
-            },
-            SqlDialect.postgres: {
-              'converted': {'clock': 'CAST(clock AS TIME WITHOUT TIME ZONE)'},
-            },
-          },
+          using: (db.dialect == SqlDialect.sqlite
+              ? {
+                  'converted': {'clock': 'clock'},
+                }
+              : {
+                  'converted': {
+                    'clock': 'CAST(clock AS TIME WITHOUT TIME ZONE)',
+                  },
+                }),
+          dialect: db.dialect,
         );
         await expectLater(
           Migrator(db).apply([first, second]),
@@ -610,19 +617,25 @@ void main() {
               label: 'pending',
             );
           }
-          final first = Migration.create('0001_local', appSchema);
-          final second = Migration.steps('0002_backfill', {
-            for (final dialect in SqlDialect.values)
-              dialect: [
-                Backfill(
-                  holidaysSchema,
-                  set: {'label': "'done'"},
-                  where: "label = 'pending'",
-                  doneWhen: "SELECT NOT EXISTS (SELECT 1 FROM holidays WHERE label = 'pending')",
-                  batchSize: 1,
-                ),
-              ],
-          }, previous: first.checksum);
+          final first = Migration.create(
+            '0001_local',
+            appSchema,
+            dialect: db.dialect,
+          );
+          final second = Migration.steps(
+            '0002_backfill',
+            [
+              Backfill(
+                holidaysSchema,
+                set: {'label': "'done'"},
+                where: "label = 'pending'",
+                doneWhen: "SELECT NOT EXISTS (SELECT 1 FROM holidays WHERE label = 'pending')",
+                batchSize: 1,
+              ),
+            ],
+            previous: first.checksum,
+            dialect: db.dialect,
+          );
           await Migrator(db).apply([first, second], maxBackfillBatches: 1);
           expect(
             (await db.holidays.where((h) => h.label.eq('done')).single()).day,

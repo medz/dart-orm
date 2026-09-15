@@ -18,7 +18,9 @@ Future<Map<String, Object?>> queryCookbook(
     checks.add(name);
   }
 
-  await Migrator(db).apply([Migration.create('0001_example', appSchema)]);
+  await Migrator(
+    db,
+  ).apply([Migration.create('0001_example', appSchema, dialect: db.dialect)]);
   final (z, a) = await db.transaction((tx) async {
     final z = await tx.users.create(
       email: 'z@example.com',

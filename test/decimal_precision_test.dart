@@ -36,8 +36,9 @@ void main() {
         }
       });
       tearDown(() => db.close());
-      Future<void> create() =>
-          Migrator(db).apply([Migration.create('0001_precision', appSchema)]);
+      Future<void> create() => Migrator(db).apply([
+        Migration.create('0001_precision', appSchema, dialect: db.dialect),
+      ]);
 
       test('column coercion rounds signed ties and handles negative and excess scales', () async {
         await create();
@@ -237,7 +238,9 @@ void main() {
             ['amount'],
           ],
         );
-        final first = Migration.create('0001_sized', [sized(3)]);
+        final first = Migration.create('0001_sized', [
+          sized(3),
+        ], dialect: db.dialect);
         await Migrator(db).apply([first]);
         await db.execute(
           SqlCommand("INSERT INTO sized VALUES (1, '1.231'), (2, '1.234')"),
@@ -248,11 +251,9 @@ void main() {
           to: SchemaSnapshot([sized(2)]),
           previous: first.checksum,
           using: {
-            for (final d in SqlDialect.values)
-              d: {
-                'sized': {'amount': 'amount'},
-              },
+            'sized': {'amount': 'amount'},
           },
+          dialect: db.dialect,
         );
         await expectLater(
           Migrator(db).apply([first, next]),
@@ -296,7 +297,7 @@ void main() {
         );
         final first = Migration.create('0001_before', [
           schema('amount', 5, 3, "'1.2345'"),
-        ]);
+        ], dialect: db.dialect);
         await Migrator(db).apply([first]);
         await db.execute(SqlCommand('INSERT INTO renamed (id) VALUES (1)'));
         final next = Migration.diff(
@@ -310,11 +311,9 @@ void main() {
             },
           ),
           using: {
-            for (final dialect in SqlDialect.values)
-              dialect: {
-                'renamed': {'price': 'price'},
-              },
+            'renamed': {'price': 'price'},
           },
+          dialect: db.dialect,
         );
         await Migrator(db).apply([first, next]);
         await db.execute(SqlCommand('INSERT INTO renamed (id) VALUES (2)'));
@@ -354,7 +353,7 @@ void main() {
             primaryKey: ['id'],
           );
           await Migrator(db).apply([
-            Migration.create('0001_bounds', [schema]),
+            Migration.create('0001_bounds', [schema], dialect: db.dialect),
           ]);
           final parameter = backend == 'sqlite' ? '?1' : r'$1';
           final parameter2 = backend == 'sqlite' ? '?2' : r'$2';
@@ -382,18 +381,24 @@ void main() {
           for (final n in ['1.234', '2.345', '3.456']) {
             await db.prices.create(id: d(n), label: 'pending');
           }
-          final first = Migration.create('0001_precision', appSchema);
-          final next = Migration.steps('0002_backfill', {
-            for (final dialect in SqlDialect.values)
-              dialect: [
-                Backfill(
-                  pricesSchema,
-                  set: {'label': "'done'"},
-                  doneWhen: "SELECT NOT EXISTS(SELECT 1 FROM prices WHERE label <> 'done')",
-                  batchSize: 1,
-                ),
-              ],
-          }, previous: first.checksum);
+          final first = Migration.create(
+            '0001_precision',
+            appSchema,
+            dialect: db.dialect,
+          );
+          final next = Migration.steps(
+            '0002_backfill',
+            [
+              Backfill(
+                pricesSchema,
+                set: {'label': "'done'"},
+                doneWhen: "SELECT NOT EXISTS(SELECT 1 FROM prices WHERE label <> 'done')",
+                batchSize: 1,
+              ),
+            ],
+            previous: first.checksum,
+            dialect: db.dialect,
+          );
           await Migrator(db).apply([first, next], maxBackfillBatches: 1);
           await Migrator(db).apply([first, next]);
           expect(await db.prices.where((p) => p.label.eq('done')).count(), 3);
@@ -420,7 +425,7 @@ void main() {
         primaryKey: ['id'],
       );
       await Migrator(db).apply([
-        Migration.create('0001_quoted', [expected]),
+        Migration.create('0001_quoted', [expected], dialect: db.dialect),
       ]);
       await db.execute(SqlCommand('INSERT INTO quoted (id) VALUES (1)'));
       expect(

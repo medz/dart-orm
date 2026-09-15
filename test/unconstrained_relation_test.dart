@@ -42,8 +42,9 @@ void main() {
               SqlCommand('CREATE SCHEMA orm_unconstrained_tests'),
             );
           }
-          await Migrator(db)
-              .apply([Migration.create('0001_initial', appSchema)]);
+          await Migrator(db).apply([
+            Migration.create('0001_initial', appSchema, dialect: db.dialect),
+          ]);
           await db.execute(
             SqlCommand(
               'INSERT INTO accounts(tenant,id,display_label,manager_id) VALUES '
@@ -103,12 +104,17 @@ void main() {
               ),
               readingsSchema,
             ];
-            final first = Migration.create('0001_initial', appSchema);
+            final first = Migration.create(
+              '0001_initial',
+              appSchema,
+              dialect: db.dialect,
+            );
             final enforce = Migration.diff(
               '0002_enforce',
               from: SchemaSnapshot(appSchema),
               to: SchemaSnapshot(constrained),
               previous: first.checksum,
+              dialect: db.dialect,
             );
             await expectLater(
               Migrator(db).apply([first, enforce]),
@@ -128,6 +134,7 @@ void main() {
               from: SchemaSnapshot(constrained),
               to: SchemaSnapshot(appSchema),
               previous: enforce.checksum,
+              dialect: db.dialect,
             );
             await Migrator(db).apply([first, enforce, release]);
             expect(

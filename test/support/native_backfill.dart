@@ -6,6 +6,8 @@ import 'package:orm/sqlite.dart';
 import 'backfill.dart';
 import 'backfill_history/migrations.g.dart' as historical;
 
+final initial = initialFor(SqlDialect.sqlite);
+
 Future<void> main() async {
   final directory = await Directory.systemTemp.createTemp(
     'orm-native-backfill-',

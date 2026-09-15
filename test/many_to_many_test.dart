@@ -42,7 +42,9 @@ void main() {
               SqlCommand('CREATE SCHEMA orm_many_to_many_tests'),
             );
           }
-          await Migrator(db).apply([Migration.create('0001_teams', appSchema)]);
+          await Migrator(db).apply([
+            Migration.create('0001_teams', appSchema, dialect: db.dialect),
+          ]);
           await db.transaction((tx) async {
             await tx.users.insertMany(
               [(1, 'Ada'), (2, 'Ben'), (3, 'Cy'), (4, 'Dee')],

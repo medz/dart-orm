@@ -3,9 +3,12 @@ part of '../../migrate.dart';
 /// Statically imported migrations and their independently recorded fingerprints.
 /// Keep these entries in version order. [checked] validates before returning them.
 final class MigrationHistory {
+  final SqlDialect dialect;
   final List<(Migration, String)> entries;
-  MigrationHistory(Iterable<(Migration, String)> entries)
-    : entries = List.unmodifiable(entries);
+  MigrationHistory(
+    Iterable<(Migration, String)> entries, {
+    required this.dialect,
+  }) : entries = List.unmodifiable(entries);
 
   List<Migration> get checked {
     final migrations = <Migration>[];
@@ -18,7 +21,7 @@ final class MigrationHistory {
       }
       migrations.add(migration);
     }
-    validateMigrationHistory(migrations);
+    validateMigrations(migrations, dialect: dialect);
     return List.unmodifiable(migrations);
   }
 }
@@ -44,9 +47,8 @@ import 'package:orm/migrate.dart';
 const migrationChecksum = ${_dartValue(migration.checksum)};
 final migration = Migration.steps(
   ${_dartValue(migration.id)},
-  {
-    ${migration.steps.entries.map((e) => 'SqlDialect.${e.key.name}: [${e.value.map(_stepSource).join(', ')}],').join('\n')}
-  },
+  [${migration.steps.map(_stepSource).join(', ')}],
+  dialect: SqlDialect.${migration.dialect.name},
   ${migration.previous == null ? '' : 'previous: ${_dartValue(migration.previous)},'}
   ${migration.snapshot == null ? '' : 'snapshot: _schema,'}
 );
@@ -55,7 +57,10 @@ ${migration.snapshot == null ? '' : '\nfinal _schema = ${_snapshotSource(migrati
 
 /// Emits a static registry. Each file owns its recorded fingerprint so rebuilding
 /// this registry does not silently accept edited migration definitions.
-String migrationHistorySource(Iterable<String> ids) {
+String migrationHistorySource(
+  Iterable<String> ids, {
+  required SqlDialect dialect,
+}) {
   final names = ids.toList();
   if (names.toSet().length != names.length ||
       names.any((id) => !RegExp(r'^[0-9]+_[a-z][a-z0-9_]*$').hasMatch(id))) {
@@ -63,12 +68,14 @@ String migrationHistorySource(Iterable<String> ids) {
   }
   return '''
 // GENERATED CODE - DO NOT MODIFY BY HAND.
+import 'package:orm/orm.dart';
 import 'package:orm/migrate.dart';
 ${[for (var i = 0; i < names.length; i++) "import 'm${names[i]}.dart' as m$i;"].join('\n')}
 
+const migrationDialect = SqlDialect.${dialect.name};
 final migrationHistory = MigrationHistory([
   ${[for (var i = 0; i < names.length; i++) '(m$i.migration, m$i.migrationChecksum),'].join('\n')}
-]);
+], dialect: migrationDialect);
 ''';
 }
 
@@ -120,9 +127,12 @@ String _columnSource(Column<Object?> column) {
 }
 
 String _computedSource(ComputedColumn column) =>
-    'ComputedColumn.forDialects(sqlite: ${_dartValue(column.sqlite)}, postgres: ${_dartValue(column.postgres)}, storage: ComputedStorage.${column.storage.name})';
-String _checkSource(CheckSchema check) =>
-    'CheckSchema.forDialects(${_dartValue(check.name)}, sqlite: ${_dartValue(check.sqlite)}, postgres: ${_dartValue(check.postgres)})';
+    column.sqlite == column.postgres
+    ? 'ComputedColumn(${_dartValue(column.sqlite)}, storage: ComputedStorage.${column.storage.name})'
+    : 'ComputedColumn.forDialects(sqlite: ${_dartValue(column.sqlite)}, postgres: ${_dartValue(column.postgres)}, storage: ComputedStorage.${column.storage.name})';
+String _checkSource(CheckSchema check) => check.sqlite == check.postgres
+    ? 'CheckSchema(${_dartValue(check.name)}, ${_dartValue(check.sqlite)})'
+    : 'CheckSchema.forDialects(${_dartValue(check.name)}, sqlite: ${_dartValue(check.sqlite)}, postgres: ${_dartValue(check.postgres)})';
 
 String _stepSource(MigrationStep step) => switch (step) {
   ExecuteSql() => 'ExecuteSql(${_dartValue(step.sql)})',

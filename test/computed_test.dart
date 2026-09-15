@@ -77,8 +77,13 @@ void main() {
             primaryKey: ['id'],
           );
           final snapshot = SchemaSnapshot([table]);
-          await Migrator(db)
-              .apply([Migration.create('0001_initial', snapshot.tables)]);
+          await Migrator(db).apply([
+            Migration.create(
+              '0001_initial',
+              snapshot.tables,
+              dialect: db.dialect,
+            ),
+          ]);
           await db.execute(SqlCommand('INSERT INTO quoted (id) VALUES (1)'));
           expect(
             (await db.execute(SqlCommand('SELECT "result)AS" FROM quoted')))
@@ -94,8 +99,9 @@ void main() {
         });
 
         test('generated CRUD, projections, batch and conflict writes compute stored and virtual values', () async {
-          await Migrator(db)
-              .apply([Migration.create('0001_initial', appSchema)]);
+          await Migrator(db).apply([
+            Migration.create('0001_initial', appSchema, dialect: db.dialect),
+          ]);
           final row = await db.lines.create(
             price: 4,
             quantity: 3,
@@ -180,8 +186,9 @@ void main() {
         test(
           'catalog/import roundtrip preserves SQL and modes and detects drift',
           () async {
-            await Migrator(db)
-                .apply([Migration.create('0001_initial', appSchema)]);
+            await Migrator(db).apply([
+              Migration.create('0001_initial', appSchema, dialect: db.dialect),
+            ]);
             final info = await inspectTable(db, 'lines');
             expect(info.unmanaged, isEmpty);
             expect(info.columns.where((c) => c.computed != null), hasLength(3));
@@ -243,7 +250,11 @@ void main() {
             '$storage add, expression/type change and drop preserve existing rows',
             () async {
               final start = SchemaSnapshot([scores(includeTotal: false)]);
-              final initial = Migration.create('0001_initial', start.tables);
+              final initial = Migration.create(
+                '0001_initial',
+                start.tables,
+                dialect: db.dialect,
+              );
               await Migrator(db).apply([initial]);
               await db.execute(SqlCommand('INSERT INTO scores VALUES (1, 3)'));
               final withTotal = SchemaSnapshot([
@@ -254,10 +265,11 @@ void main() {
                 from: start,
                 to: withTotal,
                 previous: initial.checksum,
+                dialect: db.dialect,
               );
               if (dialect == SqlDialect.sqlite) {
                 expect(
-                  add.steps[dialect]!.whereType<RebuildTable>().length,
+                  add.steps.whereType<RebuildTable>().length,
                   storage == ComputedStorage.stored ? 1 : 0,
                 );
               }
@@ -280,6 +292,7 @@ void main() {
                 from: withTotal,
                 to: changed,
                 previous: add.checksum,
+                dialect: db.dialect,
               );
               await Migrator(db).apply([initial, add, change]);
               expect(
@@ -295,6 +308,7 @@ void main() {
                 to: start,
                 previous: change.checksum,
                 allowDestructive: true,
+                dialect: db.dialect,
               );
               await Migrator(db).apply([initial, add, change, remove]);
               expect(
@@ -310,7 +324,11 @@ void main() {
 
         test('stored to ordinary materialization retains values and permits later writes', () async {
           final start = SchemaSnapshot([scores()]);
-          final initial = Migration.create('0001_initial', start.tables);
+          final initial = Migration.create(
+            '0001_initial',
+            start.tables,
+            dialect: db.dialect,
+          );
           await Migrator(db).apply([initial]);
           await db.execute(
             SqlCommand('INSERT INTO scores (id, value) VALUES (1, 3)'),
@@ -321,6 +339,7 @@ void main() {
             from: start,
             to: target,
             previous: initial.checksum,
+            dialect: db.dialect,
           );
           await Migrator(db).apply([initial, materialize]);
           expect(
@@ -354,7 +373,11 @@ void main() {
             scores(checked: true),
             notes('scores'),
           ]);
-          final initial = Migration.create('0001_initial', start.tables);
+          final initial = Migration.create(
+            '0001_initial',
+            start.tables,
+            dialect: db.dialect,
+          );
           await Migrator(db).apply([initial]);
           await db.execute(
             SqlCommand('INSERT INTO scores (id, value) VALUES (1, 3)'),
@@ -383,12 +406,10 @@ void main() {
                 'marks': {'value': 'amount'},
               },
             ),
+            dialect: db.dialect,
           );
           if (dialect == SqlDialect.sqlite) {
-            expect(
-              rename.steps[dialect]!.whereType<RebuildTable>(),
-              hasLength(2),
-            );
+            expect(rename.steps.whereType<RebuildTable>(), hasLength(2));
           }
           await Migrator(db).apply([initial, rename]);
           expect((await db.execute(SqlCommand('SELECT * FROM totals'))).rows, [
@@ -409,7 +430,11 @@ void main() {
           'invalid recomputation rolls back the table and migration history',
           () async {
             final start = SchemaSnapshot([scores()]);
-            final initial = Migration.create('0001_initial', start.tables);
+            final initial = Migration.create(
+              '0001_initial',
+              start.tables,
+              dialect: db.dialect,
+            );
             await Migrator(db).apply([initial]);
             await db.execute(
               SqlCommand('INSERT INTO scores (id, value) VALUES (1, 3)'),
@@ -422,6 +447,7 @@ void main() {
               from: start,
               to: target,
               previous: initial.checksum,
+              dialect: db.dialect,
             );
             await expectLater(
               Migrator(db).apply([initial, change]),
@@ -459,8 +485,13 @@ void main() {
             primaryKey: ['id'],
           );
           final snapshot = SchemaSnapshot([table]);
-          await Migrator(db)
-              .apply([Migration.create('0001_initial', snapshot.tables)]);
+          await Migrator(db).apply([
+            Migration.create(
+              '0001_initial',
+              snapshot.tables,
+              dialect: db.dialect,
+            ),
+          ]);
           await db.execute(SqlCommand('INSERT INTO amounts (id) VALUES (1)'));
           expect(
             (await db.execute(SqlCommand('SELECT amount FROM amounts')))
@@ -515,7 +546,12 @@ void main() {
       (virtual, plain),
     ]) {
       expect(
-        () => Migration.diff('0002_mode', from: from, to: to),
+        () => Migration.diff(
+          '0002_mode',
+          from: from,
+          to: to,
+          dialect: SqlDialect.postgres,
+        ),
         throwsA(
           isA<OrmException>().having(
             (e) => e.code,

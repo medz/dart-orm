@@ -40,7 +40,11 @@ void main() {
 void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
   group('generated $name', () {
     late Database<Backend> db;
-    final initial = Migration.create('0001_initial', appSchema);
+    final initial = Migration.create(
+      '0001_initial',
+      appSchema,
+      dialect: SqlDialect.values.byName(name),
+    );
     setUp(() async {
       db = await open();
       for (final table in ['posts', 'users', '_orm_migrations']) {
@@ -153,10 +157,10 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
 
     test('history tampering and missing applied migrations fail', () async {
       await Migrator(db).apply([initial]);
-      final changed = Migration.steps(initial.id, {
-        for (final dialect in SqlDialect.values)
-          dialect: [...initial.steps[dialect]!, ExecuteSql('SELECT 1')],
-      });
+      final changed = Migration.steps(initial.id, [
+        ...initial.steps,
+        ExecuteSql('SELECT 1'),
+      ], dialect: db.dialect);
       await expectLater(
         Migrator(db).plan([changed]),
         throwsA(isA<OrmException>()),
@@ -166,13 +170,10 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
     });
 
     test('failed DDL rolls back schema and history atomically', () async {
-      final broken = Migration('0002_broken', {
-        for (final d in SqlDialect.values)
-          d: [
-            'ALTER TABLE users ADD COLUMN migrated TEXT',
-            'INSERT INTO table_does_not_exist VALUES (1)',
-          ],
-      });
+      final broken = Migration('0002_broken', [
+        'ALTER TABLE users ADD COLUMN migrated TEXT',
+        'INSERT INTO table_does_not_exist VALUES (1)',
+      ], dialect: db.dialect);
       await expectLater(
         Migrator(db).apply([initial, broken]),
         throwsA(anything),
@@ -199,10 +200,9 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
     });
 
     test('transaction control cannot be hidden behind SQL comments', () async {
-      final bad = Migration('0001_bad', {
-        for (final d in SqlDialect.values)
-          d: ['/* outer /* nested */ */ -- comment\n COMMIT'],
-      });
+      final bad = Migration('0001_bad', [
+        '/* outer /* nested */ */ -- comment\n COMMIT',
+      ], dialect: db.dialect);
       await expectLater(
         Migrator(db).apply([bad]),
         throwsA(isA<OrmException>()),

@@ -12,12 +12,13 @@ dart run orm db import --postgres-env DATABASE_URL --database-schema public --ou
 # Review lib/schema.dart and lib/schema.import.json first.
 dart run orm generate lib/schema.dart
 # Add the Dart entrypoint described in migrations.md, then:
-dart run orm migration registry migrations
+dart run orm migration registry migrations --dialect sqlite
 dart run bin/migrate.dart create 0001_baseline
 dart run bin/migrate.dart baseline
 dart run bin/migrate.dart verify
 ```
 
+For PostgreSQL use `--dialect postgres` when initializing its registry.
 Configure the same PostgreSQL database in the [Dart migration entrypoint](migrations.md). Existing database-specific defaults and objects need reviewed migrations;
 an imported declaration is not automatically a portable creation script for the
 other dialect. Baseline verifies the declared schema before recording history and

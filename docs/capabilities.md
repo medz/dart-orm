@@ -47,6 +47,12 @@ See [query examples](queries.md), [relationships](relations.md),
 
 ## Migration and database adoption
 
+Each history fixes one database engine, even when empty. A saved migration contains
+one step list and only that engine's frozen physical expressions. Mixed histories
+and mismatched connections fail before migration SQL. PostgreSQL migration
+execution requires 18+, and SQLite opening requires 3.35+; arbitrary reviewed SQL
+can require additional capabilities.
+
 Saved migrations contain immutable snapshots, operations, predecessor checksums
 and explicit renames/conversions. Tests exercise fresh replay, older-version
 upgrades, safe SQLite rebuilds, PostgreSQL constraint/catalog behavior, baseline,
@@ -68,8 +74,9 @@ Browser reports cover real Chrome JS and Dart WASM, worker memory/OPFS storage,
 reopen, interruption recovery, upgrade and watch. Android Flutter checks cover
 actual debug-to-AOT APK replacement and independent-process restart. These do
 not certify every database version, browser, physical device, iOS or macOS Flutter.
-The PostgreSQL catalog metadata change affects its PostgreSQL SQL branch; the
-recorded SQLite web/Android execution paths and platform adapters are unchanged.
+Current source/validation revisions are recorded in [progress](progress.md).
+The single-engine migration correction rechecks native and Chrome execution;
+the earlier Android capture does not validate the latest migration API.
 
 Driver configuration is typed and explicit. PostgreSQL reuses its driver's pool,
 offers borrowed-pool ownership and certificate-verifying TLS by default; SQLite

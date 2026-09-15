@@ -15,7 +15,9 @@ Future<void> main() async {
     onDecode: decodes.add,
   );
   try {
-    await Migrator(db).apply([Migration.create('0001_teams', appSchema)]);
+    await Migrator(
+      db,
+    ).apply([Migration.create('0001_teams', appSchema, dialect: db.dialect)]);
     await db.transaction((tx) async {
       await tx.users.create(id: 1, name: 'Ada');
       await tx.teams.create(id: 10, name: 'Core');

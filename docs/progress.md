@@ -1,5 +1,20 @@
 # Implementation status
 
+The single-engine migration correction is implemented. Each registry fixes one
+database engine, including before its first migration; files contain one step list
+and only the selected physical expressions. Mixed histories/connections are
+rejected before migration SQL. PostgreSQL execution checks server 18+, while
+SQLite keeps its 3.35+ driver gate and native rebuild behavior.
+
+The [current validation](../research/validation/migration-targets.md) records 845
+passing full-suite tests and two PostgreSQL crash-test registry configuration
+failures, followed by 21 passing target/recovery tests after correcting those
+fixtures. These are separate invocations. Source-independent AOT migration and
+historical backfill bundles pass; real Chrome JS/WASM each pass 19 checks; the
+public registry and example CLI workflows pass; static analysis is clean.
+Android was not rerun for this correction. Earlier platform captures below remain
+evidence for their recorded revisions.
+
 The Dart schema/migration workflow is implemented and verified. Current snapshots,
 fixed historical migration definitions and static registries are Dart libraries;
 the project entrypoint owns typed connection/rename/conversion inputs. The JSON
@@ -7,13 +22,13 @@ artifact readers and CLI options are removed without a compatibility lane. Named
 SQL generation also emits only Dart and checks freshness against the declaration
 and SQL source. Internal checksum/checkpoint encodings and reports remain JSON.
 
-The [Dart migration acceptance](../research/validation/dart-migrations.json) records
+The earlier [Dart migration acceptance](../research/validation/dart-migrations.json) records
 837 passing tests in the full run and one stale test-fixture path, then a passing
 76-test focused run covering that correction and the final generation changes.
 This is two invocations, not a single all-green full run. The independent AOT bundle
 check passes after deleting consumer Dart sources and build cache; an AOT historical
 backfill additionally proves bounded pause and concurrent exact-once resume.
-Current-source Chrome JS/WASM each pass 19 checks. Android debug install, release
+At that revision, Chrome JS/WASM each passed 19 checks. Android debug install, release
 AOT APK upgrade and distinct-process restart pass 4/17/11 checks with compiled Dart
 history and no migration JSON assets. The runnable project migration entrypoint
 also passes check/apply/verify/no-replay against a disposable SQLite file.
@@ -48,6 +63,7 @@ intermediate List allocations; it does not establish a throughput improvement.
 
 - Reset the `next` branch contents, preserving the design research and license.
 - Establish one Dart 3.13 package and local-only commit policy.
+- Single-engine migration histories, flat saved steps, selected schema fingerprints, fixed registry targets, connection/version gates and target-specific destructive-change handling.
 - Dart physical snapshots, fixed migration files, per-file fingerprints, static registries and typed project CLI configuration; generated output cannot overwrite its source declaration.
 - Direct retirement of schema/migration/named-query JSON artifacts, with source-based named-query freshness checks and compiled application migration history.
 - Typed scalar expressions, 2–6-field composable projections and dynamic field maps.

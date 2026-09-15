@@ -21,6 +21,7 @@ void main() {
     group('backfill $backend', () {
       late Directory directory;
       late Database<Backend> db;
+      late Migration initial;
       late Migrator runner;
       late String path;
       final commands = <SqlCommand>[];
@@ -45,6 +46,7 @@ void main() {
         path = '${directory.path}/db.sqlite';
         final base = await open();
         db = Database(_Driver(base.driver, commands));
+        initial = initialFor(db.dialect);
         runner = Migrator(db);
         for (final table in [
           'children',
@@ -73,8 +75,10 @@ void main() {
         'chunks pause and resume from a checksummed historical declaration',
         () async {
           await seed(db);
-          final migration = historical.migrationHistory.checked.last;
-          expect(migration.checksum, fill().checksum);
+          final migration = db.dialect == SqlDialect.sqlite
+              ? historical.migrationHistory.checked.last
+              : fill(dialect: db.dialect);
+          expect(migration.checksum, fill(dialect: db.dialect).checksum);
           expect(
             await runner.apply([initial, migration], maxBackfillBatches: 2),
             isEmpty,
@@ -95,7 +99,7 @@ void main() {
             throwsA(code('MIGRATION.INCOMPLETE')),
           );
           await expectLater(
-            runner.apply([initial, fill(batchSize: 2)]),
+            runner.apply([initial, fill(dialect: db.dialect, batchSize: 2)]),
             throwsA(code('MIGRATION.CHECKSUM')),
           );
           expect(await runner.apply([initial, migration]), [migration.id]);
@@ -119,6 +123,7 @@ void main() {
           SqlCommand('UPDATE payload SET source = NULL WHERE id = 7'),
         );
         final migration = fill(
+          dialect: db.dialect,
           set: {
             'value': 'upper(source)',
             'touches':
@@ -147,7 +152,10 @@ void main() {
             SqlCommand('CREATE TABLE flags (ready INTEGER NOT NULL)'),
           );
           await db.execute(SqlCommand('INSERT INTO flags VALUES (0)'));
-          final migration = fill(doneWhen: 'SELECT ready = 1 FROM flags');
+          final migration = fill(
+            dialect: db.dialect,
+            doneWhen: 'SELECT ready = 1 FROM flags',
+          );
           await expectLater(
             runner.apply([initial, migration]),
             throwsA(code('MIGRATION.STEP')),
@@ -167,7 +175,7 @@ void main() {
 
       test('frozen upper bound and completion proof detect incompatible new writes', () async {
         await seed(db);
-        final migration = fill();
+        final migration = fill(dialect: db.dialect);
         await runner.apply([initial, migration], maxBackfillBatches: 1);
         await db.execute(
           SqlCommand(
@@ -194,7 +202,7 @@ void main() {
         () async {
           await seed(db, count: 35);
           final other = await open();
-          final migration = fill(batchSize: 2);
+          final migration = fill(dialect: db.dialect, batchSize: 2);
           try {
             final results = await Future.wait([
               runner.apply([initial, migration]),
@@ -223,11 +231,11 @@ void main() {
             }
           };
           await expectLater(
-            runner.apply([initial, fill()]),
+            runner.apply([initial, fill(dialect: db.dialect)]),
             throwsA(code('MIGRATION.STEP')),
           );
           expect((await progress()).rows, 3);
-          await runner.apply([initial, fill()]);
+          await runner.apply([initial, fill(dialect: db.dialect)]);
           expect((await data()).every((r) => r[2] == 1), true);
         },
       );
@@ -248,7 +256,7 @@ void main() {
           )).any((c) => c.name == 'backfill'),
           false,
         );
-        await runner.apply([initial, fill()]);
+        await runner.apply([initial, fill(dialect: db.dialect)]);
         expect((await progress()).rows, 8);
       });
 
@@ -257,7 +265,10 @@ void main() {
         () async {
           await seed(db, count: 0);
           await expectLater(
-            runner.apply([initial, fill(doneWhen: 'SELECT 1.0')]),
+            runner.apply([
+              initial,
+              fill(dialect: db.dialect, doneWhen: 'SELECT 1.0'),
+            ]),
             throwsA(
               isA<OrmException>().having(
                 (e) => e.cause,
@@ -272,7 +283,7 @@ void main() {
 
       test('empty input still requires the completion condition', () async {
         await seed(db, count: 0);
-        await runner.apply([initial, fill()]);
+        await runner.apply([initial, fill(dialect: db.dialect)]);
         expect((await progress()).toJson(), {
           'format': 1,
           'upper': null,
@@ -284,15 +295,19 @@ void main() {
 
       test('later ordinary migrations retain group atomicity after a completed backfill', () async {
         await seed(db);
-        final migration = fill();
-        final add = Migration('0003_add', {
-          for (final d in SqlDialect.values)
-            d: ['CREATE TABLE audit (value INTEGER)'],
-        }, previous: migration.checksum);
-        final fail = Migration('0004_fail', {
-          for (final d in SqlDialect.values)
-            d: ['INSERT INTO flags(ready) VALUES(1)'],
-        }, previous: add.checksum);
+        final migration = fill(dialect: db.dialect);
+        final add = Migration(
+          '0003_add',
+          ['CREATE TABLE audit (value INTEGER)'],
+          previous: migration.checksum,
+          dialect: db.dialect,
+        );
+        final fail = Migration(
+          '0004_fail',
+          ['INSERT INTO flags(ready) VALUES(1)'],
+          previous: add.checksum,
+          dialect: db.dialect,
+        );
         await expectLater(
           runner.apply([initial, migration, add, fail]),
           throwsA(isA<SqlFailure>()),
@@ -331,7 +346,7 @@ void main() {
           );
         }
         await expectLater(
-          runner.apply([initial, fill()]),
+          runner.apply([initial, fill(dialect: db.dialect)]),
           throwsA(code('MIGRATION.STEP')),
         );
         expect(
@@ -344,18 +359,24 @@ void main() {
             'DROP TRIGGER move_keys${backend == 'postgres' ? ' ON payload' : ''}',
           ),
         );
-        await runner.apply([initial, fill()]);
+        await runner.apply([initial, fill(dialect: db.dialect)]);
         expect((await data()).every((r) => r[2] == 1), true);
       });
 
       test('corrupt checkpoint dimensions and invalid run limits are rejected', () async {
         await expectLater(
-          runner.apply([initial, fill()], maxBackfillBatches: 0),
+          runner.apply([
+            initial,
+            fill(dialect: db.dialect),
+          ], maxBackfillBatches: 0),
           throwsArgumentError,
         );
         expect(commands, isEmpty);
         await seed(db);
-        await runner.apply([initial, fill()], maxBackfillBatches: 1);
+        await runner.apply([
+          initial,
+          fill(dialect: db.dialect),
+        ], maxBackfillBatches: 1);
         final bad = jsonEncode({
           'format': 1,
           'upper': ['8'],
@@ -370,7 +391,7 @@ void main() {
           ),
         );
         await expectLater(
-          runner.apply([initial, fill()]),
+          runner.apply([initial, fill(dialect: db.dialect)]),
           throwsA(code('MIGRATION.HISTORY')),
         );
         expect((await data()).where((r) => r[2] == 1).length, 3);
@@ -397,33 +418,28 @@ void main() {
           );
           final migration = Migration.steps(
             '0002_rebuild',
-            {
-              SqlDialect.sqlite: [
-                RebuildTable(
-                  payload,
-                  expanded,
-                  copy: {
-                    for (final c in payload.columns) c.name: '"${c.name}"',
-                  },
-                ),
-                Backfill(
-                  expanded,
-                  set: {'value': 'upper(source)', 'touches': 'touches + 1'},
-                  where: 'value IS NULL',
-                  doneWhen: 'SELECT NOT EXISTS(SELECT 1 FROM payload WHERE value IS NULL)',
-                  batchSize: 3,
-                ),
-                RebuildTable(
-                  expanded,
-                  required,
-                  copy: {
-                    for (final c in expanded.columns) c.name: '"${c.name}"',
-                  },
-                ),
-              ],
-            },
+            [
+              RebuildTable(
+                payload,
+                expanded,
+                copy: {for (final c in payload.columns) c.name: '"${c.name}"'},
+              ),
+              Backfill(
+                expanded,
+                set: {'value': 'upper(source)', 'touches': 'touches + 1'},
+                where: 'value IS NULL',
+                doneWhen: 'SELECT NOT EXISTS(SELECT 1 FROM payload WHERE value IS NULL)',
+                batchSize: 3,
+              ),
+              RebuildTable(
+                expanded,
+                required,
+                copy: {for (final c in expanded.columns) c.name: '"${c.name}"'},
+              ),
+            ],
             previous: initial.checksum,
             snapshot: SchemaSnapshot([required]),
+            dialect: SqlDialect.sqlite,
           );
           await runner.apply([initial, migration], maxBackfillBatches: 1);
           expect(
@@ -456,8 +472,10 @@ void main() {
             sqlitePath: path,
           );
           addTearDown(project.dispose);
-          await project.target(fill().snapshot ?? SchemaSnapshot([payload]));
-          for (final m in [initial, fill()]) {
+          await project.target(
+            fill(dialect: db.dialect).snapshot ?? SchemaSnapshot([payload]),
+          );
+          for (final m in [initial, fill(dialect: db.dialect)]) {
             await project.append(m);
           }
           final plan = await project.run(['plan']);
@@ -492,7 +510,7 @@ void main() {
           );
           try {
             await expectLater(
-              Migrator(session).apply([initial, fill()]),
+              Migrator(session).apply([initial, fill(dialect: db.dialect)]),
               throwsA(code('MIGRATION.STEP')),
             );
           } finally {
@@ -504,7 +522,7 @@ void main() {
           }
         });
         expect((await data()).every((r) => r[2] == 0), true);
-        await runner.apply([initial, fill()]);
+        await runner.apply([initial, fill(dialect: db.dialect)]);
         expect((await data()).every((r) => r[2] == 1), true);
       });
 
@@ -527,7 +545,7 @@ void main() {
                 );
               }
               await expectLater(
-                Migrator(session).apply([initial, fill()]),
+                Migrator(session).apply([initial, fill(dialect: db.dialect)]),
                 throwsA(code('MIGRATION.SESSION')),
               );
             } finally {
@@ -540,7 +558,7 @@ void main() {
           }
         });
         expect((await data()).every((r) => r[2] == 0), true);
-        await runner.apply([initial, fill()]);
+        await runner.apply([initial, fill(dialect: db.dialect)]);
         expect((await data()).every((r) => r[2] == 1), true);
       });
 
@@ -572,7 +590,7 @@ void main() {
               await session.execute(SqlCommand('SET ROLE "$role"'));
               try {
                 await expectLater(
-                  Migrator(session).apply([initial, fill()]),
+                  Migrator(session).apply([initial, fill(dialect: db.dialect)]),
                   throwsA(
                     isA<OrmException>().having(
                       (e) => e.cause,
@@ -606,7 +624,7 @@ void main() {
                 ),
               );
               await expectLater(
-                runner.apply([initial, fill()]),
+                runner.apply([initial, fill(dialect: db.dialect)]),
                 throwsA(
                   isA<OrmException>().having(
                     (e) => e.cause,
@@ -637,7 +655,10 @@ void main() {
             expect(await watch.moveNext(), true);
             expect(watch.current, everyElement(0));
             final changed = watch.moveNext();
-            await runner.apply([initial, fill()], maxBackfillBatches: 1);
+            await runner.apply([
+              initial,
+              fill(dialect: db.dialect),
+            ], maxBackfillBatches: 1);
             expect(await changed.timeout(const Duration(seconds: 2)), true);
             expect(watch.current.where((v) => v == 1).length, 3);
           } finally {
@@ -651,8 +672,13 @@ void main() {
           'real process exit after second chunk $boundary resumes correctly',
           () async {
             await seed(db);
-            final migrations = [initial, fill()];
-            final project = await MigrationProject.create();
+            final migrations = [initial, fill(dialect: db.dialect)];
+            final project = await MigrationProject.create(
+              postgresSchema: backend == 'postgres'
+                  ? 'orm_backfill_tests'
+                  : null,
+              sqlitePath: path,
+            );
             addTearDown(project.dispose);
             for (final m in migrations) {
               await project.append(m);

@@ -207,19 +207,18 @@ applied migration from the current application schema.
 ```dart
 final upgrade = Migration.diff(
   '0002_instants',
+  dialect: .sqlite,
   from: previous.snapshot!,
   to: SchemaSnapshot(currentSchema),
   previous: previous.checksum,
   using: {
-    SqlDialect.sqlite: {
-      'events': {'created_at': 'orm_instant_v1(created_at)'},
-    },
-    SqlDialect.postgres: {
-      'events': {'created_at': 'created_at'},
-    },
+    'events': {'created_at': 'orm_instant_v1(created_at)'},
   },
 );
 ```
+
+For a PostgreSQL history use `dialect: .postgres` and the reviewed conversion
+`using: {'events': {'created_at': 'created_at'}}`. Only that history's expression is needed.
 
 The SQLite converter parses and canonicalizes each value with UTC semantics;
 the rebuild installs the new collation. Invalid timestamps or newly equivalent
@@ -378,7 +377,7 @@ Catalog inspection, CLI inspection and import retain precision. Recognized SQLit
 precision checks and coercion wrappers are interpreted as column metadata; other
 checks remain visible. Import drafts defaults and computed SQL without adding a
 second SQLite wrapper. Changing precision is a type change and requires reviewed
-conversion expressions for both dialects. Rounding can merge unique keys; such a
+conversion expressions for the selected database. Rounding can merge unique keys; such a
 failure rolls back the data, schema and migration history together. Renames retain
 the precision metadata.
 
@@ -433,7 +432,7 @@ schema verification both compare the inferred width. Catalog import emits
 `@IntegerBits` for PostgreSQL SMALLINT/INTEGER and recognized SQLite range checks.
 
 Width changes are type changes in migration history. Supply reviewed conversion
-expressions for both dialects, even for widening. PostgreSQL alters the native
+expressions for the selected database, even for widening. PostgreSQL alters the native
 type; SQLite rebuilds the table with the new constraint. Data outside a narrowed
 range fails and rolls back the migration/history together. Physical column renames
 retain the width. Changing an identity column's width preserves generation and, on PostgreSQL,

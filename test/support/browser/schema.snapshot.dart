@@ -13,9 +13,8 @@ final schema = SchemaSnapshot([
         "email_size",
         Codecs.integer,
 
-        computed: ComputedColumn.forDialects(
-          sqlite: "length(email)",
-          postgres: "length(email)",
+        computed: ComputedColumn(
+          "length(email)",
           storage: ComputedStorage.stored,
         ),
       ),
@@ -24,9 +23,8 @@ final schema = SchemaSnapshot([
         Codecs.text.nullable(),
         nullable: true,
 
-        computed: ComputedColumn.forDialects(
-          sqlite: "upper(nickname)",
-          postgres: "upper(nickname)",
+        computed: ComputedColumn(
+          "upper(nickname)",
           storage: ComputedStorage.virtual,
         ),
       ),
@@ -36,13 +34,7 @@ final schema = SchemaSnapshot([
       ["email"],
     ],
 
-    checks: [
-      CheckSchema.forDialects(
-        "valid_email",
-        sqlite: "length(email) > 0",
-        postgres: "length(email) > 0",
-      ),
-    ],
+    checks: [CheckSchema("valid_email", "length(email) > 0")],
   ),
   TableSchema(
     "posts",

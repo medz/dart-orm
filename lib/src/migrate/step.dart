@@ -76,7 +76,14 @@ Future<void> _executeStep(Database<Backend> db, MigrationStep step) async {
       await _rebuild(db, step);
     case DropConstraint():
       if (step.constraint['kind'] == 'c') {
-        await _dropCheck(db, step.table, _readCheck(step.constraint));
+        await _dropCheck(
+          db,
+          step.table,
+          CheckSchema(
+            step.constraint['name'] as String?,
+            step.constraint['expression'] as String,
+          ),
+        );
         return;
       }
       final rows = await db.execute(

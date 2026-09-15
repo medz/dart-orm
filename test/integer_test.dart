@@ -34,8 +34,9 @@ void main() {
         }
       });
       tearDown(() => db.close());
-      Future<void> create() =>
-          Migrator(db).apply([Migration.create('0001_samples', appSchema)]);
+      Future<void> create() => Migrator(db).apply([
+        Migration.create('0001_samples', appSchema, dialect: db.dialect),
+      ]);
 
       test('storage bounds, nulls and wider sums keep the normal integer value codec', () async {
         await create();
@@ -140,7 +141,7 @@ void main() {
             primaryKey: ['id'],
           );
           await Migrator(db).apply([
-            Migration.create('0001_quoted', [table]),
+            Migration.create('0001_quoted', [table], dialect: db.dialect),
           ]);
           await db.execute(SqlCommand('INSERT INTO quoted DEFAULT VALUES'));
           expect(
@@ -197,7 +198,9 @@ void main() {
         primaryKey: ['id'],
       );
       test('widening and narrowing use reviewed conversions with atomic failure recovery', () async {
-        final first = Migration.create('0001_sized', [sized(16)]);
+        final first = Migration.create('0001_sized', [
+          sized(16),
+        ], dialect: db.dialect);
         await Migrator(db).apply([first]);
         await db.execute(
           SqlCommand('INSERT INTO sized(id, value) VALUES (1, 32767)'),
@@ -208,11 +211,9 @@ void main() {
           to: SchemaSnapshot([sized(32)]),
           previous: first.checksum,
           using: {
-            for (final d in SqlDialect.values)
-              d: {
-                'sized': {'value': 'value'},
-              },
+            'sized': {'value': 'value'},
           },
+          dialect: db.dialect,
         );
         await Migrator(db).apply([first, wider]);
         await db.execute(
@@ -224,11 +225,9 @@ void main() {
           to: SchemaSnapshot([sized(16)]),
           previous: wider.checksum,
           using: {
-            for (final d in SqlDialect.values)
-              d: {
-                'sized': {'value': 'value'},
-              },
+            'sized': {'value': 'value'},
           },
+          dialect: db.dialect,
         );
         await expectLater(
           Migrator(db).apply([first, wider, narrow]),
@@ -260,7 +259,9 @@ void main() {
       test(
         'column renames preserve width metadata and range constraints',
         () async {
-          final first = Migration.create('0001_sized', [sized(16)]);
+          final first = Migration.create('0001_sized', [
+            sized(16),
+          ], dialect: db.dialect);
           await Migrator(db).apply([first]);
           final renamed = Migration.diff(
             '0002_renamed',
@@ -272,6 +273,7 @@ void main() {
                 'sized': {'value': 'new_value'},
               },
             ),
+            dialect: db.dialect,
           );
           await Migrator(db).apply([first, renamed]);
           expect(
@@ -298,25 +300,29 @@ void main() {
             ],
             primaryKey: ['id'],
           );
-          final first = Migration.create('0001_sized', [table]);
+          final first = Migration.create('0001_sized', [
+            table,
+          ], dialect: db.dialect);
           await Migrator(db).apply([first]);
           for (var i = 1; i <= 4; i++) {
             await db.execute(
               SqlCommand('INSERT INTO sized(id, value) VALUES ($i, 0)'),
             );
           }
-          final second = Migration.steps('0002_backfill', {
-            for (final d in SqlDialect.values)
-              d: [
-                Backfill(
-                  table,
-                  set: {'value': 'value + 1'},
-                  doneWhen:
-                      'SELECT NOT EXISTS(SELECT 1 FROM sized WHERE value <> 1)',
-                  batchSize: 2,
-                ),
-              ],
-          }, previous: first.checksum);
+          final second = Migration.steps(
+            '0002_backfill',
+            [
+              Backfill(
+                table,
+                set: {'value': 'value + 1'},
+                doneWhen:
+                    'SELECT NOT EXISTS(SELECT 1 FROM sized WHERE value <> 1)',
+                batchSize: 2,
+              ),
+            ],
+            previous: first.checksum,
+            dialect: db.dialect,
+          );
           await Migrator(db).apply([first, second], maxBackfillBatches: 1);
           expect((await Migrator(db).progress()).single.backfill!.rows, 2);
           await Migrator(db).apply([first, second]);
@@ -332,7 +338,9 @@ void main() {
           ],
           primaryKey: ['id'],
         );
-        final first = Migration.create('0001_identity', [identity(32)]);
+        final first = Migration.create('0001_identity', [
+          identity(32),
+        ], dialect: db.dialect);
         await Migrator(db).apply([first]);
         await db.execute(SqlCommand('INSERT INTO identities DEFAULT VALUES'));
         final narrow = Migration.diff(
@@ -341,11 +349,9 @@ void main() {
           to: SchemaSnapshot([identity(16)]),
           previous: first.checksum,
           using: {
-            for (final d in SqlDialect.values)
-              d: {
-                'identities': {'id': 'id'},
-              },
+            'identities': {'id': 'id'},
           },
+          dialect: db.dialect,
         );
         await Migrator(db).apply([first, narrow]);
         await db.execute(SqlCommand('INSERT INTO identities DEFAULT VALUES'));
@@ -485,8 +491,13 @@ final rows = entity<Row>();
       ),
     ]);
     expect(implicit.checksum, explicit.checksum);
-    final change = Migration.diff('0001_same', from: implicit, to: explicit);
-    expect(change.steps.values.every((s) => s.isEmpty), true);
+    final change = Migration.diff(
+      '0001_same',
+      from: implicit,
+      to: explicit,
+      dialect: SqlDialect.sqlite,
+    );
+    expect(change.steps.isEmpty, true);
     expect(
       () => Migration.diff(
         '0001_wider',
@@ -497,6 +508,7 @@ final rows = entity<Row>();
             columns: [Column('id', Codecs.integer, integerBits: 16)],
           ),
         ]),
+        dialect: SqlDialect.sqlite,
       ),
       throwsA(isA<OrmException>()),
     );

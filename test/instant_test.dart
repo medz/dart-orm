@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 
 import 'support/instants/schema.orm.dart';
 import 'support/instants/m0001_legacy.dart' as historical;
+import 'support/instants/m0001_legacy_postgres.dart' as historical_pg;
 
 DateTime instant(String value) => Codecs.dateTime.decode(value);
 
@@ -71,15 +72,18 @@ void main() {
     );
   });
 
-  Future<Migration> legacy() async => historical.migration;
+  Future<Migration> legacy([SqlDialect dialect = SqlDialect.sqlite]) async =>
+      dialect == SqlDialect.sqlite
+      ? historical.migration
+      : historical_pg.migration;
   test(
     'historical migration checksum and timestamp tag remain immutable',
     () async {
       final first = await legacy();
-      // Captured with the 00853b4 sources, before instant storage existed.
+      // Captured as a SQLite-only historical timestamp definition.
       expect(
         first.checksum,
-        '3796f4361abf4ae7a9aaee65f7130958083c34f03e23e92679ecca5dbf19f7d6',
+        'f7c0a7ff8af0bf106e3deabaa36c4816337ae6937350dc14a44edcaab34456ab',
       );
       expect(
         first.snapshot!.tables.single.columns.first.codec.sqlType,
@@ -114,21 +118,22 @@ void main() {
         }
       });
       tearDown(() => db.close());
-      Future<void> create() =>
-          Migrator(db).apply([Migration.create('0001_instant', appSchema)]);
+      Future<void> create() => Migrator(db).apply([
+        Migration.create('0001_instant', appSchema, dialect: db.dialect),
+      ]);
       Migration upgrade(Migration first) => Migration.diff(
         '0002_instant',
         from: first.snapshot!,
         to: SchemaSnapshot([momentsSchema]),
         previous: first.checksum,
-        using: {
-          SqlDialect.sqlite: {
-            'moments': {'at': 'orm_instant_v1(at)'},
-          },
-          SqlDialect.postgres: {
-            'moments': {'at': 'at'},
-          },
-        },
+        using: (db.dialect == SqlDialect.sqlite
+            ? {
+                'moments': {'at': 'orm_instant_v1(at)'},
+              }
+            : {
+                'moments': {'at': 'at'},
+              }),
+        dialect: db.dialect,
       );
 
       test('native round trips and streams preserve exact microseconds and common endpoints', () async {
@@ -319,7 +324,9 @@ void main() {
             Column('at', Codecs.dateTime, defaultSql: "'2024-01-01 08:00+08'"),
           ],
         );
-        final migration = Migration.create('0001_defaults', [table]);
+        final migration = Migration.create('0001_defaults', [
+          table,
+        ], dialect: db.dialect);
         await Migrator(db).apply([migration]);
         expect(
           (await verifySchema(db, migration.snapshot!)).differences,
@@ -355,7 +362,7 @@ void main() {
       });
 
       test('reviewed migration preserves history and repairs legacy timestamp ordering', () async {
-        final first = await legacy();
+        final first = await legacy(db.dialect);
         await Migrator(db).apply([first]);
         await db.execute(
           SqlCommand(
@@ -378,7 +385,7 @@ void main() {
 
       if (backend == 'sqlite') {
         test('legacy key collisions and invalid calendar values roll back conversion', () async {
-          final first = await legacy();
+          final first = await legacy(db.dialect);
           await Migrator(db).apply([first]);
           await db.execute(
             SqlCommand(
@@ -424,19 +431,25 @@ void main() {
         for (final time in times) {
           await db.moments.create(at: time);
         }
-        final first = Migration.create('0001_instant', appSchema);
-        final second = Migration.steps('0002_backfill', {
-          for (final dialect in SqlDialect.values)
-            dialect: [
-              Backfill(
-                momentsSchema,
-                set: {'label': "'done'"},
-                where: "label = 'pending'",
-                doneWhen: "SELECT NOT EXISTS (SELECT 1 FROM moments WHERE label = 'pending')",
-                batchSize: 1,
-              ),
-            ],
-        }, previous: first.checksum);
+        final first = Migration.create(
+          '0001_instant',
+          appSchema,
+          dialect: db.dialect,
+        );
+        final second = Migration.steps(
+          '0002_backfill',
+          [
+            Backfill(
+              momentsSchema,
+              set: {'label': "'done'"},
+              where: "label = 'pending'",
+              doneWhen: "SELECT NOT EXISTS (SELECT 1 FROM moments WHERE label = 'pending')",
+              batchSize: 1,
+            ),
+          ],
+          previous: first.checksum,
+          dialect: db.dialect,
+        );
         await Migrator(db).apply([first, second], maxBackfillBatches: 1);
         expect(
           (await db.moments.where((m) => m.label.eq('done')).single()).at,

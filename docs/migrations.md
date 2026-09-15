@@ -6,7 +6,7 @@ current physical facts separately from the application client:
 ```sh
 dart run orm generate lib/schema.dart
 # Creates lib/schema.orm.dart and lib/schema.snapshot.dart.
-dart run orm migration registry migrations
+dart run orm migration registry migrations --dialect sqlite
 ```
 
 Create `bin/migrate.dart` once:
@@ -32,7 +32,8 @@ Future<void> main(List<String> args) => runMigrationCli(
 
 Run from the project root. Connections, schema, renames and conversions are
 ordinary typed Dart configuration; no schema or migration JSON loader is involved.
-For PostgreSQL, import `dart:io` and `package:orm/postgres.dart` and provide
+For a PostgreSQL project, initialize a **separate registry** with `--dialect postgres`,
+import `dart:io` and `package:orm/postgres.dart`, and provide
 `connect: ({required readOnly}) => postgres(PostgresOptions(url:
 Uri.parse(Platform.environment['DATABASE_URL']!), schema: 'public'))`.
 TLS defaults to certificate verification. SQLite inspection commands require an
@@ -60,11 +61,40 @@ no application models, codec callbacks or Flutter libraries.
 and freezes the resulting SQL/steps in a new Dart file. It does not execute DDL.
 No-change generation writes no migration. Repeated IDs, overwritten files, stale
 registries and broken history chains are rejected when saving a new migration.
-`check` validates the compiled history, fixed fingerprints and common supported
-dialects without connecting. Rebuilding the registry only updates imports; it
-never refreshes fingerprints. All registered migrations must support at least one
-common dialect. A PostgreSQL-only checked operation therefore narrows the history
-to PostgreSQL.
+`check` validates the compiled history, fixed fingerprints and its declared engine
+without connecting. The registry records one `migrationDialect`, including before
+the first migration. Every migration has the same explicit `dialect` and one flat
+step list. Rebuilding with `dart run orm migration registry migrations` preserves
+that target and never refreshes fingerprints. Attempting to regenerate with a
+different target fails without writing files.
+
+A connection for another engine is rejected before migration SQL, including CLI
+`status`, `verify`, `inspect` and an empty history. The connection factory itself
+runs first and may open/create a SQLite file; it must honor `readOnly`. Environment
+variables configure locations and credentials for the chosen engine, not select
+a different engine for the same history.
+
+Shared model declarations may contain per-engine expressions. Generation resolves
+only the selected engine; saved snapshots and operation tables freeze that SQL.
+Changes to another engine's override cannot change this history's plan or checksum.
+Database-specific restrictions apply only to the selected engine. Ordinary
+single-engine declarations can use `ComputedColumn(sql)` and `CheckSchema(name, sql)`.
+
+Multi-database applications own separate directories, registries and connections.
+Tests for a PostgreSQL application use PostgreSQL for migration acceptance. Switching
+to SQLite is a separate schema/data transfer and baseline operation; it does not
+translate, replay or rewrite the PostgreSQL history. Changing servers or credentials
+within the same engine preserves the history; the destination's applied hashes and
+catalog still need checking.
+
+The migration executor supports PostgreSQL 18+ and SQLite 3.35+. PostgreSQL apply,
+baseline and standalone planning read the actual server version before migration
+locks or journal writes; the SQLite driver checks its library version when opening.
+Older PostgreSQL migrations are deliberately rejected instead of attempting DDL
+whose catalog/generated-column behavior has not been verified. This does not claim
+that every older server feature is unsupported by the query driver. See the native
+[PostgreSQL ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html) and
+[SQLite ALTER TABLE](https://www.sqlite.org/lang_altertable.html) boundaries.
 
 Edit the latest **unpublished** migration when a generated change needs a reviewed
 backfill or manual SQL, then run `dart run bin/migrate.dart record 0002_name`.
@@ -83,18 +113,19 @@ renames: const SchemaRenames(
 ),
 ```
 
-Declare conversions in its `using` argument, keyed by dialect, table and column:
+Declare conversions in its `using` argument, keyed by table and column for the chosen database:
 
 ```dart
 using: {
-  SqlDialect.sqlite: {'members': {'score': 'CAST(score AS TEXT)'}},
-  SqlDialect.postgres: {'members': {'score': 'CAST(score AS TEXT)'}},
+  'members': {'score': 'CAST(score AS TEXT)'},
 },
 ```
 
 Import `package:orm/migrate.dart` for `SchemaRenames`. Renames and conversions are
 inputs to the next `create`; remove them after generating that change. Pass
-`create <id> --allow-destructive` to generate reviewed drop steps. Neither offline
+`create <id> --allow-destructive` to generate reviewed drop steps or replace
+ordinary SQLite column values with a computed expression. Computed-to-ordinary
+SQLite changes materialize the existing result instead. Neither offline
 checking nor generation applies them.
 
 Start with [catalog import](importing.md) for an existing database, then run
@@ -118,7 +149,7 @@ history: migrationHistory)` saves fixed Dart operations and the registry.
 `migrationSource`, `schemaSource` and `migrationHistorySource` also return Dart
 source without writing files. A saved migration contains frozen SQL and typed
 steps; it must not call `Migration.diff` against current models when it runs.
-Fingerprints cover SQL, operation data, historical schema and predecessor, while
+Fingerprints cover the engine, SQL, operation data, historical schema and predecessor, while
 formatting and comments do not affect them.
 
 `apply` runs a pending batch without `CheckedSql` or `Backfill` in one transaction. A failed copy, required
@@ -222,12 +253,12 @@ PostgreSQL.
 ```dart
 final change = Migration.diff(
   '0003_score_text',
+  dialect: previousMigration.dialect,
   from: previousSnapshot,
   to: nextSnapshot,
   previous: previousMigration.checksum,
   using: {
-    SqlDialect.sqlite: {'members': {'score': 'CAST(score AS TEXT)'}},
-    SqlDialect.postgres: {'members': {'score': 'CAST(score AS TEXT)'}},
+    'members': {'score': 'CAST(score AS TEXT)'},
   },
 );
 ```
@@ -251,7 +282,7 @@ and import. SQLite adds/changes/removes them through a rebuild; PostgreSQL uses
 constraint DDL. Checked renames explicitly remove and re-add the declared SQL,
 which can require two SQLite copies. Existing rows are validated before commit.
 
-Manual migrations use `Migration(id, {dialect: ['SQL', ...]})`, or
+Manual migrations use `Migration(id, ['SQL', ...], dialect: .sqlite)`, or
 `Migration.steps` with `ExecuteSql`, `DropTable`, and `RebuildTable` operations.
 For a custom SQLite copy-and-replace migration, an explicit `DropTable` enables
 outer foreign-key handling; preserve dependent SQL objects in the reviewed steps.
@@ -263,14 +294,13 @@ commands that must run outside a transaction; ordinary `ExecuteSql` rejects them
 ```dart
 final migration = Migration.steps(
   '0004_email_index',
-  {
-    SqlDialect.postgres: [
-      CheckedSql.createIndex(
-        'members',
-        const IndexSchema('members_email_lookup', ['email']),
-      ),
-    ],
-  },
+  [
+    CheckedSql.createIndex(
+      'members',
+      const IndexSchema('members_email_lookup', ['email']),
+    ),
+  ],
+  dialect: .postgres,
   previous: previousMigration.checksum,
   snapshot: nextSnapshot,
 );

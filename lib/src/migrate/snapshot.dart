@@ -6,10 +6,15 @@ final class SchemaSnapshot {
   final List<TableSchema> tables;
   SchemaSnapshot(List<TableSchema> tables)
     : tables = List.unmodifiable(tables) {
-    for (final dialect in SqlDialect.values) {
-      createSchema(tables, dialect);
-    }
+    _validateSchema(tables);
   }
+
+  /// Resolves shared declarations to physical facts for this engine only.
+  SchemaSnapshot forDialect(SqlDialect dialect) {
+    _validateSchema(tables, dialect);
+    return SchemaSnapshot([for (final t in tables) _targetTable(t, dialect)]);
+  }
+
   Map<String, Object?> toJson() => {
     'format': 1,
     'tables': [for (final table in tables) _tableJson(table)],
@@ -17,10 +22,35 @@ final class SchemaSnapshot {
   String get checksum => _hash(toJson());
 }
 
-CheckSchema _readCheck(Map<String, Object?> json) => CheckSchema.forDialects(
-  json['name'] as String?,
-  sqlite: json['sqlite'] as String,
-  postgres: json['postgres'] as String,
+TableSchema _targetTable(TableSchema table, SqlDialect dialect) => TableSchema(
+  table.name,
+  columns: [
+    for (final c in table.columns)
+      Column<Object?>(
+        c.name,
+        c.codec,
+        nullable: c.nullable,
+        generated: c.generated,
+        defaultSql: c.defaultSql,
+        computed: c.computed == null
+            ? null
+            : ComputedColumn(
+                c.computed!.expression(dialect),
+                storage: c.computed!.storage,
+              ),
+        integerBits: c.integerBits,
+        decimalPrecision: c.decimalPrecision,
+        decimalScale: c.decimalScale,
+        temporalPrecision: c.temporalPrecision,
+      ),
+  ],
+  primaryKey: table.primaryKey,
+  uniqueKeys: table.uniqueKeys,
+  indexes: table.indexes,
+  foreignKeys: table.foreignKeys,
+  checks: [
+    for (final c in table.checks) CheckSchema(c.name, c.expression(dialect)),
+  ],
 );
 
 Map<String, Object?> _checkJson(CheckSchema check) => {

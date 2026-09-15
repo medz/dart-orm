@@ -37,8 +37,9 @@ void main() {
               SqlCommand('CREATE SCHEMA orm_client_default_tests'),
             );
           }
-          await Migrator(db)
-              .apply([Migration.create('0001_initial', appSchema)]);
+          await Migrator(db).apply([
+            Migration.create('0001_initial', appSchema, dialect: db.dialect),
+          ]);
           expect(
             [d.idCalls, d.nameCalls, d.stateCalls, d.nullCalls],
             [0, 0, 0, 0],
@@ -205,7 +206,8 @@ void main() {
               '0002_no_sql_change',
               from: original,
               to: restored,
-            ).steps.values.every((s) => s.isEmpty),
+              dialect: db.dialect,
+            ).steps.isEmpty,
             true,
           );
           expect((await verifySchema(db, original)).matches, true);

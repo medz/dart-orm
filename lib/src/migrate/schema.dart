@@ -4,6 +4,36 @@ part of '../../migrate.dart';
 /// reviewed migrations; this does not inspect or mutate an existing database.
 List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
   final commands = <SqlCommand>[];
+  _validateSchema(tables, dialect);
+  for (final table in tables) {
+    commands.add(SqlCommand(_createTable(table, dialect)));
+  }
+  if (dialect == SqlDialect.postgres) {
+    // Creating constraints after all tables also supports cycles and self links.
+    for (final table in tables) {
+      for (final key in table.foreignKeys) {
+        commands.add(
+          SqlCommand(
+            'ALTER TABLE ${_quote(table.name)} ADD ${_foreignKey(key)}',
+          ),
+        );
+      }
+    }
+  }
+  for (final table in tables) {
+    for (final index in table.indexes) {
+      commands.add(
+        SqlCommand(
+          'CREATE ${index.unique ? 'UNIQUE ' : ''}INDEX ${_quote(index.name)} '
+          'ON ${_quote(table.name)} (${index.columns.map(_quote).join(', ')})',
+        ),
+      );
+    }
+  }
+  return List.unmodifiable(commands);
+}
+
+void _validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
   final names = <String>{};
   for (final table in tables) {
     if (!names.add(table.name)) {
@@ -18,7 +48,9 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
     }
     final checkNames = <String>{};
     for (final check in table.checks) {
-      if (check.expression(dialect).trim().isEmpty ||
+      if ((dialect == null
+              ? check.sqlite.trim().isEmpty && check.postgres.trim().isEmpty
+              : check.expression(dialect).trim().isEmpty) ||
           check.name != null &&
               (check.name!.isEmpty ||
                   !checkNames.add(_sqliteName(check.name!)))) {
@@ -29,8 +61,12 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
       }
     }
     for (final column in table.columns) {
+      if (dialect != null) _storageType(column.codec.sqlType, dialect);
       if (column.computed case final computed?) {
-        if (computed.expression(dialect).trim().isEmpty ||
+        if ((dialect == null
+                ? computed.sqlite.trim().isEmpty &&
+                      computed.postgres.trim().isEmpty
+                : computed.expression(dialect).trim().isEmpty) ||
             column.generated ||
             column.defaultSql != null ||
             column.clientDefault != null ||
@@ -119,31 +155,7 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
         'Identity requires a non-null single integer primary key.',
       );
     }
-    commands.add(SqlCommand(_createTable(table, dialect)));
   }
-  if (dialect == SqlDialect.postgres) {
-    // Creating constraints after all tables also supports cycles and self links.
-    for (final table in tables) {
-      for (final key in table.foreignKeys) {
-        commands.add(
-          SqlCommand(
-            'ALTER TABLE ${_quote(table.name)} ADD ${_foreignKey(key)}',
-          ),
-        );
-      }
-    }
-  }
-  for (final table in tables) {
-    for (final index in table.indexes) {
-      commands.add(
-        SqlCommand(
-          'CREATE ${index.unique ? 'UNIQUE ' : ''}INDEX ${_quote(index.name)} '
-          'ON ${_quote(table.name)} (${index.columns.map(_quote).join(', ')})',
-        ),
-      );
-    }
-  }
-  return List.unmodifiable(commands);
 }
 
 String _createTable(TableSchema table, SqlDialect dialect, {String? name}) {

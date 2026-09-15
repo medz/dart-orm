@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:orm/generate.dart';
 import 'package:orm/migrate.dart';
+import 'package:orm/orm.dart';
 import 'package:test/test.dart';
 
 import '../../tool/src/build_fixture.dart';
@@ -11,7 +12,8 @@ import '../../tool/src/build_fixture.dart';
 /// through an in-process test substitute for the public command workflow.
 final class MigrationProject {
   final BuildFixture fixture;
-  MigrationProject._(this.fixture);
+  final SqlDialect dialect;
+  MigrationProject._(this.fixture, this.dialect);
   String get path => fixture.directory.path;
   String get databasePath => '$path/database.sqlite';
   String get migrationDirectory => '$path/lib/migrations';
@@ -21,9 +23,15 @@ final class MigrationProject {
     String? sqlitePath,
   }) async {
     final fixture = await BuildFixture.create(ormPath: Directory.current.path);
-    final project = MigrationProject._(fixture);
+    final project = MigrationProject._(
+      fixture,
+      postgresSchema == null ? SqlDialect.sqlite : SqlDialect.postgres,
+    );
     try {
-      await writeMigrationRegistry(project.migrationDirectory);
+      await writeMigrationRegistry(
+        project.migrationDirectory,
+        dialect: project.dialect,
+      );
       await fixture.write('bin/migrate.dart', '''
 ${postgresSchema == null ? '' : "import 'dart:io';"}
 import 'package:orm/migrate_cli.dart';

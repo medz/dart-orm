@@ -36,8 +36,9 @@ void main() {
         }
       });
       tearDown(() => db.close());
-      Future<void> create() =>
-          Migrator(db).apply([Migration.create('0001_decimal', appSchema)]);
+      Future<void> create() => Migrator(db).apply([
+        Migration.create('0001_decimal', appSchema, dialect: db.dialect),
+      ]);
       Future<void> amounts(List<String> values) async {
         for (final v in values) {
           await db.entries.create(amount: d(v), bucket: 'a');
@@ -316,19 +317,25 @@ void main() {
         for (final n in ['10', '2', '-10', '.00000000000000000001']) {
           await db.rates.create(id: d(n), label: 'pending');
         }
-        final first = Migration.create('0001_decimal', appSchema);
-        final second = Migration.steps('0002_backfill', {
-          for (final dialect in SqlDialect.values)
-            dialect: [
-              Backfill(
-                ratesSchema,
-                set: {'label': "'done'"},
-                where: "label = 'pending'",
-                doneWhen: "SELECT NOT EXISTS (SELECT 1 FROM rates WHERE label = 'pending')",
-                batchSize: 1,
-              ),
-            ],
-        }, previous: first.checksum);
+        final first = Migration.create(
+          '0001_decimal',
+          appSchema,
+          dialect: db.dialect,
+        );
+        final second = Migration.steps(
+          '0002_backfill',
+          [
+            Backfill(
+              ratesSchema,
+              set: {'label': "'done'"},
+              where: "label = 'pending'",
+              doneWhen: "SELECT NOT EXISTS (SELECT 1 FROM rates WHERE label = 'pending')",
+              batchSize: 1,
+            ),
+          ],
+          previous: first.checksum,
+          dialect: db.dialect,
+        );
         await Migrator(db).apply([first, second], maxBackfillBatches: 1);
         expect(await db.rates.where((r) => r.label.eq('done')).count(), 1);
         await Migrator(db).apply([first, second]);
@@ -344,7 +351,9 @@ void main() {
             ['amount'],
           ],
         );
-        final first = Migration.create('0001_text', [schema(Codecs.text)]);
+        final first = Migration.create('0001_text', [
+          schema(Codecs.text),
+        ], dialect: db.dialect);
         await Migrator(db).apply([first]);
         await db.execute(
           SqlCommand(
@@ -356,14 +365,14 @@ void main() {
           from: first.snapshot!,
           to: SchemaSnapshot([schema(Codecs.decimal)]),
           previous: first.checksum,
-          using: {
-            SqlDialect.sqlite: {
-              'converted': {'amount': 'amount'},
-            },
-            SqlDialect.postgres: {
-              'converted': {'amount': 'CAST(amount AS NUMERIC)'},
-            },
-          },
+          using: (db.dialect == SqlDialect.sqlite
+              ? {
+                  'converted': {'amount': 'amount'},
+                }
+              : {
+                  'converted': {'amount': 'CAST(amount AS NUMERIC)'},
+                }),
+          dialect: db.dialect,
         );
         await expectLater(
           Migrator(db).apply([first, next]),
@@ -452,7 +461,7 @@ void main() {
         ],
       );
       await Migrator(db).apply([
-        Migration.create('0001_quoted', [table]),
+        Migration.create('0001_quoted', [table], dialect: db.dialect),
       ]);
       expect(
         (await verifySchema(db, SchemaSnapshot([table]))).differences,

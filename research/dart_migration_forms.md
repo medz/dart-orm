@@ -2,7 +2,7 @@
 
 研究日期：2026-09-15。基于 `next` 的 `b694ba9`；本轮只增加研究文档与隔离原型，没有更改 ORM 公开 API、生成器或 CLI。
 
-实现跟进：全 Dart 工作流正在落到公开 API，实际命令与文件组织见
+实现跟进：全 Dart 工作流已实现，并修正为一套历史固定一个数据库。实际命令与文件组织见
 [迁移文档](../docs/migrations.md)。实现选择把当前物理结构单独输出为
 `schema.snapshot.dart`，使迁移工具不必加载业务模型或 Flutter 依赖；下文保留原始研究记录。
 
@@ -58,19 +58,13 @@ tool/
 
 ## 可实现的迁移文件
 
-下列使用现有 `Migration.steps` API；校验和与 `_after` 的内容为展示省略，完整可运行写法在原型中：
+下列使用当前 `Migration.steps` API；校验和与 `_after` 的内容为展示省略，完整文件见 `example/migrations/`：
 
 ```dart
 final migration = Migration.steps(
   '0002_nicknames',
-  {
-    .sqlite: [
-      ExecuteSql('ALTER TABLE "people" ADD COLUMN "nickname" TEXT'),
-    ],
-    .postgres: [
-      ExecuteSql('ALTER TABLE "people" ADD COLUMN "nickname" TEXT'),
-    ],
-  },
+  [ExecuteSql('ALTER TABLE "people" ADD COLUMN "nickname" TEXT')],
+  dialect: .sqlite,
   previous: '创建迁移时固定的前驱校验和',
   snapshot: _after,
 );
@@ -112,19 +106,20 @@ Drift 的官方文档明确展示了这个问题，并提供每一步对应版�
 
 ## CLI 和 AOT 的实际形态
 
-全 Dart 文件需要一个编译入口。推荐先提供项目自己的普通入口，静态 import 迁移列表，再调用迁移运行器。下面的 `runMigrationCli` 是候选新 API，尚未实现：
+全 Dart 文件需要一个编译入口。推荐先提供项目自己的普通入口，静态 import 迁移列表，再调用迁移运行器。`runMigrationCli` 已实现，入口形态为：
 
 ```dart
 import '../lib/data/migrations/migrations.g.dart';
 
 Future<void> main(List<String> args) => runMigrationCli(
   args,
-  migrations: migrations,
-  connect: () => postgres(PostgresOptions(url: configuredUrl)),
+  history: migrationHistory,
+  directory: 'lib/data/migrations',
+  connect: ({required readOnly}) => postgres(PostgresOptions(url: configuredUrl)),
 );
 ```
 
-候选命令是 `dart run tool/migrate.dart plan|apply|check`。先检查静态计划，再根据命令决定是否连接；迁移定义本身不取得数据库会话。生成当前 schema 继续走独立的生成命令，避免“生成器入口必须先导入还没生成的文件”的循环。
+命令是 `dart run tool/migrate.dart plan|apply|check`。先检查静态计划，再根据命令决定是否连接；迁移定义本身不取得数据库会话。生成当前 schema 继续走独立的生成命令，避免“生成器入口必须先导入还没生成的文件”的循环。
 
 开发环境可以编译临时入口自动 import 文件，但首版没有必要额外引入进程调度/序列化桥接。生产可编译这个项目入口；Flutter 直接静态导入列表。Dart 官方支持编译独立 executable；语言 import 本身使用声明中的 URI。[dart compile](https://dart.dev/tools/dart-compile)、[Libraries & imports](https://dart.dev/language/libraries)
 
@@ -142,19 +137,25 @@ Future<void> main(List<String> args) => runMigrationCli(
 
 ## 实证与下一步范围
 
-[dart_migrations_probe.dart](dart_migrations_probe.dart) 没有读取或写入 schema/migration JSON 文件，也不导入当前业务模型。历史结构和两步迁移都直接来自 Dart 对象。
+早期原型在 `37aec68` 验证了 Dart 3.13.3、SQLite/PostgreSQL 下 JIT 与独立 AOT 每后端 8 项检查。其双库计划形态已淘汰，原型源码由正式的 `test/migration_source_test.dart`、`test/migration_target_test.dart` 和恢复测试替代；旧运行结果不作为当前实现的验收。
 
-在 Dart 3.13.3、真实 SQLite 和本地 PostgreSQL 上，JIT 与独立 AOT 程序各通过每后端 8 项检查：初始历史结构、升级计划、有界回填暂停、关闭并重新连接后恢复且保留数据、目标结构、应用版本、避免重复执行，以及拒绝被修改的已应用计划。AOT 最终源码静态分析无问题。
+## 数据库边界修正
 
-```sh
-dart analyze research/dart_migrations_probe.dart
-dart run research/dart_migrations_probe.dart
-dart compile exe research/dart_migrations_probe.dart -o /tmp/orm-dart-migrations-probe
-/tmp/orm-dart-migrations-probe
-```
+ORM 支持多个数据库，与应用需要多套迁移是两件不同的事。应用选择数据库之后，每个注册表从空历史开始固定 `migrationDialect`。迁移文件保存同一 `dialect` 和一组平铺的步骤；初始化时配置一次，正常创建及执行不再询问或遍历其他数据库。
 
-设置 `ORM_TEST_POSTGRES` 可加入可丢弃的本地 PostgreSQL。原型显式关闭本地 TLS，创建唯一 schema，结束时只删除自己创建的 schema；SQLite 使用临时文件并清理。`--fingerprint` 只打印首个计划的校验和。
+| 边界 | 行为 |
+| --- | --- |
+| 生成 | 当前声明与最后历史快照都按已选数据库解析，再比较并冻结 SQL。只要求该库的转换表达式。 |
+| 指纹 | 包含数据库身份、实际步骤、选定表达式的历史 schema、前驱。另一库配置变化不能改变当前指纹。 |
+| 注册 | 只接受同一库的有序历史。重建注册表保留已选数据库，不刷新文件指纹。 |
+| 连接 | CLI 和执行器在迁移 SQL 前拒绝错库；CLI 的连接工厂已执行，可能已打开 SQLite 文件，不能声称零文件系统副作用。 |
+| 数据库版本 | 当前迁移执行器支持 PostgreSQL 18+、SQLite 3.35+。执行前检查实际版本；不推测手写 SQL 对所有版本的兼容性。 |
+| 特有能力 | SQLite 重建/外键检查与 PostgreSQL 约束解析/并发索引各走本库执行语义，不为另一库生成占位步骤或采用功能交集。 |
+| 事务 | 普通迁移批次原子提交。显式 Backfill/CheckedSql 分段记账；失败及重试遵循已保存检查点，不把整个迁移描述为可回滚。 |
+| 改连接地址 | 同一数据库类型可以切环境、凭据、服务器，仍核对目的库的已应用历史及实际结构。 |
+| 真正换库 | 单独的数据搬迁及新库 baseline。原库历史不改写、不自动翻译或重放。 |
+| 同时使用多个库 | 分别维护连接、目录、注册表与发布动作；没有跨库原子迁移承诺。 |
 
-这证明现有执行语义无需 JSON 文件即可运行，不证明新生成器、注册表、历史字段 API、GUI 编辑器、大规模编译成本或 Flutter/Web 新打包流程已经实现。关闭重连也不等于杀进程恢复测试。内部 checksum 和数据库 checkpoint 仍复用现有编码。
+SQLite 可在虚拟计算列上建索引，PostgreSQL 18 不支持这种索引；这个限制不能阻止 SQLite schema。PostgreSQL 对计算列模式转换的限制也不能阻止可通过复制重建完成的 SQLite 变更。[PostgreSQL generated columns](https://www.postgresql.org/docs/18/ddl-generated-columns.html)、[SQLite generated columns](https://www.sqlite.org/gencol.html)
 
-建议下一轮实现范围限定为：Dart snapshot/迁移发射器、静态注册表、项目迁移入口，以及清空缓存后的重新生成与升级验证。先检查实际文件数、代码体积、迁移审阅体验和 AOT 引入成本，再决定是否增加历史字段 DSL 或任意 Dart 回调。迁移测试仍须覆盖每个支持的旧版本和数据保持；[Drift 的迁移测试流程](https://drift.simonbinder.eu/migrations/tests/)也把历史结构重建与升级验证作为独立步骤。
+迁移验收须使用实际部署的引擎；PostgreSQL 应用的 SQLite 测试不能替代 PostgreSQL 迁移验收。重命名、丢弃数据、重计算及长时间锁定仍需明确审阅，选择单库不会消除这些边界。
