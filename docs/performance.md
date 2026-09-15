@@ -168,3 +168,79 @@ remaining short in absolute time. On a delayed connection, protocol round trips
 can dominate; fewer selected columns do not eliminate those round trips. Allocation
 traces identify work worth investigating but do not by themselves justify a cache
 or a new abstraction.
+
+## Direct selection decoding
+
+The separate [selection report](../research/benchmarks/runtime-selection.json)
+captures runtime `d0a8c9a` on the same machine, SDK and database versions. Field
+readers now pass values directly to typed mappers or the requested dynamic Map,
+avoiding a temporary values List for each row. Relationship expansion allocates
+one fixed-length buffer and copies the original row into it. This preserves
+driver-row ownership and adds no cache or dependency.
+
+The workload, relay and VM-profiling helper hashes match the baseline. The main
+harness only adds output-path selection, allowing both reports to be retained.
+Each of the twelve scenario/case combinations has 200 latency and concurrent
+samples per lane and 64 separate acquisition samples. Independent report readback
+confirms identical SQL, parameters, statement/row counts and logical/protocol
+bytes between raw/ORM and before/after. Temporary PostgreSQL schemas were removed.
+
+The selected main-isolate List traces over **three reads** are:
+
+| Backend | Case | Raw before → after | ORM before → after | ORM reduction |
+| --- | --- | ---: | ---: | ---: |
+| SQLite WAL | full rows | 39 → 40 | 1,239 → 333 | 73.1% |
+| SQLite WAL | two columns | 37 → 37 | 885 → 282 | 68.1% |
+| SQLite WAL | three posts | 996 → 996 | 8,244 → 5,220 | 36.7% |
+| SQLite WAL | aggregate | 29 → 29 | 371 → 308 | 17.0% |
+| PostgreSQL loopback | full rows | 3,386 → 3,382 | 4,598 → 3,695 | 19.6% |
+| PostgreSQL loopback | two columns | 2,359 → 2,359 | 3,215 → 2,611 | 18.8% |
+| PostgreSQL loopback | three posts | 10,235 → 10,248 | 17,564 → 14,541 | 17.2% |
+| PostgreSQL loopback | aggregate | 451 → 451 | 803 → 740 | 7.8% |
+
+Counts sum `_List` and `_GrowableList`, including backing arrays. All captured
+traces report zero truncated stacks; the selected-class and isolate limitations
+above still apply. These percentages describe observed List creations, not total
+allocated bytes, retained heap, RSS or throughput.
+
+Normal untraced local latency did **not** establish a speed improvement. Several
+raw-driver timings increased too. All local cases are shown in milliseconds:
+
+| Backend | Case | Raw p50 before → after | ORM p50 before → after | New ORM p95 |
+| --- | --- | ---: | ---: | ---: |
+| SQLite WAL | full rows | 0.111 → 0.127 | 0.160 → 0.170 | 0.267 |
+| SQLite WAL | two columns | 0.055 → 0.057 | 0.075 → 0.075 | 0.164 |
+| SQLite WAL | three posts | 0.728 → 0.806 | 0.817 → 0.907 | 1.099 |
+| SQLite WAL | aggregate | 0.036 → 0.036 | 0.040 → 0.041 | 0.053 |
+| PostgreSQL loopback | full rows | 0.931 → 0.907 | 0.994 → 0.979 | 1.189 |
+| PostgreSQL loopback | two columns | 0.530 → 0.553 | 0.555 → 0.593 | 0.827 |
+| PostgreSQL loopback | three posts | 1.778 → 1.909 | 1.960 → 2.154 | 2.498 |
+| PostgreSQL loopback | aggregate | 0.352 → 0.353 | 0.365 → 0.375 | 0.510 |
+
+Local ORM eight-client throughput was also lower in this capture; all durations
+and throughput samples are retained in the report. Two separate captures cannot
+distinguish small runtime regressions from load, scheduling and JIT variability.
+The supported conclusion is fewer intermediate List allocations, with unchanged
+SQL/result volume and verified correctness, not a latency or throughput gain.
+
+The delayed relay's echo p50 changed from 26.410 to 24.725 ms and full-driver
+`SELECT 1` from 82.678 to 75.129 ms. Relationship raw/ORM p50 changed from
+166.178/168.265 to 162.096/162.396 ms. Transport calibration itself changed, so
+those lower durations cannot be attributed to selection decoding.
+
+The [PostgreSQL adapter](../lib/postgres.dart) still prepares each statement,
+consumes its bound ResultStream and awaits disposal. Inspection of the locked
+`postgres` 3.5.12 implementation shows separate awaited parse and close messages;
+`_PreparedStatement` also queues transaction portals for cleanup in `run()` or
+`dispose()`. Retaining statements while continuing to use `bind()` would retain
+that pending cleanup until disposal. Simply removing disposal is therefore not
+a valid optimization. The adapter currently owns cancellation and awaits control
+cleanup before allowing reuse. A future connection-scoped statement cache or
+protocol change must preserve these lifecycle guarantees and be evaluated with
+the delayed-relay harness. No implicit statement cache is introduced here.
+
+Correctness after this change: 813 native tests with PostgreSQL enabled, clean
+static analysis, and 18 real Chrome scenarios for each of JS and Dart WASM. The
+browser membership scenario additionally covers six mixed field types and
+deferred, ordered mapping. These remain separate from performance evidence and
+do not establish native Flutter behavior.

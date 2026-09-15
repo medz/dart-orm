@@ -12,7 +12,8 @@ scenarios. These checks include query plan inspection and phase observations.
 The same-driver runtime cost baseline covers SQLite and PostgreSQL, including
 controlled TCP latency, concurrency and separate allocation traces. That baseline
 uses runtime source `94d24fe`; see [measurements](performance.md). Selection decoding
-has since been optimized and is awaiting a separate cost capture.
+has since been optimized, with a separate `d0a8c9a` capture confirming fewer
+intermediate List allocations; it does not establish a throughput improvement.
 
 ## Completed
 
@@ -588,8 +589,22 @@ observation, inspection and UNION invocation passes 93 checks. The full native
 invocation passes 813 checks with PostgreSQL enabled, and analysis reports no
 issues. Real Chrome JS and Dart WASM each pass 18 scenarios; the teams scenario
 additionally checks a six-field mixed-type projection and deferred/ordered mapping.
-The browser report retains both runs. A new cost capture is still pending for
-this optimization; the benchmark accepts `--output` to preserve the prior report.
+The browser report retains both runs. The separate `runtime-selection.json` cost
+capture preserves the original baseline, retaining 200 timing/concurrency samples
+per lane and 64 acquisition samples. All twelve scenario/case combinations retain
+identical SQL, parameters, row volumes and logical/protocol bytes. Three SQLite
+relationship reads reduce selected List/backing-List traces from 8,244 to 5,220;
+local PostgreSQL reduces them from 17,564 to 14,541. Normal latency and throughput
+do not establish a speed improvement: some timings increased alongside raw-driver
+controls, and relay calibration changed between runs. The report records those
+limits rather than attributing timing changes to decoding.
+
+PostgreSQL protocol lifecycle review confirms separate awaited prepare/dispose
+work and pending portal cleanup in the pinned driver's Statement implementation.
+Caching statements while retaining the current bind path cannot just omit
+disposal; cancellation, portal release and connection reuse must stay valid.
+The current adapter deliberately retains its verified cleanup behavior. The
+measured round-trip cost and scope are documented in `docs/performance.md`.
 
 ## Still required for the goal
 
@@ -599,7 +614,6 @@ this optimization; the benchmark accepts `--output` to preserve the prior report
 - Temporal column precision and timezone conversions.
 - Further backend capability coverage.
 - Native Flutter checks and remaining platform acceptance review.
-- Review measured intermediate collection allocation and protocol round-trip costs before final performance acceptance.
 - User documentation, performance measurements and complete acceptance review.
 
 To-one projections join by default when declared keys prove uniqueness; otherwise

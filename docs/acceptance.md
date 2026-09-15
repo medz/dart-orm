@@ -34,6 +34,14 @@ is shown. The browser report is
 [`research/validation/browser.json`](../research/validation/browser.json), with
 commands and limits in [SQLite web](sqlite-web.md).
 
+The subsequent [selection cost capture](../research/benchmarks/runtime-selection.json)
+uses runtime `d0a8c9a`. Exact SQL, parameters and result/transport volumes match the
+baseline. It records fewer selected List allocations, without establishing a
+latency or throughput gain; the [comparison](performance.md#direct-selection-decoding)
+also documents the PostgreSQL protocol lifecycle tradeoff. `selection_test` adds
+direct coverage for deferred/ordered mapping, repeated fields, all typed arities,
+streaming, failures and dynamic field snapshots on both native backends.
+
 ## Open implementation and acceptance gates
 
 | Gate from the design | Evidence still required |
