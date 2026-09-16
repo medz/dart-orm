@@ -1,0 +1,500 @@
+{
+  "date": "2026-09-16",
+  "runtimeRevision": "a25c29c9a2e3025c5bb29fe3415c846e764d7373",
+  "scope": "Release Flutter builds with a temporary ORM package copy declaring web-only assets; shipping runtime unchanged.",
+  "standaloneDartPubGet": "passed offline; package keeps no Flutter SDK dependency",
+  "probeSha256": "9e99f722fcb0b11f5610d0441fe8baf236e616e326f897848b51c04587397648",
+  "artifacts": [
+    {
+      "name": "sqlite3.wasm",
+      "bytes": 748686,
+      "gzipBytes": 358944,
+      "sha256": "13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4"
+    },
+    {
+      "name": "worker.js",
+      "bytes": 175973,
+      "gzipBytes": 55940,
+      "sha256": "390820f8ceefca406e191ace4d594e06840808a7c09823ad031ccd5ebf893d44"
+    }
+  ],
+  "runs": [
+    {
+      "passed": true,
+      "checks": [
+        {
+          "name": "many-to-many plans, phase observations, payloads, pagination and transaction writes preserve query counts",
+          "milliseconds": 95
+        },
+        {
+          "name": "temporal column precision preserves epoch ties, extended ranges, defaults and keys",
+          "milliseconds": 38
+        },
+        {
+          "name": "memory migrations and verified foreign keys",
+          "milliseconds": 15
+        },
+        {
+          "name": "query ownership, optional guards and write validation survive JS and WASM",
+          "milliseconds": 20
+        },
+        {
+          "name": "client factories distinguish omission, explicit null and prepared batch values",
+          "milliseconds": 17
+        },
+        {
+          "name": "computed stored and virtual fields recompute across CRUD and migrations",
+          "milliseconds": 32
+        },
+        {
+          "name": "generated CHECK enforcement and atomic constraint migrations",
+          "milliseconds": 28
+        },
+        {
+          "name": "generated records, projections and typed relation batches",
+          "milliseconds": 3
+        },
+        {
+          "name": "rollback, savepoints and transaction lifetime",
+          "milliseconds": 1
+        },
+        {
+          "name": "stream cursor batches and early release",
+          "milliseconds": 3
+        },
+        {
+          "name": "commit invalidation and watch snapshots",
+          "milliseconds": 1
+        },
+        {
+          "name": "exact BigInt, Decimal, blobs and calendar transport",
+          "milliseconds": 3
+        },
+        {
+          "name": "explicit unsupported cancellation",
+          "milliseconds": 0
+        },
+        {
+          "name": "large real values retain floating storage",
+          "milliseconds": 3
+        },
+        {
+          "name": "instant microseconds are exact or explicitly rejected",
+          "milliseconds": 0
+        },
+        {
+          "name": "worker does not block the browser event loop",
+          "milliseconds": 161
+        },
+        {
+          "name": "startup failures are bounded and release failed workers",
+          "milliseconds": 32
+        },
+        {
+          "name": "OPFS commit survives a closed worker and new connection",
+          "milliseconds": 100
+        },
+        {
+          "name": "page reload recovers committed rows and rolls back interrupted transaction",
+          "milliseconds": 2
+        },
+        {
+          "name": "persistent schema upgrades after reload preserve existing data",
+          "milliseconds": 21
+        }
+      ],
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+      "actualWasm": false,
+      "flutterFrames": 6,
+      "baseUri": "http://127.0.0.1:56191/nested/",
+      "dartUriBase": "http://127.0.0.1:56191/nested/detail/42?phase=recover",
+      "isolated": false,
+      "requests": [
+        "/nested/detail/42",
+        "/nested/flutter_bootstrap.js",
+        "/nested/canvaskit/chromium/canvaskit.wasm",
+        "/nested/canvaskit/chromium/canvaskit.js",
+        "/nested/main.dart.js",
+        "/favicon.ico",
+        "/nested/assets/FontManifest.json",
+        "/nested/assets/fonts/MaterialIcons-Regular.otf",
+        "/nested/assets/fonts/fallback/Roboto-Regular.ttf",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/missing.wasm",
+        "/missing-worker.js",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/detail/42",
+        "/nested/flutter_bootstrap.js",
+        "/nested/canvaskit/chromium/canvaskit.wasm",
+        "/nested/canvaskit/chromium/canvaskit.js",
+        "/nested/main.dart.js",
+        "/nested/assets/FontManifest.json",
+        "/nested/assets/fonts/MaterialIcons-Regular.otf",
+        "/nested/assets/fonts/fallback/Roboto-Regular.ttf",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/report"
+      ],
+      "build": "js",
+      "expectedIsolation": false,
+      "flutterSdk": {
+        "frameworkVersion": "3.47.4",
+        "channel": "stable",
+        "repositoryUrl": "https://github.com/flutter/flutter.git",
+        "frameworkRevision": "9584c6713b324636289d067944a46fd6b49df14b",
+        "frameworkCommitDate": "2026-09-10 15:25:10 -0700",
+        "engineRevision": "06a2e2a110089dff50fe635cffd2a61e1b24fbcd",
+        "engineCommitDate": "2026-09-03 16:07:13.000Z",
+        "engineContentHash": "0e228ec8c8d2abc9fcf1d053e8a40665bb859ec7",
+        "engineBuildDate": "2026-09-04 00:39:13.722",
+        "dartSdkVersion": "3.13.3",
+        "devToolsVersion": "2.60.0",
+        "flutterVersion": "3.47.4"
+      },
+      "sqliteWasmSha256": "13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4"
+    },
+    {
+      "passed": true,
+      "checks": [
+        {
+          "name": "many-to-many plans, phase observations, payloads, pagination and transaction writes preserve query counts",
+          "milliseconds": 100
+        },
+        {
+          "name": "temporal column precision preserves epoch ties, extended ranges, defaults and keys",
+          "milliseconds": 38
+        },
+        {
+          "name": "memory migrations and verified foreign keys",
+          "milliseconds": 12
+        },
+        {
+          "name": "query ownership, optional guards and write validation survive JS and WASM",
+          "milliseconds": 19
+        },
+        {
+          "name": "client factories distinguish omission, explicit null and prepared batch values",
+          "milliseconds": 17
+        },
+        {
+          "name": "computed stored and virtual fields recompute across CRUD and migrations",
+          "milliseconds": 27
+        },
+        {
+          "name": "generated CHECK enforcement and atomic constraint migrations",
+          "milliseconds": 24
+        },
+        {
+          "name": "generated records, projections and typed relation batches",
+          "milliseconds": 2
+        },
+        {
+          "name": "rollback, savepoints and transaction lifetime",
+          "milliseconds": 1
+        },
+        {
+          "name": "stream cursor batches and early release",
+          "milliseconds": 1
+        },
+        {
+          "name": "commit invalidation and watch snapshots",
+          "milliseconds": 0
+        },
+        {
+          "name": "exact BigInt, Decimal, blobs and calendar transport",
+          "milliseconds": 3
+        },
+        {
+          "name": "explicit unsupported cancellation",
+          "milliseconds": 0
+        },
+        {
+          "name": "large real values retain floating storage",
+          "milliseconds": 2
+        },
+        {
+          "name": "instant microseconds are exact or explicitly rejected",
+          "milliseconds": 0
+        },
+        {
+          "name": "worker does not block the browser event loop",
+          "milliseconds": 160
+        },
+        {
+          "name": "startup failures are bounded and release failed workers",
+          "milliseconds": 32
+        },
+        {
+          "name": "OPFS commit survives a closed worker and new connection",
+          "milliseconds": 97
+        },
+        {
+          "name": "page reload recovers committed rows and rolls back interrupted transaction",
+          "milliseconds": 2
+        },
+        {
+          "name": "persistent schema upgrades after reload preserve existing data",
+          "milliseconds": 12
+        }
+      ],
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+      "actualWasm": true,
+      "flutterFrames": 4,
+      "baseUri": "http://127.0.0.1:56219/nested/",
+      "dartUriBase": "http://127.0.0.1:56219/nested/detail/42?phase=recover",
+      "isolated": false,
+      "requests": [
+        "/nested/detail/42",
+        "/nested/flutter_bootstrap.js",
+        "/nested/canvaskit/skwasm.wasm",
+        "/nested/canvaskit/skwasm.js",
+        "/nested/main.dart.mjs",
+        "/favicon.ico",
+        "/nested/main.dart.wasm",
+        "/nested/assets/FontManifest.json",
+        "/nested/assets/fonts/MaterialIcons-Regular.otf",
+        "/nested/assets/fonts/fallback/Roboto-Regular.ttf",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/missing.wasm",
+        "/missing-worker.js",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/detail/42",
+        "/nested/flutter_bootstrap.js",
+        "/nested/canvaskit/skwasm.wasm",
+        "/nested/canvaskit/skwasm.js",
+        "/nested/main.dart.mjs",
+        "/nested/main.dart.wasm",
+        "/nested/assets/FontManifest.json",
+        "/nested/assets/fonts/MaterialIcons-Regular.otf",
+        "/nested/assets/fonts/fallback/Roboto-Regular.ttf",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/report"
+      ],
+      "build": "wasm",
+      "expectedIsolation": false,
+      "flutterSdk": {
+        "frameworkVersion": "3.47.4",
+        "channel": "stable",
+        "repositoryUrl": "https://github.com/flutter/flutter.git",
+        "frameworkRevision": "9584c6713b324636289d067944a46fd6b49df14b",
+        "frameworkCommitDate": "2026-09-10 15:25:10 -0700",
+        "engineRevision": "06a2e2a110089dff50fe635cffd2a61e1b24fbcd",
+        "engineCommitDate": "2026-09-03 16:07:13.000Z",
+        "engineContentHash": "0e228ec8c8d2abc9fcf1d053e8a40665bb859ec7",
+        "engineBuildDate": "2026-09-04 00:39:13.722",
+        "dartSdkVersion": "3.13.3",
+        "devToolsVersion": "2.60.0",
+        "flutterVersion": "3.47.4"
+      },
+      "sqliteWasmSha256": "13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4"
+    },
+    {
+      "passed": true,
+      "checks": [
+        {
+          "name": "many-to-many plans, phase observations, payloads, pagination and transaction writes preserve query counts",
+          "milliseconds": 56
+        },
+        {
+          "name": "temporal column precision preserves epoch ties, extended ranges, defaults and keys",
+          "milliseconds": 41
+        },
+        {
+          "name": "memory migrations and verified foreign keys",
+          "milliseconds": 12
+        },
+        {
+          "name": "query ownership, optional guards and write validation survive JS and WASM",
+          "milliseconds": 18
+        },
+        {
+          "name": "client factories distinguish omission, explicit null and prepared batch values",
+          "milliseconds": 17
+        },
+        {
+          "name": "computed stored and virtual fields recompute across CRUD and migrations",
+          "milliseconds": 27
+        },
+        {
+          "name": "generated CHECK enforcement and atomic constraint migrations",
+          "milliseconds": 23
+        },
+        {
+          "name": "generated records, projections and typed relation batches",
+          "milliseconds": 2
+        },
+        {
+          "name": "rollback, savepoints and transaction lifetime",
+          "milliseconds": 1
+        },
+        {
+          "name": "stream cursor batches and early release",
+          "milliseconds": 1
+        },
+        {
+          "name": "commit invalidation and watch snapshots",
+          "milliseconds": 0
+        },
+        {
+          "name": "exact BigInt, Decimal, blobs and calendar transport",
+          "milliseconds": 3
+        },
+        {
+          "name": "explicit unsupported cancellation",
+          "milliseconds": 0
+        },
+        {
+          "name": "large real values retain floating storage",
+          "milliseconds": 2
+        },
+        {
+          "name": "instant microseconds are exact or explicitly rejected",
+          "milliseconds": 0
+        },
+        {
+          "name": "worker does not block the browser event loop",
+          "milliseconds": 160
+        },
+        {
+          "name": "startup failures are bounded and release failed workers",
+          "milliseconds": 31
+        },
+        {
+          "name": "OPFS commit survives a closed worker and new connection",
+          "milliseconds": 96
+        },
+        {
+          "name": "page reload recovers committed rows and rolls back interrupted transaction",
+          "milliseconds": 1
+        },
+        {
+          "name": "persistent schema upgrades after reload preserve existing data",
+          "milliseconds": 14
+        }
+      ],
+      "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+      "actualWasm": true,
+      "flutterFrames": 4,
+      "baseUri": "http://127.0.0.1:56235/nested/",
+      "dartUriBase": "http://127.0.0.1:56235/nested/detail/42?phase=recover",
+      "isolated": true,
+      "requests": [
+        "/nested/detail/42",
+        "/nested/flutter_bootstrap.js",
+        "/nested/canvaskit/skwasm.wasm",
+        "/nested/canvaskit/skwasm.js",
+        "/nested/main.dart.mjs",
+        "/favicon.ico",
+        "/nested/main.dart.wasm",
+        "/nested/assets/FontManifest.json",
+        "/nested/assets/fonts/MaterialIcons-Regular.otf",
+        "/nested/assets/fonts/fallback/Roboto-Regular.ttf",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/canvaskit/skwasm.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/missing.wasm",
+        "/missing-worker.js",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/nested/detail/42",
+        "/nested/flutter_bootstrap.js",
+        "/nested/canvaskit/skwasm.wasm",
+        "/nested/canvaskit/skwasm.js",
+        "/nested/main.dart.mjs",
+        "/nested/main.dart.wasm",
+        "/nested/assets/FontManifest.json",
+        "/nested/assets/fonts/MaterialIcons-Regular.otf",
+        "/nested/assets/fonts/fallback/Roboto-Regular.ttf",
+        "/nested/assets/packages/orm/assets/web/worker.js",
+        "/nested/canvaskit/skwasm.js",
+        "/nested/assets/packages/orm/assets/web/sqlite3.wasm",
+        "/report"
+      ],
+      "build": "wasm",
+      "expectedIsolation": true,
+      "flutterSdk": {
+        "frameworkVersion": "3.47.4",
+        "channel": "stable",
+        "repositoryUrl": "https://github.com/flutter/flutter.git",
+        "frameworkRevision": "9584c6713b324636289d067944a46fd6b49df14b",
+        "frameworkCommitDate": "2026-09-10 15:25:10 -0700",
+        "engineRevision": "06a2e2a110089dff50fe635cffd2a61e1b24fbcd",
+        "engineCommitDate": "2026-09-03 16:07:13.000Z",
+        "engineContentHash": "0e228ec8c8d2abc9fcf1d053e8a40665bb859ec7",
+        "engineBuildDate": "2026-09-04 00:39:13.722",
+        "dartSdkVersion": "3.13.3",
+        "devToolsVersion": "2.60.0",
+        "flutterVersion": "3.47.4"
+      },
+      "sqliteWasmSha256": "13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4"
+    }
+  ]
+}

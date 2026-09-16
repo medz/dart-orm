@@ -4,6 +4,11 @@
 Generated models, queries, selections, relationships, transactions, migrations and
 subscriptions use the same runtime as native SQLite.
 
+The [Flutter Web integration study](../research/flutter-web-integration.md) adds
+actual Flutter release-build evidence and a proposal for package-owned assets.
+The API below still requires explicit asset URLs; the automatic packaging proposal
+is not yet part of the shipped entry point.
+
 ```dart
 import 'package:orm/sqlite_web.dart';
 import 'schema.orm.dart';

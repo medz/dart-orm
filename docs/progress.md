@@ -1,5 +1,22 @@
 # Implementation status
 
+## Flutter Web integration research
+
+[The integration study](../research/flutter-web-integration.md) confirms that
+`sqlite3` already supplies Web engine/storage support and shared database APIs.
+A temporary package with Web-only bundled worker/WASM assets passes actual Flutter
+3.47.4 release builds: JS, WASM without isolation headers, and WASM with isolation
+headers each pass the 20 browser scenarios. Long SQL also allows Flutter animation
+ticks to advance. Deep routes under a subpath, page reload recovery and migrations
+are included; [captured evidence](../research/validation/flutter-web-probe.json)
+records actual compilation mode and asset requests.
+
+This is a research probe, not a shipping packaging change. The recommendation is
+package-owned resources and a simpler SQLite entry, with the platform transport
+kept internal. CDN/CSP, cross-browser behavior, multi-tab ownership, hot restart
+and offline deployment still need design/verification. The native Flutter example
+and current manual Web options remain unchanged.
+
 ## API and correctness refactor
 
 The comprehensive review of public exports, generation, SQL/decoding, writes,
