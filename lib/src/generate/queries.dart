@@ -1,4 +1,4 @@
-part of '../../generate.dart';
+part of '../generate.dart';
 
 /// Offline generated code and its fixed SQL/codec contracts. Native checks are
 /// explicit: generation does not claim that a database has accepted the SQL.
@@ -124,6 +124,9 @@ Future<GeneratedQueries> _generateQueries(
           f.generated ||
           f.unique ||
           f.defaultSql != null ||
+          f.clientDefault != null ||
+          f.computed != null ||
+          f.temporalPrecision != null ||
           f.integerBits != null ||
           f.decimalPrecision != null) {
         throw const GenerationException(
@@ -168,29 +171,7 @@ Future<GeneratedQueries> _generateQueries(
       if (name.startsWith('_')) {
         throw const GenerationException('Named queries must be public.');
       }
-      if ({
-        'driver',
-        'onQuery',
-        'onAcquire',
-        'onDecode',
-        'capabilities',
-        'dialect',
-        'inTransaction',
-        'inSession',
-        'table',
-        'registerSchema',
-        'invalidate',
-        'execute',
-        'session',
-        'discard',
-        'transaction',
-        'savepoint',
-        'close',
-        'hashCode',
-        'runtimeType',
-        'toString',
-        'noSuchMethod',
-      }.contains(name)) {
+      if (_databaseMembers.contains(name)) {
         throw GenerationException('$name conflicts with a Database member.');
       }
       if (types.first.toSource().startsWith('_')) {
@@ -284,7 +265,10 @@ String _emitQueries(
 ) {
   final b = StringBuffer('// GENERATED CODE - DO NOT MODIFY BY HAND.\n\n')
     ..writeln("import 'package:orm/orm.dart';")
-    ..writeln('import ${_literal(sourceImport)} as models;');
+    ..writeln('import ${_literal(sourceImport)} as models;')
+    ..writeln(
+      'export ${_literal(sourceImport)} show ${queries.map((q) => q.result.row).toSet().join(', ')};',
+    );
   if (names.typedData) b.writeln("import 'dart:typed_data';");
   for (final (uri, prefix) in names.imports) {
     b.writeln('import ${_literal(uri)} as $prefix;');

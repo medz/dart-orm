@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show Entry, Rate, Allocation;
 
 final _entriesId = Column<int>(
   "id",
@@ -216,7 +217,11 @@ extension AllocationsUpdates on Query<models.Allocation, AllocationsFields> {
       update((row) => [...row.rateId.change(rateId)]).execute();
 }
 
-final appSchema = <TableSchema>[entriesSchema, ratesSchema, allocationsSchema];
+final appSchema = List<TableSchema>.unmodifiable([
+  entriesSchema,
+  ratesSchema,
+  allocationsSchema,
+]);
 
 extension AppTables<B extends Backend> on Database<B> {
   EntriesTableSet get entries => EntriesTableSet(this);

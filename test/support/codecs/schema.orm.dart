@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show Person, Note;
 import "types.dart" as types0;
 import "alternate.dart" as types1;
 
@@ -260,7 +261,7 @@ extension NotesUpdates on Query<models.Note, NotesFields> {
   ).execute();
 }
 
-final appSchema = <TableSchema>[peopleSchema, notesSchema];
+final appSchema = List<TableSchema>.unmodifiable([peopleSchema, notesSchema]);
 
 extension AppTables<B extends Backend> on Database<B> {
   PeopleTableSet get people => PeopleTableSet(this);

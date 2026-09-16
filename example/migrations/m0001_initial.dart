@@ -1,5 +1,4 @@
 // Review before applying. Applied migrations must remain unchanged.
-import 'package:orm/orm.dart';
 import 'package:orm/migrate.dart';
 
 const migrationChecksum =

@@ -1,6 +1,5 @@
 import 'package:orm/orm.dart';
 
-import '../../example/schema.dart';
 import '../../example/schema.orm.dart';
 
 typedef UserCard = ({int id, String email});

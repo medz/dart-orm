@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show Product, Line;
 
 final _productsId = Column<int>(
   "id",
@@ -218,7 +219,7 @@ extension LinesUpdates on Query<models.Line, LinesFields> {
       update((row) => [...row.productId.change(productId)]).execute();
 }
 
-final appSchema = <TableSchema>[productsSchema, linesSchema];
+final appSchema = List<TableSchema>.unmodifiable([productsSchema, linesSchema]);
 
 extension AppTables<B extends Backend> on Database<B> {
   ProductsTableSet get products => ProductsTableSet(this);

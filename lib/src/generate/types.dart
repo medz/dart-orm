@@ -1,4 +1,4 @@
-part of '../../generate.dart';
+part of '../generate.dart';
 
 /// Resolve symbols by defining library rather than copying source import text.
 final class _DartNames(final Uri source, final String Function(Uri) importUri) {

@@ -1,4 +1,4 @@
-part of '../../generate.dart';
+part of '../generate.dart';
 
 /// Factory used by build_runner's build.yaml registration.
 builder.Builder ormBuilder(builder.BuilderOptions options) {

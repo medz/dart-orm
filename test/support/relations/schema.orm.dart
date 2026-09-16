@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show Account, Event;
 
 final _accountsTenant = Column<int>(
   "tenant",
@@ -302,7 +303,10 @@ extension EventsUpdates on Query<models.Event, EventsFields> {
   ).execute();
 }
 
-final appSchema = <TableSchema>[accountsSchema, eventsSchema];
+final appSchema = List<TableSchema>.unmodifiable([
+  accountsSchema,
+  eventsSchema,
+]);
 
 extension AppTables<B extends Backend> on Database<B> {
   AccountsTableSet get accounts => AccountsTableSet(this);

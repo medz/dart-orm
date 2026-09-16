@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show User, Post, Value, Reading;
 
 import 'dart:typed_data';
 
@@ -418,12 +419,12 @@ extension ReadingsUpdates on Query<models.Reading, ReadingsFields> {
           .execute();
 }
 
-final appSchema = <TableSchema>[
+final appSchema = List<TableSchema>.unmodifiable([
   usersSchema,
   postsSchema,
   valuesSchema,
   readingsSchema,
-];
+]);
 
 extension AppTables<B extends Backend> on Database<B> {
   UsersTableSet get users => UsersTableSet(this);

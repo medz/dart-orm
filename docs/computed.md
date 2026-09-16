@@ -31,8 +31,10 @@ is assumed from these correctness tests.
 Generated computed fields are `ReadField<T>`: they support expressions, ordering,
 selection and relationship keys, but have no `set`, `increment`, `change` or
 `defaultValue` method. They cannot coexist with identity, SQL defaults or client
-factories. Portable models cannot use computed primary keys, and every table
-needs an ordinary column. Raw SQL retains the database's own write rules.
+factories. SQLite cannot use computed primary keys; PostgreSQL permits stored
+computed primary keys. Every table needs an ordinary column. Generation preserves
+these declarations and the migration target enforces the selected engine's rules.
+Raw SQL retains the database's own write rules.
 
 SQL is trusted schema code. Generation reads the literal; it does not translate
 Dart closures or validate SQL function volatility. The database validates names,
@@ -44,8 +46,8 @@ its own deterministic-expression rules. Review overrides for each backend.
 
 ## Migration behavior
 
-Snapshots preserve expression SQL for each dialect and the storage mode. Existing
-snapshots without computed metadata retain their representation and checksum.
+Current generated snapshots retain expression overrides and the storage mode.
+Each saved migration freezes only its selected engine's expressions.
 
 | Change | PostgreSQL | SQLite |
 | --- | --- | --- |
@@ -54,10 +56,10 @@ snapshots without computed metadata retain their representation and checksum.
 | Change computed result type | Native TYPE without USING, followed by target expression | Rebuild with target expression |
 | Drop a computed column | Explicit destructive diff, native DROP COLUMN | Explicit destructive diff, rebuild |
 | Stored to ordinary | DROP EXPRESSION retains existing values | Rebuild copies the old computed values |
-| Ordinary to computed, storage-mode change, virtual to ordinary | Automatic diff requires a reviewed replacement/materialization plan | A manual RebuildTable can express the SQLite transition |
+| Ordinary to computed, storage-mode change, virtual to ordinary | Automatic diff requires a reviewed replacement/materialization plan | Automatic rebuild; discarding ordinary stored values requires `allowDestructive` |
 
-The shared automatic diff refuses mode transitions that cannot be emitted natively
-for PostgreSQL. Use reviewed `Migration.steps` with explicit per-dialect operations;
+The PostgreSQL diff refuses mode transitions that cannot be emitted natively.
+Use reviewed `Migration.steps` with explicit operations for that history's engine;
 preserve indexes, constraints, views and triggers when replacing a column. Changing
 types of columns used by generated expressions can also require a manual plan due
 to native dependency rules. Automatic TYPE assumes the database accepts the cast;
@@ -76,10 +78,9 @@ the rename, then rebuilds using the target expressions. A renamed computed table
 can be copied twice; related CHECK preparation shares the first copy. Plan this
 I/O and lock time before applying a large migration.
 
-Tests run against PostgreSQL 18.4 and the pinned SQLite engine. Older PostgreSQL
-servers require capability/version review: virtual columns require 18, and
-SET EXPRESSION requires 17. Unsupported native syntax fails the migration; there
-is no silent emulation. Stored expression changes rewrite rows and PostgreSQL
+Tests run against PostgreSQL 18.4 and the pinned SQLite engine. PostgreSQL migration
+execution requires server 18 or newer. Unsupported native syntax fails the
+migration; there is no silent emulation. Stored expression changes rewrite rows and PostgreSQL
 discards their column statistics, so review post-migration ANALYZE needs.
 [Native ALTER TABLE behavior](https://www.postgresql.org/docs/18/sql-altertable.html).
 

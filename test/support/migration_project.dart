@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:orm/generate.dart';
 import 'package:orm/migrate.dart';
-import 'package:orm/orm.dart';
 import 'package:test/test.dart';
 
 import '../../tool/src/build_fixture.dart';

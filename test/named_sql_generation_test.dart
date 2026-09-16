@@ -5,6 +5,7 @@ import 'package:analyzer/dart/analysis/results.dart';
 import 'package:build/build.dart';
 import 'package:build_test/build_test.dart';
 import 'package:orm/generate.dart';
+import 'package:orm/builder.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
@@ -23,45 +24,57 @@ void main() {
     await file('query.sql').writeAsString(sql);
   }
 
-  test(
-    'source contracts reject missing/extra parameters and row metadata',
-    () async {
-      for (final (record, call, sql) in [
-        (
-          'typedef Row = ({int n});',
-          "sqlQuery<Row, ({int missing})>(sqlite: 'query.sql')",
-          'SELECT :n AS n',
-        ),
-        (
-          'typedef Row = ({@Id() int n});',
-          "sqlQuery<Row, ()>(sqlite: 'query.sql')",
-          'SELECT 1 AS n',
-        ),
-        (
-          'typedef Row = ({int n, @ColumnName("n") String duplicate});',
-          "sqlQuery<Row, ()>(sqlite: 'query.sql')",
-          'SELECT 1 AS n',
-        ),
-        (
-          'typedef Row = (int,);',
-          "sqlQuery<Row, ()>(sqlite: 'query.sql')",
-          'SELECT 1 AS n',
-        ),
-        ('typedef Row = ({int n});', 'sqlQuery<Row, ()>()', 'SELECT 1 AS n'),
-        (
-          'typedef Row = ({int n});',
-          "sqlQuery<Row, ()>(sqlite: 'query.sql')",
-          'SELECT 1; DELETE FROM posts',
-        ),
-      ]) {
-        await declaration(record, call, sql);
-        await expectLater(
-          generateQueries(file('query.dart').path),
-          throwsA(anyOf(isA<GenerationException>(), isA<OrmException>())),
-        );
-      }
-    },
-  );
+  test('source contracts reject missing/extra parameters and row metadata', () async {
+    for (final (record, call, sql) in [
+      (
+        'typedef Row = ({int n});',
+        "sqlQuery<Row, ({int missing})>(sqlite: 'query.sql')",
+        'SELECT :n AS n',
+      ),
+      (
+        'typedef Row = ({@Id() int n});',
+        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
+        'SELECT 1 AS n',
+      ),
+      (
+        "typedef Row = ({@Computed.sql('1') int n});",
+        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
+        'SELECT 1 AS n',
+      ),
+      (
+        "int factory() => 1; typedef Row = ({@ClientDefault(factory) int n});",
+        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
+        'SELECT 1 AS n',
+      ),
+      (
+        'typedef Row = ({@TemporalPrecision(2) DateTime n});',
+        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
+        'SELECT 1 AS n',
+      ),
+      (
+        'typedef Row = ({int n, @ColumnName("n") String duplicate});',
+        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
+        'SELECT 1 AS n',
+      ),
+      (
+        'typedef Row = (int,);',
+        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
+        'SELECT 1 AS n',
+      ),
+      ('typedef Row = ({int n});', 'sqlQuery<Row, ()>()', 'SELECT 1 AS n'),
+      (
+        'typedef Row = ({int n});',
+        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
+        'SELECT 1; DELETE FROM posts',
+      ),
+    ]) {
+      await declaration(record, call, sql);
+      await expectLater(
+        generateQueries(file('query.dart').path),
+        throwsA(anyOf(isA<GenerationException>(), isA<OrmException>())),
+      );
+    }
+  });
 
   test('SQL edits and modified generated code fail freshness checks', () async {
     await declaration(

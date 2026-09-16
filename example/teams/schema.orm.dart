@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show User, Team, Membership;
 
 final _usersId = Column<int>(
   "id",
@@ -222,7 +223,11 @@ extension MembershipsUpdates on Query<models.Membership, MembershipsFields> {
   ).execute();
 }
 
-final appSchema = <TableSchema>[usersSchema, teamsSchema, membershipsSchema];
+final appSchema = List<TableSchema>.unmodifiable([
+  usersSchema,
+  teamsSchema,
+  membershipsSchema,
+]);
 
 extension AppTables<B extends Backend> on Database<B> {
   UsersTableSet get users => UsersTableSet(this);

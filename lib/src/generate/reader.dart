@@ -1,4 +1,4 @@
-part of '../../generate.dart';
+part of '../generate.dart';
 
 final class _SchemaReader(
   final CompilationUnit unit,
@@ -49,6 +49,12 @@ final class _SchemaReader(
       ];
       if (fields.isEmpty) _fail(record, 'A model needs fields.');
       final name = variable.name.lexeme;
+      if (name.startsWith('_') || _databaseMembers.contains(name)) {
+        _fail(
+          variable,
+          'Entity $name must be public and cannot shadow a Database member. Rename the Dart declaration and keep table: for its physical name.',
+        );
+      }
       final table = _namedString(call, 'table') ?? _snake(name);
       if (entities.values.any((e) => e.table == table)) {
         _fail(call, 'Duplicate physical table $table.');
@@ -87,13 +93,9 @@ final class _SchemaReader(
           sqlite: _namedString(call, 'sqlite') ?? expression.value,
           postgres: _namedString(call, 'postgres') ?? expression.value,
         );
-        if (check.sqlite.trim().isEmpty ||
-            check.postgres.trim().isEmpty ||
+        if (check.sqlite.trim().isEmpty && check.postgres.trim().isEmpty ||
             name != null &&
-                (name.isEmpty ||
-                    entity.checks.any(
-                      (c) => c.name?.toLowerCase() == name.toLowerCase(),
-                    ))) {
+                (name.isEmpty || entity.checks.any((c) => c.name == name))) {
           _fail(
             call,
             'CHECK expressions and names must be non-empty; names must be unique per table.',
@@ -195,18 +197,28 @@ final class _SchemaReader(
       }
     }
     final indexNames = <String>{};
+    final symbols = <String>{'appSchema', 'AppTables'};
     for (final entity in entities.values) {
+      for (final symbol in [
+        entity.fieldsType,
+        entity.setType,
+        '${entity.symbol}Updates',
+        '${entity.name}Schema',
+        '${entity.name}Table',
+        for (final field in entity.fields) _columnSymbol(entity, field),
+      ]) {
+        if (!symbols.add(symbol)) {
+          throw GenerationException(
+            'Generated symbol $symbol is ambiguous. Rename an entity or Dart field while keeping its physical SQL name.',
+          );
+        }
+      }
       if (entity.fields.every((f) => f.computed != null)) {
         throw GenerationException(
           '${entity.name} needs at least one ordinary column.',
         );
       }
       for (final key in entity.primaryKey) {
-        if (entity.field(key).computed != null) {
-          throw GenerationException(
-            'SQLite primary keys cannot contain computed columns: ${entity.name}.$key.',
-          );
-        }
         if (entity.field(key).nullable) {
           throw GenerationException(
             '${entity.name} primary keys cannot be nullable.',
@@ -217,19 +229,6 @@ final class _SchemaReader(
         if (f.storage != 'integer' || !_same(entity.primaryKey, [f.name])) {
           throw GenerationException(
             'Generated identity requires a single integer primary key: ${entity.name}.${f.name}.',
-          );
-        }
-      }
-      for (final keys in [
-        ...entity.uniqueKeys,
-        ...entity.indexes.map((i) => i.keys),
-      ]) {
-        if (keys.any(
-          (key) =>
-              entity.field(key).computed?.storage == ComputedStorage.virtual,
-        )) {
-          throw GenerationException(
-            '${entity.name}: PostgreSQL 18 cannot index a virtual computed column. Use stored computation for indexed columns.',
           );
         }
       }
@@ -291,7 +290,7 @@ final class _SchemaReader(
                     .getField('index')!
                     .toIntValue()!],
           );
-          if (computed.sqlite.trim().isEmpty ||
+          if (computed.sqlite.trim().isEmpty &&
               computed.postgres.trim().isEmpty) {
             _fail(annotation, 'Computed SQL expressions must be non-empty.');
           }

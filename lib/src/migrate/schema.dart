@@ -34,11 +34,26 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
 }
 
 void _validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
+  String identifier(String name) {
+    if (name.isEmpty ||
+        name.contains('\u0000') ||
+        dialect == SqlDialect.postgres && utf8.encode(name).length > 63) {
+      throw const OrmException(
+        'SCHEMA.IDENTIFIER',
+        'Identifiers must be non-empty, contain no NUL, and fit PostgreSQL\'s 63-byte limit.',
+      );
+    }
+    return dialect == SqlDialect.sqlite ? _sqliteName(name) : name;
+  }
+
   final names = <String>{};
+  final indexes = <String>{};
   for (final table in tables) {
-    if (!names.add(table.name)) {
+    if (!names.add(identifier(table.name))) {
       throw const OrmException('SCHEMA.DUPLICATE', 'Duplicate table name.');
     }
+  }
+  for (final table in tables) {
     final columns = <String>{};
     if (table.columns.every((c) => c.computed != null)) {
       throw const OrmException(
@@ -51,9 +66,7 @@ void _validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
       if ((dialect == null
               ? check.sqlite.trim().isEmpty && check.postgres.trim().isEmpty
               : check.expression(dialect).trim().isEmpty) ||
-          check.name != null &&
-              (check.name!.isEmpty ||
-                  !checkNames.add(_sqliteName(check.name!)))) {
+          check.name != null && !checkNames.add(identifier(check.name!))) {
         throw const OrmException(
           'SCHEMA.CHECK',
           'CHECK expressions and names must be non-empty; names must be unique per table.',
@@ -112,19 +125,21 @@ void _validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
           'Integer width must be 16, 32 or 64 on an integer column.',
         );
       }
-      if (!columns.add(column.name)) {
+      if (!columns.add(identifier(column.name))) {
         throw const OrmException('SCHEMA.DUPLICATE', 'Duplicate column name.');
       }
     }
     for (final key in [
-      table.primaryKey,
+      if (table.primaryKey.isNotEmpty) table.primaryKey,
       ...table.uniqueKeys,
       ...table.indexes.map((i) => i.columns),
     ]) {
-      if (key.any((name) => !columns.contains(name))) {
+      if (key.isEmpty ||
+          key.toSet().length != key.length ||
+          key.any((name) => !table.columns.any((c) => c.name == name))) {
         throw const OrmException(
           'SCHEMA.KEY',
-          'Key references an unknown column.',
+          'Keys require distinct, declared columns and cannot be empty.',
         );
       }
       if (dialect == SqlDialect.postgres &&
@@ -139,6 +154,40 @@ void _validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
           'SCHEMA.COMPUTED',
           'PostgreSQL 18 does not support indexes or unique keys on virtual computed columns.',
         );
+      }
+    }
+    if (table.columns.any(
+      (c) => c.nullable && table.primaryKey.contains(c.name),
+    )) {
+      throw const OrmException(
+        'SCHEMA.KEY',
+        'Primary key columns cannot be nullable.',
+      );
+    }
+    for (final index in table.indexes) {
+      final name = identifier(index.name);
+      if (names.contains(name) || !indexes.add(name)) {
+        throw const OrmException(
+          'SCHEMA.DUPLICATE',
+          'Tables and indexes must have distinct names in a schema.',
+        );
+      }
+    }
+    for (final key in table.foreignKeys) {
+      _foreignKey(key);
+      identifier(key.target);
+      if (key.columns.toSet().length != key.columns.length ||
+          key.targetColumns.toSet().length != key.targetColumns.length ||
+          key.columns.any(
+            (name) => !table.columns.any((c) => c.name == name),
+          )) {
+        throw const OrmException(
+          'SCHEMA.FOREIGN_KEY',
+          'Foreign keys require distinct, declared local columns.',
+        );
+      }
+      for (final name in key.targetColumns) {
+        identifier(name);
       }
     }
     final generated = table.columns.where((c) => c.generated).toList();

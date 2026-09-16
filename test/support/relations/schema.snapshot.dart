@@ -1,5 +1,4 @@
 // Generated physical schema. Keep historical copies with their migration.
-import 'package:orm/orm.dart';
 import 'package:orm/migrate.dart';
 
 final schema = SchemaSnapshot([

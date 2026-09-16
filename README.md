@@ -3,9 +3,10 @@
 A new Dart 3.13 ORM designed around record schemas, typed relationships,
 composable selections, and explicit database sessions.
 
-The initial design is implemented and checked against real SQLite, PostgreSQL,
-Chrome and Android Flutter. See [design acceptance](docs/acceptance.md),
-[capability limits](docs/capabilities.md) and [verification history](docs/progress.md).
+The implementation has separate real SQLite, PostgreSQL, Chrome and Android
+verification records. See [current progress](docs/progress.md),
+[capability limits](docs/capabilities.md) and [design acceptance](docs/acceptance.md)
+for which revision and scenarios each record covers.
 
 One package, independent SQLite and PostgreSQL entry points, no runtime reflection.
 This branch is unrelated to earlier ORM implementations.
@@ -39,27 +40,46 @@ typedef User = ({
 final users = entity<User>();
 ```
 
-Import the generated client and a driver:
+Import the generated client and a driver. The client exports `User` and the driver
+exports the portable query API:
 
 ```dart
-final db = await sqlite(const SqliteOptions.memory());
-await Migrator(db).apply([Migration.create('0001_initial', appSchema, dialect: db.dialect)]);
-final user = await db.users.create(email: 'seven@example.com');
-await db.users.byId(user.id).patch(nickname: .set('Seven'));
-final emails = await db.users.select((u) => u.email).get(); // List<String>
-await db.close();
+import 'package:orm/migrate.dart';
+import 'package:orm/sqlite.dart';
+import 'schema.orm.dart';
+
+Future<void> main() async {
+  final db = await sqlite(const SqliteOptions.memory());
+  try {
+    await Migrator(db).apply([
+      Migration.create('0001_initial', appSchema, dialect: .sqlite),
+    ]);
+    final User user = await db.users.create(email: 'seven@example.com');
+    await db.users.byId(user.id).patch(nickname: .set('Seven'));
+    final List<String> emails = await db.users.select((u) => u.email).get();
+    print(emails);
+  } finally {
+    await db.close();
+  }
+}
 ```
 
-For PostgreSQL, use `postgres(PostgresOptions(url: url))`; TLS certificate
-verification is the default. Each backend has its own transaction options.
-Schema snapshots and reviewed migrations are Dart files with a static registry.
-Commit them before use in persistent environments. See [migration workflows](docs/migrations.md) for diffs, renames,
-rebuilds and existing-database baselines. Long data transformations can use
-[resumable backfills](docs/backfills.md) with bounded batches and durable progress.
-The in-memory example builds an initial migration directly for clarity.
-The persistent [Dart migration entrypoint](example/migrate.dart) runs with
-`dart run example/migrate.dart check`; set `ORM_SQLITE_PATH` for a SQLite file or
-`DATABASE_URL` for PostgreSQL before `apply` or `verify`.
+For PostgreSQL, import `postgres.dart` and use
+`postgres(PostgresOptions(url: url))`; TLS certificate verification is the default.
+Each backend has its own transaction options and migration history. Choose the
+engine when initializing that history, and keep its reviewed Dart migrations and
+static registry in version control. A connection change does not translate history.
+
+The example above creates a temporary in-memory schema. The persistent
+[migration entrypoint](example/migrate.dart) fixes SQLite: run
+`dart run example/migrate.dart check`, then set `ORM_SQLITE_PATH` before `apply` or
+`verify`. A PostgreSQL project creates its own PostgreSQL history and connection
+entrypoint. See [migrations](docs/migrations.md) and [resumable backfills](docs/backfills.md).
+
+Read [API and mental model](docs/api.md) for imports, current declarations versus
+historical schemas, prepared versus executed operations, selection nullability,
+and transaction ownership. Inside a transaction, build every query from `tx`;
+subqueries, CTEs and UNION operands must share that same view.
 
 For an existing database, [import a Record declaration](docs/importing.md), review
 its report, generate the client, and baseline the current schema without copying

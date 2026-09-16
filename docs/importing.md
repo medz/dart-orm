@@ -115,6 +115,11 @@ and are currently blocking. Sequence defaults such as a BIGSERIAL default retain
 their catalog SQL; import does not convert them to identities or reset sequences.
 Review their dependencies before baselining.
 
+The draft targets the inspected engine. SQLite indexed virtual columns and
+PostgreSQL stored computed primary keys remain importable; the other engine's
+restrictions do not block them. Imported names that collide with Database members
+receive a distinct Dart name while retaining the physical SQL name.
+
 PostgreSQL SMALLINT/INTEGER columns and SQLite INTEGER columns with recognized
 ORM range checks retain their `@IntegerBits(16)` or `@IntegerBits(32)` declaration.
 See [integer widths](types.md#signed-integer-column-widths) for range enforcement,

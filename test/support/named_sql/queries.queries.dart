@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "queries.dart" as models;
+export "queries.dart" show AuthorStats, Echo, Constant;
 
 Expr<T> _bindSqlParameter<T>(T input, Codec<T> codec) => value(input, codec);
 final _sqlColumnAuthorStats_0 = Column<String>(

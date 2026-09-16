@@ -6,6 +6,17 @@ same schema validation, emission and in-process formatter. Generation reads
 declarations and produces source/metadata; it does not connect to or migrate a
 database.
 
+Generated clients export their row typedefs and an immutable `appSchema`; entity
+declaration values remain in the source library. Import the generated client and
+the chosen driver in application code. Programmatic generation is in
+`generate.dart`; build_runner factories are exported only by `builder.dart`.
+See [API boundaries](api.md).
+
+Generation validates declaration structure and generated symbol names. Database
+member collisions such as an entity called `close` fail here; keep the physical
+name with `table:` when renaming its Dart declaration. Database-specific computed
+and identifier restrictions are checked when selecting the migration engine.
+
 ## Standalone command
 
 ```sh

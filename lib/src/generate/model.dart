@@ -1,4 +1,29 @@
-part of '../../generate.dart';
+part of '../generate.dart';
+
+// A Database instance member takes precedence over a generated extension getter.
+const _databaseMembers = {
+  'driver',
+  'onQuery',
+  'onAcquire',
+  'onDecode',
+  'capabilities',
+  'dialect',
+  'inTransaction',
+  'inSession',
+  'table',
+  'registerSchema',
+  'invalidate',
+  'execute',
+  'session',
+  'discard',
+  'transaction',
+  'savepoint',
+  'close',
+  'hashCode',
+  'runtimeType',
+  'noSuchMethod',
+  'toString',
+};
 
 final class _Field {
   final String name;

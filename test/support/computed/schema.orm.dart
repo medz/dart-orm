@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show Line, Band;
 
 final _linesId = Column<int>(
   "id",
@@ -238,7 +239,7 @@ extension BandsUpdates on Query<models.Band, BandsFields> {
           .execute();
 }
 
-final appSchema = <TableSchema>[linesSchema, bandsSchema];
+final appSchema = List<TableSchema>.unmodifiable([linesSchema, bandsSchema]);
 
 extension AppTables<B extends Backend> on Database<B> {
   LinesTableSet get lines => LinesTableSet(this);

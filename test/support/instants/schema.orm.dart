@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show Event, Moment, Link;
 
 final _eventsId = Column<int>(
   "id",
@@ -200,7 +201,11 @@ extension LinksUpdates on Query<models.Link, LinksFields> {
       update((row) => [...row.at.change(at)]).execute();
 }
 
-final appSchema = <TableSchema>[eventsSchema, momentsSchema, linksSchema];
+final appSchema = List<TableSchema>.unmodifiable([
+  eventsSchema,
+  momentsSchema,
+  linksSchema,
+]);
 
 extension AppTables<B extends Backend> on Database<B> {
   EventsTableSet get events => EventsTableSet(this);

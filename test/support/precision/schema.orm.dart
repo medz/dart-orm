@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show Wallet, Price, Receipt;
 
 final _walletsId = Column<int>(
   "id",
@@ -256,7 +257,11 @@ extension ReceiptsUpdates on Query<models.Receipt, ReceiptsFields> {
       update((row) => [...row.priceId.change(priceId)]).execute();
 }
 
-final appSchema = <TableSchema>[walletsSchema, pricesSchema, receiptsSchema];
+final appSchema = List<TableSchema>.unmodifiable([
+  walletsSchema,
+  pricesSchema,
+  receiptsSchema,
+]);
 
 extension AppTables<B extends Backend> on Database<B> {
   WalletsTableSet get wallets => WalletsTableSet(this);

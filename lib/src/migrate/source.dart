@@ -30,7 +30,6 @@ final class MigrationHistory {
 String schemaSource(SchemaSnapshot schema) =>
     '''
 // Generated physical schema. Keep historical copies with their migration.
-${schema.tables.isEmpty ? '' : "import 'package:orm/orm.dart';"}
 import 'package:orm/migrate.dart';
 
 final schema = ${_snapshotSource(schema)};
@@ -41,7 +40,6 @@ final schema = ${_snapshotSource(schema)};
 String migrationSource(Migration migration) =>
     '''
 // Review before applying. Applied migrations must remain unchanged.
-import 'package:orm/orm.dart';
 import 'package:orm/migrate.dart';
 
 const migrationChecksum = ${_dartValue(migration.checksum)};
@@ -68,7 +66,6 @@ String migrationHistorySource(
   }
   return '''
 // GENERATED CODE - DO NOT MODIFY BY HAND.
-import 'package:orm/orm.dart';
 import 'package:orm/migrate.dart';
 ${[for (var i = 0; i < names.length; i++) "import 'm${names[i]}.dart' as m$i;"].join('\n')}
 

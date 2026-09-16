@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show Ticket, SequenceRow;
 import "types.dart" as types0;
 
 final _ticketsId = Column<types0.TicketId>(
@@ -153,7 +154,10 @@ final class SequencesTableSet
       where((row) => row.id.eq(id));
 }
 
-final appSchema = <TableSchema>[ticketsSchema, sequencesSchema];
+final appSchema = List<TableSchema>.unmodifiable([
+  ticketsSchema,
+  sequencesSchema,
+]);
 
 extension AppTables<B extends Backend> on Database<B> {
   TicketsTableSet get tickets => TicketsTableSet(this);

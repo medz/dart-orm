@@ -1,9 +1,12 @@
-part of '../../generate.dart';
+part of '../generate.dart';
 
 String _emit(List<_Entity> schema, String import, _DartNames names) {
   final b = StringBuffer('// GENERATED CODE - DO NOT MODIFY BY HAND.\n\n')
     ..writeln("import 'package:orm/orm.dart';")
-    ..writeln("import ${_literal(import)} as models;");
+    ..writeln("import ${_literal(import)} as models;")
+    ..writeln(
+      "export ${_literal(import)} show ${schema.map((e) => e.row).toSet().join(', ')};",
+    );
   if (names.typedData) {
     b.writeln("import 'dart:typed_data';");
   }
@@ -97,7 +100,7 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
     }
   }
   b.writeln(
-    'final appSchema = <TableSchema>[${schema.map((e) => '${e.name}Schema').join(', ')}];',
+    'final appSchema = List<TableSchema>.unmodifiable([${schema.map((e) => '${e.name}Schema').join(', ')}]);',
   );
   b.writeln('extension AppTables<B extends Backend> on Database<B> {');
   for (final e in schema) {

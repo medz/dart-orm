@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show User, Post;
 
 final _usersId = Column<int>(
   "id",
@@ -187,7 +188,7 @@ extension PostsUpdates on Query<models.Post, PostsFields> {
   ).execute();
 }
 
-final appSchema = <TableSchema>[usersSchema, postsSchema];
+final appSchema = List<TableSchema>.unmodifiable([usersSchema, postsSchema]);
 
 extension AppTables<B extends Backend> on Database<B> {
   UsersTableSet get users => UsersTableSet(this);

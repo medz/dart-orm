@@ -22,9 +22,11 @@ final shortLabel = products.check(
 `name` defaults to the declaration's snake_case name, for example
 `nonnegative_price`. Set an explicit stable name to rename the Dart declaration
 without renaming its database constraint. `name: null` deliberately emits an
-unnamed constraint. Names must be nonempty and unique per table; expressions and
-optional `sqlite`/`postgres` overrides must be nonempty string literals. An
-override replaces the common expression for that backend.
+unnamed constraint. Names must be nonempty and unique per table. SQLite compares
+ASCII identifier case without distinction; PostgreSQL preserves quoted case.
+Expressions and optional overrides are string literals. An override replaces the
+common expression for that backend; the expression selected by the migration
+target must be nonempty.
 
 These are trusted schema SQL fragments, like `@Default.sql`; do not construct
 them from user input. Dart checks the declaration API, while the database checks
@@ -40,10 +42,9 @@ and [SQLite CHECK semantics](https://www.sqlite.org/lang_createtable.html#check_
 
 ## Snapshots, verification and import
 
-Generated `TableSchema.checks` stores `CheckSchema` entries with a nullable name
-and both dialect expressions. Snapshot format 1 includes `checks` only when
-nonempty. Existing snapshots and migration checksums without CHECK metadata keep
-their original representation.
+The current generated `TableSchema.checks` retains overrides in `CheckSchema`.
+Saved migration schemas freeze only their chosen engine's expressions. Changing
+an unused override does not change that migration target's physical fingerprint.
 
 `inspectTable` and `orm db inspect` expose native names and expressions.
 `verifySchema` compares declared checks, including duplicate unnamed constraints.

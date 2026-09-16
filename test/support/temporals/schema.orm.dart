@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show Appointment, Holiday, Visit;
 
 final _appointmentsId = Column<int>(
   "id",
@@ -205,11 +206,11 @@ extension VisitsUpdates on Query<models.Visit, VisitsFields> {
       update((row) => [...row.day.change(day)]).execute();
 }
 
-final appSchema = <TableSchema>[
+final appSchema = List<TableSchema>.unmodifiable([
   appointmentsSchema,
   holidaysSchema,
   visitsSchema,
-];
+]);
 
 extension AppTables<B extends Backend> on Database<B> {
   AppointmentsTableSet get appointments => AppointmentsTableSet(this);

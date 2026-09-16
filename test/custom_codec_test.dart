@@ -6,7 +6,6 @@ import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
 import 'support/codecs/alternate.dart' as alt;
-import 'support/codecs/schema.dart' show Person;
 import 'support/codecs/schema.orm.dart';
 import 'support/codecs/schema.snapshot.dart' as physical;
 import 'support/codecs/types.dart';

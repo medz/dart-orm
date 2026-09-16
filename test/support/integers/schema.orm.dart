@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show Sample, Owner;
 
 final _samplesId = Column<int>(
   "id",
@@ -177,7 +178,7 @@ extension OwnersUpdates on Query<models.Owner, OwnersFields> {
           .execute();
 }
 
-final appSchema = <TableSchema>[samplesSchema, ownersSchema];
+final appSchema = List<TableSchema>.unmodifiable([samplesSchema, ownersSchema]);
 
 extension AppTables<B extends Backend> on Database<B> {
   SamplesTableSet get samples => SamplesTableSet(this);

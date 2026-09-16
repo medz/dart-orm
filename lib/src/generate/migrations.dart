@@ -1,4 +1,4 @@
-part of '../../generate.dart';
+part of '../generate.dart';
 
 /// Regenerates only static imports. Fingerprints stay in the migration files.
 Future<String> writeMigrationRegistry(

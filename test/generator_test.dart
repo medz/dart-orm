@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:orm/generate.dart';
+import 'package:orm/migrate.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -16,6 +17,48 @@ void main() {
     await file.writeAsString("import 'package:orm/schema.dart';\n$source");
     return generateSchema(file.path);
   }
+
+  test(
+    'target capabilities are checked when choosing a migration engine',
+    () async {
+      final sqlite = await generate('sqlite_virtual_index', '''
+typedef Item = ({int id, @Unique() @Computed.sql('id + 1', storage: ComputedStorage.virtual, postgres: '') int value});
+final items = entity<Item>();
+final positive = items.check('id > 0', postgres: '');
+''');
+      expect(sqlite.snapshot.forDialect(.sqlite).tables, hasLength(1));
+      expect(
+        () => sqlite.snapshot.forDialect(.postgres),
+        throwsA(isA<OrmException>()),
+      );
+      final postgres = await generate('postgres_computed_pk', '''
+typedef Item = ({int source, @Id() @Computed.sql('source + 1') int id});
+final items = entity<Item>();
+final lower = items.check('source > 0', name: 'valid');
+final upper = items.check('source < 10', name: 'VALID');
+''');
+      expect(postgres.snapshot.forDialect(.postgres).tables, hasLength(1));
+      expect(
+        () => postgres.snapshot.forDialect(.sqlite),
+        throwsA(isA<OrmException>()),
+      );
+    },
+  );
+
+  test('unusable extension getters and generated symbol collisions fail at generation', () async {
+    for (final source in [
+      'typedef Item = ({int id}); final close = entity<Item>();',
+      'typedef Item = ({int id}); final _items = entity<Item>();',
+      'typedef Item = ({int id}); final app = entity<Item>();',
+      "typedef Item = ({int id}); final items = entity<Item>(); final Items = entity<Item>(table: 'others');",
+      'typedef Item = ({int iD, int ID}); final items = entity<Item>();',
+    ]) {
+      await expectLater(
+        generate('collision', source),
+        throwsA(isA<GenerationException>()),
+      );
+    }
+  });
 
   test('client and snapshot paths cannot overwrite the declaration', () async {
     const declaration =
@@ -134,15 +177,12 @@ final key = users.primaryKey((u) => u.id + 1);
   test('computed declarations reject conflicting defaults, empty SQL and invalid row identities', () async {
     final cases = [
       "typedef Item = ({int id, @Computed.sql('') int value});",
-      "typedef Item = ({int id, @Computed.sql('1', postgres: '') int value});",
       "typedef Item = ({int id, @Computed.sql('1') @Default.sql('0') int value});",
       "int factory() => 1; typedef Item = ({int id, @Computed.sql('1') @ClientDefault(factory) int value});",
       "typedef Item = ({@Id.generated() @Computed.sql('1') int id, int value});",
-      "typedef Item = ({@Id() @Computed.sql('1') int id, int value});",
       "typedef Item = ({@Computed.sql('1') int value});",
       "typedef Item = ({int id, @Computed.sql('1') @Computed.sql('2') int value});",
       "typedef Item = ({int id, int readColumn});",
-      "typedef Item = ({int id, @Unique() @Computed.sql('id + 1', storage: ComputedStorage.virtual) int value});",
     ];
     for (var i = 0; i < cases.length; i++) {
       await expectLater(
@@ -216,33 +256,32 @@ typedef Item = ({@UseCodec(idCodec) @ClientDefault(factory) UserId id});
     }
   });
 
-  test('CHECK declarations reject dynamic SQL, empty overrides and duplicate names', () async {
-    for (final (name, declaration) in [
-      (
-        'dynamic_check',
-        "final sql = 'id > 0'; final valid = items.check(sql);",
-      ),
-      ('empty_check', "final valid = items.check(' ');"),
-      (
-        'empty_check_override',
-        "final valid = items.check('id > 0', sqlite: '');",
-      ),
-      (
-        'duplicate_check',
-        "final one = items.check('id > 0', name: 'valid'); final two = items.check('id < 10', name: 'VALID');",
-      ),
-      ('empty_check_name', "final valid = items.check('id > 0', name: '');"),
-    ]) {
-      await expectLater(
-        generate(name, '''
+  test(
+    'CHECK declarations reject dynamic SQL, empty SQL and duplicate names',
+    () async {
+      for (final (name, declaration) in [
+        (
+          'dynamic_check',
+          "final sql = 'id > 0'; final valid = items.check(sql);",
+        ),
+        ('empty_check', "final valid = items.check(' ');"),
+        (
+          'duplicate_check',
+          "final one = items.check('id > 0', name: 'valid'); final two = items.check('id < 10', name: 'valid');",
+        ),
+        ('empty_check_name', "final valid = items.check('id > 0', name: '');"),
+      ]) {
+        await expectLater(
+          generate(name, '''
 typedef Item = ({@Id() int id});
 final items = entity<Item>();
 $declaration
 '''),
-        throwsA(isA<GenerationException>()),
-      );
-    }
-  });
+          throwsA(isA<GenerationException>()),
+        );
+      }
+    },
+  );
 
   test('custom types resolve defining libraries when output moves to another directory', () async {
     final output = '${fixtures.path}/nested/domain_client.dart';

@@ -1,4 +1,4 @@
-part of '../../generate.dart';
+part of '../generate.dart';
 
 /// A catalog fact that needs manual handling. Blocking issues prevent a faithful
 /// declaration of the affected table or relationship; other issues retain objects
@@ -244,21 +244,6 @@ Future<ImportedSchema> _importCatalog(
     }
     for (final column in info.columns) {
       final path = '$name.${column.name}';
-      if (column.computed != null &&
-          (info.primaryKey.contains(column.name) ||
-              (column.computed!.storage == ComputedStorage.virtual &&
-                  [
-                    ...info.uniqueKeys,
-                    ...info.indexes.map((i) => i.columns),
-                  ].any((key) => key.contains(column.name))))) {
-        issues.add(
-          SchemaImportIssue(
-            'IMPORT.COMPUTED_KEY',
-            path,
-            'Portable declarations cannot use computed primary keys or indexed virtual columns.',
-          ),
-        );
-      }
       if (_importType(column, db.dialect) == null) {
         issues.add(
           SchemaImportIssue(
@@ -385,26 +370,9 @@ String _importCap(String name) => name[0].toUpperCase() + name.substring(1);
 final class _ImportNames {
   final used = <String>{
     ...Keyword.keywords.keys,
-    'table',
+    ..._databaseMembers,
     'column',
     'readColumn',
-    'hashCode',
-    'runtimeType',
-    'toString',
-    'noSuchMethod',
-    'driver',
-    'capabilities',
-    'dialect',
-    'inTransaction',
-    'inSession',
-    'execute',
-    'session',
-    'transaction',
-    'savepoint',
-    'discard',
-    'close',
-    'registerSchema',
-    'invalidate',
     'appSchema',
     'models',
     'row',

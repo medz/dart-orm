@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show Moment, Slot, Booking;
 
 final _momentsId = Column<int>(
   "id",
@@ -273,7 +274,11 @@ extension BookingsUpdates on Query<models.Booking, BookingsFields> {
       update((row) => [...row.time.change(time)]).execute();
 }
 
-final appSchema = <TableSchema>[momentsSchema, slotsSchema, bookingsSchema];
+final appSchema = List<TableSchema>.unmodifiable([
+  momentsSchema,
+  slotsSchema,
+  bookingsSchema,
+]);
 
 extension AppTables<B extends Backend> on Database<B> {
   MomentsTableSet get moments => MomentsTableSet(this);

@@ -6,6 +6,19 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import 'orm.dart';
+export 'orm.dart'
+    show
+        SqlDialect,
+        TableSchema,
+        Column,
+        Codec,
+        Codecs,
+        ComputedColumn,
+        ComputedStorage,
+        CheckSchema,
+        ForeignKey,
+        IndexSchema,
+        OrmException;
 
 part 'src/migrate/schema.dart';
 part 'src/migrate/history.dart';

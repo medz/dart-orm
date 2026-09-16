@@ -3,6 +3,7 @@
 import 'package:orm/orm.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show Note, Comment;
 
 final _notesId = Column<int>(
   "id",
@@ -163,7 +164,7 @@ extension CommentsUpdates on Query<models.Comment, CommentsFields> {
           .execute();
 }
 
-final appSchema = <TableSchema>[notesSchema, commentsSchema];
+final appSchema = List<TableSchema>.unmodifiable([notesSchema, commentsSchema]);
 
 extension AppTables<B extends Backend> on Database<B> {
   NotesTableSet get notes => NotesTableSet(this);
