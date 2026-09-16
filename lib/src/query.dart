@@ -154,6 +154,7 @@ class Query<R, F extends Fields> {
     final w = _Writer(
       database.dialect,
       {},
+      database: database,
       reads: reads,
       exactDecimal: database.capabilities.exactDecimal,
       temporal: database.capabilities.temporal,
@@ -162,6 +163,12 @@ class Query<R, F extends Fields> {
   }
 
   String _write(_Writer w, _SelectionPlan plan, {bool aliasColumns = false}) {
+    if (!identical(w.database, database)) {
+      throw const OrmException(
+        'QUERY.SESSION',
+        'Compose queries from the same database or transaction session.',
+      );
+    }
     final joins = [..._state.joins, ...plan.joins];
     if (_state.union == null &&
         !_state.ctes.any((cte) => cte.name == _state.source.schema.name)) {
@@ -292,6 +299,7 @@ class Query<R, F extends Fields> {
         final check = _Writer(
           w.dialect,
           visible,
+          database: w.database,
           exactDecimal: w.exactDecimal,
           temporal: w.temporal,
         )..leftJoins.addAll(w.leftJoins.where(visible.containsKey));

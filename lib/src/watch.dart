@@ -89,6 +89,7 @@ final class _ReadTables {
       _Writer(
         query.database.dialect,
         {},
+        database: query.database,
         reads: this,
         exactDecimal: query.database.capabilities.exactDecimal,
         temporal: query.database.capabilities.temporal,

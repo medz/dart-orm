@@ -15,7 +15,27 @@ final class _SelectionPlan {
   final List<_RelationBinding> relations = [];
   final List<_Join> joins = [];
   final List<Expr<Object?>> required = [];
-  int optionalDepth = 0;
+  final Map<Set<TableRef>, List<Expr<Object?>>> guarded = {};
+  Set<TableRef> _present = const {};
+  void require(Expr<Object?> expression) {
+    if (expression.codec.acceptsNull) return;
+    if (_present.isEmpty) {
+      required.add(expression);
+    } else {
+      (guarded[_present] ??= []).add(expression);
+    }
+  }
+
+  _Decoder<T> optional<T>(TableRef table, Selection<T> selection) {
+    final saved = _present;
+    _present = {...saved, table};
+    try {
+      return selection._bind(this);
+    } finally {
+      _present = saved;
+    }
+  }
+
   final Map<_Node, int> _indices = {};
   int column(Expr<Object?> expression) {
     if (!deduplicate) {

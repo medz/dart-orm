@@ -118,6 +118,7 @@ final class _Raw(final List<String> parts, final List<_Node> values)
 
 final class _Writer {
   final SqlDialect dialect;
+  final Database<Backend>? database;
   final Map<TableRef, String> aliases;
   final List<Object?> parameters = [];
   final Set<TableRef> leftJoins = {};
@@ -130,6 +131,7 @@ final class _Writer {
   _Writer(
     this.dialect,
     this.aliases, {
+    this.database,
     this.reads,
     this.exactDecimal = false,
     this.temporal = false,
@@ -242,7 +244,7 @@ class Expr<T> extends Selection<T> {
   Expr<T?> max() => Expr._(_Function('MAX', [_node]), codec.nullable());
   @override
   _Decoder<T> _bind(_SelectionPlan plan) {
-    if (plan.optionalDepth == 0 && !codec.acceptsNull) plan.required.add(this);
+    plan.require(this);
     final index = plan.column(this);
     return (row) => codec.decode(row[index]);
   }

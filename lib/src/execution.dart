@@ -10,19 +10,26 @@ final class CancellationToken {
     if (_cancelled) return;
     _cancelled = true;
     for (final listener in _listeners.toList()) {
-      listener();
+      _notify(listener);
     }
     _listeners.clear();
   }
 
   /// Adapter hook; returns a function that removes the listener.
+  /// Listener errors are isolated so every pending operation receives cancellation.
   void Function() listen(void Function() listener) {
     if (_cancelled) {
-      listener();
+      _notify(listener);
       return () {};
     }
     _listeners.add(listener);
     return () => _listeners.remove(listener);
+  }
+
+  void _notify(void Function() listener) {
+    try {
+      listener();
+    } catch (_) {}
   }
 }
 

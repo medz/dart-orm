@@ -173,13 +173,7 @@ final class _JoinedRelationSelection<R, F extends Fields>(
     final marker = plan.column(
       Expr._(_Presence(relation._alias), Codecs.integer.nullable()),
     );
-    plan.optionalDepth++;
-    late _Decoder<R> decode;
-    try {
-      decode = relation._selection._bind(plan);
-    } finally {
-      plan.optionalDepth--;
-    }
+    final decode = plan.optional(relation._fields.table, relation._selection);
     return (row) {
       if (row[marker] != null) return decode(row);
       if (required) {
@@ -345,6 +339,7 @@ final class _TypedRelationBinding<R, F extends Fields>(
     final w = _Writer(
       db.dialect,
       {},
+      database: db,
       reads: reads,
       exactDecimal: db.capabilities.exactDecimal,
       temporal: db.capabilities.temporal,
@@ -358,6 +353,7 @@ final class _TypedRelationBinding<R, F extends Fields>(
     final sqlPlan = _SelectionPlan()
       ..columns.addAll(plan.columns)
       ..required.addAll(plan.required)
+      ..guarded.addAll(plan.guarded)
       ..joins.addAll(plan.joins);
     if (paginated) {
       if (state.order.isEmpty) {

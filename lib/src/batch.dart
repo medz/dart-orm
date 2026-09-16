@@ -22,6 +22,7 @@ final class BatchInsert<F extends Fields> {
     final extra = _Writer(
       database.dialect,
       {_state.source: 't0'},
+      database: database,
       exactDecimal: database.capabilities.exactDecimal,
       temporal: database.capabilities.temporal,
     );
@@ -53,6 +54,7 @@ final class BatchInsert<F extends Fields> {
       final writer = _Writer(
         database.dialect,
         {_state.source: 't0'},
+        database: database,
         exactDecimal: database.capabilities.exactDecimal,
         temporal: database.capabilities.temporal,
       );

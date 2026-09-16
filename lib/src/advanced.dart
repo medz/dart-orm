@@ -54,13 +54,7 @@ final class _OptionalJoin<T>(
     final marker = plan.column(
       Expr._(_Presence(alias), Codecs.integer.nullable()),
     );
-    plan.optionalDepth++;
-    late _Decoder<T> decode;
-    try {
-      decode = selection._bind(plan);
-    } finally {
-      plan.optionalDepth--;
-    }
+    final decode = plan.optional(alias.fields.table, selection);
     return (row) => row[marker] == null ? null : decode(row);
   }
 }
@@ -186,7 +180,13 @@ void _validateGrouping(_QueryState state, _SelectionPlan plan) {
     for (final join in state.joins)
       if (join.left) join.alias.fields.table,
   };
-  if (plan.required.any((e) => _outerNullable(e._node, optional))) {
+  bool unguarded(MapEntry<Set<TableRef>, List<Expr<Object?>>> entry) {
+    final absent = optional.difference(entry.key);
+    return entry.value.any((e) => _outerNullable(e._node, absent));
+  }
+
+  if (plan.required.any((e) => _outerNullable(e._node, optional)) ||
+      plan.guarded.entries.any(unguarded)) {
     throw const OrmException(
       'QUERY.NULLABILITY',
       'Use alias.optional(selection) or alias.nullable(expression) for outer-joined fields.',

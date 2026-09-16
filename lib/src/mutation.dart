@@ -111,6 +111,12 @@ final class Mutation<F extends Fields> {
   }
 
   SqlCommand _compile([_SelectionPlan? selection]) {
+    if (selection != null && selection.columns.isEmpty) {
+      throw const OrmException(
+        'QUERY.EMPTY_SELECTION',
+        'Select at least one field.',
+      );
+    }
     if (selection != null &&
         selection.columns.any((e) => _aggregate(e._node) || _window(e._node))) {
       throw const OrmException(
@@ -118,7 +124,8 @@ final class Mutation<F extends Fields> {
         'RETURNING cannot contain aggregate or window functions.',
       );
     }
-    if (selection != null && selection.relations.isNotEmpty) {
+    if (selection != null &&
+        (selection.relations.isNotEmpty || selection.joins.isNotEmpty)) {
       throw const OrmException(
         'MUTATION.RELATION',
         'RETURNING selects scalar fields; query relations after the mutation.',
@@ -141,12 +148,21 @@ final class Mutation<F extends Fields> {
     final w = _Writer(
       database.dialect,
       {_state.source: 't0'},
+      database: database,
       exactDecimal: database.capabilities.exactDecimal,
       temporal: database.capabilities.temporal,
     );
     void validate(List<Assignment> assignments) {
       final names = <String>{};
       for (final a in assignments) {
+        if (a._value case final node?) {
+          if (_aggregate(node) || _window(node)) {
+            throw const OrmException(
+              'QUERY.AGGREGATE',
+              'Assignments cannot contain aggregate or window functions. Use a scalar subquery.',
+            );
+          }
+        }
         if (a._value == null &&
             !a.field.definition.generated &&
             a.field.definition.defaultSql == null) {
@@ -171,6 +187,14 @@ final class Mutation<F extends Fields> {
     }
 
     validate(_assignments);
+    if (_state.predicate case final predicate?) {
+      if (_aggregate(predicate._node) || _window(predicate._node)) {
+        throw const OrmException(
+          'QUERY.AGGREGATE',
+          'Mutation predicates cannot contain aggregate or window functions. Use a subquery.',
+        );
+      }
+    }
     for (final row in _rows ?? <List<Assignment>>[]) {
       validate(row);
     }

@@ -47,6 +47,7 @@ An escaping active stream is stopped and the callback fails with
 `TRANSACTION.UNAWAITED` or `SESSION.UNAWAITED`. `Database.close()` also stops
 active cursors before releasing its driver. A leased connection executes one
 statement at a time; overlapping statements fail with `SESSION.BUSY`.
+Concurrent `close()` callers all await the same drain and driver shutdown.
 
 ## Connection acquisition
 

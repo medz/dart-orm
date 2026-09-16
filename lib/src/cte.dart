@@ -57,7 +57,7 @@ final class Cte<R, F extends Fields> implements _CteDefinition {
       (table) => CteFields._(table, _source._fields, _plan, nullable),
       (fields) => _ReboundSelection(_decode, [
         for (var i = 0; i < _plan.columns.length; i++)
-          Expr._(_ColumnNode(fields.table, 'c$i'), _plan.columns[i].codec),
+          Expr._(_ColumnNode(fields.table, 'c$i'), schema.columns[i].codec),
       ], source: _source._selection),
     );
   }
@@ -115,6 +115,9 @@ final class _ReboundSelection<R>(
 }) extends Selection<R> {
   @override
   _Decoder<R> _bind(_SelectionPlan plan) {
+    for (final column in columns) {
+      plan.require(column);
+    }
     final indices = [for (final column in columns) plan.column(column)];
     return (row) => decode([for (final index in indices) row[index]]);
   }

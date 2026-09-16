@@ -128,6 +128,7 @@ class Database<B extends Backend> {
   Future<void> _stopStreams() =>
       Future.wait(_streams.toList().map((stop) => stop()));
   bool _active = true;
+  Future<void>? _closing;
   bool _childActive = false;
   bool _statementFailed = false;
   int _savepointId = 0;
@@ -416,6 +417,13 @@ class Database<B extends Backend> {
     _checkActive();
     acquire.check();
     retry?._check();
+    if ((options is PostgresTransaction && dialect != SqlDialect.postgres) ||
+        (options is SqliteTransaction && dialect != SqlDialect.sqlite)) {
+      throw const OrmException(
+        'TRANSACTION.OPTIONS',
+        'Transaction options must match the connected database engine.',
+      );
+    }
     if (inTransaction) {
       throw const OrmException(
         'TRANSACTION.NESTED',
@@ -692,7 +700,10 @@ class Database<B extends Backend> {
         'A borrowed session cannot close its driver.',
       );
     }
-    if (!_active) return;
+    await (_closing ??= _close());
+  }
+
+  Future<void> _close() async {
     _active = false;
     try {
       await _changes.stop();
