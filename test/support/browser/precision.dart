@@ -1,12 +1,10 @@
 import 'package:orm/migrate.dart';
-import 'package:orm/sqlite_web.dart';
+import 'package:orm/sqlite.dart';
 
 import '../temporal_precision/schema.orm.dart';
 
-Future<void> checkTemporalPrecision(Uri wasm, Uri worker) async {
-  final db = await sqliteWeb(
-    SqliteWebOptions.memory(wasm: wasm, worker: worker),
-  );
+Future<void> checkTemporalPrecision() async {
+  final db = await sqlite(const SqliteOptions.memory());
   void expect(bool value, String message) {
     if (!value) throw StateError(message);
   }

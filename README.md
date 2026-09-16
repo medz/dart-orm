@@ -3,7 +3,7 @@
 A new Dart 3.13 ORM designed around record schemas, typed relationships,
 composable selections, and explicit database sessions.
 
-The implementation has separate real SQLite, PostgreSQL, Chrome and Android
+The implementation has separate real SQLite, PostgreSQL, Chrome, Flutter Web and Android
 verification records. See [current progress](docs/progress.md),
 [capability limits](docs/capabilities.md) and [design acceptance](docs/acceptance.md)
 for which revision and scenarios each record covers.
@@ -11,8 +11,9 @@ for which revision and scenarios each record covers.
 One package, independent SQLite and PostgreSQL entry points, no runtime reflection.
 This branch is unrelated to earlier ORM implementations.
 
-The [browser SQLite entry point](docs/sqlite-web.md) runs in a dedicated worker,
-with explicit in-memory or OPFS storage and the same generated query API.
+The [SQLite entry point](docs/sqlite-web.md) works on native platforms and the web,
+with background execution and the same generated query API. Flutter Web bundles
+its worker/WASM resources automatically; plain Dart uses `dart run orm web-assets`.
 The [native Flutter example](docs/flutter.md) verifies Android APK upgrades,
 background SQLite, persistence and commit-driven query subscriptions.
 

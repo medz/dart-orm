@@ -1,14 +1,14 @@
 import 'package:orm/migrate.dart';
-import 'package:orm/sqlite_web.dart';
+import 'package:orm/sqlite.dart';
 
 import '../../../example/teams/schema.dart';
 import '../../../example/teams/schema.orm.dart';
 
-Future<void> checkTeams(Uri wasm, Uri worker) async {
+Future<void> checkTeams() async {
   final events = <QueryEvent>[];
   final acquired = <AcquisitionEvent>[], decoded = <DecodeEvent>[];
-  final db = await sqliteWeb(
-    SqliteWebOptions.memory(wasm: wasm, worker: worker),
+  final db = await sqlite(
+    const SqliteOptions.memory(),
     onQuery: events.add,
     onAcquire: acquired.add,
     onDecode: decoded.add,

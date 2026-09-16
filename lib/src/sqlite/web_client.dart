@@ -1,4 +1,4 @@
-part of '../../sqlite_web.dart';
+part of 'web.dart';
 
 final class _WebConnection implements SqlConnection {
   final web.Worker worker;

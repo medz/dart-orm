@@ -1,4 +1,26 @@
-# Native Flutter acceptance
+# Flutter acceptance
+
+For Web, use the same package and SQLite entry point:
+
+```sh
+cd example/flutter
+flutter pub get
+flutter run -d chrome
+flutter build web --wasm
+```
+
+No worker compilation, WASM download or application asset declaration is needed.
+The Web example applies the fixed Dart migration history, persists a note and its
+comment in one transaction, loads typed relationships and checks that animation
+advances during worker SQL. Refreshing the page retains its OPFS database.
+The platform-specific acceptance files select different checks and host reporting;
+they do not implement database drivers.
+
+The automated release runner is `dart run tool/test_flutter_web.dart /path/to/flutter`
+from the repository root. For native directory choices and current platform limits,
+see [SQLite setup](../../docs/sqlite-web.md).
+
+## Android acceptance
 
 This Android application exercises the public ORM APIs in an installed Flutter
 app. The native bridge only provides the application's files directory and launch

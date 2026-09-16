@@ -37,6 +37,26 @@ void main() {
         final migrate = await library('lib/migrate.dart');
         final generate = await library('lib/generate.dart');
         final builder = await library('lib/builder.dart');
+        final sqlite = exports(await library('lib/sqlite.dart'));
+        expect(
+          sqlite,
+          containsAll([
+            'sqlite',
+            'SqliteDriver',
+            'SqliteOptions',
+            'SqliteWebOptions',
+          ]),
+        );
+        expect(
+          sqlite,
+          isNot(
+            anyOf(
+              contains('SqliteExecutor'),
+              contains('OpenedSqlite'),
+              contains('sqliteWorkerBuild'),
+            ),
+          ),
+        );
         expect(exports(schema), isNot(contains('Database')));
         expect(exports(runtime), isNot(contains('Migration')));
         expect(

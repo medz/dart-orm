@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'acceptance.dart';
+// The acceptance harness has platform-specific reporting and lifecycle checks.
+// Both implementations use package:orm/sqlite.dart for database access.
+import 'acceptance.dart' if (dart.library.js_interop) 'acceptance_web.dart';
 
 void main() => runApp(const MaterialApp(home: AcceptanceApp()));
 
@@ -48,7 +50,7 @@ class _AcceptanceAppState extends State<AcceptanceApp>
     final status = report?['status'];
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7F3),
-      appBar: AppBar(title: const Text('Dart ORM · native acceptance')),
+      appBar: AppBar(title: const Text('Dart ORM · Flutter acceptance')),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
@@ -57,7 +59,7 @@ class _AcceptanceAppState extends State<AcceptanceApp>
                 ? 'All checks passed'
                 : status == 'failed'
                 ? 'Check failed'
-                : 'Running on Android',
+                : 'Running checks',
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           const SizedBox(height: 12),
@@ -65,7 +67,7 @@ class _AcceptanceAppState extends State<AcceptanceApp>
           if (report != null)
             Text(
               '${report!['phase']} · SQLite ${report!['sqlite']} · '
-              '${report!['release'] == true ? 'AOT release' : 'debug'}',
+              '${report!['release'] == true ? 'release' : 'debug'}',
             ),
           if (report?['error'] != null)
             Text(

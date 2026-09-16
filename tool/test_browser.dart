@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
+import 'package:orm/src/sqlite/assets_io.dart';
+import 'package:orm/src/sqlite/web_build.dart';
 import 'package:orm/generate.dart';
 
 const engineVersion = '3.6.0';
@@ -17,33 +18,15 @@ Future<void> main(List<String> arguments) async {
   final wasm = arguments.contains('--wasm');
   final assets = Directory('.dart_tool/browser').absolute;
   await assets.create(recursive: true);
-  final engine = File('${assets.path}/sqlite3.wasm');
-  if (!await engine.exists()) {
-    final http = HttpClient();
-    try {
-      final response = await (await http.getUrl(
-        Uri.parse(
-          'https://github.com/simolus3/sqlite3.dart/releases/download/sqlite3-$engineVersion/sqlite3.wasm',
-        ),
-      )).close();
-      if (response.statusCode != 200) {
-        throw StateError('WASM download failed: ${response.statusCode}');
-      }
-      final bytes = await response.fold<List<int>>(
-        [],
-        (all, chunk) => all..addAll(chunk),
-      );
-      if (sha256.convert(bytes).toString() != engineDigest) {
-        throw StateError('WASM digest differs.');
-      }
-      await engine.writeAsBytes(bytes);
-    } finally {
-      http.close(force: true);
-    }
+  final checked = await Process.run(Platform.resolvedExecutable, [
+    'run',
+    'tool/build_sqlite_web.dart',
+    '--check',
+  ]);
+  if (checked.exitCode != 0) {
+    throw StateError('${checked.stdout}${checked.stderr}');
   }
-  if ((await sha256.bind(engine.openRead()).first).toString() != engineDigest) {
-    throw StateError('Cached WASM digest differs.');
-  }
+  await copySqliteWebAssets(Directory('${assets.path}/orm'));
   final generated = await generateSchema('test/support/browser/schema.dart');
   if (generated.dart !=
           await File('test/support/browser/schema.orm.dart').readAsString() ||
@@ -63,13 +46,6 @@ Future<void> main(List<String> arguments) async {
   }
 
   await Future.wait([
-    compile([
-      'js',
-      '-O2',
-      'test/support/browser/worker.dart',
-      '-o',
-      '${assets.path}/worker.js',
-    ]),
     compile([
       wasm ? 'wasm' : 'js',
       if (!wasm) '-O2',
@@ -102,12 +78,22 @@ const instance = await app.instantiate({});
 instance.invokeMain();
 </script>''' : '<script defer src="/main.js"></script>'}</body></html>',
         );
+      } else if (request.uri.path == '/mismatched-worker.js') {
+        final protocol = request.uri.queryParameters['protocol'] == 'old'
+            ? sqliteWebProtocol - 1
+            : sqliteWebProtocol;
+        request.response.headers.contentType = ContentType.parse(
+          'text/javascript',
+        );
+        request.response.write(
+          'onmessage=e=>postMessage([e.data[0],true,false,[$protocol,"old-build"]]);',
+        );
       } else if ({
         '/main.js',
         '/main.wasm',
         '/main.mjs',
-        '/worker.js',
-        '/sqlite3.wasm',
+        '/orm/$sqliteWorkerFile',
+        '/orm/$sqliteWasmFile',
       }.contains(request.uri.path)) {
         request.response.headers.contentType = ContentType.parse(
           request.uri.path.endsWith('.wasm')

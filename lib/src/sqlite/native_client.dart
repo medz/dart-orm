@@ -1,4 +1,4 @@
-part of '../../sqlite.dart';
+part of 'native.dart';
 
 // Resolve against the exact native asset used by package:sqlite3. Never call
 // an unrelated system SQLite library with this library's database pointer.

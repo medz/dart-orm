@@ -79,7 +79,7 @@ final db = await sqlite(
 );
 ```
 
-`Database`, `postgres`, `sqlite` and `sqliteWeb` accept the same optional hooks.
+`Database`, `postgres` and `sqlite` accept the same optional hooks.
 Sessions, transaction attempts and savepoints inherit them.
 
 | Hook | Measured interval | Limits |

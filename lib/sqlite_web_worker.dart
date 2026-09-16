@@ -3,12 +3,14 @@ library;
 
 import 'dart:async';
 import 'dart:js_interop';
+import 'dart:typed_data';
 
 import 'package:sqlite3/wasm.dart' as sqlite;
 import 'package:web/web.dart' as web;
 
 import 'orm.dart';
-import 'src/sqlite/functions.dart';
+import 'src/sqlite/execution.dart';
+import 'src/sqlite/web_build.dart';
 import 'src/sqlite/web_wire.dart';
 
 void runSqliteWebWorker() {
@@ -51,11 +53,13 @@ final class _WorkerDatabase {
   sqlite.CommonDatabase? db;
   sqlite.SimpleOpfsFileSystem? opfs;
   sqlite.InMemoryFileSystem? memory;
-  final Map<int, _WorkerCursor> cursors = {};
-  int serial = 0;
+  SqliteExecutor? executor;
   bool? get active => db == null ? null : !db!.autocommit;
 
   Future<JSAny?> handle(String operation, JSAny? payload) async {
+    if (operation == 'hello') {
+      return [sqliteWebProtocol.toJS, sqliteWorkerBuild.toJS].toJS;
+    }
     if (operation == 'open') {
       if (engine != null) {
         throw const OrmException('DRIVER.OPEN', 'Worker is already open.');
@@ -64,8 +68,25 @@ final class _WorkerDatabase {
       final wasm = (options[0]! as JSString).toDart;
       final storage = (options[1]! as JSString).toDart;
       try {
-        final sqlite3 = engine = await sqlite.WasmSqlite3.loadFromUrlString(
-          wasm,
+        final web.Response response;
+        try {
+          response = await (globalContext as web.DedicatedWorkerGlobalScope)
+              .fetch(
+                wasm.toJS,
+                web.RequestInit(integrity: (options[3]! as JSString).toDart),
+              )
+              .toDart;
+          if (!response.ok) throw StateError('HTTP ${response.status}');
+        } catch (e) {
+          throw OrmException(
+            'DRIVER.ASSET',
+            'SQLite WASM fetch or integrity check failed.',
+            cause: e,
+          );
+        }
+        final bytes = (await response.arrayBuffer().toDart).toDart;
+        final sqlite3 = engine = await sqlite.WasmSqlite3.load(
+          Uint8List.view(bytes),
         );
         if (storage == 'opfs') {
           opfs = await sqlite.SimpleOpfsFileSystem.loadFromStorage(
@@ -84,37 +105,15 @@ final class _WorkerDatabase {
         final opened = db = sqlite3.open(
           storage == 'memory' ? ':memory:' : '/database',
         );
-        registerSqliteFunctions(opened);
-        opened.execute('PRAGMA foreign_keys = ON');
-        if (opened.select('PRAGMA foreign_keys').single.values.single != 1) {
-          throw const OrmException(
-            'DRIVER.FOREIGN_KEYS',
-            'SQLite foreign keys were not enabled.',
-          );
-        }
-        final journal = storage == 'memory' ? 'memory' : 'delete';
-        if (opened
-                .select('PRAGMA journal_mode = $journal')
-                .single
-                .values
-                .single !=
-            journal) {
-          throw const OrmException(
-            'DRIVER.JOURNAL',
-            'SQLite journal mode differs.',
-          );
-        }
-        // OPFS sync handles exclusively own this database. Busy waits cannot
-        // coordinate another owner and would only block the worker.
-        opened.execute('PRAGMA busy_timeout = 0');
-        opened.execute('PRAGMA synchronous = FULL');
-        var maxParameters = 999;
-        for (final row in opened.select('PRAGMA compile_options')) {
-          final option = row.values.single as String;
-          if (option.startsWith('MAX_VARIABLE_NUMBER=')) {
-            maxParameters = int.parse(option.split('=').last);
-          }
-        }
+        executor = SqliteExecutor(opened);
+        // Sync OPFS handles own the database exclusively; a busy wait cannot
+        // coordinate another owner. Keep durable rollback-journal storage.
+        final maxParameters = configureSqlite(
+          opened,
+          journal: storage == 'memory' ? 'memory' : 'delete',
+          busyTimeout: Duration.zero,
+          fullSync: true,
+        );
         return [sqlite3.version.versionNumber.toJS, maxParameters.toJS].toJS;
       } catch (_) {
         close();
@@ -127,46 +126,21 @@ final class _WorkerDatabase {
     }
     switch (operation) {
       case 'execute':
-        final command = sqliteWebDartCommand(payload);
-        final statement = opened.prepare(command.sql, checkNoTail: true);
-        try {
-          final rows = statement.select(sqliteParameters(command.parameters));
-          return sqliteWebResult(
-            SqlResult(
-              [for (final row in rows) row.values.toList()],
-              columns: rows.columnNames,
-              affectedRows: statement.isReadOnly ? 0 : opened.updatedRows,
-            ),
-          );
-        } finally {
-          statement.close();
-        }
+        return sqliteWebResult(
+          executor!.execute(sqliteWebDartCommand(payload)),
+        );
       case 'cursor':
-        final command = sqliteWebDartCommand(payload);
-        final statement = opened.prepare(command.sql, checkNoTail: true);
-        try {
-          if (!statement.isReadOnly) {
-            throw const OrmException(
-              'CURSOR.READ_ONLY',
-              'Streaming requires a read-only query.',
-            );
-          }
-          final id = ++serial;
-          cursors[id] = _WorkerCursor(
-            statement,
-            statement.selectCursor(sqliteParameters(command.parameters)),
-          );
-          return id.toJS;
-        } catch (_) {
-          statement.close();
-          rethrow;
-        }
+        return executor!.openCursor(sqliteWebDartCommand(payload)).toJS;
       case 'fetch':
         final parts = payload! as JSArray<JSAny?>;
-        final cursor = cursors[(parts[0]! as JSNumber).toDartInt]!;
-        return sqliteWebResult(cursor.fetch((parts[1]! as JSNumber).toDartInt));
+        return sqliteWebResult(
+          executor!.fetch(
+            (parts[0]! as JSNumber).toDartInt,
+            (parts[1]! as JSNumber).toDartInt,
+          ),
+        );
       case 'release':
-        cursors.remove((payload! as JSNumber).toDartInt)?.close();
+        executor!.release((payload! as JSNumber).toDartInt);
         return null;
       case 'close':
         close();
@@ -180,11 +154,12 @@ final class _WorkerDatabase {
   }
 
   void close() {
-    for (final cursor in cursors.values) {
-      cursor.close();
+    if (executor != null) {
+      executor!.close();
+    } else {
+      db?.close();
     }
-    cursors.clear();
-    db?.close();
+    executor = null;
     db = null;
     if (opfs case final fs?) {
       engine?.unregisterVirtualFileSystem(fs);
@@ -193,29 +168,5 @@ final class _WorkerDatabase {
     if (memory case final fs?) engine?.unregisterVirtualFileSystem(fs);
     opfs = null;
     memory = null;
-  }
-}
-
-final class _WorkerCursor(
-  final sqlite.CommonPreparedStatement statement,
-  final sqlite.IteratingCursor cursor,
-) {
-  bool closed = false;
-  SqlResult fetch(int count) {
-    final rows = <List<Object?>>[];
-    while (!closed && rows.length < count) {
-      if (!cursor.moveNext()) {
-        close();
-        break;
-      }
-      rows.add(cursor.current.values.toList());
-    }
-    return SqlResult(rows, columns: cursor.columnNames);
-  }
-
-  void close() {
-    if (closed) return;
-    closed = true;
-    statement.close();
   }
 }

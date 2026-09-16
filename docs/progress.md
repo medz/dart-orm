@@ -1,6 +1,26 @@
 # Implementation status
 
-## Flutter Web integration research
+## Unified SQLite integration
+
+The current refactor uses `sqlite.dart` for native and browser connections. Shared
+sqlite3 statement/cursor execution replaces the duplicated implementations.
+`SqliteOptions.persistent(name, nativePath: ...)` keeps storage identity explicit;
+Flutter Web automatically bundles its worker and WASM, and plain Dart exports the
+same verified resources with `dart run orm web-assets`. Startup verifies worker
+build/protocol identity and WASM integrity. Asset names include their content hash.
+
+The real Flutter release builds pass 21 scenarios each in JS, WASM without
+isolation headers and WASM with isolation headers. Plain Dart JS/WASM also pass
+21 each. The repository Flutter example builds for Web, resource export succeeds,
+and static analysis is clean. The complete native suite passes **875 tests in
+09:12**, with real SQLite/PostgreSQL enabled. Five focused native checks and all
+Web configurations pass after finalizing the release artifacts. Negative startup
+checks reject both an old protocol and a different build using the current
+protocol. An Android arm64 asset bundle builds and excludes SQLite Web resources.
+See [validation and limits](../research/validation/sqlite-refactor.md). Android
+device runtime and cross-browser acceptance were not repeated for this change.
+
+## Previous Flutter Web integration research
 
 [The integration study](../research/flutter-web-integration.md) confirms that
 `sqlite3` already supplies Web engine/storage support and shared database APIs.

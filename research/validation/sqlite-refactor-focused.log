@@ -1,0 +1,8 @@
+Running build hooks...Running build hooks...00:00 +0: loading test/sqlite_options_test.dart
+00:00 +0: test/sqlite_options_test.dart: persistent uses the explicit native path and retains committed data
+00:00 +1: test/sqlite_options_test.dart: native persistent storage never guesses a path or falls back to memory
+00:00 +2: test/sqlite_options_test.dart: all driver close callers wait for active work and shutdown
+00:00 +3: loading test/public_api_test.dart
+00:00 +3: test/public_api_test.dart: generated clients expose row types and an immutable schema
+00:00 +4: test/public_api_test.dart: entrypoint exports and runtime dependency boundaries stay explicit
+00:06 +5: All tests passed!

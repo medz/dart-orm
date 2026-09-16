@@ -4,7 +4,7 @@ import 'dart:js_interop';
 import 'dart:typed_data';
 
 import 'package:orm/migrate.dart';
-import 'package:orm/sqlite_web.dart';
+import 'package:orm/sqlite.dart';
 import 'package:web/web.dart' as web;
 
 import 'schema.orm.dart';
@@ -13,8 +13,6 @@ import 'teams.dart';
 import 'precision.dart';
 
 final checks = <Map<String, Object?>>[];
-final wasm = Uri.parse('/sqlite3.wasm');
-final worker = Uri.parse('/worker.js');
 void expect(bool condition, String message) {
   if (!condition) throw StateError(message);
 }
@@ -37,8 +35,7 @@ Future<void> check(String name, Future<void> Function() body) async {
   checks.add({'name': name, 'milliseconds': watch.elapsedMilliseconds});
 }
 
-Future<Database<Sqlite>> memory() =>
-    sqliteWeb(SqliteWebOptions.memory(wasm: wasm, worker: worker));
+Future<Database<Sqlite>> memory() => sqlite(const SqliteOptions.memory());
 Future<void> initialize(Database<Sqlite> db) => Migrator(db)
     .apply([
       Migration.create('0001_browser', appSchema, dialect: SqlDialect.sqlite),
@@ -53,9 +50,7 @@ Future<void> main() async {
             .cast<Map<String, Object?>>(),
       );
       final name = web.window.sessionStorage.getItem('orm_database')!;
-      final recovered = await sqliteWeb(
-        SqliteWebOptions.opfs(name: name, wasm: wasm, worker: worker),
-      );
+      final recovered = await sqlite(SqliteOptions.persistent(name));
       try {
         await check('page reload recovers committed rows and rolls back interrupted transaction', () async {
           expect(
@@ -112,11 +107,11 @@ Future<void> main() async {
     }
     await check(
       'many-to-many plans, phase observations, payloads, pagination and transaction writes preserve query counts',
-      () => checkTeams(wasm, worker),
+      () => checkTeams(),
     );
     await check(
       'temporal column precision preserves epoch ties, extended ranges, defaults and keys',
-      () => checkTemporalPrecision(wasm, worker),
+      () => checkTemporalPrecision(),
     );
     final db = await memory();
     try {
@@ -601,19 +596,19 @@ Future<void> main() async {
       'startup failures are bounded and release failed workers',
       () async {
         await rejects(
-          () => sqliteWeb(
-            SqliteWebOptions.memory(
-              wasm: Uri.parse('/missing.wasm'),
-              worker: worker,
+          () => sqlite(
+            SqliteOptions.memory(
+              web: SqliteWebOptions(wasm: Uri.parse('/missing.wasm')),
             ),
           ),
         );
         await rejects(
-          () => sqliteWeb(
-            SqliteWebOptions.memory(
-              wasm: wasm,
-              worker: Uri.parse('/missing-worker.js'),
-              openTimeout: const Duration(seconds: 2),
+          () => sqlite(
+            SqliteOptions.memory(
+              web: SqliteWebOptions(
+                worker: Uri.parse('/missing-worker.js'),
+                openTimeout: const Duration(seconds: 2),
+              ),
             ),
           ),
         );
@@ -622,18 +617,56 @@ Future<void> main() async {
       },
     );
     await check(
+      'unified entry rejects native paths and mismatched browser assets',
+      () async {
+        await rejects(
+          () => sqlite(const SqliteOptions.file('native.sqlite')),
+          code: 'CAPABILITY.STORAGE',
+        );
+        await rejects(
+          () => sqlite(
+            SqliteOptions.memory(
+              web: SqliteWebOptions(worker: Uri.parse('/mismatched-worker.js')),
+            ),
+          ),
+          code: 'DRIVER.PROTOCOL',
+        );
+        await rejects(
+          () => sqlite(
+            SqliteOptions.memory(
+              web: SqliteWebOptions(
+                worker: Uri.parse('/mismatched-worker.js?protocol=old'),
+              ),
+            ),
+          ),
+          code: 'DRIVER.PROTOCOL',
+        );
+        await rejects(
+          () => sqlite(
+            const SqliteOptions.memory(
+              web: SqliteWebOptions(
+                wasmIntegrity:
+                    'sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+              ),
+            ),
+          ),
+          code: 'DRIVER.ASSET',
+        );
+        final healthy = await memory();
+        await healthy.close();
+      },
+    );
+    await check(
       'OPFS commit survives a closed worker and new connection',
       () async {
-        final options = SqliteWebOptions.opfs(
-          name: 'browser-${DateTime.now().millisecondsSinceEpoch}',
-          wasm: wasm,
-          worker: worker,
+        final options = SqliteOptions.persistent(
+          'browser-${DateTime.now().millisecondsSinceEpoch}',
         );
-        var persistent = await sqliteWeb(options);
+        var persistent = await sqlite(options);
         try {
           await initialize(persistent);
           await persistent.users.create(email: 'persisted');
-          await rejects(() => sqliteWeb(options));
+          await rejects(() => sqlite(options));
           expect(
             (await persistent.users.single()).email == 'persisted',
             'Failed competing open disturbed the owner',
@@ -641,7 +674,7 @@ Future<void> main() async {
         } finally {
           await persistent.close();
         }
-        persistent = await sqliteWeb(options);
+        persistent = await sqlite(options);
         try {
           expect(
             (await persistent.users.single()).email == 'persisted',
@@ -653,9 +686,7 @@ Future<void> main() async {
       },
     );
     final name = 'reload-${DateTime.now().millisecondsSinceEpoch}';
-    final persistent = await sqliteWeb(
-      SqliteWebOptions.opfs(name: name, wasm: wasm, worker: worker),
-    );
+    final persistent = await sqlite(SqliteOptions.persistent(name));
     await initialize(persistent);
     await persistent.users.create(email: 'durable');
     await persistent.transaction((tx) async {

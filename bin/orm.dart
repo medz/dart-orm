@@ -5,10 +5,12 @@ import 'package:orm/generate.dart';
 import 'package:orm/postgres.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
+import 'package:orm/src/sqlite/assets_io.dart';
 import 'package:path/path.dart' as p;
 
 const _usage = '''Usage: dart run orm <command>
   generate <schema.dart> [output.orm.dart]
+  web-assets [directory (default: web/orm)]
   migration registry <directory> [--dialect sqlite|postgres]
   queries generate <queries.dart> [output.queries.dart]
   queries check --source queries.dart [--output queries.queries.dart] <database>
@@ -25,6 +27,19 @@ Future<void> main(List<String> arguments) async {
         arguments.first == '--help' ||
         arguments.first == 'help') {
       stdout.writeln(_usage);
+      return;
+    }
+    if (arguments.first == 'web-assets') {
+      if (arguments.length > 2) {
+        throw const FormatException(
+          'web-assets expects at most one directory.',
+        );
+      }
+      final directory = Directory(
+        arguments.length == 2 ? arguments[1] : 'web/orm',
+      );
+      await copySqliteWebAssets(directory);
+      stdout.writeln('Copied SQLite browser assets to ${directory.path}');
       return;
     }
     if (arguments.first == 'generate') {

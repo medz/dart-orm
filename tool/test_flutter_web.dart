@@ -2,10 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
+import 'package:orm/src/sqlite/web_build.dart';
 
-/// Research spike: package-owned assets with an unmodified ORM runtime.
-/// Builds a temporary package copy, never changes the shipping pubspec.
+/// Release Flutter acceptance against an unchanged copy of the product package.
 Future<void> main(List<String> arguments) async {
   if (arguments.length != 1) {
     throw ArgumentError('Pass the absolute path to the Flutter SDK.');
@@ -13,8 +12,7 @@ Future<void> main(List<String> arguments) async {
   final root = Directory.current.absolute;
   final sdk = Directory(arguments.single).absolute;
   final flutter = '${sdk.path}/bin/flutter';
-  final dart = '${sdk.path}/bin/cache/dart-sdk/bin/dart';
-  final work = Directory('${root.path}/.dart_tool/flutter_web_probe');
+  final work = Directory('${root.path}/.dart_tool/flutter_web_test');
   if (await work.exists()) await work.delete(recursive: true);
   final package = Directory('${work.path}/orm');
   final app = Directory('${work.path}/app');
@@ -48,46 +46,15 @@ Future<void> main(List<String> arguments) async {
   }
 
   await copyTree('${root.path}/lib', '${package.path}/lib');
-  await write(
-    '${package.path}/pubspec.yaml',
-    '${await File('${root.path}/pubspec.yaml').readAsString()}\n'
-        'flutter:\n  assets:\n'
-        '    - path: assets/web/\n      platforms: [web]\n'
-        '    - path: assets/native-only.txt\n      platforms: [android]\n',
-  );
-  await write(
-    '${package.path}/assets/native-only.txt',
-    'Must not enter web output.',
-  );
-  final assets = Directory('${package.path}/assets/web');
-  await assets.create(recursive: true);
-  final wasm = File('${root.path}/.dart_tool/browser/sqlite3.wasm');
-  const digest =
-      '13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4';
-  if (!await wasm.exists() ||
-      (await sha256.bind(wasm.openRead()).first).toString() != digest) {
-    throw StateError(
-      'Run tool/test_browser.dart to cache the pinned SQLite WASM.',
-    );
-  }
-  await wasm.copy('${assets.path}/sqlite3.wasm');
-  await run(dart, [
-    'compile',
-    'js',
-    '-O2',
-    'test/support/browser/worker.dart',
-    '-o',
-    '${assets.path}/worker.js',
+  await File('${root.path}/pubspec.yaml').copy('${package.path}/pubspec.yaml');
+  await copyTree('${root.path}/assets', '${package.path}/assets');
+  await run('${sdk.path}/bin/cache/dart-sdk/bin/dart', [
+    'run',
+    'tool/build_sqlite_web.dart',
+    '--check',
   ], root.path);
-  // A release package only needs these two runtime artifacts.
-  for (final entry in assets.listSync()) {
-    if (entry is File &&
-        !{'worker.js', 'sqlite3.wasm'}.contains(entry.uri.pathSegments.last)) {
-      await entry.delete();
-    }
-  }
   await write('${app.path}/pubspec.yaml', '''
-name: orm_flutter_web_probe
+name: orm_flutter_web_test
 publish_to: none
 environment:
   sdk: '>=3.13.0 <4.0.0'
@@ -117,14 +84,7 @@ flutter:
     return source.replaceFirst(from, to);
   }
 
-  checks = replace(
-    checks,
-    "final wasm = Uri.parse('/sqlite3.wasm');\nfinal worker = Uri.parse('/worker.js');",
-    "final assetBase = Uri.parse(web.document.baseURI).resolve('assets/packages/orm/assets/web/');\n"
-        "final wasm = assetBase.resolve('sqlite3.wasm');\n"
-        "final worker = assetBase.resolve('worker.js');\n"
-        'int Function() flutterFrames = () => 0;',
-  );
+  checks += '\nint Function() flutterFrames = () => 0;\n';
   checks = replace(
     checks,
     'var ticks = 0;',
@@ -177,10 +137,6 @@ flutter:
       if (mode == 'wasm') '--wasm',
     ], app.path);
     final output = Directory('${app.path}/build/web');
-    if (await File('${output.path}/assets/packages/orm/assets/native-only.txt')
-        .exists()) {
-      throw StateError('Platform asset filtering failed.');
-    }
     for (final isolated in mode == 'js' ? [false] : [false, true]) {
       final report = await _serve(output, isolated);
       report['build'] = mode;
@@ -188,7 +144,7 @@ flutter:
       report['flutterSdk'] = jsonDecode(
         await File('${sdk.path}/bin/cache/flutter.version.json').readAsString(),
       );
-      report['sqliteWasmSha256'] = digest;
+      report['sqliteWasmSha256'] = sqliteWasmSha256;
       reports.add(report);
       stdout.writeln(jsonEncode(report));
       await write(
@@ -228,6 +184,16 @@ Future<Map<String, Object?>> _serve(Directory output, bool isolated) async {
           complete.complete(jsonDecode(body) as Map<String, Object?>);
         }
         request.response.write('ok');
+      } else if (path == '/mismatched-worker.js') {
+        final protocol = request.uri.queryParameters['protocol'] == 'old'
+            ? sqliteWebProtocol - 1
+            : sqliteWebProtocol;
+        request.response.headers.contentType = ContentType.parse(
+          'text/javascript',
+        );
+        request.response.write(
+          'onmessage=e=>postMessage([e.data[0],true,false,[$protocol,"old-build"]]);',
+        );
       } else {
         final relative = path == '/nested/detail/42'
             ? 'index.html'

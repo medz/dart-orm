@@ -1,5 +1,5 @@
 name: orm_flutter
-description: Native Flutter acceptance application for Dart ORM.
+description: Native and web Flutter acceptance application for Dart ORM.
 publish_to: 'none'
 version: 0.1.0+1
 

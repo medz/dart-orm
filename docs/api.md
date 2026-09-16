@@ -6,10 +6,15 @@ Migrations have a separate, fixed history for the chosen engine.
 
 ## Imports
 
+SQLite uses `sqlite.dart` on native platforms and the web. `SqliteOptions.memory()`
+is portable. `persistent(name, nativePath: ...)` uses the native path or the named
+browser database. Flutter bundles its browser resources automatically; see
+[SQLite Web setup](sqlite-web.md). Platform transports are internal.
+
 | File being written | Import | Purpose |
 | --- | --- | --- |
 | Schema declaration | `package:orm/schema.dart` | Record annotations, entities, keys and relations |
-| Application | Generated `schema.orm.dart` plus `package:orm/sqlite.dart`, `postgres.dart` or `sqlite_web.dart` | Row aliases, table getters, driver configuration and the portable query API |
+| Application | Generated `schema.orm.dart` plus `package:orm/sqlite.dart`, or `postgres.dart` | Row aliases, table getters, driver configuration and the portable query API |
 | Shared queries/codecs without a driver | `package:orm/orm.dart` | Portable runtime, typed SQL, codecs and explicit driver/manual-table extension interfaces |
 | Migration or snapshot | `package:orm/migrate.dart` | Historical schema primitives, steps, checksums and migration execution |
 | Project migration CLI | `package:orm/migrate_cli.dart` | Statically imported history and project-owned connection configuration |
@@ -22,7 +27,8 @@ ID or enum, remain owned by their defining library. Import that library when
 constructing those values. Use import prefixes for multiple generated clients.
 
 Runtime/schema/migration imports do not pull in the analyzer, build system or a
-native database driver. Native and browser entrypoints stay explicit.
+native database driver. `sqlite.dart` selects its platform implementation;
+PostgreSQL retains its own entrypoint and connection options.
 The single package still declares tooling dependencies for its CLI and builders;
 `pub get` resolves them. This import boundary avoids runtime initialization and
 compilation dependencies, not the dependency-download cost of one package.

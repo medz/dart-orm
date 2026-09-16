@@ -80,8 +80,9 @@ the earlier Android capture does not validate the latest migration API.
 
 Driver configuration is typed and explicit. PostgreSQL reuses its driver's pool,
 offers borrowed-pool ownership and certificate-verifying TLS by default; SQLite
-owns one background connection with explicit memory/file/read-only settings.
-The web driver has separate worker/persistence configuration. URL options are
+owns one background connection behind a unified native/browser entrypoint.
+Memory and named persistent settings are shared; native paths remain explicit.
+Flutter Web bundles default assets, with optional browser resource overrides. URL options are
 not silently merged with typed settings. Unsupported transports, serverless
 sessions, MySQL, replica routing and connection-pool variants need their own
 adapters and verification.

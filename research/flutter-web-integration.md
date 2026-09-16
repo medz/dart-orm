@@ -1,5 +1,9 @@
 # Flutter Web integration research
 
+The recommendation below has since been implemented; see [current setup](../docs/sqlite-web.md)
+and [refactor validation](validation/sqlite-refactor.md). The measurements in this
+research note describe the earlier probe.
+
 Date: 2026-09-16. Recommendation: retain `sqlite3` as the engine, share its
 `CommonDatabase` interfaces, and make browser resource packaging an ORM product
 responsibility. Flutter applications should not author a worker or assemble
@@ -120,7 +124,7 @@ with and without the isolation headers used for multithreaded Flutter rendering.
 
 ## Actual Flutter probe
 
-The [reproducible runner](../tool/probe_flutter_web.dart) copies the current ORM
+The original probe, now evolved into the [acceptance runner](../tool/test_flutter_web.dart), copies the current ORM
 library into a disposable package, adds platform-filtered assets, compiles the
 existing worker and creates a real Flutter widget application. It reuses the 20
 browser acceptance scenarios, changing only resource resolution, the reload URL,
@@ -129,12 +133,12 @@ ticks advance while SQL executes. It starts after the first Flutter frame and
 keeps the widget tree mounted throughout the checks.
 
 ```sh
-dart run tool/test_browser.dart # populate/verify the pinned SQLite WASM cache
-dart run tool/probe_flutter_web.dart /absolute/path/to/flutter
+dart run tool/build_sqlite_web.dart --check
+dart run tool/test_flutter_web.dart /absolute/path/to/flutter
 ```
 
 On this host, commands use `DEVELOPER_DIR=/Library/Developer/CommandLineTools`.
-The probe rebuilds its own `.dart_tool/flutter_web_probe/` directory, needs cached
+The current runner rebuilds its own `.dart_tool/flutter_web_test/` directory, needs cached
 Flutter/pub dependencies for offline resolution, serves local renderer assets,
 and uses disposable Chrome profiles. It does not modify the shipping pubspec.
 
