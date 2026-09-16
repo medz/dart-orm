@@ -1,5 +1,11 @@
 # Design acceptance map
 
+The latest [API/correctness audit](../research/api-correctness-audit.md) passes
+872 native tests and 20 real Chrome checks for each of JavaScript and Dart WASM.
+[Its validation record](../research/validation/api-audit.md) pins the runtime source
+and preserves platform/performance limits. The [API guide](api.md) documents the
+reviewed import, selection, execution and history boundaries.
+
 The common ORM lifecycle in
 [`new-dart-orm-design.md`](../research/new-dart-orm-design.md) is implemented and
 accepted within the [reviewed capability boundaries](capabilities.md). The original

@@ -1,5 +1,31 @@
 # Implementation status
 
+## API and correctness refactor
+
+The comprehensive review of public exports, generation, SQL/decoding, writes,
+session ownership and migration boundaries is recorded in
+[the audit](../research/api-correctness-audit.md). It adds reproduced regressions
+for cross-session subqueries/CTEs, optional-join presence guards, mutation
+validation, concurrent shutdown and cancellation notification. Generated row
+exports, immutable schema lists, target-specific declaration checks and native
+catalog import round-trips are verified. The complete native suite passes
+**872 tests in 10:41**, with real SQLite and PostgreSQL 18.4 enabled. Real Chrome
+JavaScript and Dart WASM each pass **20 checks**, including the new query boundaries.
+Static analysis has no issues. See [final validation](../research/validation/api-audit.md)
+and the [API/mental model guide](api.md).
+
+The full suite includes static generation, build_runner recovery, source/registry
+fingerprints, CLI lifecycle, actual process-exit migration recovery and AOT history
+without source assets. Temporary consumer tests reuse existing SQLite downloads;
+the normal native-asset hook still verifies their hashes. No driver configuration
+or consumer packaging path is substituted.
+
+The previous acceptance records below remain tied to their recorded revisions.
+Android/Apple runtime and performance measurements were not repeated in this
+review. Work stays on `next`, with local commits only and no push/publication.
+
+## Previous migration correction
+
 The single-engine migration correction is implemented. Each registry fixes one
 database engine, including before its first migration; files contain one step list
 and only the selected physical expressions. Mixed histories/connections are

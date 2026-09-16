@@ -83,6 +83,12 @@ the callback's `tx` to construct that transaction's queries. Subqueries, CTEs an
 UNION operands must all use the same view. Use `savepoint` for a recoverable nested
 unit; borrowed views expire at callback completion.
 
+Pass `tx` into helper functions. Calling the captured root `db` separately inside
+the callback requests separate work: a pool may run it outside the transaction,
+and a single-connection SQLite driver may wait on the callback's own lease.
+Composition checks reject mixed query descriptions; they do not rewrite unrelated
+root calls into transaction calls.
+
 ```dart
 await db.transaction((tx) async {
   final user = await tx.users.create(email: 'seven@example.com');

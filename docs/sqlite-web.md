@@ -132,6 +132,11 @@ browser reports any failed check. Reports contain the actual browser, Dart SDK,
 compilation mode and engine checksum. The captured results are in
 `research/validation/browser.json`.
 
+The subsequent [API audit capture](../research/validation/api-audit.md) passes
+20 checks in each compilation mode, adding mixed-session query rejection,
+independent optional-join guards and rejected-write state checks. Its logs are
+separate from the original browser capture.
+
 Run these separately from the native full suite: concurrent Dart CLI invocations
 can race while rewriting/codesigning the shared macOS native-asset cache. The
 acceptance checks cover memory migration/catalog checks, FK and CHECK enforcement,

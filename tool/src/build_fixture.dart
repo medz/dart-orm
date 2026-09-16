@@ -39,10 +39,35 @@ targets:
     await result.write('lib/unrelated.dart', 'const unrelated = 1;\n');
     try {
       await result.run(['pub', 'get', '--offline']);
+      await result._copySqliteDownloads(ormPath);
       return result;
     } catch (_) {
       await result.dispose();
       rethrow;
+    }
+  }
+
+  // Keep temporary consumers on the normal native-asset hook, while avoiding a
+  // new network download per process fixture. sqlite3 rechecks each cached hash.
+  Future<void> _copySqliteDownloads(String ormPath) async {
+    const cachePath = '.dart_tool/hooks_runner/shared/sqlite3/build';
+    final cache = Directory('$ormPath/$cachePath');
+    if (!await cache.exists()) return;
+    await for (final entry in cache.list(followLinks: false)) {
+      if (entry is! Directory ||
+          !entry.path
+              .split(Platform.pathSeparator)
+              .last
+              .startsWith('download-')) {
+        continue;
+      }
+      await for (final file in entry.list(followLinks: false)) {
+        if (file is! File) continue;
+        final relative = file.path.substring(cache.path.length);
+        final target = File('${directory.path}/$cachePath$relative');
+        await target.parent.create(recursive: true);
+        await file.copy(target.path);
+      }
     }
   }
 

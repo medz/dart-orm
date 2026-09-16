@@ -128,6 +128,75 @@ Future<void> main() async {
         );
         await rejects(() => db.posts.create(authorId: 999, title: 'invalid'));
       });
+      await check('query ownership, optional guards and write validation survive JS and WASM', () async {
+        final isolated = await memory();
+        try {
+          await initialize(isolated);
+          await isolated.users.create(email: 'boundary');
+          await isolated.transaction((tx) async {
+            final ids = isolated.users.select((u) => u.id);
+            await rejects(
+              () => tx.users.where((u) => u.id.isInQuery(ids)).get(),
+              code: 'QUERY.SESSION',
+            );
+            final cte = ids.asCte('root_ids').alias();
+            await rejects(
+              () => tx.users
+                  .join(cte, on: (u, c) => u.id.equals(c.ref((u) => u.id)))
+                  .get(),
+              code: 'QUERY.SESSION',
+            );
+            expect(
+              await tx.users.count() == 1,
+              'Rejected queries damaged the transaction',
+            );
+          });
+          final present = usersTable.alias(), absent = usersTable.alias();
+          final query = isolated.users
+              .leftJoin(present, on: (u, p) => u.id.equals(p.id))
+              .leftJoin(absent, on: (u, a) => a.id.eq(-1));
+          await rejects(
+            () => query
+                .select((_) => present.optional(absent.fields.email))
+                .get(),
+            code: 'QUERY.NULLABILITY',
+          );
+          final result = await query
+              .select(
+                (_) => present.optional(
+                  (
+                    present.fields.email,
+                    absent.optional(absent.fields.email),
+                  ).map((a, b) => (a, b)),
+                ),
+              )
+              .get();
+          expect(
+            result.single == ('boundary', null),
+            'Nested optional decoding differs',
+          );
+          await rejects(
+            () => isolated.users
+                .where((u) => u.id.count().gt(0))
+                .delete()
+                .execute(),
+            code: 'QUERY.AGGREGATE',
+          );
+          await rejects(
+            () => isolated.users
+                .insert((u) => [u.email.set('invalid')])
+                .returning((_) => fields({}))
+                .get(),
+            code: 'QUERY.EMPTY_SELECTION',
+          );
+          expect(
+            await isolated.users.count() == 1,
+            'Rejected writes changed data',
+          );
+        } finally {
+          await isolated.close();
+        }
+      });
       await check('client factories distinguish omission, explicit null and prepared batch values', () async {
         final isolated = await memory();
         try {
