@@ -35,6 +35,9 @@ pins the runtime source and limits. Complete GitHub CI and Codex review of the
 final PR head are the merge gates; earlier captures below retain their revisions.
 
 Linux CI exposed native-asset packaging and capability assumptions in tests.
+The complete run subsequently found 17 remaining interruption assumptions in
+transaction/acquisition/watch tests (1129 passed, 25 skipped); those test cases
+now cover supported behavior or explicit rejection without changing runtime.
 The import AOT fixture now uses a complete `dart build cli` bundle; borrowed
 PostgreSQL tests include URL passwords (48 related checks pass). SQLite
 interruption-dependent cases honor the actual build capability; default Linux

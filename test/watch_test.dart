@@ -570,6 +570,12 @@ void runTests(
     );
 
     test('cancelling an active watched query interrupts SQL and releases its lease', () async {
+      if (!db.capabilities.cancellation) {
+        markTestSkipped(
+          'This SQLite build does not expose native statement interruption.',
+        );
+        return;
+      }
       await db.users.create(email: 'a');
       final started = Completer<void>();
       final expression = db.dialect == .postgres
@@ -591,6 +597,29 @@ void runTests(
       expect(result.errors, isEmpty);
       expect(await db.users.count(), 1);
       expect(events.any((e) => e.error != null), true);
+    });
+
+    test('unsupported watch deadlines fail before SQL and ordinary watches remain usable', () async {
+      if (db.capabilities.statementTimeout) {
+        markTestSkipped('This driver supports statement deadlines.');
+        return;
+      }
+      final rejected = watch(
+        db.users.watch(
+          options: const ExecutionOptions(timeout: Duration(milliseconds: 40)),
+        ),
+      );
+      await rejected.waitForError();
+      expect(rejected.errors.single, code('CAPABILITY.CANCEL'));
+      expect(rejected.rows, isEmpty);
+      expect(events, isEmpty);
+      await rejected.close();
+
+      final ordinary = watch(db.users.select((u) => u.email).watch());
+      expect(await ordinary.next(), isEmpty);
+      await db.users.create(email: 'still-watching');
+      expect(await ordinary.next(), ['still-watching']);
+      expect(ordinary.errors, isEmpty);
     });
 
     if (name == 'postgres') {

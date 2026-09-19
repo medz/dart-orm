@@ -67,6 +67,15 @@
     },
     "redesign-final-analyze.log": {
       "sha256": "34a0d218671a357b7042bd3be43d0134efd7f8d5b56c5d8c0ab98096c99a331e"
+    },
+    "linux-sqlite-capabilities-final.log": {
+      "sha256": "13a02dd8b95df6ffa238a966089c2b16622d81482e0643e8d1bcf3610ea1eb6d"
+    },
+    "sqlite-capabilities-host-final.log": {
+      "sha256": "e9d51ff36d51b734d67555b280a29acb8fb029f419af92c1660f3a8ed05e50f3"
+    },
+    "ci-35446420359.log": {
+      "sha256": "5a40050575da4445c076f65a1ab7f025e2614569efa8e442ad496f7d31f58054"
     }
   },
   "limits": [
@@ -120,5 +129,27 @@
     },
     "analysis": "No issues found",
     "independentCodeReview": "No additional concrete defects found"
+  },
+  "linuxCompleteAttempt": {
+    "headCommit": "326f41e842acc840e15b4f8cd28bf159df803995",
+    "runUrl": "https://github.com/medz/dart-orm/actions/runs/35446420359",
+    "passed": 1129,
+    "failed": 17,
+    "skipped": 25,
+    "note": "All 17 failures were remaining Linux SQLite interruption assumptions in transaction/acquisition/watch tests. Runtime source was unchanged by their correction. The final PR CI run is the complete merge gate."
+  },
+  "finalCapabilityRegression": {
+    "capturedAt": "2026-09-19T14:19:05.153644+00:00",
+    "runtimeSourceCommit": "3aef4e7905f6997ff2fa9c181709bdddbdcc64ad",
+    "linux": {
+      "passed": 41,
+      "skipped": 14,
+      "skipReason": "13 transaction interruption and 1 active watched-query interruption scenarios."
+    },
+    "macosAndPostgres": {
+      "passed": 108,
+      "skipped": 4,
+      "skipReason": "Inverse unsupported-capability tests."
+    }
   }
 }

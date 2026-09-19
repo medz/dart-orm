@@ -360,11 +360,26 @@ void runTests(
 
     test('acquisition timeout stops on entry and statement timeout starts afterward', () async {
       await hold();
+      if (!db.capabilities.statementTimeout) {
+        expect(
+          () => db.execute(
+            SqlCommand('SELECT 99'),
+            options: const ExecutionOptions(
+              acquireTimeout: Duration(seconds: 2),
+              timeout: Duration(milliseconds: 100),
+            ),
+          ),
+          throwsA(code('CAPABILITY.CANCEL')),
+        );
+        expect(events, isEmpty);
+      }
       final result = db.execute(
         SqlCommand('SELECT 1'),
-        options: const ExecutionOptions(
-          acquireTimeout: Duration(seconds: 2),
-          timeout: Duration(milliseconds: 100),
+        options: ExecutionOptions(
+          acquireTimeout: const Duration(seconds: 2),
+          timeout: db.capabilities.statementTimeout
+              ? const Duration(milliseconds: 100)
+              : null,
         ),
       );
       await Future<void>.delayed(const Duration(milliseconds: 180));

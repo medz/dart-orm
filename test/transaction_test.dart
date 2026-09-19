@@ -70,10 +70,18 @@ void main() {
         // An actual deadline during the same known rejection remains a timeout,
         // rather than an unknown-commit report.
         await expectLater(
-          writer.transaction((tx) async {
-            await tx.table(users).update((u) => [u.score.set(9)]).execute();
-          }, timeout: const Duration(milliseconds: 20)),
-          throwsA(code('TRANSACTION.TIMEOUT')),
+          Future.sync(
+            () => writer.transaction((tx) async {
+              await tx.table(users).update((u) => [u.score.set(9)]).execute();
+            }, timeout: const Duration(milliseconds: 20)),
+          ),
+          throwsA(
+            code(
+              writer.capabilities.cancellation
+                  ? 'TRANSACTION.TIMEOUT'
+                  : 'CAPABILITY.CANCEL',
+            ),
+          ),
         );
         expect((await writer.table(users).single()).score, 0);
       } finally {
@@ -105,14 +113,22 @@ void main() {
       try {
         await entered.future;
         await expectLater(
-          blocked.transaction(
-            (tx) async {
-              calls++;
-            },
-            options: const SqliteTransaction(mode: .immediate),
-            timeout: const Duration(milliseconds: 40),
+          Future.sync(
+            () => blocked.transaction(
+              (tx) async {
+                calls++;
+              },
+              options: const SqliteTransaction(mode: .immediate),
+              timeout: const Duration(milliseconds: 40),
+            ),
           ),
-          throwsA(code('TRANSACTION.TIMEOUT')),
+          throwsA(
+            code(
+              blocked.capabilities.cancellation
+                  ? 'TRANSACTION.TIMEOUT'
+                  : 'CAPABILITY.CANCEL',
+            ),
+          ),
         ).timeout(const Duration(seconds: 2));
         expect(calls, 0);
         release.complete();
@@ -160,9 +176,16 @@ void runTests(
       await tx.table(users).update((u) => [u.score.set(8)]).execute();
     }
 
+    bool skipUnsupportedCancellation() {
+      if (db.capabilities.cancellation) return false;
+      markTestSkipped('This SQLite build does not export sqlite3_interrupt.');
+      return true;
+    }
+
     test(
       'idle callback expires, rolls back and cannot issue late SQL',
       () async {
+        if (skipUnsupportedCancellation()) return;
         final entered = Completer<void>(),
             resume = Completer<void>(),
             finished = Completer<void>();
@@ -202,6 +225,7 @@ void runTests(
     test(
       'deadline interrupts active SQL before releasing and reusing the lease',
       () async {
+        if (skipUnsupportedCancellation()) return;
         await expectLater(
           db.transaction((tx) async {
             await write(tx);
@@ -223,6 +247,7 @@ void runTests(
     );
 
     test('interrupted write rolls back and leaves the connection usable', () async {
+      if (skipUnsupportedCancellation()) return;
       final writing = name == 'postgres'
           ? 'UPDATE users SET score = (SELECT 9 FROM pg_sleep(10))'
           : 'WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<100000000) UPDATE users SET score=(SELECT sum(x) FROM n)';
@@ -239,6 +264,7 @@ void runTests(
     test(
       'explicit transaction cancellation stops an idle callback and active SQL',
       () async {
+        if (skipUnsupportedCancellation()) return;
         final token = CancellationToken(),
             entered = Completer<void>(),
             resume = Completer<void>();
@@ -277,6 +303,7 @@ void runTests(
     );
 
     test('global transaction cancellation also abandons acquisition', () async {
+      if (skipUnsupportedCancellation()) return;
       final entered = Completer<void>(), release = Completer<void>();
       final owner = db.session((s) async {
         entered.complete();
@@ -306,6 +333,7 @@ void runTests(
     test(
       'savepoint inherits deadline, drains and rolls back through raw cleanup',
       () async {
+        if (skipUnsupportedCancellation()) return;
         final resume = Completer<void>();
         try {
           await expectLater(
@@ -332,6 +360,7 @@ void runTests(
     test(
       'deadline closes a paused transactional cursor before rollback',
       () async {
+        if (skipUnsupportedCancellation()) return;
         StreamSubscription<User>? subscription;
         final resume = Completer<void>();
         try {
@@ -357,6 +386,7 @@ void runTests(
     );
 
     test('deadline interrupts an active transactional cursor fetch', () async {
+      if (skipUnsupportedCancellation()) return;
       final expression = sql<int>(
         [name == 'postgres' ? '(SELECT 1 FROM pg_sleep(10))' : '($slow)'],
         [],
@@ -377,6 +407,7 @@ void runTests(
     });
 
     test('transaction clock starts after acquisition and a borrowed session recovers', () async {
+      if (skipUnsupportedCancellation()) return;
       final entered = Completer<void>(), release = Completer<void>();
       final owner = db.session((s) async {
         entered.complete();
@@ -465,6 +496,7 @@ void runTests(
     );
 
     test('shorter statement limit retains its error and rolls back the transaction', () async {
+      if (skipUnsupportedCancellation()) return;
       await expectLater(
         db.transaction((tx) async {
           await write(tx);
@@ -483,6 +515,7 @@ void runTests(
     test(
       'monotonic deadline prevents commit after a CPU-bound callback',
       () async {
+        if (skipUnsupportedCancellation()) return;
         await expectLater(
           db.transaction((tx) async {
             final busy = Stopwatch()..start();
@@ -497,6 +530,7 @@ void runTests(
     test(
       'completed scopes remove their timers and cancellation listeners',
       () async {
+        if (skipUnsupportedCancellation()) return;
         final token = CancellationToken();
         await db.transaction(
           (tx) async {
@@ -515,7 +549,8 @@ void runTests(
       },
     );
 
-    test('confirmed commit wins a cancellation race; lost acknowledgement stays unknown', () async {
+    test('confirmed commit wins a cancellation race', () async {
+      if (skipUnsupportedCancellation()) return;
       final token = CancellationToken();
       final driver = _AfterCommitDriver(db.driver, () => token.cancel());
       final hooked = Database(driver);
@@ -523,7 +558,14 @@ void runTests(
         await write(tx);
       }, cancellation: token);
       expect(await score(), 8);
-      driver.after = () => throw StateError('Lost COMMIT acknowledgement');
+    });
+
+    test('lost COMMIT acknowledgement stays unknown', () async {
+      final driver = _AfterCommitDriver(
+        db.driver,
+        () => throw StateError('Lost COMMIT acknowledgement'),
+      );
+      final hooked = Database(driver);
       await expectLater(
         hooked.transaction((tx) async {
           await tx.table(users).update((u) => [u.score.set(12)]).execute();
@@ -559,6 +601,37 @@ void runTests(
             [0],
           ],
         );
+      },
+    );
+
+    test(
+      'native unsupported transaction controls reject before BEGIN or callback',
+      () {
+        if (db.capabilities.cancellation) {
+          markTestSkipped('This build supports transaction controls.');
+          return;
+        }
+        var calls = 0;
+        Future<void> action(Database<Backend> tx) async {
+          calls++;
+          await write(tx);
+        }
+
+        expect(
+          () =>
+              db.transaction(action, timeout: const Duration(milliseconds: 20)),
+          throwsA(code('CAPABILITY.CANCEL')),
+        );
+        expect(
+          () => db.transaction(action, cancellation: CancellationToken()),
+          throwsA(code('CAPABILITY.CANCEL')),
+        );
+        expect(
+          () => db.transaction(action, retry: const TransactionRetry()),
+          throwsA(code('CAPABILITY.CANCEL')),
+        );
+        expect(calls, 0);
+        expect(events, isEmpty);
       },
     );
 

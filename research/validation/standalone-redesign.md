@@ -80,6 +80,16 @@ CLI workflows kept progressing in the original run; repeated independent Dart
 starts made the full run longer than local acceptance. CI now permits 45 minutes
 without removing checks. Canceled earlier runs are not passing acceptance evidence.
 
+The complete Linux run on `326f41e8` then reported 1129 passed, 17 failed and
+25 skipped. All remaining failures were interruption assumptions in transaction,
+acquisition and watch tests. Their correction preserves ordinary COMMIT failure,
+unknown acknowledgement, acquisition and subscription checks; it only skips actual
+interruption scenarios and explicitly verifies unsupported controls before SQL.
+The corrected three suites pass 41 tests with 14 capability skips on Linux, and
+108 tests with four inverse-capability skips on macOS/PostgreSQL.
+Runtime and Web assets remain identical to `3aef4e79`. The final PR run, not this
+failed attempt, is the complete merge gate.
+
 ## Explicit boundaries
 
 MySQL/MariaDB provide exact values, storage, comparison and MIN/MAX within their
