@@ -43,7 +43,10 @@ PostgreSQL tests include URL passwords (48 related checks pass). SQLite
 interruption-dependent cases honor the actual build capability; default Linux
 `sqlite3` 3.6.0 rejects cancellation/deadlines and bounded retries before SQL.
 This limitation is documented rather than replaced with a second SQLite library.
-Complete Linux CI and final-head Codex review are required before merge;
+The complete Linux native stage now passes 1136 tests with 41 capability skips.
+Chrome JS passes 21 scenarios; an exiting-process profile cleanup race in the
+runner is corrected with bounded retries. Browser checks run in an independent CI
+job. Both jobs and final-head Codex review are required before merge;
 [PR #485](https://github.com/medz/dart-orm/pull/485) records their final outcome.
 
 Design: [standalone redesign](../research/standalone-orm-redesign.md).

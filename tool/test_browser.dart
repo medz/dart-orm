@@ -6,6 +6,8 @@ import 'package:orm/src/sqlite/assets_io.dart';
 import 'package:orm/src/sqlite/web_build.dart';
 import 'package:orm/generate.dart';
 
+import 'src/browser_profile.dart';
+
 const engineVersion = '3.6.0';
 const engineDigest =
     '13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4';
@@ -142,6 +144,6 @@ instance.invokeMain();
     browser?.kill();
     if (browser != null) await browser.exitCode;
     await server.close(force: true);
-    await profile.delete(recursive: true);
+    await deleteBrowserProfile(profile);
   }
 }

@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   test:
-    name: Dart, databases and browser
+    name: Dart and databases
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     services:
@@ -89,6 +89,20 @@ jobs:
         run: dart run tool/build_sqlite_web.dart --check
       - name: Test SQLite, PostgreSQL, MySQL and MariaDB
         run: dart test --concurrency=1
+
+  browser:
+    name: Chrome JS and WASM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.3
+      - name: Install dependencies
+        run: dart pub get --enforce-lockfile
       - name: Locate Chrome
         run: echo "CHROME_EXECUTABLE=$(command -v google-chrome)" >> "$GITHUB_ENV"
       - name: Test Chrome with JavaScript

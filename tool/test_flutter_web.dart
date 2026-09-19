@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:orm/src/sqlite/web_build.dart';
 
+import 'src/browser_profile.dart';
+
 /// Release Flutter acceptance against an unchanged copy of the product package.
 Future<void> main(List<String> arguments) async {
   if (arguments.length != 1) {
@@ -250,7 +252,7 @@ Future<Map<String, Object?>> _serve(Directory output, bool isolated) async {
     browser?.kill();
     if (browser != null) await browser.exitCode;
     await server.close(force: true);
-    await profile.delete(recursive: true);
+    await deleteBrowserProfile(profile);
   }
 }
 

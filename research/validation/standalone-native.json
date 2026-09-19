@@ -76,6 +76,9 @@
     },
     "ci-35446420359.log": {
       "sha256": "5a40050575da4445c076f65a1ab7f025e2614569efa8e442ad496f7d31f58054"
+    },
+    "ci-35448372437.log": {
+      "sha256": "f28d359e9d376ff16bd55247014df42c79235613d65b261e10466182ca0217f0"
     }
   },
   "limits": [
@@ -151,5 +154,53 @@
       "skipped": 4,
       "skipReason": "Inverse unsupported-capability tests."
     }
+  },
+  "linuxNativeAcceptance": {
+    "headCommit": "e933576a790f579477e9c8a1980eb74febe8742a",
+    "runtimeSourceCommit": "3aef4e7905f6997ff2fa9c181709bdddbdcc64ad",
+    "runUrl": "https://github.com/medz/dart-orm/actions/runs/35448372437",
+    "passed": 1136,
+    "failed": 0,
+    "skipped": 41,
+    "skipReason": "Native interruption-dependent scenarios and inverse unsupported-capability checks.",
+    "browserJs": {
+      "scenariosPassed": 21,
+      "runnerSucceeded": false,
+      "reason": "Chrome profile deletion raced with exiting child processes (ENOTEMPTY)."
+    },
+    "note": "Complete native stage succeeded. The overall workflow failed during browser runner cleanup, so the final corrected workflow remains the merge gate."
+  },
+  "browserCleanupRegression": {
+    "runtimeSourceCommit": "3aef4e7905f6997ff2fa9c181709bdddbdcc64ad",
+    "helperTestsPassed": 5,
+    "chromeJs": {
+      "passed": 21,
+      "runnerExitCode": 0
+    },
+    "chromeWasm": {
+      "passed": 21,
+      "runnerExitCode": 0
+    },
+    "flutterWeb": {
+      "js": 21,
+      "wasmNonIsolated": 21,
+      "wasmIsolated": 21,
+      "runnerExitCode": 0
+    },
+    "logs": {
+      "browser-profile-tests.log": {
+        "sha256": "7bbac204502db57154e0cefbd95a2dfd56a6bb8590fa0c0b1d37287d63ac5876"
+      },
+      "browser-cleanup-js.log": {
+        "sha256": "dee57767d28ddaf07db9be34aba8104c62f533183d36871461da723ab74ff6ab"
+      },
+      "browser-cleanup-wasm.log": {
+        "sha256": "3f650ea848b0964e753e496833574ae59e1d73c39254767645878140471c1235"
+      },
+      "flutter-web-cleanup.log": {
+        "sha256": "cd6260d768cddd523c3eb80d6eace8f7399287f9d53986d75e3d893a2f410a44"
+      }
+    },
+    "note": "Five real Chrome runs completed profile cleanup on macOS. Independent Linux browser CI remains required for the final head."
   }
 }

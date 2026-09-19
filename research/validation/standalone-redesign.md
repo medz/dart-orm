@@ -90,6 +90,16 @@ The corrected three suites pass 41 tests with 14 capability skips on Linux, and
 Runtime and Web assets remain identical to `3aef4e79`. The final PR run, not this
 failed attempt, is the complete merge gate.
 
+The subsequent complete native Linux run on `e933576a` succeeds: **1136 passed,
+41 capability skips, zero failures**. Its Chrome JS report also passes all 21
+scenarios, but the runner exits unsuccessfully when profile deletion races with
+exiting Chrome child processes. Runner cleanup is corrected with bounded retries,
+and browser checks run as a separate CI job so their outcome is visible early.
+The cleanup correction passes five deterministic regressions and five real Chrome
+runs on macOS: Dart JS/WASM and Flutter Web JS/WASM with and without isolation
+each pass 21 scenarios, including successful runner exit and profile deletion.
+The final workflow must pass both jobs before merge.
+
 ## Explicit boundaries
 
 MySQL/MariaDB provide exact values, storage, comparison and MIN/MAX within their
