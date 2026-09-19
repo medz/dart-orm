@@ -1,10 +1,11 @@
 # Standalone ORM acceptance
 
 Captured on 2026-09-19. Initial runtime source: `7a54553933ae1d768576a54a4234b00b6bfcf97e`.
-Final server-driver fixes and refreshed Web assets: `46265f836e49a248c7e6a64dbc646fada929e79f`.
+Final runtime and refreshed Web assets: `3aef4e7905f6997ff2fa9c181709bdddbdcc64ad`.
 The refreshed browser reports pin the latter revision. Android reports retain the
-initial revision: native SQLite runtime and Android packaging have not changed.
-Validation commits add reports and consumer metadata, without changing runtime.
+initial revision. Later changes affect server drivers, operation capability
+validation, test portability and Web asset fingerprints; Android was not rerun.
+Validation commits add reports without changing runtime.
 
 ## Actual environments
 
@@ -52,6 +53,14 @@ interruption without a PID discards the connection before sending application SQ
 The cached PID path retains cancellation and reuse, and uncertain errors after a
 statement starts are not reclassified as confirmed interruption. A real PostgreSQL
 TCP proxy reproduces the original hang and verifies the correction.
+
+The second Codex review found that MySQL/MariaDB statement deadlines were
+implemented by the driver but rejected by the runtime cancellation gate.
+`Capabilities.statementTimeout` now distinguishes connection-discard deadlines
+from token cancellation. The raw runtime and ORM accept per-operation timeouts;
+transaction deadlines and retries still require actual interruption. All 140
+driver, typed database and transaction-boundary regressions pass against real
+MySQL/MariaDB, including unknown-outcome messaging and caught-timeout failure.
 
 ## Linux CI portability corrections
 

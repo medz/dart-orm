@@ -61,6 +61,12 @@
     },
     "redesign-linux-pg-fixtures.log": {
       "sha256": "0ba05b46decc78fceb636726374cefb1417101fece8f0bc5311dc6c1a23fe639"
+    },
+    "mysql-statement-timeout.log": {
+      "sha256": "4d4b114f0189333e7b4adb00ff329f4816c6281cff31b0c1ef44f5fa01ce3860"
+    },
+    "redesign-final-analyze.log": {
+      "sha256": "34a0d218671a357b7042bd3be43d0134efd7f8d5b56c5d8c0ab98096c99a331e"
     }
   },
   "limits": [
@@ -104,5 +110,15 @@
       "passed": 48,
       "failed": 0
     }
+  },
+  "statementTimeoutRegression": {
+    "capturedAt": "2026-09-19T13:38:04.781896+00:00",
+    "runtimeSourceCommit": "3aef4e7905f6997ff2fa9c181709bdddbdcc64ad",
+    "mysqlAndMariadb": {
+      "passed": 140,
+      "failed": 0
+    },
+    "analysis": "No issues found",
+    "independentCodeReview": "No additional concrete defects found"
   }
 }
