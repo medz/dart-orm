@@ -1,99 +1,181 @@
 # Dart ORM
 
-> [!IMPORTANT]
->  December 2, 2025: I've decided to restart this project! Please check out 👉 "[Dartorm New Beginning!](https://github.com/medz/dart-orm/issues/479)"
+A Dart 3.13 ORM with ordinary immutable Dart models, typed relationships,
+composable selections, and explicit database sessions. Declare a class once;
+generated queries return that class directly.
 
-> ⚠️ **IMPORTANT NOTICE**: Development of Prisma Dart Client has been suspended until after June 2025 due to Prisma's architectural changes from Rust to TypeScript. Current versions will continue to work with existing Prisma versions but will not be updated to support Prisma v7 and beyond until after the suspension period. For more details, please see the [official announcement](https://github.com/medz/prisma-dart/issues/471).
+The implementation has separate real SQLite, PostgreSQL, MySQL, MariaDB, Chrome, Flutter Web and Android
+verification records. See [current progress](docs/progress.md),
+[capability limits](docs/capabilities.md) and [design acceptance](docs/acceptance.md)
+for which revision and scenarios each record covers.
 
-[![Pub Version](https://img.shields.io/pub/v/orm?include_prereleases)](https://pub.dev/packages/orm)
-[![GitHub License](https://img.shields.io/github/license/medz/prisma-dart)](https://github.com/medz/prisma-dart/blob/main/LICENSE)
-[![Docs website](https://img.shields.io/badge/docs-prisma.pub-brightgreen)](https://prisma.pub/)
-[![GitHub Sponsors](https://img.shields.io/github/sponsors/medz?label=github%20sponsors)](https://github.com/sponsors/medz)
-[![Open Collective sponsors](https://img.shields.io/opencollective/sponsors/openodroe?label=open%20collective)](https://opencollective.com/openodroe)
-[![Discord](https://img.shields.io/discord/1035043284457881620?label=discord)](https://discord.gg/ms2X9TQMR8)
-[![X (formerly Twitter) Follow](https://img.shields.io/twitter/follow/shiweidu)
-](https://twitter.com/shiweidu)
+One package, independent modules and database adapters, no runtime reflection.
+This branch is unrelated to earlier ORM implementations.
 
-Prisma Client Dart is an auto-generated type-safe ORM. It uses Prisma Engine as the data access layer and is as consistent as possible with the Prisma Client JS/TS APIs.
+For a new application with the `orm` dependency:
 
-👉 [Learn how to use Prisma ORM for Dart in your project](https://prisma.pub/).
+```sh
+dart run orm init --database sqlite
+dart run orm migrate create 0001_initial
+# Review the generated Dart migration.
+dart run orm migrate apply
+```
+
+Choose `postgres`, `mysql` or `mariadb` to initialize that engine's own history.
+The [project CLI](docs/cli.md) creates typed Dart configuration, a nominal model,
+the generated client and a static migration registry. Initialization and
+generation never connect or apply DDL.
+
+| Module | Independent use |
+| --- | --- |
+| `values.dart` | Codecs and precise domain values |
+| `driver.dart`, `drivers/*.dart` | Parameterized SQL contracts and database adapters |
+| `runtime.dart` | Raw SQL sessions, transactions and cursor lifetimes |
+| `schema_model.dart` | Physical table metadata |
+| `sql.dart` | Typed query construction and offline SQL compilation |
+| `orm.dart` | Typed execution and query subscriptions over `SqlDatabase` |
+| `migrate.dart` | Schema inspection, plans and immutable migration execution |
+| `schema.dart`, `generate.dart`, `cli.dart` | Declaration, static generation and project tools |
+
+These are separate Dart libraries with directed dependencies. Use a raw driver
+without the ORM, compile a typed query without a connection, or run migrations
+without current application models. See [API boundaries](docs/api.md).
+
+The [SQLite entry point](docs/sqlite-web.md) works on native platforms and the web,
+with background execution and the same generated query API. Flutter Web bundles
+its worker/WASM resources automatically; plain Dart uses `dart run orm web-assets`.
+The [native Flutter example](docs/flutter.md) verifies Android APK upgrades,
+background SQLite, persistence and commit-driven query subscriptions.
+
+```sh
+dart pub get
+dart run orm generate example/schema.dart
+dart run example/main.dart
+dart run example/queries.dart
+dart test
+```
+
+For incremental generation, enable `orm:orm` for explicit schema roots in
+`build.yaml` and run `dart run build_runner watch`. See
+[generation and builds](docs/generation.md) for setup, dependency tracking and
+reproducible generation measurements.
+
+Declare data once in [schema.dart](example/schema.dart):
 
 ```dart
-import 'package:orm/orm.dart';
+final class User({
+  @Id.generated() required final int id,
+  @Unique() required final String email,
+  required final String? nickname,
+});
+final users = entity<User>();
+```
 
-final client = PrismaClient();
+Import the generated client and a driver. The client exports `User` and the driver
+exports the portable query API:
 
-main() {
-  final users = await client.user.findMany();
+```dart
+import 'package:orm/migrate.dart';
+import 'package:orm/sqlite.dart';
+import 'schema.orm.dart';
+
+Future<void> main() async {
+  final db = await sqlite(const SqliteOptions.memory());
+  try {
+    await Migrator(db.sql).apply([
+      Migration.create('0001_initial', appSchema, dialect: .sqlite),
+    ]);
+    final User user = await db.users.create(email: 'seven@example.com');
+    await db.users.byId(user.id).patch(nickname: .set('Seven'));
+    final List<String> emails = await db.users.select((u) => u.email).get();
+    print(emails);
+  } finally {
+    await db.close();
+  }
 }
 ```
 
-## Installation
+For PostgreSQL, import `postgres.dart` and use
+`postgres(PostgresOptions(url: url))`; TLS certificate verification is the default.
+[MySQL and MariaDB](docs/mysql.md) use `mysql.dart` / `mariadb.dart` with
+`await mysql(MysqlOptions(url: url))` / `await mariadb(MariadbOptions(url: url))`.
+Each backend has its own transaction options and migration history. Choose the
+engine when initializing that history, and keep its reviewed Dart migrations and
+static registry in version control. A connection change does not translate history.
 
-This will add a like this to you packages `pubspec.yaml` (and run an implicit `dart pub get`):
+The example above creates a temporary in-memory schema. The persistent
+[migration entrypoint](example/migrate.dart) fixes SQLite: run
+`dart run example/migrate.dart check`, then set `ORM_SQLITE_PATH` before `apply` or
+`verify`. A PostgreSQL project creates its own PostgreSQL history and connection
+entrypoint. See [migrations](docs/migrations.md) and [resumable backfills](docs/backfills.md).
 
-```yaml
-dependencies:
-  orm: latest
-```
+Read [API and mental model](docs/api.md) for imports, current declarations versus
+historical schemas, prepared versus executed operations, selection nullability,
+and transaction ownership. Inside a transaction, build every query from `tx`;
+subqueries, CTEs and UNION operands must share that same view.
 
-Or you can run the following command:
+For an existing database, [import a model declaration](docs/importing.md), review
+its report, generate the client, and baseline the current schema without copying
+existing rows.
 
-```sh
-dart pub add orm
-```
+Declare [row CHECK constraints](docs/checks.md) with explicit SQL and optional
+backend overrides; generated snapshots support catalog verification, import and
+reviewed constraint migrations.
 
-## Sponsors
+Use [client defaults](docs/defaults.md) for typed Dart value factories and SQL
+defaults for database-generated values, with explicit omission/value/default inputs.
+Declare [computed columns](docs/computed.md) for database expressions with typed
+read-only results, explicit stored/virtual modes and reviewed migrations.
 
-Prisma Client Dart is an [BSD-3 Clause licensed](https://github.com/medz/prisma-dart/blob/main/LICENSE) open source project with its ongoing development made possible entirely by the support of these awesome backers. If you'd like to join them, please consider [sponsoring Seven(@medz)](https://github.com/sponsors/medz) on GitHub.
+Model [many-to-many memberships](docs/relations.md#many-to-many-with-business-fields)
+with an explicit association table, typed business fields and per-parent pagination.
+Run `dart run example/teams/main.dart` to see its selected records and SQL counts.
 
-<p align="center">
-  <a target="_blank" href="https://github.com/sponsors/medz#:~:text=Featured-,sponsors,-Current%20sponsors">
-    <img alt="sponsors" src="https://github.com/medz/public/raw/main/sponsors.tiers.svg">
-  </a>
-</p>
+Use `query.inspect()` for SQL templates, selected columns, joins and conditional
+relation batches without connecting. Optional `onAcquire`, `onQuery` and `onDecode`
+callbacks measure execution phases. See [plans and observations](docs/observability.md).
 
-## Documentation
+For complex SQL files, [generate named queries](docs/named-sql.md) with typed
+Record parameters/results, native database structure checks and the same query
+composition, transaction and streaming APIs.
 
-You can find the Prisma Client Dart [on the website](https://prisma.pub).
+Use `query.stream(batchSize: 128)` with `await for` to read through a database
+cursor. Reads and mutations accept `ExecutionOptions` for connection acquisition
+limits, statement deadlines and cancellation. See [streaming and execution](docs/execution.md) for connection
+lifetime, batch sizing, transaction-wide deadlines and failure outcomes.
 
-The documentation is divided into the following sections:
+The [runtime cost report](docs/performance.md) compares the same driver, SQL and
+result shapes across SQLite, local PostgreSQL and a controlled TCP delay. It
+separates normal timing from acquisition probes, live heap and allocation traces.
 
-- [Getting Started](https://prisma.pub/getting-started/)
-  - [Setup & Configuration](https://prisma.pub/getting-started/setup.html)
-  - [Prisma Schema](https://prisma.pub/getting-started/schema.html)
-- Queries
-  - [CRUD](https://prisma.pub/queries/crud.html)
-  - [Select Fields](https://prisma.pub/queries/select-fields.html)
-  - [Relation queries](https://prisma.pub/queries/relation-queries.html)
-  - [Filtering and Sorting](https://prisma.pub/queries/filtering-and-sorting.html)
-  - [Pagination](https://prisma.pub/queries/pagination.html)
-  - [Aggregation, grouping, and summarizing](https://prisma.pub/queries/aggregation-grouping-summarizing.html)
-  - [Transactions](https://prisma.pub/queries/transactions.html)
-  - [Raw database access](https://prisma.pub/queries/raw-database-access.html)
+Single relationships use JOINs when declared keys prove uniqueness; collections
+load in parameter-aware batches. Both support typed nested selections. See
+[relationship strategies](docs/relations.md) for composite keys, per-parent
+pagination and explicit `.join`/`.batch` choices.
 
-> You can improve it by sending pull requests to [`docs` folder in the `main` branch](https://github.com/odroe/prisma-dart/tree/main/docs).
+Domain IDs, custom classes, record values and enums retain their types in generated
+APIs. Declare public const codecs with `@UseCodec`; use `@EnumValue` for stable
+stored labels. See [types and JSON](docs/types.md) for codec validation, nullable
+values and the distinction between SQL NULL and JSON null.
 
-## Examples
+Use `query.watch()` for typed snapshots after relevant committed writes.
+Transactions merge notifications; rollbacks do not notify. See
+[query subscriptions](docs/watch.md) for relation dependencies, pause/cancellation,
+and explicit notifications for raw SQL or external writers.
 
-You can also find them in the [`example` folder in the `main` branch](https://github.com/odroe/prisma-dart/tree/main/examples).
+The [query cookbook](example/queries.dart) runs filters, joined ordering, relation
+counts, grouped CTEs, windows, subqueries and cursor pagination. See
+[query usage](docs/queries.md) for the API and PostgreSQL example configuration.
 
-## Query engine support matrix
+Combine scalar or `.row` projections with `union`/`unionAll`, then map the
+result to a Record or DTO. Sets support typed exported columns, CTEs, streaming
+and subscriptions. See [queries](docs/queries.md) for scope,
+nullability and codec requirements.
 
-| Engine     | Dart Native | Dart Web | Flutter Native | Flutter Web |
-| ---------- | :---------: | :------: | :------------: | :---------: |
-| Binary     |     ✅      |    ❌    |       ❌       |     ❌      |
-| Library    |     ✅      |    ❌    |       ✅       |     ❌      |
-| Data Proxy |     ✅      |    ✅    |       ✅       |     ✅      |
-
-## Contributing
-
-We welcome contributions! Please read our [contributing guide](CONTRIBUTING.md) to learn about our development process, how to propose bugfixes and improvements, and how to build and test your changes to Prisma.
-
-Thank you to all the people who already contributed to Prisma Dart!
-
-[![Contributors](https://contrib.rocks/image?repo=medz/prisma-dart)](https://github.com/odroe/prisma-dart/graphs/contributors)
-
-## Code of Conduct
-
-This project has adopted the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). For more information see the [Code of Conduct FAQ](https://www.contributor-covenant.org/faq) or contact [hello@odroe.com](mailto:hello@odroe.com) with any additional questions or comments.
+Set `ORM_TEST_POSTGRES` to a **disposable** local PostgreSQL database to include
+PostgreSQL integration tests. The tests create and drop their own test tables.
+Set `ORM_TEST_MYSQL` and `ORM_TEST_MARIADB` for their live suites; migration
+recovery tests additionally create and drop isolated databases. Use dedicated test
+servers and credentials with the necessary privileges. Their TLS setting defaults
+to `verifyFull`; self-signed local fixtures can explicitly set
+`ORM_TEST_MYSQL_TLS=require` / `ORM_TEST_MARIADB_TLS=require`.

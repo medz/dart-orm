@@ -1,0 +1,7 @@
+# These suites launch Dart CLI processes in the same package. On macOS the SDK
+# rewrites/codesigns one shared SQLite native-asset file during their startup.
+# Serialize suites there; explicit concurrent database operations inside tests
+# still run concurrently.
+on_os:
+  mac-os:
+    concurrency: 1

@@ -1,0 +1,948 @@
+Running build hooks...Running build hooks...00:00 +0: loading test/client_default_test.dart
+00:00 +0: test/client_default_test.dart: client defaults sqlite omitted values use typed Dart factories and return stored records
+00:00 +1: test/client_default_test.dart: client defaults sqlite explicit values, null and SQL DEFAULT bypass their client factory
+00:00 +2: test/client_default_test.dart: client defaults sqlite prepared mutations, repeated compilation and conflicts retain one generated value
+00:00 +3: test/client_default_test.dart: client defaults sqlite batch insert prepares defaults once per omitted row and preserves explicit values
+00:00 +4: test/client_default_test.dart: client defaults sqlite updates and conflict updates do not reset omitted client values
+00:00 +5: test/client_default_test.dart: client defaults sqlite factory errors issue no writes, and rollback does not reverse Dart side effects
+00:00 +6: test/client_default_test.dart: client defaults sqlite snapshots, migrations, catalogs and imports never store or run a client factory
+00:00 +7: test/client_default_test.dart: client defaults sqlite explicit DEFAULT can choose database identity instead of the client value
+00:00 +8: test/client_default_test.dart: client defaults postgres omitted values use typed Dart factories and return stored records
+00:00 +9: test/client_default_test.dart: client defaults postgres explicit values, null and SQL DEFAULT bypass their client factory
+00:00 +10: test/client_default_test.dart: client defaults postgres prepared mutations, repeated compilation and conflicts retain one generated value
+00:00 +11: test/client_default_test.dart: client defaults postgres batch insert prepares defaults once per omitted row and preserves explicit values
+00:00 +12: test/client_default_test.dart: client defaults postgres updates and conflict updates do not reset omitted client values
+00:00 +13: test/client_default_test.dart: client defaults postgres factory errors issue no writes, and rollback does not reverse Dart side effects
+00:00 +14: test/client_default_test.dart: client defaults postgres snapshots, migrations, catalogs and imports never store or run a client factory
+00:00 +15: test/client_default_test.dart: client defaults postgres explicit DEFAULT can choose database identity instead of the client value
+00:00 +16: test/client_default_test.dart: generation reads factory references without executing them and supports moved output
+00:02 +17: loading test/decimal_precision_test.dart
+00:02 +17: test/decimal_precision_test.dart: decimal precision sqlite column coercion rounds signed ties and handles negative and excess scales
+00:02 +18: test/decimal_precision_test.dart: decimal precision sqlite writes constrain columns while arithmetic and wider aggregates retain their result precision
+00:02 +19: test/decimal_precision_test.dart: decimal precision sqlite batch inserts and upserts use column coercion and roll back as a unit
+00:02 +20: test/decimal_precision_test.dart: decimal precision sqlite catalogs snapshots and imported declarations retain precision scale and defaults
+00:04 +21: test/decimal_precision_test.dart: decimal precision sqlite reviewed scale reduction detects rounded duplicate keys and rolls back schema history
+00:04 +22: test/decimal_precision_test.dart: decimal precision sqlite physical renames and changing constrained defaults preserve column contracts
+00:04 +23: test/decimal_precision_test.dart: decimal precision sqlite maximum declared precision and scale bounds remain exact
+00:04 +24: test/decimal_precision_test.dart: decimal precision sqlite historical backfills retain constrained decimal key declarations
+00:04 +25: test/decimal_precision_test.dart: decimal precision postgres column coercion rounds signed ties and handles negative and excess scales
+00:04 +26: test/decimal_precision_test.dart: decimal precision postgres writes constrain columns while arithmetic and wider aggregates retain their result precision
+00:04 +27: test/decimal_precision_test.dart: decimal precision postgres batch inserts and upserts use column coercion and roll back as a unit
+00:04 +28: test/decimal_precision_test.dart: decimal precision postgres catalogs snapshots and imported declarations retain precision scale and defaults
+00:05 +29: test/decimal_precision_test.dart: decimal precision postgres reviewed scale reduction detects rounded duplicate keys and rolls back schema history
+00:05 +30: test/decimal_precision_test.dart: decimal precision postgres physical renames and changing constrained defaults preserve column contracts
+00:05 +31: test/decimal_precision_test.dart: decimal precision postgres maximum declared precision and scale bounds remain exact
+00:05 +32: test/decimal_precision_test.dart: decimal precision postgres historical backfills retain constrained decimal key declarations
+00:05 +33: test/decimal_precision_test.dart: SQLite enforces stored precision and checks default coercion and trusted-schema behavior
+00:05 +34: test/decimal_precision_test.dart: generation validates DecimalDigits and retains custom decimal codec types
+00:07 +35: test/decimal_precision_test.dart: metadata rejects invalid precisions scales and non-decimal columns
+00:07 +36: loading test/selection_test.dart
+00:07 +36: test/selection_test.dart: selection sqlite all typed arities defer mapping and preserve left-to-right evaluation
+00:07 +37: test/selection_test.dart: selection sqlite first decoder failure prevents later fields and outer mapper
+00:07 +38: test/selection_test.dart: selection sqlite dynamic fields snapshot keys and preserve nulls and mapping order
+00:07 +39: test/selection_test.dart: selection postgres all typed arities defer mapping and preserve left-to-right evaluation
+00:07 +40: test/selection_test.dart: selection postgres first decoder failure prevents later fields and outer mapper
+00:07 +41: test/selection_test.dart: selection postgres dynamic fields snapshot keys and preserve nulls and mapping order
+00:07 +42: loading test/build_runner_test.dart
+00:07 +42: test/build_runner_test.dart: real build_runner build/watch tracks imports, recovers errors and deletes stale outputs
+00:37 +43: loading test/schema_version_test.dart
+00:37 +43: test/schema_version_test.dart: schema version sqlite invalid ranges fail before SQL; caller transactions stay usable
+00:37 +44: test/schema_version_test.dart: schema version sqlite unversioned existing data is rejected without creating history
+00:37 +45: test/schema_version_test.dart: schema version sqlite default requires latest; inclusive compatibility range is explicit
+00:37 +46: test/schema_version_test.dart: schema version sqlite newer database rejects downgrade without changing data or schema
+00:37 +47: test/schema_version_test.dart: schema version sqlite complete applied prefix is checked, including old checksums and missing entries
+00:37 +48: test/schema_version_test.dart: schema version sqlite matching version does not claim that the catalog is free of drift
+00:37 +49: test/schema_version_test.dart: schema version sqlite verified baseline is compatible without replaying creation
+00:37 +50: test/schema_version_test.dart: schema version sqlite borrowed session uses a read snapshot and survives rejected versions
+00:37 +51: test/schema_version_test.dart: schema version postgres invalid ranges fail before SQL; caller transactions stay usable
+00:37 +52: test/schema_version_test.dart: schema version postgres unversioned existing data is rejected without creating history
+00:37 +53: test/schema_version_test.dart: schema version postgres default requires latest; inclusive compatibility range is explicit
+00:37 +54: test/schema_version_test.dart: schema version postgres newer database rejects downgrade without changing data or schema
+00:37 +55: test/schema_version_test.dart: schema version postgres complete applied prefix is checked, including old checksums and missing entries
+00:37 +56: test/schema_version_test.dart: schema version postgres matching version does not claim that the catalog is free of drift
+00:37 +57: test/schema_version_test.dart: schema version postgres verified baseline is compatible without replaying creation
+00:37 +58: test/schema_version_test.dart: schema version postgres borrowed session uses a read snapshot and survives rejected versions
+00:37 +59: test/schema_version_test.dart: schema version postgres unfinished recoverable migration blocks startup until repaired and completed
+00:37 +60: test/schema_version_test.dart: schema version postgres catalog and history share a snapshot and the supplied history is frozen
+00:38 +61: test/schema_version_test.dart: SQLite version gate works on an explicitly read-only file
+00:38 +62: loading test/types_test.dart
+00:38 +62: test/types_test.dart: junction-table keys, enum payloads and nested results keep generated types
+00:39 +63: test/types_test.dart: computed generated fields are statically readable and never writable
+00:40 +64: test/types_test.dart: client-default create parameters preserve domain, nullable and timestamp types
+00:40 +65: test/types_test.dart: query-only relation APIs retain result types and expose no graph writes
+00:41 +66: test/types_test.dart: calendar APIs reject instants, strings and mixed temporal types
+00:41 +67: test/types_test.dart: actual generated APIs reject wrong inputs, results and backend options
+00:41 +68: loading test/migration_test.dart
+00:41 +68: test/migration_test.dart: (setUpAll)
+00:42 +68: test/migration_test.dart: migrations sqlite explicit table and column renames preserve incoming references and data
+00:42 +69: test/migration_test.dart: migrations sqlite constraint changes resolve catalog names and retain rows
+00:42 +70: test/migration_test.dart: migrations sqlite failed NOT NULL rebuild restores data history and foreign key settings
+00:42 +71: test/migration_test.dart: migrations sqlite reviewed conversion expressions preserve values when storage types change
+00:42 +72: test/migration_test.dart: migrations sqlite additive changes use ALTER without a table rebuild
+00:42 +73: test/migration_test.dart: migrations sqlite reviewed table removal handles restrictive foreign keys atomically
+00:42 +74: test/migration_test.dart: migrations sqlite broken migration chain is refused before DDL
+00:42 +75: test/migration_test.dart: migrations sqlite catalog distinguishes nullable non-rowid primary keys
+00:42 +76: test/migration_test.dart: migrations sqlite rebuild preserves unmanaged index trigger and view definitions
+00:42 +77: test/migration_test.dart: migrations sqlite foreign key check rolls back changed parent keys without cascading data away
+00:42 +78: test/migration_test.dart: migrations sqlite unmodeled CHECK constraints are refused without losing their definition
+00:42 +79: test/migration_test.dart: migrations postgres explicit table and column renames preserve incoming references and data
+00:42 +80: test/migration_test.dart: migrations postgres constraint changes resolve catalog names and retain rows
+00:42 +81: test/migration_test.dart: migrations postgres failed NOT NULL rebuild restores data history and foreign key settings
+00:42 +82: test/migration_test.dart: migrations postgres reviewed conversion expressions preserve values when storage types change
+00:42 +83: test/migration_test.dart: migrations postgres additive changes use ALTER without a table rebuild
+00:42 +84: test/migration_test.dart: migrations postgres reviewed table removal handles restrictive foreign keys atomically
+00:42 +85: test/migration_test.dart: migrations postgres broken migration chain is refused before DDL
+00:42 +86: test/migration_test.dart: diff requires explicit renames, casts and backfills
+00:42 +87: test/migration_test.dart: (tearDownAll)
+00:42 +87: loading test/many_to_many_test.dart
+00:42 +87: test/many_to_many_test.dart: many-to-many sqlite two declared FKs and a composite primary key enforce association identity
+00:42 +88: test/many_to_many_test.dart: many-to-many sqlite forward projection keeps payload, shared targets and per-user limits in two statements
+00:42 +89: test/many_to_many_test.dart: many-to-many sqlite reverse projection applies tie-breaking and offset to each team without changing root pagination
+00:42 +90: test/many_to_many_test.dart: many-to-many sqlite nested team rosters deduplicate shared team keys and batch by level
+00:42 +91: test/many_to_many_test.dart: many-to-many sqlite association predicates and counts stay in one SQL statement
+00:42 +92: test/many_to_many_test.dart: many-to-many sqlite limited parameter capacity chunks associations without changing per-parent limits
+00:42 +93: test/many_to_many_test.dart: many-to-many sqlite transaction rollback restores payload changes and new endpoints after an invalid association
+00:42 +94: test/many_to_many_test.dart: many-to-many sqlite composite-key conflict updates preserve membership dates and unlinking keeps endpoints
+00:42 +95: test/many_to_many_test.dart: many-to-many sqlite watch tracks junction payload and opposite endpoint changes after commit
+00:42 +96: test/many_to_many_test.dart: many-to-many postgres two declared FKs and a composite primary key enforce association identity
+00:42 +97: test/many_to_many_test.dart: many-to-many postgres forward projection keeps payload, shared targets and per-user limits in two statements
+00:42 +98: test/many_to_many_test.dart: many-to-many postgres reverse projection applies tie-breaking and offset to each team without changing root pagination
+00:42 +99: test/many_to_many_test.dart: many-to-many postgres nested team rosters deduplicate shared team keys and batch by level
+00:42 +100: test/many_to_many_test.dart: many-to-many postgres association predicates and counts stay in one SQL statement
+00:42 +101: test/many_to_many_test.dart: many-to-many postgres limited parameter capacity chunks associations without changing per-parent limits
+00:42 +102: test/many_to_many_test.dart: many-to-many postgres transaction rollback restores payload changes and new endpoints after an invalid association
+00:42 +103: test/many_to_many_test.dart: many-to-many postgres composite-key conflict updates preserve membership dates and unlinking keeps endpoints
+00:43 +104: test/many_to_many_test.dart: many-to-many postgres watch tracks junction payload and opposite endpoint changes after commit
+00:43 +105: loading test/migration_target_test.dart
+00:43 +105: test/migration_target_test.dart: history requires a single engine even when empty or SQL is portable
+00:43 +106: test/migration_target_test.dart: unselected expressions cannot change a saved plan, hash or source
+00:43 +107: test/migration_target_test.dart: SQLite virtual indexes and computed mode changes ignore PostgreSQL limits
+00:43 +108: test/migration_target_test.dart: replacing stored values with computed values requires explicit review
+00:43 +109: test/migration_target_test.dart: older PostgreSQL is rejected before locks, journals or partial execution
+00:43 +110: test/migration_target_test.dart: registry fixes its engine at initialization and refuses retargeting
+00:43 +111: test/migration_target_test.dart: wrong engine fails before any migration SQL for runner and every connected CLI command
+OrmException(MIGRATION.TARGET): History targets postgres, connection is sqlite.
+OrmException(MIGRATION.TARGET): History targets postgres, connection is sqlite.
+OrmException(MIGRATION.TARGET): History targets postgres, connection is sqlite.
+OrmException(MIGRATION.TARGET): History targets postgres, connection is sqlite.
+OrmException(MIGRATION.TARGET): History targets postgres, connection is sqlite.
+OrmException(MIGRATION.TARGET): History targets postgres, connection is sqlite.
+00:43 +112: test/migration_target_test.dart: PostgreSQL applies only its own generated conversion and rejects a SQLite history before SQL
+00:43 +113: loading test/stream_test.dart
+00:43 +113: test/stream_test.dart: sqlite cancellation between batch chunks prevents a partial commit
+00:43 +114: test/stream_test.dart: sqlite cancellation interrupts an active cursor fetch
+00:43 +115: test/stream_test.dart: sqlite timed-out mutations return no partial write
+00:43 +116: test/stream_test.dart: sqlite database close stops a paused cursor and releases the driver
+00:43 +117: test/stream_test.dart: sqlite cancellation between stream creation and listening needs no rollback
+00:43 +118: test/stream_test.dart: sqlite bounded cursor fetches preserve parameters and typed rows
+00:43 +119: test/stream_test.dart: sqlite pause stops fetches and early cancellation releases the lease
+00:43 +120: test/stream_test.dart: sqlite await-for provides demand and take closes without exhausting
+00:43 +121: test/stream_test.dart: sqlite relation projections load once per root batch
+00:43 +122: test/stream_test.dart: sqlite mapper failure closes the cursor and rolls back
+00:43 +123: test/stream_test.dart: sqlite early stream end inside a transaction preserves other work
+00:43 +124: test/stream_test.dart: sqlite escaping paused stream cannot keep a transaction alive
+00:43 +125: test/stream_test.dart: sqlite cancels executing SQL and allows the next statement
+00:43 +126: test/stream_test.dart: sqlite statement timeout stops SQL and leaves a usable connection
+00:43 +127: test/stream_test.dart: sqlite cancelled statement poisons a transaction even if caught
+00:43 +128: test/stream_test.dart: sqlite cancelling a paused stream releases its connection before resume
+00:43 +129: test/stream_test.dart: sqlite cancellation before starting performs no SQL
+00:43 +130: test/stream_test.dart: postgres cancellation between batch chunks prevents a partial commit
+00:43 +131: test/stream_test.dart: postgres cancellation interrupts an active cursor fetch
+00:43 +132: test/stream_test.dart: postgres timed-out mutations return no partial write
+00:44 +133: test/stream_test.dart: postgres database close stops a paused cursor and releases the driver
+00:44 +134: test/stream_test.dart: postgres cancellation between stream creation and listening needs no rollback
+00:44 +135: test/stream_test.dart: postgres bounded cursor fetches preserve parameters and typed rows
+00:44 +136: test/stream_test.dart: postgres pause stops fetches and early cancellation releases the lease
+00:44 +137: test/stream_test.dart: postgres await-for provides demand and take closes without exhausting
+00:44 +138: test/stream_test.dart: postgres relation projections load once per root batch
+00:44 +139: test/stream_test.dart: postgres mapper failure closes the cursor and rolls back
+00:44 +140: test/stream_test.dart: postgres early stream end inside a transaction preserves other work
+00:44 +141: test/stream_test.dart: postgres escaping paused stream cannot keep a transaction alive
+00:44 +142: test/stream_test.dart: postgres cancels executing SQL and allows the next statement
+00:44 +143: test/stream_test.dart: postgres statement timeout stops SQL and leaves a usable connection
+00:44 +144: test/stream_test.dart: postgres cancelled statement poisons a transaction even if caught
+00:44 +145: test/stream_test.dart: postgres cancelling a paused stream releases its connection before resume
+00:44 +146: test/stream_test.dart: postgres cancellation before starting performs no SQL
+00:44 +147: test/stream_test.dart: late PostgreSQL cancellation cannot reach the next statement
+00:44 +148: test/stream_test.dart: borrowed pool requires cancellation support and retains ownership
+00:44 +149: test/stream_test.dart: failed cancellation control discards the physical connection
+00:44 +150: loading test/migration_recovery_test.dart
+00:45 +150: test/migration_recovery_test.dart: (setUpAll)
+00:45 +150: test/migration_recovery_test.dart: SQLite and transaction controls reject recoverable autocommit steps
+00:45 +151: test/migration_recovery_test.dart: mixed migrations checkpoint SQL and verify concurrent indexes
+00:54 +152: test/migration_recovery_test.dart: same-name wrong-definition indexes are never accepted as completion
+00:55 +153: test/migration_recovery_test.dart: failed unique builds leave INVALID indexes and require explicit repair
+00:55 +154: test/migration_recovery_test.dart: failed attempts freeze migration checksums and block baseline
+00:55 +155: test/migration_recovery_test.dart: failed postconditions report their actual failing stage
+00:55 +156: test/migration_recovery_test.dart: recovery probes must produce one boolean value
+00:55 +157: test/migration_recovery_test.dart: concurrent runners serialize normal and autocommit steps under one lock
+00:55 +158: test/migration_recovery_test.dart: runner lock timeout leaves history untouched and the connection reusable
+00:55 +159: test/migration_recovery_test.dart: ordinary SQL inside a mixed migration rolls back only its failed step and resumes
+00:55 +160: test/migration_recovery_test.dart: completion checks reject partial and NULLS NOT DISTINCT definitions
+00:55 +161: test/migration_recovery_test.dart: real process exit after concurrent DDL resumes without replay
+01:00 +161 -1: test/migration_recovery_test.dart: real process exit after concurrent DDL resumes without replay [E]
+  Expected: <91>
+    Actual: <255>
+  
+  Running build hooks...Running build hooks...Unhandled exception:
+  OrmException(MIGRATION.TARGET): 0001_initial targets postgres, but this history requires sqlite.
+  #0      validateMigrations (package:orm/src/migrate/history.dart:362:7)
+  #1      MigrationHistory.checked (package:orm/src/migrate/source.dart:24:5)
+  #2      main (file:///private/var/folders/gf/46z6v161517c7_h1zl31hj1m0000gn/T/orm-build-h4pesJ/bin/crash.dart:3:73)
+  #3      _delayEntrypointInvocation.<anonymous closure> (dart:isolate-patch/isolate_patch.dart:311:33)
+  #4      _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:192:12)
+  
+  
+  package:matcher                           expect
+  test/migration_recovery_test.dart 417:11  main.<fn>
+  
+01:00 +161 -1: test/migration_recovery_test.dart: real process exit after transaction commit resumes without replay
+01:08 +161 -2: test/migration_recovery_test.dart: real process exit after transaction commit resumes without replay [E]
+  Expected: <91>
+    Actual: <255>
+  
+  Running build hooks...Running build hooks...Unhandled exception:
+  OrmException(MIGRATION.TARGET): 0001_initial targets postgres, but this history requires sqlite.
+  #0      validateMigrations (package:orm/src/migrate/history.dart:362:7)
+  #1      MigrationHistory.checked (package:orm/src/migrate/source.dart:24:5)
+  #2      main (file:///private/var/folders/gf/46z6v161517c7_h1zl31hj1m0000gn/T/orm-build-blAlWv/bin/crash.dart:3:73)
+  #3      _delayEntrypointInvocation.<anonymous closure> (dart:isolate-patch/isolate_patch.dart:311:33)
+  #4      _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:192:12)
+  
+  
+  package:matcher                           expect
+  test/migration_recovery_test.dart 417:11  main.<fn>
+  
+01:08 +161 -2: test/migration_recovery_test.dart: (tearDownAll)
+01:08 +161 -2: loading test/acquisition_test.dart
+01:08 +161 -2: test/acquisition_test.dart: an expired lease cannot enter before a delayed Timer gets its turn
+01:08 +162 -2: test/acquisition_test.dart: acquisition sqlite expired raw writes never execute after a late lease becomes available
+01:08 +163 -2: test/acquisition_test.dart: acquisition sqlite query cancellation returns while the pool is still occupied
+01:08 +164 -2: test/acquisition_test.dart: acquisition sqlite typed mutations and batch transactions propagate acquisition limits
+01:08 +165 -2: test/acquisition_test.dart: acquisition sqlite expired transactions and sessions never enter their callbacks
+01:08 +166 -2: test/acquisition_test.dart: acquisition sqlite acquisition timeout stops on entry and statement timeout starts afterward
+01:08 +167 -2: test/acquisition_test.dart: acquisition sqlite invalid and already-cancelled acquisition options never queue work
+01:08 +168 -2: test/acquisition_test.dart: acquisition sqlite stream cancellation and timeout return without opening a cursor
+01:08 +169 -2: test/acquisition_test.dart: acquisition sqlite query watch acquisition failure can recover on a later invalidation
+01:08 +170 -2: test/acquisition_test.dart: acquisition sqlite close drains abandoned reservations without running their callbacks
+01:08 +171 -2: test/acquisition_test.dart: acquisition sqlite abandoned requests preserve pool reuse and subsequent action errors
+01:08 +172 -2: test/acquisition_test.dart: PostgreSQL native pool timeout is classified before entering the callback
+01:09 +173 -2: test/acquisition_test.dart: PostgreSQL connection establishment timeout does not cap pool waiting
+01:09 +174 -2: test/acquisition_test.dart: acquisition postgres expired raw writes never execute after a late lease becomes available
+01:09 +175 -2: test/acquisition_test.dart: acquisition postgres query cancellation returns while the pool is still occupied
+01:09 +176 -2: test/acquisition_test.dart: acquisition postgres typed mutations and batch transactions propagate acquisition limits
+01:09 +177 -2: test/acquisition_test.dart: acquisition postgres expired transactions and sessions never enter their callbacks
+01:09 +178 -2: test/acquisition_test.dart: acquisition postgres acquisition timeout stops on entry and statement timeout starts afterward
+01:09 +179 -2: test/acquisition_test.dart: acquisition postgres invalid and already-cancelled acquisition options never queue work
+01:09 +180 -2: test/acquisition_test.dart: acquisition postgres stream cancellation and timeout return without opening a cursor
+01:09 +181 -2: test/acquisition_test.dart: acquisition postgres query watch acquisition failure can recover on a later invalidation
+01:10 +182 -2: test/acquisition_test.dart: acquisition postgres close drains abandoned reservations without running their callbacks
+01:10 +183 -2: test/acquisition_test.dart: acquisition postgres abandoned requests preserve pool reuse and subsequent action errors
+01:10 +184 -2: test/acquisition_test.dart: PostgreSQL timeout during real connection initialization releases the late lease
+01:10 +185 -2: loading test/computed_test.dart
+01:10 +185 -2: test/computed_test.dart: computed sqlite native expressions preserve quoted identifiers, comments and SQL-like string values
+01:10 +186 -2: test/computed_test.dart: computed sqlite generated CRUD, projections, batch and conflict writes compute stored and virtual values
+01:10 +187 -2: test/computed_test.dart: computed sqlite catalog/import roundtrip preserves SQL and modes and detects drift
+01:12 +188 -2: test/computed_test.dart: computed sqlite ComputedStorage.stored add, expression/type change and drop preserve existing rows
+01:12 +189 -2: test/computed_test.dart: computed sqlite ComputedStorage.virtual add, expression/type change and drop preserve existing rows
+01:12 +190 -2: test/computed_test.dart: computed sqlite stored to ordinary materialization retains values and permits later writes
+01:12 +191 -2: test/computed_test.dart: computed sqlite explicit renamed expressions preserve indexes, checks, references and views
+01:12 +192 -2: test/computed_test.dart: computed sqlite invalid recomputation rolls back the table and migration history
+01:12 +193 -2: test/computed_test.dart: computed sqlite decimal computed SQL keeps precision coercion and imports exactly once
+01:13 +194 -2: test/computed_test.dart: computed postgres native expressions preserve quoted identifiers, comments and SQL-like string values
+01:13 +195 -2: test/computed_test.dart: computed postgres generated CRUD, projections, batch and conflict writes compute stored and virtual values
+01:13 +196 -2: test/computed_test.dart: computed postgres catalog/import roundtrip preserves SQL and modes and detects drift
+01:13 +197 -2: test/computed_test.dart: computed postgres ComputedStorage.stored add, expression/type change and drop preserve existing rows
+01:13 +198 -2: test/computed_test.dart: computed postgres ComputedStorage.virtual add, expression/type change and drop preserve existing rows
+01:13 +199 -2: test/computed_test.dart: computed postgres stored to ordinary materialization retains values and permits later writes
+01:13 +200 -2: test/computed_test.dart: computed postgres explicit renamed expressions preserve indexes, checks, references and views
+01:13 +201 -2: test/computed_test.dart: computed postgres invalid recomputation rolls back the table and migration history
+01:13 +202 -2: test/computed_test.dart: computed postgres decimal computed SQL keeps precision coercion and imports exactly once
+01:14 +203 -2: test/computed_test.dart: mode conversions need explicit plans and historical copy/backfill cannot write computed columns
+01:14 +204 -2: loading test/named_sql_test.dart
+01:14 +204 -2: test/named_sql_test.dart: template binds repeated names once and preserves quotes/comments
+01:14 +205 -2: test/named_sql_test.dart: templates reject ambiguous bindings and incomplete or multiple statements
+01:14 +206 -2: test/named_sql_test.dart: generated client is deterministic and checked against its Dart declaration
+01:16 +207 -2: test/named_sql_test.dart: sqlite typed parameters, projection and repeated nullable bindings compose
+01:16 +208 -2: test/named_sql_test.dart: sqlite native numeric and temporal codecs survive binding and streaming
+01:16 +209 -2: test/named_sql_test.dart: sqlite CTEs and unions retain distinct query arguments and field identity
+01:16 +210 -2: test/named_sql_test.dart: sqlite transactions see pending writes and rollback normally
+01:16 +211 -2: test/named_sql_test.dart: sqlite named sources reject table mutations and require explicit watch reads
+01:16 +212 -2: test/named_sql_test.dart: sqlite native checks accept declared shape and preserve prepared-statement state
+01:17 +213 -2: test/named_sql_test.dart: sqlite native checks reject syntax, missing tables and missing result aliases
+01:17 +214 -2: test/named_sql_test.dart: sqlite native checks do not evaluate application expressions
+01:17 +215 -2: test/named_sql_test.dart: postgres typed parameters, projection and repeated nullable bindings compose
+01:17 +216 -2: test/named_sql_test.dart: postgres native numeric and temporal codecs survive binding and streaming
+01:17 +217 -2: test/named_sql_test.dart: postgres CTEs and unions retain distinct query arguments and field identity
+01:17 +218 -2: test/named_sql_test.dart: postgres transactions see pending writes and rollback normally
+01:17 +219 -2: test/named_sql_test.dart: postgres named sources reject table mutations and require explicit watch reads
+01:17 +220 -2: test/named_sql_test.dart: postgres native checks accept declared shape and preserve prepared-statement state
+01:17 +221 -2: test/named_sql_test.dart: postgres native checks reject syntax, missing tables and missing result aliases
+01:17 +222 -2: test/named_sql_test.dart: postgres native checks do not evaluate application expressions
+01:17 +223 -2: loading test/named_sql_generation_test.dart
+01:18 +223 -2: test/named_sql_generation_test.dart: source contracts reject missing/extra parameters and row metadata
+01:21 +224 -2: test/named_sql_generation_test.dart: SQL edits and modified generated code fail freshness checks
+01:23 +225 -2: test/named_sql_generation_test.dart: asset builder and standalone generator emit identical SQL contracts
+01:25 +226 -2: test/named_sql_generation_test.dart: generated APIs reject missing/wrong parameters, result types and unsupported backends
+01:25 +227 -2: test/named_sql_generation_test.dart: CLI checks a persistent SQLite database without creating missing files
+01:44 +228 -2: loading test/decimal_average_test.dart
+01:44 +228 -2: test/decimal_average_test.dart: integer fractions round once and only bound their final result
+01:45 +229 -2: test/decimal_average_test.dart: decimal average sqlite empty null and constant inputs retain aggregate semantics
+01:45 +230 -2: test/decimal_average_test.dart: decimal average sqlite all rounding modes match exact signed sums across scales
+01:45 +231 -2: test/decimal_average_test.dart: decimal average sqlite valid means survive sums exceeding the finite numeric range
+01:47 +232 -2: test/decimal_average_test.dart: decimal average sqlite minimum fractions and outermost rounding scales stay exact
+01:47 +233 -2: test/decimal_average_test.dart: decimal average sqlite grouping HAVING ordering and CTE references preserve the mean
+01:47 +234 -2: test/decimal_average_test.dart: decimal average sqlite illegal window nesting and aggregate assignments fail before SQL
+01:47 +235 -2: test/decimal_average_test.dart: decimal average sqlite windows and rounded window means respect partitions and pagination
+01:47 +236 -2: test/decimal_average_test.dart: decimal average sqlite correlated means can update values and failures roll back transactions
+01:47 +237 -2: test/decimal_average_test.dart: decimal average sqlite batched relationship windows keep per-parent limits
+01:47 +238 -2: test/decimal_average_test.dart: decimal average sqlite sliding windows remove values, reset empty frames and reject varying policies
+01:47 +239 -2: test/decimal_average_test.dart: decimal average sqlite window means of grouped sums run after HAVING
+01:47 +240 -2: test/decimal_average_test.dart: decimal average postgres empty null and constant inputs retain aggregate semantics
+01:47 +241 -2: test/decimal_average_test.dart: decimal average postgres all rounding modes match exact signed sums across scales
+01:47 +242 -2: test/decimal_average_test.dart: decimal average postgres valid means survive sums exceeding the finite numeric range
+01:47 +243 -2: test/decimal_average_test.dart: decimal average postgres minimum fractions and outermost rounding scales stay exact
+01:48 +244 -2: test/decimal_average_test.dart: decimal average postgres grouping HAVING ordering and CTE references preserve the mean
+01:48 +245 -2: test/decimal_average_test.dart: decimal average postgres illegal window nesting and aggregate assignments fail before SQL
+01:48 +246 -2: test/decimal_average_test.dart: decimal average postgres windows and rounded window means respect partitions and pagination
+01:48 +247 -2: test/decimal_average_test.dart: decimal average postgres correlated means can update values and failures roll back transactions
+01:48 +248 -2: test/decimal_average_test.dart: decimal average postgres batched relationship windows keep per-parent limits
+01:48 +249 -2: test/decimal_average_test.dart: decimal average postgres window means of grouped sums run after HAVING
+01:48 +250 -2: test/decimal_average_test.dart: decimal average postgres volatile inputs and window ordering are evaluated once per row
+01:48 +251 -2: loading test/instant_test.dart
+01:48 +251 -2: test/instant_test.dart: strict UTC parsing handles eras, offsets, endpoints and invalid components
+01:48 +252 -2: test/instant_test.dart: UTC defaults and local DateTime inputs do not depend on the process timezone
+01:49 +253 -2: test/instant_test.dart: historical migration checksum and timestamp tag remain immutable
+01:49 +254 -2: test/instant_test.dart: UTC instant sqlite native round trips and streams preserve exact microseconds and common endpoints
+01:49 +255 -2: test/instant_test.dart: UTC instant sqlite chronological comparisons, grouping, windows, union and CTEs use instants
+01:49 +256 -2: test/instant_test.dart: UTC instant sqlite offset-equivalent keys join and batch through the same unique index
+01:49 +257 -2: test/instant_test.dart: UTC instant sqlite current snapshots, physical catalog and imported DateTime declarations agree
+01:51 +258 -2: test/instant_test.dart: UTC instant sqlite offset literals compare by value while expression casts remain visible
+01:51 +259 -2: test/instant_test.dart: UTC instant sqlite reviewed migration preserves history and repairs legacy timestamp ordering
+01:51 +260 -2: test/instant_test.dart: UTC instant sqlite legacy key collisions and invalid calendar values roll back conversion
+01:51 +261 -2: test/instant_test.dart: UTC instant sqlite instant primary-key backfills resume across sub-millisecond boundaries
+01:51 +262 -2: test/instant_test.dart: UTC instant sqlite external infinity and out-of-DateTime values fail decoding without wrapping
+01:51 +263 -2: test/instant_test.dart: UTC instant postgres native round trips and streams preserve exact microseconds and common endpoints
+01:51 +264 -2: test/instant_test.dart: UTC instant postgres chronological comparisons, grouping, windows, union and CTEs use instants
+01:51 +265 -2: test/instant_test.dart: UTC instant postgres offset-equivalent keys join and batch through the same unique index
+01:51 +266 -2: test/instant_test.dart: UTC instant postgres current snapshots, physical catalog and imported DateTime declarations agree
+01:52 +267 -2: test/instant_test.dart: UTC instant postgres offset literals compare by value while expression casts remain visible
+01:52 +268 -2: test/instant_test.dart: UTC instant postgres reviewed migration preserves history and repairs legacy timestamp ordering
+01:52 +269 -2: test/instant_test.dart: UTC instant postgres instant primary-key backfills resume across sub-millisecond boundaries
+01:52 +270 -2: test/instant_test.dart: UTC instant postgres external infinity and out-of-DateTime values fail decoding without wrapping
+01:52 +271 -2: loading test/codec_test.dart
+01:52 +271 -2: test/codec_test.dart: numeric aggregate text decodes without integer rounding or overflow
+01:52 +272 -2: test/codec_test.dart: erased codecs keep checked argument types without function getter casts
+01:52 +273 -2: test/codec_test.dart: mapped domain codecs preserve one decode and one encode boundary
+01:52 +274 -2: test/codec_test.dart: parsed JSON scalars and document presence have unambiguous decoding
+01:52 +275 -2: test/codec_test.dart: enum mappings reject duplicates and do not follow mutable caller maps
+01:52 +276 -2: loading test/sql_real_test.dart
+01:52 +276 -2: test/sql_real_test.dart: sqlite explicitly typed REAL parameters preserve floating storage
+01:52 +277 -2: test/sql_real_test.dart: postgres explicitly typed REAL parameters preserve floating storage
+01:52 +278 -2: loading test/migration_source_test.dart
+01:52 +278 -2: test/migration_source_test.dart: Dart emission preserves storage metadata and every operation without application imports
+02:00 +279 -2: test/migration_source_test.dart: project CLI creates Dart history, upgrades a database and preserves recorded fingerprints
+03:13 +280 -2: test/migration_source_test.dart: AOT migration bundle works without Dart sources or migration assets
+03:24 +281 -2: loading test/generator_test.dart
+03:24 +281 -2: test/generator_test.dart: (setUpAll)
+03:24 +281 -2: test/generator_test.dart: client and snapshot paths cannot overwrite the declaration
+03:24 +282 -2: test/generator_test.dart: record annotations, physical names, relations and snapshots
+03:26 +283 -2: test/generator_test.dart: output is deterministic and matches the committed generated client
+03:31 +284 -2: test/generator_test.dart: composite keys and more than six fields generate analyzable code
+03:32 +285 -2: test/generator_test.dart: computed keys are rejected instead of executing a fake row
+03:32 +286 -2: test/generator_test.dart: computed declarations reject conflicting defaults, empty SQL and invalid row identities
+03:34 +287 -2: test/generator_test.dart: client defaults reject incompatible, asynchronous, private and ambiguous factories
+03:37 +288 -2: test/generator_test.dart: CHECK declarations reject dynamic SQL, empty overrides and duplicate names
+03:38 +289 -2: test/generator_test.dart: custom types resolve defining libraries when output moves to another directory
+03:38 +290 -2: test/generator_test.dart: nested generic and record types preserve nullable aliases without running codecs
+03:39 +291 -2: test/generator_test.dart: invalid custom declaration: wrong_codec
+03:39 +292 -2: test/generator_test.dart: invalid custom declaration: nullable_codec
+03:40 +293 -2: test/generator_test.dart: invalid custom declaration: erased_extension
+03:40 +294 -2: test/generator_test.dart: invalid custom declaration: unknown_storage
+03:40 +295 -2: test/generator_test.dart: invalid custom declaration: private_codec
+03:40 +296 -2: test/generator_test.dart: invalid custom declaration: private_type
+03:41 +297 -2: test/generator_test.dart: invalid custom declaration: inline_codec
+03:41 +298 -2: test/generator_test.dart: invalid custom declaration: duplicate_codec
+03:41 +299 -2: test/generator_test.dart: invalid custom declaration: missing_codec
+03:41 +300 -2: test/generator_test.dart: invalid custom declaration: duplicate_labels
+03:41 +301 -2: test/generator_test.dart: invalid custom declaration: duplicate_enum_annotation
+03:42 +302 -2: test/generator_test.dart: foreign keys require unique targets
+03:42 +303 -2: test/generator_test.dart: query-only edges do not alter physical snapshots or require unique targets
+03:42 +304 -2: test/generator_test.dart: constrained and unconstrained edges retain separate migration meaning
+03:43 +305 -2: test/generator_test.dart: invalid query-only relation: lookup_computed
+03:43 +306 -2: test/generator_test.dart: invalid query-only relation: lookup_codec
+03:43 +307 -2: test/generator_test.dart: invalid query-only relation: lookup_inverse
+03:43 +308 -2: test/generator_test.dart: invalid query-only relation: lookup_type
+03:44 +309 -2: test/generator_test.dart: invalid query-only relation: lookup_delete
+03:44 +310 -2: test/generator_test.dart: Dart type errors stop generation
+03:44 +311 -2: test/generator_test.dart: duplicate physical names and nullable primary keys are rejected
+03:45 +312 -2: test/generator_test.dart: (tearDownAll)
+03:45 +312 -2: loading test/transaction_test.dart
+03:45 +312 -2: test/transaction_test.dart: transaction control sqlite idle callback expires, rolls back and cannot issue late SQL
+03:45 +313 -2: test/transaction_test.dart: transaction control sqlite deadline interrupts active SQL before releasing and reusing the lease
+03:45 +314 -2: test/transaction_test.dart: transaction control sqlite interrupted write rolls back and leaves the connection usable
+03:45 +315 -2: test/transaction_test.dart: transaction control sqlite explicit transaction cancellation stops an idle callback and active SQL
+03:45 +316 -2: test/transaction_test.dart: transaction control sqlite global transaction cancellation also abandons acquisition
+03:45 +317 -2: test/transaction_test.dart: transaction control sqlite savepoint inherits deadline, drains and rolls back through raw cleanup
+03:45 +318 -2: test/transaction_test.dart: transaction control sqlite deadline closes a paused transactional cursor before rollback
+03:45 +319 -2: test/transaction_test.dart: transaction control sqlite deadline interrupts an active transactional cursor fetch
+03:45 +320 -2: test/transaction_test.dart: transaction control sqlite transaction clock starts after acquisition and a borrowed session recovers
+03:46 +321 -2: test/transaction_test.dart: transaction control sqlite failed rollback is explicit and discards an uncertain connection
+03:46 +322 -2: test/transaction_test.dart: transaction control sqlite transaction controls reject adapters without actual cancellation
+03:46 +323 -2: test/transaction_test.dart: transaction control sqlite shorter statement limit retains its error and rolls back the transaction
+03:46 +324 -2: test/transaction_test.dart: transaction control sqlite monotonic deadline prevents commit after a CPU-bound callback
+03:46 +325 -2: test/transaction_test.dart: transaction control sqlite completed scopes remove their timers and cancellation listeners
+03:46 +326 -2: test/transaction_test.dart: transaction control sqlite confirmed commit wins a cancellation race; lost acknowledgement stays unknown
+03:46 +327 -2: test/transaction_test.dart: transaction control sqlite deferred constraint rejection at COMMIT is a known failure
+03:46 +328 -2: test/transaction_test.dart: transaction control sqlite invalid deadlines and already cancelled tokens never begin a transaction
+03:46 +329 -2: test/transaction_test.dart: transaction control sqlite automatic SQLite rollback prevents late autocommit writes, nested=false
+03:46 +330 -2: test/transaction_test.dart: transaction control sqlite automatic SQLite rollback prevents late autocommit writes, nested=true
+03:46 +331 -2: test/transaction_test.dart: transaction control postgres idle callback expires, rolls back and cannot issue late SQL
+03:46 +332 -2: test/transaction_test.dart: transaction control postgres deadline interrupts active SQL before releasing and reusing the lease
+03:46 +333 -2: test/transaction_test.dart: transaction control postgres interrupted write rolls back and leaves the connection usable
+03:46 +334 -2: test/transaction_test.dart: transaction control postgres explicit transaction cancellation stops an idle callback and active SQL
+03:46 +335 -2: test/transaction_test.dart: transaction control postgres global transaction cancellation also abandons acquisition
+03:46 +336 -2: test/transaction_test.dart: transaction control postgres savepoint inherits deadline, drains and rolls back through raw cleanup
+03:47 +337 -2: test/transaction_test.dart: transaction control postgres deadline closes a paused transactional cursor before rollback
+03:47 +338 -2: test/transaction_test.dart: transaction control postgres deadline interrupts an active transactional cursor fetch
+03:47 +339 -2: test/transaction_test.dart: transaction control postgres transaction clock starts after acquisition and a borrowed session recovers
+03:47 +340 -2: test/transaction_test.dart: transaction control postgres failed rollback is explicit and discards an uncertain connection
+03:47 +341 -2: test/transaction_test.dart: transaction control postgres transaction controls reject adapters without actual cancellation
+03:47 +342 -2: test/transaction_test.dart: transaction control postgres shorter statement limit retains its error and rolls back the transaction
+03:47 +343 -2: test/transaction_test.dart: transaction control postgres monotonic deadline prevents commit after a CPU-bound callback
+03:47 +344 -2: test/transaction_test.dart: transaction control postgres completed scopes remove their timers and cancellation listeners
+03:48 +345 -2: test/transaction_test.dart: transaction control postgres confirmed commit wins a cancellation race; lost acknowledgement stays unknown
+03:48 +346 -2: test/transaction_test.dart: transaction control postgres deferred constraint rejection at COMMIT is a known failure
+03:48 +347 -2: test/transaction_test.dart: transaction control postgres invalid deadlines and already cancelled tokens never begin a transaction
+03:48 +348 -2: test/transaction_test.dart: transaction control postgres SQLSTATE 40003 at COMMIT is never classified as a confirmed rejection
+03:48 +349 -2: test/transaction_test.dart: transaction control postgres real PostgreSQL serialization failure is classified after rollback
+03:48 +350 -2: test/transaction_test.dart: transaction control postgres real PostgreSQL deadlock rolls back exactly one transaction
+03:49 +351 -2: test/transaction_test.dart: SQLite COMMIT busy is a known rejection followed by verified rollback
+03:49 +352 -2: test/transaction_test.dart: SQLite deadline while BEGIN waits for a writer preserves its connection
+03:49 +353 -2: loading test/backfill_keys_test.dart
+03:49 +353 -2: test/backfill_keys_test.dart: backfill keys sqlite integer cursors preserve native values across resume
+03:49 +354 -2: test/backfill_keys_test.dart: backfill keys sqlite bigint cursors preserve native values across resume
+03:49 +355 -2: test/backfill_keys_test.dart: backfill keys sqlite text cursors preserve native values across resume
+03:49 +356 -2: test/backfill_keys_test.dart: backfill keys sqlite real cursors preserve native values across resume
+03:49 +357 -2: test/backfill_keys_test.dart: backfill keys sqlite boolean cursors preserve native values across resume
+03:49 +358 -2: test/backfill_keys_test.dart: backfill keys sqlite timestamp cursors preserve native values across resume
+03:49 +359 -2: test/backfill_keys_test.dart: backfill keys sqlite blob cursors preserve native values across resume
+03:49 +360 -2: test/backfill_keys_test.dart: backfill keys sqlite composite key batches account for every bound parameter
+03:49 +361 -2: test/backfill_keys_test.dart: backfill keys postgres integer cursors preserve native values across resume
+03:49 +362 -2: test/backfill_keys_test.dart: backfill keys postgres bigint cursors preserve native values across resume
+03:49 +363 -2: test/backfill_keys_test.dart: backfill keys postgres text cursors preserve native values across resume
+03:50 +364 -2: test/backfill_keys_test.dart: backfill keys postgres real cursors preserve native values across resume
+03:50 +365 -2: test/backfill_keys_test.dart: backfill keys postgres boolean cursors preserve native values across resume
+03:50 +366 -2: test/backfill_keys_test.dart: backfill keys postgres timestamp cursors preserve native values across resume
+03:50 +367 -2: test/backfill_keys_test.dart: backfill keys postgres blob cursors preserve native values across resume
+03:50 +368 -2: test/backfill_keys_test.dart: backfill keys postgres composite key batches account for every bound parameter
+03:50 +369 -2: test/backfill_keys_test.dart: invalid key, assignments and completion declarations fail before execution
+03:50 +370 -2: loading test/retry_test.dart
+03:50 +370 -2: test/retry_test.dart: retry sqlite opt-in retries roll back all writes and use new closed-over views
+03:50 +371 -2: test/retry_test.dart: retry sqlite default is one attempt; an explicit attempt limit is exact
+03:50 +372 -2: test/retry_test.dart: retry sqlite application and constraint errors and caught statement failures do not replay
+03:50 +373 -2: test/retry_test.dart: retry sqlite unknown commit and unconfirmed rollback prohibit replay
+03:50 +374 -2: test/retry_test.dart: retry sqlite retry time budget bounds active SQL and does not retry cancellation
+03:50 +375 -2: test/retry_test.dart: retry sqlite deadline and cancellation interrupt backoff without another callback
+03:50 +376 -2: test/retry_test.dart: retry sqlite time budget includes acquisition and abandons late callbacks
+03:50 +377 -2: test/retry_test.dart: retry sqlite transaction timeout is shared across attempts and sessions recover after expiry
+03:50 +378 -2: test/retry_test.dart: retry sqlite subscriptions publish only the final committed retry result
+03:50 +379 -2: test/retry_test.dart: retry sqlite invalid policies reject before SQL
+03:50 +380 -2: test/retry_test.dart: retry postgres opt-in retries roll back all writes and use new closed-over views
+03:50 +381 -2: test/retry_test.dart: retry postgres default is one attempt; an explicit attempt limit is exact
+03:50 +382 -2: test/retry_test.dart: retry postgres application and constraint errors and caught statement failures do not replay
+03:50 +383 -2: test/retry_test.dart: retry postgres unknown commit and unconfirmed rollback prohibit replay
+03:50 +384 -2: test/retry_test.dart: retry postgres retry time budget bounds active SQL and does not retry cancellation
+03:51 +385 -2: test/retry_test.dart: retry postgres deadline and cancellation interrupt backoff without another callback
+03:51 +386 -2: test/retry_test.dart: retry postgres time budget includes acquisition and abandons late callbacks
+03:51 +387 -2: test/retry_test.dart: retry postgres transaction timeout is shared across attempts and sessions recover after expiry
+03:51 +388 -2: test/retry_test.dart: retry postgres subscriptions publish only the final committed retry result
+03:51 +389 -2: test/retry_test.dart: retry postgres invalid policies reject before SQL
+03:51 +390 -2: test/retry_test.dart: retry postgres real unknown COMMIT response prohibits opted-in retry
+03:51 +391 -2: test/retry_test.dart: retry postgres real serialization conflict repeats the reads and decisions
+03:51 +392 -2: test/retry_test.dart: retry postgres real deadlock retries only the aborted callback
+03:52 +393 -2: test/retry_test.dart: SQLite WAL snapshot conflict replays reads after rollback
+03:52 +394 -2: test/retry_test.dart: SQLite real busy COMMIT: success
+03:52 +395 -2: test/retry_test.dart: SQLite real busy COMMIT: exhausted
+03:52 +396 -2: test/retry_test.dart: SQLite real busy COMMIT: deadline
+03:52 +397 -2: test/retry_test.dart: SQLite real busy COMMIT: cancel
+03:52 +398 -2: test/retry_test.dart: SQLite real busy COMMIT: shared-budget
+03:53 +399 -2: loading test/builder_test.dart
+03:53 +399 -2: test/builder_test.dart: build assets and standalone CLI produce identical client and snapshot
+03:56 +400 -2: test/builder_test.dart: multiple explicit schema roots resolve shared public types under lib
+03:56 +401 -2: test/builder_test.dart: invalid semantic_error never publishes partial outputs
+03:57 +402 -2: test/builder_test.dart: invalid enum_labels never publishes partial outputs
+03:58 +403 -2: test/builder_test.dart: invalid no_models never publishes partial outputs
+03:58 +404 -2: test/builder_test.dart: invalid part_file never publishes partial outputs
+03:59 +405 -2: test/builder_test.dart: unknown options fail instead of silently changing build behavior
+03:59 +406 -2: test/builder_test.dart: schema resolution can consume an earlier builder output
+04:00 +407 -2: loading test/temporal_precision_test.dart
+04:00 +407 -2: test/temporal_precision_test.dart: temporal precision sqlite generated writes, defaults and computed columns use database precision
+04:00 +408 -2: test/temporal_precision_test.dart: temporal precision sqlite SQL casts match all precisions on both sides of the PostgreSQL epoch
+04:00 +409 -2: test/temporal_precision_test.dart: temporal precision sqlite nulls, CTE references, grouping, streams and wrong scopes retain type semantics
+04:00 +410 -2: test/temporal_precision_test.dart: temporal precision sqlite rounded keys work in batch writes, upserts and foreign-key relation loading
+04:00 +411 -2: test/temporal_precision_test.dart: temporal precision sqlite catalog import preserves precision, defaults and computed expressions
+04:02 +412 -2: test/temporal_precision_test.dart: temporal precision sqlite narrowing precision requires a reviewed conversion and duplicate-key failure rolls back history
+04:02 +413 -2: test/temporal_precision_test.dart: temporal precision sqlite timestamp defaults and explicit six-digit catalogs retain precision
+04:02 +414 -2: test/temporal_precision_test.dart: temporal precision sqlite extended timestamps round in SQL without total-microsecond overflow
+04:02 +415 -2: test/temporal_precision_test.dart: temporal precision sqlite raw SQL respects native or managed precision constraints
+04:02 +416 -2: test/temporal_precision_test.dart: temporal precision postgres generated writes, defaults and computed columns use database precision
+04:02 +417 -2: test/temporal_precision_test.dart: temporal precision postgres SQL casts match all precisions on both sides of the PostgreSQL epoch
+04:02 +418 -2: test/temporal_precision_test.dart: temporal precision postgres nulls, CTE references, grouping, streams and wrong scopes retain type semantics
+04:02 +419 -2: test/temporal_precision_test.dart: temporal precision postgres rounded keys work in batch writes, upserts and foreign-key relation loading
+04:02 +420 -2: test/temporal_precision_test.dart: temporal precision postgres catalog import preserves precision, defaults and computed expressions
+04:03 +421 -2: test/temporal_precision_test.dart: temporal precision postgres narrowing precision requires a reviewed conversion and duplicate-key failure rolls back history
+04:03 +422 -2: test/temporal_precision_test.dart: temporal precision postgres timestamp defaults and explicit six-digit catalogs retain precision
+04:03 +423 -2: test/temporal_precision_test.dart: temporal precision postgres extended timestamps round in SQL without total-microsecond overflow
+04:03 +424 -2: test/temporal_precision_test.dart: temporal precision postgres raw SQL respects native or managed precision constraints
+04:03 +425 -2: test/temporal_precision_test.dart: value rounding keeps extended ranges and rejects overflow/invalid precision
+04:03 +426 -2: test/temporal_precision_test.dart: default and explicit six preserve historical snapshots and migration checksums
+04:03 +427 -2: test/temporal_precision_test.dart: generator rejects invalid annotations and preserves generated fixture metadata
+04:05 +428 -2: loading test/observation_test.dart
+04:05 +428 -2: test/observation_test.dart: observation sqlite actual lease queue and synchronous mapping have separate clocks
+04:05 +429 -2: test/observation_test.dart: observation sqlite expired acquisition emits one failure and no late SQL
+04:05 +430 -2: test/observation_test.dart: observation sqlite cancelled acquisition emits one failure and no late SQL
+04:05 +431 -2: test/observation_test.dart: observation sqlite sessions transactions and savepoints inherit hooks and report reused leases
+04:05 +432 -2: test/observation_test.dart: observation sqlite nested reads attribute decoding to each statement without repeating SQL
+04:05 +433 -2: test/observation_test.dart: observation sqlite SQL and mapper failures belong to their own phases
+04:05 +434 -2: test/observation_test.dart: observation sqlite cursor batches and returning writes produce decoding observations
+04:05 +435 -2: test/observation_test.dart: observation sqlite observer exceptions preserve successful commits and original mapper errors
+04:05 +436 -2: test/observation_test.dart: observation postgres actual lease queue and synchronous mapping have separate clocks
+04:06 +437 -2: test/observation_test.dart: observation postgres expired acquisition emits one failure and no late SQL
+04:06 +438 -2: test/observation_test.dart: observation postgres cancelled acquisition emits one failure and no late SQL
+04:06 +439 -2: test/observation_test.dart: observation postgres sessions transactions and savepoints inherit hooks and report reused leases
+04:06 +440 -2: test/observation_test.dart: observation postgres nested reads attribute decoding to each statement without repeating SQL
+04:06 +441 -2: test/observation_test.dart: observation postgres SQL and mapper failures belong to their own phases
+04:06 +442 -2: test/observation_test.dart: observation postgres cursor batches and returning writes produce decoding observations
+04:06 +443 -2: test/observation_test.dart: observation postgres observer exceptions preserve successful commits and original mapper errors
+04:06 +444 -2: test/observation_test.dart: synchronous driver acquisition failures are reported once
+04:06 +445 -2: loading test/integer_test.dart
+04:06 +445 -2: test/integer_test.dart: integer widths sqlite storage bounds, nulls and wider sums keep the normal integer value codec
+04:06 +446 -2: test/integer_test.dart: integer widths sqlite relations, union and cursors share int expressions across physical widths
+04:06 +447 -2: test/integer_test.dart: integer widths sqlite defaulted and quoted columns retain enforced nullable bounds
+04:06 +448 -2: test/integer_test.dart: integer widths sqlite Dart snapshots and imports retain widths without confusing value codecs
+04:08 +449 -2: test/integer_test.dart: integer widths sqlite widening and narrowing use reviewed conversions with atomic failure recovery
+04:08 +450 -2: test/integer_test.dart: integer widths sqlite column renames preserve width metadata and range constraints
+04:08 +451 -2: test/integer_test.dart: integer widths sqlite historical bounded backfills verify widths and resume normally
+04:08 +452 -2: test/integer_test.dart: integer widths sqlite changing an identity width preserves generation and rejects out-of-range explicit IDs
+04:08 +453 -2: test/integer_test.dart: integer widths sqlite quoted defaults and comments cannot masquerade as managed range checks
+04:08 +454 -2: test/integer_test.dart: integer widths sqlite extra weaker expressions remain unmanaged and cannot claim a narrower width
+04:08 +455 -2: test/integer_test.dart: integer widths postgres storage bounds, nulls and wider sums keep the normal integer value codec
+04:08 +456 -2: test/integer_test.dart: integer widths postgres relations, union and cursors share int expressions across physical widths
+04:08 +457 -2: test/integer_test.dart: integer widths postgres defaulted and quoted columns retain enforced nullable bounds
+04:08 +458 -2: test/integer_test.dart: integer widths postgres Dart snapshots and imports retain widths without confusing value codecs
+04:09 +459 -2: test/integer_test.dart: integer widths postgres widening and narrowing use reviewed conversions with atomic failure recovery
+04:09 +460 -2: test/integer_test.dart: integer widths postgres column renames preserve width metadata and range constraints
+04:09 +461 -2: test/integer_test.dart: integer widths postgres historical bounded backfills verify widths and resume normally
+04:09 +462 -2: test/integer_test.dart: integer widths postgres changing an identity width preserves generation and rejects out-of-range explicit IDs
+04:09 +463 -2: test/integer_test.dart: analyzer validates width annotations and integer-backed domain codecs
+04:10 +464 -2: test/integer_test.dart: width declarations reject wrong kinds and ranges without changing default snapshots
+04:10 +465 -2: loading test/relation_test.dart
+04:10 +465 -2: test/relation_test.dart: sqlite automatic unique joins preserve root pagination in one statement
+04:10 +466 -2: test/relation_test.dart: sqlite all-null projections still distinguish a present row from absence
+04:10 +467 -2: test/relation_test.dart: sqlite explicit batch deduplicates composite keys and skips partial nulls
+04:10 +468 -2: test/relation_test.dart: sqlite composite chunks include filter and window parameters with nested joins
+04:10 +469 -2: test/relation_test.dart: sqlite nested self joins and two edges to the same table use distinct aliases
+04:10 +470 -2: test/relation_test.dart: sqlite batch collection below a joined optional parent loads on the same plan
+04:10 +471 -2: test/relation_test.dart: sqlite join refuses unproven cardinality while automatic batch checks it
+04:10 +472 -2: test/relation_test.dart: sqlite filters and to-one pagination do not drop root rows
+04:10 +473 -2: test/relation_test.dart: sqlite joined records survive CTE projection and cursor decoding
+04:10 +474 -2: test/relation_test.dart: sqlite required tests row presence independently of nullable selected values
+04:10 +475 -2: test/relation_test.dart: sqlite relation aggregates restore the alias used by a joined selection
+04:10 +476 -2: test/relation_test.dart: sqlite reusing an identical edge deduplicates its join
+04:10 +477 -2: test/relation_test.dart: sqlite different filters need fresh relation occurrences
+04:10 +478 -2: test/relation_test.dart: sqlite large composite batches avoid expression-depth failure
+04:10 +479 -2: test/relation_test.dart: postgres automatic unique joins preserve root pagination in one statement
+04:11 +480 -2: test/relation_test.dart: postgres all-null projections still distinguish a present row from absence
+04:11 +481 -2: test/relation_test.dart: postgres explicit batch deduplicates composite keys and skips partial nulls
+04:11 +482 -2: test/relation_test.dart: postgres composite chunks include filter and window parameters with nested joins
+04:11 +483 -2: test/relation_test.dart: postgres nested self joins and two edges to the same table use distinct aliases
+04:11 +484 -2: test/relation_test.dart: postgres batch collection below a joined optional parent loads on the same plan
+04:11 +485 -2: test/relation_test.dart: postgres join refuses unproven cardinality while automatic batch checks it
+04:11 +486 -2: test/relation_test.dart: postgres filters and to-one pagination do not drop root rows
+04:11 +487 -2: test/relation_test.dart: postgres joined records survive CTE projection and cursor decoding
+04:11 +488 -2: test/relation_test.dart: postgres required tests row presence independently of nullable selected values
+04:11 +489 -2: test/relation_test.dart: postgres relation aggregates restore the alias used by a joined selection
+04:11 +490 -2: test/relation_test.dart: postgres reusing an identical edge deduplicates its join
+04:11 +491 -2: test/relation_test.dart: postgres different filters need fresh relation occurrences
+04:11 +492 -2: test/relation_test.dart: postgres large composite batches avoid expression-depth failure
+04:11 +493 -2: loading test/generated_database_test.dart
+04:11 +493 -2: test/generated_database_test.dart: (setUpAll)
+04:11 +493 -2: test/generated_database_test.dart: generated sqlite generated client, DDL, relations, dates and patches work together
+04:11 +494 -2: test/generated_database_test.dart: generated sqlite planning is read-only and repeat migration is a no-op
+04:11 +495 -2: test/generated_database_test.dart: generated sqlite compiled physical snapshot and full managed catalog comparison
+04:11 +496 -2: test/generated_database_test.dart: generated sqlite baseline preserves existing rows and verifies keys before recording history
+04:11 +497 -2: test/generated_database_test.dart: generated sqlite full verification sees defaults and additional unique constraints
+04:11 +498 -2: test/generated_database_test.dart: generated sqlite history tampering and missing applied migrations fail
+04:11 +499 -2: test/generated_database_test.dart: generated sqlite failed DDL rolls back schema and history atomically
+04:11 +500 -2: test/generated_database_test.dart: generated sqlite actual column drift is detected independently of history
+04:11 +501 -2: test/generated_database_test.dart: generated sqlite transaction control cannot be hidden behind SQL comments
+04:11 +502 -2: test/generated_database_test.dart: generated sqlite concurrent migration callers serialize against shared history
+04:11 +503 -2: test/generated_database_test.dart: generated postgres generated client, DDL, relations, dates and patches work together
+04:11 +504 -2: test/generated_database_test.dart: generated postgres planning is read-only and repeat migration is a no-op
+04:11 +505 -2: test/generated_database_test.dart: generated postgres compiled physical snapshot and full managed catalog comparison
+04:11 +506 -2: test/generated_database_test.dart: generated postgres baseline preserves existing rows and verifies keys before recording history
+04:11 +507 -2: test/generated_database_test.dart: generated postgres full verification sees defaults and additional unique constraints
+04:11 +508 -2: test/generated_database_test.dart: generated postgres history tampering and missing applied migrations fail
+04:11 +509 -2: test/generated_database_test.dart: generated postgres failed DDL rolls back schema and history atomically
+04:11 +510 -2: test/generated_database_test.dart: generated postgres actual column drift is detected independently of history
+04:11 +511 -2: test/generated_database_test.dart: generated postgres transaction control cannot be hidden behind SQL comments
+04:11 +512 -2: test/generated_database_test.dart: generated postgres concurrent migration callers serialize against shared history
+04:11 +513 -2: test/generated_database_test.dart: (tearDownAll)
+04:11 +513 -2: loading test/import_test.dart
+04:12 +513 -2: test/import_test.dart: catalog import sqlite imports records, identities, defaults and constraints then baselines unchanged rows
+04:15 +514 -2: test/import_test.dart: catalog import sqlite normalizes reserved, colliding and hostile identifiers without changing physical names
+04:16 +515 -2: test/import_test.dart: catalog import sqlite composite and self relations preserve key order and unique indexes
+04:17 +516 -2: test/import_test.dart: catalog import sqlite unsupported storage excludes its table while computed SQL imports with a review note
+04:17 +517 -2: test/import_test.dart: catalog import sqlite read-only snapshot and selected scope reject temporary shadowing and active transactions
+04:17 +518 -2: test/import_test.dart: catalog import sqlite physical storage mapping does not infer domain types from data
+04:18 +519 -2: test/import_test.dart: catalog import sqlite views triggers and specialized indexes remain in the review report
+04:18 +520 -2: test/import_test.dart: catalog import sqlite nullable primary keys, virtual tables and their storage tables need explicit handling
+04:18 +521 -2: test/import_test.dart: catalog import sqlite foreign keys with coercible but different Dart types are reported
+04:18 +522 -2: test/import_test.dart: catalog import postgres imports records, identities, defaults and constraints then baselines unchanged rows
+04:21 +523 -2: test/import_test.dart: catalog import postgres normalizes reserved, colliding and hostile identifiers without changing physical names
+04:22 +524 -2: test/import_test.dart: catalog import postgres composite and self relations preserve key order and unique indexes
+04:22 +525 -2: test/import_test.dart: catalog import postgres unsupported storage excludes its table while computed SQL imports with a review note
+04:23 +526 -2: test/import_test.dart: catalog import postgres read-only snapshot and selected scope reject temporary shadowing and active transactions
+04:23 +527 -2: test/import_test.dart: catalog import postgres physical storage mapping does not infer domain types from data
+04:23 +528 -2: test/import_test.dart: catalog import postgres views triggers and specialized indexes remain in the review report
+04:23 +529 -2: test/import_test.dart: catalog import postgres policy reports retain roles, commands, mode and row-security state
+04:24 +530 -2: test/import_test.dart: catalog import postgres always identity and inherited tables are not flattened into ordinary writable models
+04:24 +531 -2: loading test/database_test.dart
+04:24 +531 -2: test/database_test.dart: sqlite typed CRUD, exact projection and parameter binding
+04:24 +532 -2: test/database_test.dart: sqlite record and DTO mapping run only when decoding
+04:24 +533 -2: test/database_test.dart: sqlite immutable filters, empty IN, null and pagination
+04:24 +534 -2: test/database_test.dart: sqlite cross-table identity and duplicate assignments rejected before IO
+04:24 +535 -2: test/database_test.dart: sqlite commit, rollback, savepoint recovery and escaped session
+04:24 +536 -2: test/database_test.dart: sqlite caught statement failures cannot masquerade as a commit
+04:24 +537 -2: test/database_test.dart: sqlite recoverable constraint errors stay within their savepoint
+04:24 +538 -2: test/database_test.dart: sqlite unawaited work is drained and rolled back
+04:24 +539 -2: test/database_test.dart: sqlite close waits for active operations and rejects further use
+04:24 +540 -2: test/database_test.dart: sqlite leased sessions retain one connection across transactions and expire
+04:24 +541 -2: test/database_test.dart: sqlite native upsert updates atomically using existing and incoming values
+04:24 +542 -2: test/database_test.dart: sqlite bulk inserts split at parameter limits and opt into returning
+04:24 +543 -2: test/database_test.dart: sqlite a failed later bulk chunk rolls back all previous chunks
+04:24 +544 -2: test/database_test.dart: sqlite bulk optional field shapes preserve defaults and explicit null
+04:24 +545 -2: test/database_test.dart: sqlite relations CTEs preserve SQL column identity through mapped projections
+04:24 +546 -2: test/database_test.dart: sqlite relations explicit aliases support multiple joins and self joins
+04:24 +547 -2: test/database_test.dart: sqlite relations left join distinguishes a missing row from an all-null selection
+04:24 +548 -2: test/database_test.dart: sqlite relations correlated scalar, IN and EXISTS use nested SQL scopes
+04:24 +549 -2: test/database_test.dart: sqlite relations grouping is checked and window functions preserve row cardinality
+04:24 +550 -2: test/database_test.dart: sqlite relations root pagination and each parent limit use two queries
+04:24 +551 -2: test/database_test.dart: sqlite relations empty roots skip child queries; empty lists remain typed lists
+04:24 +552 -2: test/database_test.dart: sqlite relations nested relation projections and optional all-null projection
+04:24 +553 -2: test/database_test.dart: sqlite relations correlated any, none, count and every with SQL nulls
+04:24 +554 -2: test/database_test.dart: sqlite relations relation parameters bind correctly in projection and filter
+04:24 +555 -2: test/database_test.dart: sqlite keyset pagination uses a unique tie breaker in mixed directions
+04:24 +556 -2: test/database_test.dart: sqlite keyset pagination handles null order and validates versioned tokens
+04:24 +557 -2: test/database_test.dart: postgres typed CRUD, exact projection and parameter binding
+04:24 +558 -2: test/database_test.dart: postgres record and DTO mapping run only when decoding
+04:24 +559 -2: test/database_test.dart: postgres immutable filters, empty IN, null and pagination
+04:24 +560 -2: test/database_test.dart: postgres cross-table identity and duplicate assignments rejected before IO
+04:24 +561 -2: test/database_test.dart: postgres commit, rollback, savepoint recovery and escaped session
+04:24 +562 -2: test/database_test.dart: postgres caught statement failures cannot masquerade as a commit
+04:24 +563 -2: test/database_test.dart: postgres recoverable constraint errors stay within their savepoint
+04:24 +564 -2: test/database_test.dart: postgres unawaited work is drained and rolled back
+04:24 +565 -2: test/database_test.dart: postgres close waits for active operations and rejects further use
+04:24 +566 -2: test/database_test.dart: postgres leased sessions retain one connection across transactions and expire
+04:24 +567 -2: test/database_test.dart: postgres native upsert updates atomically using existing and incoming values
+04:24 +568 -2: test/database_test.dart: postgres bulk inserts split at parameter limits and opt into returning
+04:24 +569 -2: test/database_test.dart: postgres a failed later bulk chunk rolls back all previous chunks
+04:24 +570 -2: test/database_test.dart: postgres bulk optional field shapes preserve defaults and explicit null
+04:24 +571 -2: test/database_test.dart: postgres relations CTEs preserve SQL column identity through mapped projections
+04:24 +572 -2: test/database_test.dart: postgres relations explicit aliases support multiple joins and self joins
+04:24 +573 -2: test/database_test.dart: postgres relations left join distinguishes a missing row from an all-null selection
+04:24 +574 -2: test/database_test.dart: postgres relations correlated scalar, IN and EXISTS use nested SQL scopes
+04:24 +575 -2: test/database_test.dart: postgres relations grouping is checked and window functions preserve row cardinality
+04:24 +576 -2: test/database_test.dart: postgres relations root pagination and each parent limit use two queries
+04:24 +577 -2: test/database_test.dart: postgres relations empty roots skip child queries; empty lists remain typed lists
+04:24 +578 -2: test/database_test.dart: postgres relations nested relation projections and optional all-null projection
+04:24 +579 -2: test/database_test.dart: postgres relations correlated any, none, count and every with SQL nulls
+04:24 +580 -2: test/database_test.dart: postgres relations relation parameters bind correctly in projection and filter
+04:24 +581 -2: test/database_test.dart: postgres keyset pagination uses a unique tie breaker in mixed directions
+04:24 +582 -2: test/database_test.dart: postgres keyset pagination handles null order and validates versioned tokens
+04:24 +583 -2: loading test/union_test.dart
+04:24 +583 -2: test/union_test.dart: union sqlite SQL duplicate and NULL semantics use one statement
+04:24 +584 -2: test/union_test.dart: union sqlite heterogeneous records map only after SQL union and final pagination
+04:24 +585 -2: test/union_test.dart: union sqlite operand limits, order, parameters and final filter stay scoped
+04:24 +586 -2: test/union_test.dart: union sqlite repeated SQL expressions preserve positional columns
+04:24 +587 -2: test/union_test.dart: union sqlite nested sets preserve association, CTE exports and streaming
+04:24 +588 -2: test/union_test.dart: union sqlite same CTE names in distinct operands stay in separate scopes
+04:24 +589 -2: test/union_test.dart: union sqlite SQL scalar, IN subqueries, aggregate and zero-row results compose
+04:24 +590 -2: test/union_test.dart: union sqlite grouped branches and window branches remain SQL queries
+04:24 +591 -2: test/union_test.dart: union sqlite bound constant projections retain Dart types
+04:24 +592 -2: test/union_test.dart: union sqlite Dart maps and relation selections are rejected before execution
+04:24 +593 -2: test/union_test.dart: union sqlite codecs and nullability cannot silently change across operands
+04:24 +594 -2: test/union_test.dart: union sqlite shared domain codecs work, and nullable wrappers retain decoding semantics
+04:24 +595 -2: test/union_test.dart: union sqlite export references and outer join nullability are guarded
+04:24 +596 -2: test/union_test.dart: union sqlite compound mutations and mixed sessions fail before SQL
+04:24 +597 -2: test/union_test.dart: union sqlite all record arities use typed SQL decoding
+04:24 +598 -2: test/union_test.dart: union sqlite subscription observes committed changes in both operands
+04:24 +599 -2: test/union_test.dart: union postgres SQL duplicate and NULL semantics use one statement
+04:24 +600 -2: test/union_test.dart: union postgres heterogeneous records map only after SQL union and final pagination
+04:24 +601 -2: test/union_test.dart: union postgres operand limits, order, parameters and final filter stay scoped
+04:24 +602 -2: test/union_test.dart: union postgres repeated SQL expressions preserve positional columns
+04:24 +603 -2: test/union_test.dart: union postgres nested sets preserve association, CTE exports and streaming
+04:24 +604 -2: test/union_test.dart: union postgres same CTE names in distinct operands stay in separate scopes
+04:25 +605 -2: test/union_test.dart: union postgres SQL scalar, IN subqueries, aggregate and zero-row results compose
+04:25 +606 -2: test/union_test.dart: union postgres grouped branches and window branches remain SQL queries
+04:25 +607 -2: test/union_test.dart: union postgres bound constant projections retain Dart types
+04:25 +608 -2: test/union_test.dart: union postgres Dart maps and relation selections are rejected before execution
+04:25 +609 -2: test/union_test.dart: union postgres codecs and nullability cannot silently change across operands
+04:25 +610 -2: test/union_test.dart: union postgres shared domain codecs work, and nullable wrappers retain decoding semantics
+04:25 +611 -2: test/union_test.dart: union postgres export references and outer join nullability are guarded
+04:25 +612 -2: test/union_test.dart: union postgres compound mutations and mixed sessions fail before SQL
+04:25 +613 -2: test/union_test.dart: union postgres all record arities use typed SQL decoding
+04:25 +614 -2: test/union_test.dart: union postgres subscription observes committed changes in both operands
+04:25 +615 -2: loading test/import_cli_test.dart
+04:25 +615 -2: test/import_cli_test.dart: CLI sqlite imports reviews generates and baselines existing data without replacing files
+05:12 +616 -2: test/import_cli_test.dart: CLI postgres imports reviews generates and baselines existing data without replacing files
+05:55 +617 -2: loading test/decimal_division_test.dart
+05:55 +617 -2: test/decimal_division_test.dart: decimal division sqlite signed modes and scales match exact integer arithmetic
+05:55 +618 -2: test/decimal_division_test.dart: decimal division sqlite exact defaults reject lost digits and zero divisors, NULL propagates
+05:55 +619 -2: test/decimal_division_test.dart: decimal division sqlite precision exceeds native division scale without double rounding
+05:55 +620 -2: test/decimal_division_test.dart: decimal division sqlite huge remainders avoid overflowing intermediate scaled products
+06:17 +621 -2: test/decimal_division_test.dart: decimal division sqlite outermost integer scale and result overflow are explicit
+06:18 +622 -2: test/decimal_division_test.dart: decimal division sqlite aggregates windows CTEs predicates and unions compose
+06:18 +623 -2: test/decimal_division_test.dart: decimal division sqlite expression assignments and transaction rollback preserve values
+06:18 +624 -2: test/decimal_division_test.dart: decimal division sqlite window filtering ordering DISTINCT and pagination keep their SQL order
+06:18 +625 -2: test/decimal_division_test.dart: decimal division sqlite windows over grouped aggregates run after HAVING
+06:18 +626 -2: test/decimal_division_test.dart: decimal division sqlite window results compose through CTEs sets and correlated subqueries
+06:18 +627 -2: test/decimal_division_test.dart: decimal division sqlite batched relations retain per-parent window pagination
+06:18 +628 -2: test/decimal_division_test.dart: decimal division postgres signed modes and scales match exact integer arithmetic
+06:18 +629 -2: test/decimal_division_test.dart: decimal division postgres exact defaults reject lost digits and zero divisors, NULL propagates
+06:18 +630 -2: test/decimal_division_test.dart: decimal division postgres precision exceeds native division scale without double rounding
+06:18 +631 -2: test/decimal_division_test.dart: decimal division postgres huge remainders avoid overflowing intermediate scaled products
+06:38 +632 -2: test/decimal_division_test.dart: decimal division postgres outermost integer scale and result overflow are explicit
+06:38 +633 -2: test/decimal_division_test.dart: decimal division postgres aggregates windows CTEs predicates and unions compose
+06:38 +634 -2: test/decimal_division_test.dart: decimal division postgres expression assignments and transaction rollback preserve values
+06:38 +635 -2: test/decimal_division_test.dart: decimal division postgres window filtering ordering DISTINCT and pagination keep their SQL order
+06:39 +636 -2: test/decimal_division_test.dart: decimal division postgres windows over grouped aggregates run after HAVING
+06:39 +637 -2: test/decimal_division_test.dart: decimal division postgres window results compose through CTEs sets and correlated subqueries
+06:39 +638 -2: test/decimal_division_test.dart: decimal division postgres batched relations retain per-parent window pagination
+06:39 +639 -2: test/decimal_division_test.dart: decimal division postgres volatile operands are evaluated exactly once each
+06:39 +640 -2: loading test/cli_test.dart
+06:39 +640 -2: test/cli_test.dart: Dart CLI generates, reviews, upgrades and verifies constraints without overwriting history
+07:48 +641 -2: test/cli_test.dart: Dart CLI baselines existing rows; read-only connections and invalid options reject writes
+08:35 +642 -2: test/cli_test.dart: Dart PostgreSQL configuration supports checked nontransactional recovery operations
+09:28 +643 -2: loading test/decimal_test.dart
+09:28 +643 -2: test/decimal_test.dart: exact decimal sqlite generated writes, defaults, patches and projections preserve all digits
+09:28 +644 -2: test/decimal_test.dart: exact decimal sqlite numeric ordering, predicates, IN, distinct and stable cursors
+09:28 +645 -2: test/decimal_test.dart: exact decimal sqlite sums, min/max, grouped aggregates and sliding windows stay exact
+09:28 +646 -2: test/decimal_test.dart: exact decimal sqlite computed CTEs, union results, subqueries and streaming keep decimal semantics
+09:28 +647 -2: test/decimal_test.dart: exact decimal sqlite numeric primary keys, foreign keys, joined and batched relations
+09:28 +648 -2: test/decimal_test.dart: exact decimal sqlite snapshots, catalog verification and imported declarations retain decimal storage
+09:30 +649 -2: test/decimal_test.dart: exact decimal sqlite aggregate intermediate overflow may cancel before a valid final result
+09:30 +650 -2: test/decimal_test.dart: exact decimal sqlite historical decimal keys resume backfills without lexical ordering or precision loss
+09:30 +651 -2: test/decimal_test.dart: exact decimal sqlite reviewed text-to-decimal migration rejects duplicate numeric keys and rolls back
+09:30 +652 -2: test/decimal_test.dart: exact decimal sqlite invalid external values fail decoding; later valid queries still work
+09:30 +653 -2: test/decimal_test.dart: exact decimal postgres generated writes, defaults, patches and projections preserve all digits
+09:30 +654 -2: test/decimal_test.dart: exact decimal postgres numeric ordering, predicates, IN, distinct and stable cursors
+09:30 +655 -2: test/decimal_test.dart: exact decimal postgres sums, min/max, grouped aggregates and sliding windows stay exact
+09:30 +656 -2: test/decimal_test.dart: exact decimal postgres computed CTEs, union results, subqueries and streaming keep decimal semantics
+09:30 +657 -2: test/decimal_test.dart: exact decimal postgres numeric primary keys, foreign keys, joined and batched relations
+09:30 +658 -2: test/decimal_test.dart: exact decimal postgres snapshots, catalog verification and imported declarations retain decimal storage
+09:31 +659 -2: test/decimal_test.dart: exact decimal postgres aggregate intermediate overflow may cancel before a valid final result
+09:31 +660 -2: test/decimal_test.dart: exact decimal postgres historical decimal keys resume backfills without lexical ordering or precision loss
+09:31 +661 -2: test/decimal_test.dart: exact decimal postgres reviewed text-to-decimal migration rejects duplicate numeric keys and rolls back
+09:31 +662 -2: test/decimal_test.dart: exact decimal postgres invalid external values fail decoding; later valid queries still work
+09:31 +663 -2: test/decimal_test.dart: decimal SQL rejects drivers without exact operations before execution
+09:31 +664 -2: test/decimal_test.dart: SQLite recognizes only column decimal collations, and detects drift
+09:31 +665 -2: loading test/watch_test.dart
+09:31 +665 -2: test/watch_test.dart: independent native SQLite workers require explicit notification
+09:31 +666 -2: test/watch_test.dart: watch sqlite lazy initial snapshot and relevant table invalidation
+09:31 +667 -2: test/watch_test.dart: watch sqlite transactions publish one snapshot after commit and none on rollback
+09:31 +668 -2: test/watch_test.dart: watch sqlite savepoint changes merge on release and disappear on rollback
+09:31 +669 -2: test/watch_test.dart: watch sqlite failed statements, zero-row writes and conflict no-ops do not refresh
+09:31 +670 -2: test/watch_test.dart: watch sqlite batch writes and upsert returning publish committed changes
+09:31 +671 -2: test/watch_test.dart: watch sqlite joined and nested batch relations track child writes
+09:31 +672 -2: test/watch_test.dart: watch sqlite relation predicates, SQL subqueries and CTE sources are dependencies
+09:31 +673 -2: test/watch_test.dart: watch sqlite declared cascade deletion invalidates a child-only query
+09:31 +674 -2: test/watch_test.dart: watch sqlite CASCADE tracks declared transitive deletion effects
+09:31 +675 -2: test/watch_test.dart: watch sqlite SET NULL tracks declared transitive deletion effects
+09:31 +676 -2: test/watch_test.dart: watch sqlite explicit JOINs and joined CTE definitions track both physical sources
+09:31 +677 -2: test/watch_test.dart: watch sqlite raw SQL declares changed and read tables; explicit invalidation follows transactions
+09:31 +678 -2: test/watch_test.dart: watch sqlite paused listeners coalesce writes and stop fetching until resumed
+09:31 +679 -2: test/watch_test.dart: watch sqlite invalidation during a read suppresses the stale snapshot and refetches
+09:31 +680 -2: test/watch_test.dart: watch sqlite decoding errors are reported and a later write can recover
+09:31 +681 -2: test/watch_test.dart: watch sqlite separate subscriptions and views of one driver receive changes
+09:31 +682 -2: test/watch_test.dart: watch sqlite watching leased sessions is rejected and cancelled tokens close the stream
+09:31 +683 -2: test/watch_test.dart: watch sqlite database close finishes watchers even when a listener is paused
+09:31 +684 -2: test/watch_test.dart: watch sqlite cancelling an active watched query interrupts SQL and releases its lease
+09:31 +685 -2: test/watch_test.dart: watch postgres lazy initial snapshot and relevant table invalidation
+09:31 +686 -2: test/watch_test.dart: watch postgres transactions publish one snapshot after commit and none on rollback
+09:31 +687 -2: test/watch_test.dart: watch postgres savepoint changes merge on release and disappear on rollback
+09:31 +688 -2: test/watch_test.dart: watch postgres failed statements, zero-row writes and conflict no-ops do not refresh
+09:31 +689 -2: test/watch_test.dart: watch postgres batch writes and upsert returning publish committed changes
+09:31 +690 -2: test/watch_test.dart: watch postgres joined and nested batch relations track child writes
+09:31 +691 -2: test/watch_test.dart: watch postgres relation predicates, SQL subqueries and CTE sources are dependencies
+09:31 +692 -2: test/watch_test.dart: watch postgres declared cascade deletion invalidates a child-only query
+09:31 +693 -2: test/watch_test.dart: watch postgres CASCADE tracks declared transitive deletion effects
+09:31 +694 -2: test/watch_test.dart: watch postgres SET NULL tracks declared transitive deletion effects
+09:31 +695 -2: test/watch_test.dart: watch postgres explicit JOINs and joined CTE definitions track both physical sources
+09:31 +696 -2: test/watch_test.dart: watch postgres raw SQL declares changed and read tables; explicit invalidation follows transactions
+09:32 +697 -2: test/watch_test.dart: watch postgres paused listeners coalesce writes and stop fetching until resumed
+09:32 +698 -2: test/watch_test.dart: watch postgres invalidation during a read suppresses the stale snapshot and refetches
+09:32 +699 -2: test/watch_test.dart: watch postgres decoding errors are reported and a later write can recover
+09:32 +700 -2: test/watch_test.dart: watch postgres separate subscriptions and views of one driver receive changes
+09:32 +701 -2: test/watch_test.dart: watch postgres watching leased sessions is rejected and cancelled tokens close the stream
+09:32 +702 -2: test/watch_test.dart: watch postgres database close finishes watchers even when a listener is paused
+09:32 +703 -2: test/watch_test.dart: watch postgres cancelling an active watched query interrupts SQL and releases its lease
+09:32 +704 -2: test/watch_test.dart: watch postgres lost commit acknowledgement triggers a conservative re-read
+09:32 +705 -2: test/watch_test.dart: watch postgres independent connections require an explicit external-write notification
+09:32 +706 -2: loading test/backfill_test.dart
+09:32 +706 -2: test/backfill_test.dart: backfill sqlite chunks pause and resume from a checksummed historical declaration
+09:32 +707 -2: test/backfill_test.dart: backfill sqlite failed chunk rolls back both writes and cursor, then resumes after repair
+09:32 +708 -2: test/backfill_test.dart: backfill sqlite failed completion proof preserves finished chunks without replay
+09:32 +709 -2: test/backfill_test.dart: backfill sqlite frozen upper bound and completion proof detect incompatible new writes
+09:32 +710 -2: test/backfill_test.dart: backfill sqlite competing runners share committed chunks without duplicate updates
+09:32 +711 -2: test/backfill_test.dart: backfill sqlite lost chunk commit acknowledgement preserves the committed frontier
+09:32 +712 -2: test/backfill_test.dart: backfill sqlite old checkpoint tables upgrade on apply; completed reads remain nonmutating
+09:32 +713 -2: test/backfill_test.dart: backfill sqlite completion conditions reject numeric results instead of truthiness
+09:32 +714 -2: test/backfill_test.dart: backfill sqlite empty input still requires the completion condition
+09:32 +715 -2: test/backfill_test.dart: backfill sqlite later ordinary migrations retain group atomicity after a completed backfill
+09:32 +716 -2: test/backfill_test.dart: backfill sqlite AFTER triggers cannot silently move keys past a committed cursor
+09:32 +717 -2: test/backfill_test.dart: backfill sqlite corrupt checkpoint dimensions and invalid run limits are rejected
+09:32 +718 -2: test/backfill_test.dart: backfill sqlite rebuild, chunked backfill and required-column rebuild preserve FK enforcement
+09:32 +719 -2: test/backfill_test.dart: backfill sqlite CLI previews non-atomic work and reports a bounded run as incomplete
+09:58 +720 -2: test/backfill_test.dart: backfill sqlite temporary tables cannot redirect the historical backfill target
+09:58 +721 -2: test/backfill_test.dart: backfill sqlite temporary objects cannot impersonate durable migration metadata
+09:58 +722 -2: test/backfill_test.dart: backfill sqlite committed chunks invalidate relevant typed query subscriptions
+09:58 +723 -2: test/backfill_test.dart: backfill sqlite real process exit after second chunk write resumes correctly
+10:20 +724 -2: test/backfill_test.dart: backfill sqlite real process exit after second chunk commit resumes correctly
+10:42 +725 -2: test/backfill_test.dart: backfill postgres chunks pause and resume from a checksummed historical declaration
+10:42 +726 -2: test/backfill_test.dart: backfill postgres failed chunk rolls back both writes and cursor, then resumes after repair
+10:42 +727 -2: test/backfill_test.dart: backfill postgres failed completion proof preserves finished chunks without replay
+10:42 +728 -2: test/backfill_test.dart: backfill postgres frozen upper bound and completion proof detect incompatible new writes
+10:42 +729 -2: test/backfill_test.dart: backfill postgres competing runners share committed chunks without duplicate updates
+10:42 +730 -2: test/backfill_test.dart: backfill postgres lost chunk commit acknowledgement preserves the committed frontier
+10:42 +731 -2: test/backfill_test.dart: backfill postgres old checkpoint tables upgrade on apply; completed reads remain nonmutating
+10:42 +732 -2: test/backfill_test.dart: backfill postgres completion conditions reject numeric results instead of truthiness
+10:42 +733 -2: test/backfill_test.dart: backfill postgres empty input still requires the completion condition
+10:42 +734 -2: test/backfill_test.dart: backfill postgres later ordinary migrations retain group atomicity after a completed backfill
+10:42 +735 -2: test/backfill_test.dart: backfill postgres AFTER triggers cannot silently move keys past a committed cursor
+10:42 +736 -2: test/backfill_test.dart: backfill postgres corrupt checkpoint dimensions and invalid run limits are rejected
+10:42 +737 -2: test/backfill_test.dart: backfill postgres CLI previews non-atomic work and reports a bounded run as incomplete
+11:10 +738 -2: test/backfill_test.dart: backfill postgres temporary tables cannot redirect the historical backfill target
+11:10 +739 -2: test/backfill_test.dart: backfill postgres temporary objects cannot impersonate durable migration metadata
+11:10 +740 -2: test/backfill_test.dart: backfill postgres row security cannot hide unfinished rows from the completion proof
+11:10 +741 -2: test/backfill_test.dart: backfill postgres inherited duplicate primary keys cannot advance a cursor
+11:10 +742 -2: test/backfill_test.dart: backfill postgres committed chunks invalidate relevant typed query subscriptions
+11:10 +743 -2: test/backfill_test.dart: backfill postgres real process exit after second chunk write resumes correctly
+11:25 +744 -2: test/backfill_test.dart: backfill postgres real process exit after second chunk commit resumes correctly
+11:43 +745 -2: loading test/custom_codec_test.dart
+11:43 +745 -2: test/custom_codec_test.dart: (setUpAll)
+11:43 +745 -2: test/custom_codec_test.dart: custom codecs sqlite generated custom values round trip through create, select and patch
+11:43 +746 -2: test/custom_codec_test.dart: custom codecs sqlite enum labels are stable text and unknown labels fail decoding
+11:43 +747 -2: test/custom_codec_test.dart: custom codecs sqlite domain validation and bound parameters apply to writes and predicates
+11:43 +748 -2: test/custom_codec_test.dart: custom codecs sqlite JSON documents distinguish SQL NULL, JSON null and string scalars
+11:43 +749 -2: test/custom_codec_test.dart: custom codecs sqlite nullable structured codec rejects JSON null instead of masking invalid data
+11:43 +750 -2: test/custom_codec_test.dart: custom codecs sqlite custom IDs and domain projections work across joined and batched relations
+11:43 +751 -2: test/custom_codec_test.dart: custom codecs sqlite custom values participate in atomic batch writes and native upsert
+11:43 +752 -2: test/custom_codec_test.dart: custom codecs sqlite custom IDs and enums survive cursor transport and streaming decoders
+11:43 +753 -2: test/custom_codec_test.dart: custom codecs sqlite migration snapshots retain physical storage without executing domain codecs
+11:43 +754 -2: test/custom_codec_test.dart: custom codecs postgres generated custom values round trip through create, select and patch
+11:43 +755 -2: test/custom_codec_test.dart: custom codecs postgres enum labels are stable text and unknown labels fail decoding
+11:43 +756 -2: test/custom_codec_test.dart: custom codecs postgres domain validation and bound parameters apply to writes and predicates
+11:43 +757 -2: test/custom_codec_test.dart: custom codecs postgres JSON documents distinguish SQL NULL, JSON null and string scalars
+11:43 +758 -2: test/custom_codec_test.dart: custom codecs postgres nullable structured codec rejects JSON null instead of masking invalid data
+11:44 +759 -2: test/custom_codec_test.dart: custom codecs postgres custom IDs and domain projections work across joined and batched relations
+11:44 +760 -2: test/custom_codec_test.dart: custom codecs postgres custom values participate in atomic batch writes and native upsert
+11:44 +761 -2: test/custom_codec_test.dart: custom codecs postgres custom IDs and enums survive cursor transport and streaming decoders
+11:44 +762 -2: test/custom_codec_test.dart: custom codecs postgres migration snapshots retain physical storage without executing domain codecs
+11:44 +763 -2: test/custom_codec_test.dart: (tearDownAll)
+11:44 +763 -2: loading test/plan_test.dart
+11:44 +763 -2: test/plan_test.dart: inspect sqlite reports composite key width and validates each potential batch
+11:44 +764 -2: test/plan_test.dart: inspect sqlite compiles nested plans without acquiring or decoding
+11:44 +765 -2: test/plan_test.dart: inspect sqlite distinguishes same-statement joins and skipped batches
+11:44 +766 -2: test/plan_test.dart: inspect sqlite retains CTE, UNION and raw SQL boundaries
+11:44 +767 -2: test/plan_test.dart: plan execution sqlite one-key SQL templates match executed SQL and internal slots
+11:44 +768 -2: test/plan_test.dart: inspect postgres reports composite key width and validates each potential batch
+11:44 +769 -2: test/plan_test.dart: inspect postgres compiles nested plans without acquiring or decoding
+11:44 +770 -2: test/plan_test.dart: inspect postgres distinguishes same-statement joins and skipped batches
+11:44 +771 -2: test/plan_test.dart: inspect postgres retains CTE, UNION and raw SQL boundaries
+11:44 +772 -2: test/plan_test.dart: plan execution postgres one-key SQL templates match executed SQL and internal slots
+11:44 +773 -2: loading test/check_test.dart
+11:44 +773 -2: test/check_test.dart: CHECK sqlite generated named and unnamed constraints enforce values and permit NULL
+11:44 +774 -2: test/check_test.dart: CHECK sqlite import preserves names and SQL then generates a matching snapshot
+11:46 +775 -2: test/check_test.dart: CHECK sqlite add, change and remove constraints validate old rows atomically
+11:46 +776 -2: test/check_test.dart: CHECK sqlite duplicate unnamed checks consume and drop exactly one catalog entry
+11:46 +777 -2: test/check_test.dart: CHECK sqlite explicit checked renames preserve rows, incoming references, indexes and views
+11:46 +778 -2: test/check_test.dart: CHECK sqlite verification preserves casts, precedence, literals and trailing comments
+11:46 +779 -2: test/check_test.dart: CHECK sqlite quoted Unicode identifiers retain SQLite case distinctions
+11:46 +780 -2: test/check_test.dart: CHECK sqlite undeclared CHECK is refused before a rebuild and remains enforced
+11:46 +781 -2: test/check_test.dart: CHECK postgres generated named and unnamed constraints enforce values and permit NULL
+11:46 +782 -2: test/check_test.dart: CHECK postgres import preserves names and SQL then generates a matching snapshot
+11:47 +783 -2: test/check_test.dart: CHECK postgres add, change and remove constraints validate old rows atomically
+11:47 +784 -2: test/check_test.dart: CHECK postgres duplicate unnamed checks consume and drop exactly one catalog entry
+11:47 +785 -2: test/check_test.dart: CHECK postgres explicit checked renames preserve rows, incoming references, indexes and views
+11:47 +786 -2: test/check_test.dart: CHECK postgres verification preserves casts, precedence, literals and trailing comments
+11:47 +787 -2: test/check_test.dart: CHECK postgres catalog excludes unvalidated and NO INHERIT constraints
+11:47 +788 -2: test/check_test.dart: CHECK postgres verification plans but does not execute volatile row expressions
+11:47 +789 -2: test/check_test.dart: dialect overrides only alter the affected backend and preserve old snapshot JSON
+11:47 +790 -2: loading test/temporal_test.dart
+11:47 +790 -2: test/temporal_test.dart: borrowed PostgreSQL pool local calendar capability: false
+11:47 +791 -2: test/temporal_test.dart: borrowed PostgreSQL pool local calendar capability: true
+11:47 +792 -2: test/temporal_test.dart: Gregorian cycles, era boundaries and full finite date range
+11:47 +793 -2: test/temporal_test.dart: local time precision, day endpoint and timestamp arithmetic
+11:47 +794 -2: test/temporal_test.dart: PostgreSQL binary registry covers boundaries without DateTime
+11:47 +795 -2: test/temporal_test.dart: local temporal sqlite generated writes, defaults, null patches and typed parameters
+11:47 +796 -2: test/temporal_test.dart: local temporal sqlite finite extremes and microseconds survive native rows and streams
+11:47 +797 -2: test/temporal_test.dart: local temporal sqlite calendar ordering, min/max, grouping and stable date cursors
+11:47 +798 -2: test/temporal_test.dart: local temporal sqlite equivalent date keys drive batched relations and unique indexes
+11:47 +799 -2: test/temporal_test.dart: local temporal sqlite time and local timestamp comparisons retain calendar semantics
+11:47 +800 -2: test/temporal_test.dart: local temporal sqlite reviewed text-to-time migration rolls back duplicate clock values
+11:47 +801 -2: test/temporal_test.dart: local temporal sqlite invalid external dates fail typed reads without damaging the connection
+11:47 +802 -2: test/temporal_test.dart: local temporal sqlite snapshots, catalog import and regenerated defaults agree
+11:49 +803 -2: test/temporal_test.dart: local temporal sqlite historical date keys resume a bounded backfill in calendar order
+11:49 +804 -2: test/temporal_test.dart: local temporal postgres catalog retains time-truncating casts in expression defaults
+11:49 +805 -2: test/temporal_test.dart: local temporal postgres generated writes, defaults, null patches and typed parameters
+11:49 +806 -2: test/temporal_test.dart: local temporal postgres finite extremes and microseconds survive native rows and streams
+11:49 +807 -2: test/temporal_test.dart: local temporal postgres calendar ordering, min/max, grouping and stable date cursors
+11:49 +808 -2: test/temporal_test.dart: local temporal postgres equivalent date keys drive batched relations and unique indexes
+11:50 +809 -2: test/temporal_test.dart: local temporal postgres time and local timestamp comparisons retain calendar semantics
+11:50 +810 -2: test/temporal_test.dart: local temporal postgres reviewed text-to-time migration rolls back duplicate clock values
+11:50 +811 -2: test/temporal_test.dart: local temporal postgres invalid external dates fail typed reads without damaging the connection
+11:50 +812 -2: test/temporal_test.dart: local temporal postgres snapshots, catalog import and regenerated defaults agree
+11:50 +813 -2: test/temporal_test.dart: local temporal postgres historical date keys resume a bounded backfill in calendar order
+11:50 +814 -2: loading test/unconstrained_relation_test.dart
+11:50 +814 -2: test/unconstrained_relation_test.dart: unconstrained sqlite catalogs contain no FK, implicit index or uniqueness promise
+11:50 +815 -2: test/unconstrained_relation_test.dart: unconstrained sqlite adding and removing a real FK remains a reviewed physical migration
+11:50 +816 -2: test/unconstrained_relation_test.dart: unconstrained sqlite unique joins preserve root rows, NULL components and missing targets
+11:50 +817 -2: test/unconstrained_relation_test.dart: unconstrained sqlite required target and filter visibility remain explicit
+11:50 +818 -2: test/unconstrained_relation_test.dart: unconstrained sqlite nonunique composite collections batch by tuple and page per parent
+11:50 +819 -2: test/unconstrained_relation_test.dart: unconstrained sqlite to-one uses cardinality checks without assuming a unique lookup
+11:50 +820 -2: test/unconstrained_relation_test.dart: unconstrained sqlite correlated filters and counts do not materialize related rows
+11:50 +821 -2: test/unconstrained_relation_test.dart: unconstrained sqlite self relations and inverse collections share the existing planner
+11:50 +822 -2: test/unconstrained_relation_test.dart: unconstrained sqlite delete has no cascade and watches track the joined target
+11:50 +823 -2: test/unconstrained_relation_test.dart: unconstrained sqlite transaction reads observe writes and outer rollback restores targets
+11:50 +824 -2: test/unconstrained_relation_test.dart: unconstrained sqlite streaming preserves optional and batched relation result shapes
+11:50 +825 -2: test/unconstrained_relation_test.dart: unconstrained sqlite floating relation keys retain storage intent and key equality
+11:50 +826 -2: test/unconstrained_relation_test.dart: unconstrained postgres catalogs contain no FK, implicit index or uniqueness promise
+11:51 +827 -2: test/unconstrained_relation_test.dart: unconstrained postgres adding and removing a real FK remains a reviewed physical migration
+11:51 +828 -2: test/unconstrained_relation_test.dart: unconstrained postgres unique joins preserve root rows, NULL components and missing targets
+11:51 +829 -2: test/unconstrained_relation_test.dart: unconstrained postgres required target and filter visibility remain explicit
+11:51 +830 -2: test/unconstrained_relation_test.dart: unconstrained postgres nonunique composite collections batch by tuple and page per parent
+11:51 +831 -2: test/unconstrained_relation_test.dart: unconstrained postgres to-one uses cardinality checks without assuming a unique lookup
+11:51 +832 -2: test/unconstrained_relation_test.dart: unconstrained postgres correlated filters and counts do not materialize related rows
+11:51 +833 -2: test/unconstrained_relation_test.dart: unconstrained postgres self relations and inverse collections share the existing planner
+11:51 +834 -2: test/unconstrained_relation_test.dart: unconstrained postgres delete has no cascade and watches track the joined target
+11:51 +835 -2: test/unconstrained_relation_test.dart: unconstrained postgres transaction reads observe writes and outer rollback restores targets
+11:51 +836 -2: test/unconstrained_relation_test.dart: unconstrained postgres streaming preserves optional and batched relation result shapes
+11:51 +837 -2: test/unconstrained_relation_test.dart: unconstrained postgres floating relation keys retain storage intent and key equality
+11:51 +838 -2: loading test/decimal_value_test.dart
+11:51 +838 -2: test/decimal_value_test.dart: normalization, scientific notation, equality and hash are exact
+11:51 +839 -2: test/decimal_value_test.dart: invalid and approximate inputs fail instead of silently rounding
+11:51 +840 -2: test/decimal_value_test.dart: range boundaries are checked without binary numeric conversions
+11:51 +841 -2: test/decimal_value_test.dart: addition, subtraction, multiplication and ordering keep every digit
+11:51 +842 -2: test/decimal_value_test.dart: division requires an explicit scale and rejects implicit rounding
+11:51 +843 -2: test/decimal_value_test.dart: rounding modes handle negative values, ties and negative scales
+11:51 +844 -2: test/decimal_value_test.dart: small fixed-scale arithmetic agrees with independent integer arithmetic
+11:51 +845 -2: Some tests failed.
+
+Failing tests:
+  test/migration_recovery_test.dart: real process exit after concurrent DDL resumes without replay
+  test/migration_recovery_test.dart: real process exit after transaction commit resumes without replay
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.

@@ -1,0 +1,1159 @@
+{
+  "recordedAt": "2026-09-15T08:45:16.612800Z",
+  "runtimeSourceCommit": "4ef499eece6fc09c9b41f3d3f07a3bbf3d4fae01",
+  "dart": "3.13.3 (stable) (Tue Sep 1 01:07:17 2026 -0700) on \"macos_arm64\"",
+  "os": "Version 26.6.2 (Build 25G83)",
+  "smoke": false,
+  "scope": "Controlled User/Post/Profile/Follow declaration-frontends experiment. All forms are resolved, normalized to the same Record schema, and sent through the unchanged production generator. Class/table inputs describe schema only; arbitrary constructors/methods and nominal runtime row objects are not implemented. No database execution or runtime performance claim. One timing observation per stage, warm SDK/pub/OS caches, offline dependency resolution excluded. Physical snapshots and generated Dart must be byte-identical for each variant. Record field rename is manual; class/table schema references use a clean LSP server. Generated-client references are independently checked and repaired after regeneration.",
+  "harnessSha256": {
+    "tool/compare_authoring.dart": "94d67e12617f4c31921ffde23c87f4db43ab8b416911052ba2f4bf726df00e38",
+    "tool/src/authoring.dart": "8c015925af9b5dd34eac1e07f68b68d07458463a880102d5f1d8180ceb7353b2",
+    "tool/src/authoring_fixture.dart": "26179f126778b3d1bfef7ff3e59f0b4b67b1adc89ff02381abddede0cf02188d",
+    "tool/src/build_fixture.dart": "03a5d875d608fd25245b5da268d66ce4c0913ed288ac05270ae9522a68bb0ea9",
+    "tool/src/editor_server.dart": "00e3cf5e7675166979cdb03a9d333754ee7aeb2874d6940d5d5ab6cff43a9ff8"
+  },
+  "outputs": {
+    "base": {
+      "schema": "import 'package:orm/schema.dart';\ntypedef User = ({\n@Id.generated() @ColumnName(\"id\") int id,\n@ColumnName(\"tenant_id\") int tenantId,\n@ColumnName(\"email\") String email,\n@ColumnName(\"nickname\") String? nickname,\n});\ntypedef Post = ({\n@Id.generated() @ColumnName(\"id\") int id,\n@ColumnName(\"tenant_id\") int tenantId,\n@ColumnName(\"author_id\") int authorId,\n@ColumnName(\"title\") String title,\n@Default.sql('false') @ColumnName(\"published\") bool published,\n@ColumnName(\"created_at\") DateTime createdAt,\n});\ntypedef Profile = ({\n@ColumnName(\"tenant_id\") int tenantId,\n@ColumnName(\"user_id\") int userId,\n@ColumnName(\"bio\") String? bio,\n});\ntypedef Follow = ({\n@ColumnName(\"tenant_id\") int tenantId,\n@ColumnName(\"follower_id\") int followerId,\n@ColumnName(\"followed_id\") int followedId,\n@ColumnName(\"created_at\") DateTime createdAt,\n});\nfinal users = entity<User>(table: 'users');\nfinal posts = entity<Post>(table: 'posts');\nfinal profiles = entity<Profile>(table: 'profiles');\nfinal follows = entity<Follow>(table: 'follows');\nfinal userIdentity = users.unique((u) => (u.tenantId, u.id));\nfinal userEmail = users.unique((u) => (u.tenantId, u.email));\nfinal profileIdentity = profiles.primaryKey((p) => (p.tenantId, p.userId));\nfinal followIdentity = follows.primaryKey(\n  (f) => (f.tenantId, f.followerId, f.followedId),\n);\nfinal author = posts\n    .key((p) => (p.tenantId, p.authorId))\n    .references(users.key((u) => (u.tenantId, u.id)), inverse: 'posts');\nfinal profileOwner = profiles\n    .key((p) => (p.tenantId, p.userId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'profile',\n      onDelete: .cascade,\n    );\nfinal follower = follows\n    .key((f) => (f.tenantId, f.followerId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'following',\n      onDelete: .cascade,\n    );\nfinal followed = follows\n    .key((f) => (f.tenantId, f.followedId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'followers',\n      onDelete: .cascade,\n    );\nfinal authorTimeline = posts.index(\n  (p) => (p.tenantId, p.authorId, p.createdAt, p.id),\n);\nfinal distinctUsers = follows.check('follower_id <> followed_id');\n",
+      "clientSha256": "f4b306b028261cb1c88d2c18d5e4d1dee57e65e9e1cc5561aab52e56d5c27c65",
+      "snapshot": {
+        "format": 1,
+        "tables": [
+          {
+            "name": "users",
+            "columns": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "generated": true
+              },
+              {
+                "name": "tenant_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "email",
+                "type": "text",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "nickname",
+                "type": "text",
+                "nullable": true,
+                "generated": false
+              }
+            ],
+            "primaryKey": [
+              "id"
+            ],
+            "uniqueKeys": [
+              [
+                "tenant_id",
+                "id"
+              ],
+              [
+                "tenant_id",
+                "email"
+              ]
+            ],
+            "indexes": [],
+            "foreignKeys": []
+          },
+          {
+            "name": "posts",
+            "columns": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "generated": true
+              },
+              {
+                "name": "tenant_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "author_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "title",
+                "type": "text",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "published",
+                "type": "boolean",
+                "nullable": false,
+                "generated": false,
+                "default": "false"
+              },
+              {
+                "name": "created_at",
+                "type": "instant",
+                "nullable": false,
+                "generated": false
+              }
+            ],
+            "primaryKey": [
+              "id"
+            ],
+            "uniqueKeys": [],
+            "indexes": [
+              {
+                "name": "author_timeline",
+                "columns": [
+                  "tenant_id",
+                  "author_id",
+                  "created_at",
+                  "id"
+                ],
+                "unique": false
+              }
+            ],
+            "foreignKeys": [
+              {
+                "columns": [
+                  "tenant_id",
+                  "author_id"
+                ],
+                "target": "users",
+                "targetColumns": [
+                  "tenant_id",
+                  "id"
+                ],
+                "onDelete": "RESTRICT"
+              }
+            ]
+          },
+          {
+            "name": "profiles",
+            "columns": [
+              {
+                "name": "tenant_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "user_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "bio",
+                "type": "text",
+                "nullable": true,
+                "generated": false
+              }
+            ],
+            "primaryKey": [
+              "tenant_id",
+              "user_id"
+            ],
+            "uniqueKeys": [],
+            "indexes": [],
+            "foreignKeys": [
+              {
+                "columns": [
+                  "tenant_id",
+                  "user_id"
+                ],
+                "target": "users",
+                "targetColumns": [
+                  "tenant_id",
+                  "id"
+                ],
+                "onDelete": "CASCADE"
+              }
+            ]
+          },
+          {
+            "name": "follows",
+            "columns": [
+              {
+                "name": "tenant_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "follower_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "followed_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "created_at",
+                "type": "instant",
+                "nullable": false,
+                "generated": false
+              }
+            ],
+            "primaryKey": [
+              "tenant_id",
+              "follower_id",
+              "followed_id"
+            ],
+            "uniqueKeys": [],
+            "indexes": [],
+            "foreignKeys": [
+              {
+                "columns": [
+                  "tenant_id",
+                  "follower_id"
+                ],
+                "target": "users",
+                "targetColumns": [
+                  "tenant_id",
+                  "id"
+                ],
+                "onDelete": "CASCADE"
+              },
+              {
+                "columns": [
+                  "tenant_id",
+                  "followed_id"
+                ],
+                "target": "users",
+                "targetColumns": [
+                  "tenant_id",
+                  "id"
+                ],
+                "onDelete": "CASCADE"
+              }
+            ],
+            "checks": [
+              {
+                "name": "distinct_users",
+                "sqlite": "follower_id <> followed_id",
+                "postgres": "follower_id <> followed_id"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "field_type": {
+      "schema": "import 'package:orm/schema.dart';\ntypedef User = ({\n@Id.generated() @ColumnName(\"id\") int id,\n@ColumnName(\"tenant_id\") int tenantId,\n@ColumnName(\"email\") String email,\n@ColumnName(\"nickname\") String? nickname,\n});\ntypedef Post = ({\n@Id.generated() @ColumnName(\"id\") int id,\n@ColumnName(\"tenant_id\") int tenantId,\n@ColumnName(\"author_id\") int authorId,\n@ColumnName(\"title\") String title,\n@Default.sql('false') @ColumnName(\"published\") bool published,\n@ColumnName(\"created_at\") DateTime createdAt,\n});\ntypedef Profile = ({\n@ColumnName(\"tenant_id\") int tenantId,\n@ColumnName(\"user_id\") int userId,\n@ColumnName(\"bio\") int? bio,\n});\ntypedef Follow = ({\n@ColumnName(\"tenant_id\") int tenantId,\n@ColumnName(\"follower_id\") int followerId,\n@ColumnName(\"followed_id\") int followedId,\n@ColumnName(\"created_at\") DateTime createdAt,\n});\nfinal users = entity<User>(table: 'users');\nfinal posts = entity<Post>(table: 'posts');\nfinal profiles = entity<Profile>(table: 'profiles');\nfinal follows = entity<Follow>(table: 'follows');\nfinal userIdentity = users.unique((u) => (u.tenantId, u.id));\nfinal userEmail = users.unique((u) => (u.tenantId, u.email));\nfinal profileIdentity = profiles.primaryKey((p) => (p.tenantId, p.userId));\nfinal followIdentity = follows.primaryKey(\n  (f) => (f.tenantId, f.followerId, f.followedId),\n);\nfinal author = posts\n    .key((p) => (p.tenantId, p.authorId))\n    .references(users.key((u) => (u.tenantId, u.id)), inverse: 'posts');\nfinal profileOwner = profiles\n    .key((p) => (p.tenantId, p.userId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'profile',\n      onDelete: .cascade,\n    );\nfinal follower = follows\n    .key((f) => (f.tenantId, f.followerId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'following',\n      onDelete: .cascade,\n    );\nfinal followed = follows\n    .key((f) => (f.tenantId, f.followedId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'followers',\n      onDelete: .cascade,\n    );\nfinal authorTimeline = posts.index(\n  (p) => (p.tenantId, p.authorId, p.createdAt, p.id),\n);\nfinal distinctUsers = follows.check('follower_id <> followed_id');\n",
+      "clientSha256": "9e71d404b664a5a686f3cd460d0ab41c9cc6fe9332412e7f896f65241f914152",
+      "snapshot": {
+        "format": 1,
+        "tables": [
+          {
+            "name": "users",
+            "columns": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "generated": true
+              },
+              {
+                "name": "tenant_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "email",
+                "type": "text",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "nickname",
+                "type": "text",
+                "nullable": true,
+                "generated": false
+              }
+            ],
+            "primaryKey": [
+              "id"
+            ],
+            "uniqueKeys": [
+              [
+                "tenant_id",
+                "id"
+              ],
+              [
+                "tenant_id",
+                "email"
+              ]
+            ],
+            "indexes": [],
+            "foreignKeys": []
+          },
+          {
+            "name": "posts",
+            "columns": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "generated": true
+              },
+              {
+                "name": "tenant_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "author_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "title",
+                "type": "text",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "published",
+                "type": "boolean",
+                "nullable": false,
+                "generated": false,
+                "default": "false"
+              },
+              {
+                "name": "created_at",
+                "type": "instant",
+                "nullable": false,
+                "generated": false
+              }
+            ],
+            "primaryKey": [
+              "id"
+            ],
+            "uniqueKeys": [],
+            "indexes": [
+              {
+                "name": "author_timeline",
+                "columns": [
+                  "tenant_id",
+                  "author_id",
+                  "created_at",
+                  "id"
+                ],
+                "unique": false
+              }
+            ],
+            "foreignKeys": [
+              {
+                "columns": [
+                  "tenant_id",
+                  "author_id"
+                ],
+                "target": "users",
+                "targetColumns": [
+                  "tenant_id",
+                  "id"
+                ],
+                "onDelete": "RESTRICT"
+              }
+            ]
+          },
+          {
+            "name": "profiles",
+            "columns": [
+              {
+                "name": "tenant_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "user_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "bio",
+                "type": "integer",
+                "nullable": true,
+                "generated": false
+              }
+            ],
+            "primaryKey": [
+              "tenant_id",
+              "user_id"
+            ],
+            "uniqueKeys": [],
+            "indexes": [],
+            "foreignKeys": [
+              {
+                "columns": [
+                  "tenant_id",
+                  "user_id"
+                ],
+                "target": "users",
+                "targetColumns": [
+                  "tenant_id",
+                  "id"
+                ],
+                "onDelete": "CASCADE"
+              }
+            ]
+          },
+          {
+            "name": "follows",
+            "columns": [
+              {
+                "name": "tenant_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "follower_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "followed_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "created_at",
+                "type": "instant",
+                "nullable": false,
+                "generated": false
+              }
+            ],
+            "primaryKey": [
+              "tenant_id",
+              "follower_id",
+              "followed_id"
+            ],
+            "uniqueKeys": [],
+            "indexes": [],
+            "foreignKeys": [
+              {
+                "columns": [
+                  "tenant_id",
+                  "follower_id"
+                ],
+                "target": "users",
+                "targetColumns": [
+                  "tenant_id",
+                  "id"
+                ],
+                "onDelete": "CASCADE"
+              },
+              {
+                "columns": [
+                  "tenant_id",
+                  "followed_id"
+                ],
+                "target": "users",
+                "targetColumns": [
+                  "tenant_id",
+                  "id"
+                ],
+                "onDelete": "CASCADE"
+              }
+            ],
+            "checks": [
+              {
+                "name": "distinct_users",
+                "sqlite": "follower_id <> followed_id",
+                "postgres": "follower_id <> followed_id"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "rename": {
+      "schema": "import 'package:orm/schema.dart';\ntypedef User = ({\n@Id.generated() @ColumnName(\"id\") int id,\n@ColumnName(\"tenant_id\") int tenantId,\n@ColumnName(\"email\") String contactEmail,\n@ColumnName(\"nickname\") String? nickname,\n});\ntypedef Post = ({\n@Id.generated() @ColumnName(\"id\") int id,\n@ColumnName(\"tenant_id\") int tenantId,\n@ColumnName(\"author_id\") int authorId,\n@ColumnName(\"title\") String title,\n@Default.sql('false') @ColumnName(\"published\") bool published,\n@ColumnName(\"created_at\") DateTime createdAt,\n});\ntypedef Profile = ({\n@ColumnName(\"tenant_id\") int tenantId,\n@ColumnName(\"user_id\") int userId,\n@ColumnName(\"bio\") String? bio,\n});\ntypedef Follow = ({\n@ColumnName(\"tenant_id\") int tenantId,\n@ColumnName(\"follower_id\") int followerId,\n@ColumnName(\"followed_id\") int followedId,\n@ColumnName(\"created_at\") DateTime createdAt,\n});\nfinal users = entity<User>(table: 'users');\nfinal posts = entity<Post>(table: 'posts');\nfinal profiles = entity<Profile>(table: 'profiles');\nfinal follows = entity<Follow>(table: 'follows');\nfinal userIdentity = users.unique((u) => (u.tenantId, u.id));\nfinal userEmail = users.unique((u) => (u.tenantId, u.contactEmail));\nfinal profileIdentity = profiles.primaryKey((p) => (p.tenantId, p.userId));\nfinal followIdentity = follows.primaryKey(\n  (f) => (f.tenantId, f.followerId, f.followedId),\n);\nfinal author = posts\n    .key((p) => (p.tenantId, p.authorId))\n    .references(users.key((u) => (u.tenantId, u.id)), inverse: 'posts');\nfinal profileOwner = profiles\n    .key((p) => (p.tenantId, p.userId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'profile',\n      onDelete: .cascade,\n    );\nfinal follower = follows\n    .key((f) => (f.tenantId, f.followerId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'following',\n      onDelete: .cascade,\n    );\nfinal followed = follows\n    .key((f) => (f.tenantId, f.followedId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'followers',\n      onDelete: .cascade,\n    );\nfinal authorTimeline = posts.index(\n  (p) => (p.tenantId, p.authorId, p.createdAt, p.id),\n);\nfinal distinctUsers = follows.check('follower_id <> followed_id');\n",
+      "clientSha256": "421b7bf6338dd8e2116e3acaa1c0b887f1ee8c077e79e0009a13d4734c6c9adc",
+      "snapshot": {
+        "format": 1,
+        "tables": [
+          {
+            "name": "users",
+            "columns": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "generated": true
+              },
+              {
+                "name": "tenant_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "email",
+                "type": "text",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "nickname",
+                "type": "text",
+                "nullable": true,
+                "generated": false
+              }
+            ],
+            "primaryKey": [
+              "id"
+            ],
+            "uniqueKeys": [
+              [
+                "tenant_id",
+                "id"
+              ],
+              [
+                "tenant_id",
+                "email"
+              ]
+            ],
+            "indexes": [],
+            "foreignKeys": []
+          },
+          {
+            "name": "posts",
+            "columns": [
+              {
+                "name": "id",
+                "type": "integer",
+                "nullable": false,
+                "generated": true
+              },
+              {
+                "name": "tenant_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "author_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "title",
+                "type": "text",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "published",
+                "type": "boolean",
+                "nullable": false,
+                "generated": false,
+                "default": "false"
+              },
+              {
+                "name": "created_at",
+                "type": "instant",
+                "nullable": false,
+                "generated": false
+              }
+            ],
+            "primaryKey": [
+              "id"
+            ],
+            "uniqueKeys": [],
+            "indexes": [
+              {
+                "name": "author_timeline",
+                "columns": [
+                  "tenant_id",
+                  "author_id",
+                  "created_at",
+                  "id"
+                ],
+                "unique": false
+              }
+            ],
+            "foreignKeys": [
+              {
+                "columns": [
+                  "tenant_id",
+                  "author_id"
+                ],
+                "target": "users",
+                "targetColumns": [
+                  "tenant_id",
+                  "id"
+                ],
+                "onDelete": "RESTRICT"
+              }
+            ]
+          },
+          {
+            "name": "profiles",
+            "columns": [
+              {
+                "name": "tenant_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "user_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "bio",
+                "type": "text",
+                "nullable": true,
+                "generated": false
+              }
+            ],
+            "primaryKey": [
+              "tenant_id",
+              "user_id"
+            ],
+            "uniqueKeys": [],
+            "indexes": [],
+            "foreignKeys": [
+              {
+                "columns": [
+                  "tenant_id",
+                  "user_id"
+                ],
+                "target": "users",
+                "targetColumns": [
+                  "tenant_id",
+                  "id"
+                ],
+                "onDelete": "CASCADE"
+              }
+            ]
+          },
+          {
+            "name": "follows",
+            "columns": [
+              {
+                "name": "tenant_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "follower_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "followed_id",
+                "type": "integer",
+                "nullable": false,
+                "generated": false
+              },
+              {
+                "name": "created_at",
+                "type": "instant",
+                "nullable": false,
+                "generated": false
+              }
+            ],
+            "primaryKey": [
+              "tenant_id",
+              "follower_id",
+              "followed_id"
+            ],
+            "uniqueKeys": [],
+            "indexes": [],
+            "foreignKeys": [
+              {
+                "columns": [
+                  "tenant_id",
+                  "follower_id"
+                ],
+                "target": "users",
+                "targetColumns": [
+                  "tenant_id",
+                  "id"
+                ],
+                "onDelete": "CASCADE"
+              },
+              {
+                "columns": [
+                  "tenant_id",
+                  "followed_id"
+                ],
+                "target": "users",
+                "targetColumns": [
+                  "tenant_id",
+                  "id"
+                ],
+                "onDelete": "CASCADE"
+              }
+            ],
+            "checks": [
+              {
+                "name": "distinct_users",
+                "sqlite": "follower_id <> followed_id",
+                "postgres": "follower_id <> followed_id"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "results": [
+    {
+      "form": "record",
+      "source": "// @dart=3.13\nimport 'package:orm/schema.dart';\n\ntypedef User = ({\n  @Id.generated() int id,\n  int tenantId,\n  @ColumnName('email') String email,\n  String? nickname,\n});\ntypedef Post = ({\n  @Id.generated() int id,\n  int tenantId,\n  int authorId,\n  String title,\n  @Default.sql('false') bool published,\n  DateTime createdAt,\n});\ntypedef Profile = ({int tenantId, int userId, String? bio});\ntypedef Follow = ({\n  int tenantId,\n  int followerId,\n  int followedId,\n  DateTime createdAt,\n});\nfinal users = entity<User>(table: 'users');\nfinal posts = entity<Post>(table: 'posts');\nfinal profiles = entity<Profile>(table: 'profiles');\nfinal follows = entity<Follow>(table: 'follows');\nfinal userIdentity = users.unique((u) => (u.tenantId, u.id));\nfinal userEmail = users.unique((u) => (u.tenantId, u.email));\nfinal profileIdentity = profiles.primaryKey((p) => (p.tenantId, p.userId));\nfinal followIdentity = follows.primaryKey(\n  (f) => (f.tenantId, f.followerId, f.followedId),\n);\nfinal author = posts\n    .key((p) => (p.tenantId, p.authorId))\n    .references(users.key((u) => (u.tenantId, u.id)), inverse: 'posts');\nfinal profileOwner = profiles\n    .key((p) => (p.tenantId, p.userId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'profile',\n      onDelete: .cascade,\n    );\nfinal follower = follows\n    .key((f) => (f.tenantId, f.followerId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'following',\n      onDelete: .cascade,\n    );\nfinal followed = follows\n    .key((f) => (f.tenantId, f.followedId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'followers',\n      onDelete: .cascade,\n    );\nfinal authorTimeline = posts.index(\n  (p) => (p.tenantId, p.authorId, p.createdAt, p.id),\n);\nfinal distinctUsers = follows.check('follower_id <> followed_id');\n",
+      "base": {
+        "sourceBytes": 1843,
+        "sourceLines": 62,
+        "modelDeclarationBytes": 487,
+        "modelDeclarationLines": 24,
+        "normalizeMicros": 1401839,
+        "generationMicros": 510759,
+        "schemaSha256": "cd7afdcdbf23cf25963555e46af817e1be7914e08bb0c96033290976c2dbe7c9",
+        "clientSha256": "f4b306b028261cb1c88d2c18d5e4d1dee57e65e9e1cc5561aab52e56d5c27c65",
+        "snapshotSha256": "8fdeb6639ee4f6bc1358d356f305095de9462b6a14b8c4fdd2bde8ca626afa85"
+      },
+      "initialAnalyzeMs": 467,
+      "fieldTypeEdit": {
+        "sourceBytes": 1840,
+        "sourceLines": 62,
+        "modelDeclarationBytes": 484,
+        "modelDeclarationLines": 24,
+        "normalizeMicros": 345208,
+        "generationMicros": 352162,
+        "schemaSha256": "a9f4abceec75636c58c9e81edbdaea637aad35f9c201fa814d509e4f8ec043fa",
+        "clientSha256": "9e71d404b664a5a686f3cd460d0ab41c9cc6fe9332412e7f896f65241f914152",
+        "snapshotSha256": "4b410fc14cf017b777c36062aa71b38bd6620e6869bd3a1b22397775cb0a7866",
+        "source": "// @dart=3.13\nimport 'package:orm/schema.dart';\n\ntypedef User = ({\n  @Id.generated() int id,\n  int tenantId,\n  @ColumnName('email') String email,\n  String? nickname,\n});\ntypedef Post = ({\n  @Id.generated() int id,\n  int tenantId,\n  int authorId,\n  String title,\n  @Default.sql('false') bool published,\n  DateTime createdAt,\n});\ntypedef Profile = ({int tenantId, int userId, int? bio});\ntypedef Follow = ({\n  int tenantId,\n  int followerId,\n  int followedId,\n  DateTime createdAt,\n});\nfinal users = entity<User>(table: 'users');\nfinal posts = entity<Post>(table: 'posts');\nfinal profiles = entity<Profile>(table: 'profiles');\nfinal follows = entity<Follow>(table: 'follows');\nfinal userIdentity = users.unique((u) => (u.tenantId, u.id));\nfinal userEmail = users.unique((u) => (u.tenantId, u.email));\nfinal profileIdentity = profiles.primaryKey((p) => (p.tenantId, p.userId));\nfinal followIdentity = follows.primaryKey(\n  (f) => (f.tenantId, f.followerId, f.followedId),\n);\nfinal author = posts\n    .key((p) => (p.tenantId, p.authorId))\n    .references(users.key((u) => (u.tenantId, u.id)), inverse: 'posts');\nfinal profileOwner = profiles\n    .key((p) => (p.tenantId, p.userId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'profile',\n      onDelete: .cascade,\n    );\nfinal follower = follows\n    .key((f) => (f.tenantId, f.followerId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'following',\n      onDelete: .cascade,\n    );\nfinal followed = follows\n    .key((f) => (f.tenantId, f.followedId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'followers',\n      onDelete: .cascade,\n    );\nfinal authorTimeline = posts.index(\n  (p) => (p.tenantId, p.authorId, p.createdAt, p.id),\n);\nfinal distinctUsers = follows.check('follower_id <> followed_id');\n",
+        "staleConsumerDiagnostics": [
+          "ERROR|COMPILE_TIME_ERROR|INVALID_ASSIGNMENT|/privatefixture/lib/client.dart|14|97|5|A value of type 'List<({int? bio, String email, List<String> following, List<String> posts})>' can't be assigned to a variable of type 'List<({String? bio, String email, List<String> following, List<String> posts})>'."
+        ]
+      },
+      "fieldRename": {
+        "sourceBytes": 1857,
+        "sourceLines": 62,
+        "modelDeclarationBytes": 494,
+        "modelDeclarationLines": 24,
+        "normalizeMicros": 315184,
+        "generationMicros": 282625,
+        "schemaSha256": "6efc4a760f465a87b05ada8a66d38a9262c21730ae586d6caaaa24418abf1943",
+        "clientSha256": "421b7bf6338dd8e2116e3acaa1c0b887f1ee8c077e79e0009a13d4734c6c9adc",
+        "snapshotSha256": "8fdeb6639ee4f6bc1358d356f305095de9462b6a14b8c4fdd2bde8ca626afa85",
+        "source": "// @dart=3.13\nimport 'package:orm/schema.dart';\n\ntypedef User = ({\n  @Id.generated() int id,\n  int tenantId,\n  @ColumnName('email') String contactEmail,\n  String? nickname,\n});\ntypedef Post = ({\n  @Id.generated() int id,\n  int tenantId,\n  int authorId,\n  String title,\n  @Default.sql('false') bool published,\n  DateTime createdAt,\n});\ntypedef Profile = ({int tenantId, int userId, String? bio});\ntypedef Follow = ({\n  int tenantId,\n  int followerId,\n  int followedId,\n  DateTime createdAt,\n});\nfinal users = entity<User>(table: 'users');\nfinal posts = entity<Post>(table: 'posts');\nfinal profiles = entity<Profile>(table: 'profiles');\nfinal follows = entity<Follow>(table: 'follows');\nfinal userIdentity = users.unique((u) => (u.tenantId, u.id));\nfinal userEmail = users.unique((u) => (u.tenantId, u.contactEmail));\nfinal profileIdentity = profiles.primaryKey((p) => (p.tenantId, p.userId));\nfinal followIdentity = follows.primaryKey(\n  (f) => (f.tenantId, f.followerId, f.followedId),\n);\nfinal author = posts\n    .key((p) => (p.tenantId, p.authorId))\n    .references(users.key((u) => (u.tenantId, u.id)), inverse: 'posts');\nfinal profileOwner = profiles\n    .key((p) => (p.tenantId, p.userId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'profile',\n      onDelete: .cascade,\n    );\nfinal follower = follows\n    .key((f) => (f.tenantId, f.followerId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'following',\n      onDelete: .cascade,\n    );\nfinal followed = follows\n    .key((f) => (f.tenantId, f.followedId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'followers',\n      onDelete: .cascade,\n    );\nfinal authorTimeline = posts.index(\n  (p) => (p.tenantId, p.authorId, p.createdAt, p.id),\n);\nfinal distinctUsers = follows.check('follower_id <> followed_id');\n",
+        "method": "manual",
+        "lspMicros": 2358,
+        "prepare": null,
+        "edit": null,
+        "staleConsumerDiagnostics": [
+          "ERROR|COMPILE_TIME_ERROR|MISSING_REQUIRED_ARGUMENT|/privatefixture/lib/client.dart|5|31|6|The named parameter 'contactEmail' is required, but there's no corresponding argument.",
+          "ERROR|COMPILE_TIME_ERROR|UNDEFINED_NAMED_PARAMETER|/privatefixture/lib/client.dart|5|51|5|The named parameter 'email' isn't defined.",
+          "ERROR|COMPILE_TIME_ERROR|UNDEFINED_GETTER|/privatefixture/lib/client.dart|6|29|5|The getter 'email' isn't defined for the type 'User'.",
+          "ERROR|COMPILE_TIME_ERROR|UNDEFINED_GETTER|/privatefixture/lib/client.dart|9|7|5|The getter 'email' isn't defined for the type 'UsersFields'.",
+          "ERROR|COMPILE_TIME_ERROR|UNDEFINED_GETTER|/privatefixture/lib/client.dart|12|58|5|The getter 'email' isn't defined for the type 'UsersFields'.",
+          "ERROR|COMPILE_TIME_ERROR|INVALID_ASSIGNMENT|/privatefixture/lib/client.dart|14|97|5|A value of type 'List<({dynamic bio, dynamic email, dynamic following, dynamic posts})>' can't be assigned to a variable of type 'List<({String? bio, String email, List<String> following, List<String> posts})>'."
+        ],
+        "physicalSnapshotUnchanged": true
+      },
+      "errors": [
+        {
+          "case": "unknown_field",
+          "phase": "dart",
+          "code": "undefined_getter",
+          "message": "The getter 'absent' isn't defined for the type 'User'.",
+          "offset": 793,
+          "length": 6,
+          "line": 30,
+          "column": 54,
+          "sourceLine": "final userEmail = users.unique((u) => (u.tenantId, u.absent));"
+        },
+        {
+          "case": "computed_selector",
+          "phase": "generator",
+          "code": "computed_selector",
+          "message": "Key selectors accept direct fields or positional records of fields only. (offset 2217)",
+          "offset": 1879,
+          "length": 1,
+          "line": 64,
+          "column": 36,
+          "sourceLine": "final invalid = users.index((u) => 0);"
+        },
+        {
+          "case": "duplicate_key_field",
+          "phase": "generator",
+          "code": "duplicate_key_field",
+          "message": "A key cannot repeat a field. (offset 2224)",
+          "offset": 1886,
+          "length": 4,
+          "line": 64,
+          "column": 43,
+          "sourceLine": "final invalid = users.index((u) => (u.id, u.id));"
+        },
+        {
+          "case": "non_unique_target",
+          "phase": "generator",
+          "code": "non_unique_target",
+          "message": "Foreign key target must be a primary or unique key in the same column order. (offset 1267)",
+          "offset": 928,
+          "length": 5,
+          "line": 34,
+          "column": 16,
+          "sourceLine": "final author = posts"
+        }
+      ],
+      "finalAnalyzeMs": 465
+    },
+    {
+      "form": "primary",
+      "source": "// @dart=3.13\nimport 'package:orm/schema.dart';\n\nfinal class User(\n  @Id.generated() final int id,\n  final int tenantId,\n  @ColumnName('email') final String email,\n  final String? nickname,\n);\nfinal class Post(\n  @Id.generated() final int id,\n  final int tenantId,\n  final int authorId,\n  final String title,\n  @Default.sql('false') final bool published,\n  final DateTime createdAt,\n);\nfinal class Profile(final int tenantId, final int userId, final String? bio);\nfinal class Follow(\n  final int tenantId,\n  final int followerId,\n  final int followedId,\n  final DateTime createdAt,\n);\nfinal users = entity<User>(table: 'users');\nfinal posts = entity<Post>(table: 'posts');\nfinal profiles = entity<Profile>(table: 'profiles');\nfinal follows = entity<Follow>(table: 'follows');\nfinal userIdentity = users.unique((u) => (u.tenantId, u.id));\nfinal userEmail = users.unique((u) => (u.tenantId, u.email));\nfinal profileIdentity = profiles.primaryKey((p) => (p.tenantId, p.userId));\nfinal followIdentity = follows.primaryKey(\n  (f) => (f.tenantId, f.followerId, f.followedId),\n);\nfinal author = posts\n    .key((p) => (p.tenantId, p.authorId))\n    .references(users.key((u) => (u.tenantId, u.id)), inverse: 'posts');\nfinal profileOwner = profiles\n    .key((p) => (p.tenantId, p.userId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'profile',\n      onDelete: .cascade,\n    );\nfinal follower = follows\n    .key((f) => (f.tenantId, f.followerId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'following',\n      onDelete: .cascade,\n    );\nfinal followed = follows\n    .key((f) => (f.tenantId, f.followedId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'followers',\n      onDelete: .cascade,\n    );\nfinal authorTimeline = posts.index(\n  (p) => (p.tenantId, p.authorId, p.createdAt, p.id),\n);\nfinal distinctUsers = follows.check('follower_id <> followed_id');\n",
+      "base": {
+        "sourceBytes": 1941,
+        "sourceLines": 62,
+        "modelDeclarationBytes": 585,
+        "modelDeclarationLines": 24,
+        "normalizeMicros": 240968,
+        "generationMicros": 256922,
+        "schemaSha256": "cd7afdcdbf23cf25963555e46af817e1be7914e08bb0c96033290976c2dbe7c9",
+        "clientSha256": "f4b306b028261cb1c88d2c18d5e4d1dee57e65e9e1cc5561aab52e56d5c27c65",
+        "snapshotSha256": "8fdeb6639ee4f6bc1358d356f305095de9462b6a14b8c4fdd2bde8ca626afa85"
+      },
+      "initialAnalyzeMs": 465,
+      "fieldTypeEdit": {
+        "sourceBytes": 1938,
+        "sourceLines": 62,
+        "modelDeclarationBytes": 582,
+        "modelDeclarationLines": 24,
+        "normalizeMicros": 234572,
+        "generationMicros": 248713,
+        "schemaSha256": "a9f4abceec75636c58c9e81edbdaea637aad35f9c201fa814d509e4f8ec043fa",
+        "clientSha256": "9e71d404b664a5a686f3cd460d0ab41c9cc6fe9332412e7f896f65241f914152",
+        "snapshotSha256": "4b410fc14cf017b777c36062aa71b38bd6620e6869bd3a1b22397775cb0a7866",
+        "source": "// @dart=3.13\nimport 'package:orm/schema.dart';\n\nfinal class User(\n  @Id.generated() final int id,\n  final int tenantId,\n  @ColumnName('email') final String email,\n  final String? nickname,\n);\nfinal class Post(\n  @Id.generated() final int id,\n  final int tenantId,\n  final int authorId,\n  final String title,\n  @Default.sql('false') final bool published,\n  final DateTime createdAt,\n);\nfinal class Profile(final int tenantId, final int userId, final int? bio);\nfinal class Follow(\n  final int tenantId,\n  final int followerId,\n  final int followedId,\n  final DateTime createdAt,\n);\nfinal users = entity<User>(table: 'users');\nfinal posts = entity<Post>(table: 'posts');\nfinal profiles = entity<Profile>(table: 'profiles');\nfinal follows = entity<Follow>(table: 'follows');\nfinal userIdentity = users.unique((u) => (u.tenantId, u.id));\nfinal userEmail = users.unique((u) => (u.tenantId, u.email));\nfinal profileIdentity = profiles.primaryKey((p) => (p.tenantId, p.userId));\nfinal followIdentity = follows.primaryKey(\n  (f) => (f.tenantId, f.followerId, f.followedId),\n);\nfinal author = posts\n    .key((p) => (p.tenantId, p.authorId))\n    .references(users.key((u) => (u.tenantId, u.id)), inverse: 'posts');\nfinal profileOwner = profiles\n    .key((p) => (p.tenantId, p.userId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'profile',\n      onDelete: .cascade,\n    );\nfinal follower = follows\n    .key((f) => (f.tenantId, f.followerId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'following',\n      onDelete: .cascade,\n    );\nfinal followed = follows\n    .key((f) => (f.tenantId, f.followedId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'followers',\n      onDelete: .cascade,\n    );\nfinal authorTimeline = posts.index(\n  (p) => (p.tenantId, p.authorId, p.createdAt, p.id),\n);\nfinal distinctUsers = follows.check('follower_id <> followed_id');\n",
+        "staleConsumerDiagnostics": [
+          "ERROR|COMPILE_TIME_ERROR|INVALID_ASSIGNMENT|/privatefixture/lib/client.dart|14|97|5|A value of type 'List<({int? bio, String email, List<String> following, List<String> posts})>' can't be assigned to a variable of type 'List<({String? bio, String email, List<String> following, List<String> posts})>'."
+        ]
+      },
+      "fieldRename": {
+        "sourceBytes": 1955,
+        "sourceLines": 62,
+        "modelDeclarationBytes": 592,
+        "modelDeclarationLines": 24,
+        "normalizeMicros": 225761,
+        "generationMicros": 229178,
+        "schemaSha256": "6efc4a760f465a87b05ada8a66d38a9262c21730ae586d6caaaa24418abf1943",
+        "clientSha256": "421b7bf6338dd8e2116e3acaa1c0b887f1ee8c077e79e0009a13d4734c6c9adc",
+        "snapshotSha256": "8fdeb6639ee4f6bc1358d356f305095de9462b6a14b8c4fdd2bde8ca626afa85",
+        "source": "// @dart=3.13\nimport 'package:orm/schema.dart';\n\nfinal class User(\n  @Id.generated() final int id,\n  final int tenantId,\n  @ColumnName('email') final String contactEmail,\n  final String? nickname,\n);\nfinal class Post(\n  @Id.generated() final int id,\n  final int tenantId,\n  final int authorId,\n  final String title,\n  @Default.sql('false') final bool published,\n  final DateTime createdAt,\n);\nfinal class Profile(final int tenantId, final int userId, final String? bio);\nfinal class Follow(\n  final int tenantId,\n  final int followerId,\n  final int followedId,\n  final DateTime createdAt,\n);\nfinal users = entity<User>(table: 'users');\nfinal posts = entity<Post>(table: 'posts');\nfinal profiles = entity<Profile>(table: 'profiles');\nfinal follows = entity<Follow>(table: 'follows');\nfinal userIdentity = users.unique((u) => (u.tenantId, u.id));\nfinal userEmail = users.unique((u) => (u.tenantId, u.contactEmail));\nfinal profileIdentity = profiles.primaryKey((p) => (p.tenantId, p.userId));\nfinal followIdentity = follows.primaryKey(\n  (f) => (f.tenantId, f.followerId, f.followedId),\n);\nfinal author = posts\n    .key((p) => (p.tenantId, p.authorId))\n    .references(users.key((u) => (u.tenantId, u.id)), inverse: 'posts');\nfinal profileOwner = profiles\n    .key((p) => (p.tenantId, p.userId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'profile',\n      onDelete: .cascade,\n    );\nfinal follower = follows\n    .key((f) => (f.tenantId, f.followerId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'following',\n      onDelete: .cascade,\n    );\nfinal followed = follows\n    .key((f) => (f.tenantId, f.followedId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'followers',\n      onDelete: .cascade,\n    );\nfinal authorTimeline = posts.index(\n  (p) => (p.tenantId, p.authorId, p.createdAt, p.id),\n);\nfinal distinctUsers = follows.check('follower_id <> followed_id');\n",
+        "method": "lsp",
+        "lspMicros": 321910,
+        "prepare": {
+          "placeholder": "email",
+          "range": {
+            "end": {
+              "character": 41,
+              "line": 6
+            },
+            "start": {
+              "character": 36,
+              "line": 6
+            }
+          }
+        },
+        "edit": {
+          "documentChanges": [
+            {
+              "edits": [
+                {
+                  "newText": "contactEmail",
+                  "range": {
+                    "end": {
+                      "character": 41,
+                      "line": 6
+                    },
+                    "start": {
+                      "character": 36,
+                      "line": 6
+                    }
+                  }
+                },
+                {
+                  "newText": "contactEmail",
+                  "range": {
+                    "end": {
+                      "character": 58,
+                      "line": 29
+                    },
+                    "start": {
+                      "character": 53,
+                      "line": 29
+                    }
+                  }
+                }
+              ],
+              "textDocument": {
+                "uri": "fixture/lib/author.dart",
+                "version": 1
+              }
+            }
+          ]
+        },
+        "staleConsumerDiagnostics": [
+          "ERROR|COMPILE_TIME_ERROR|MISSING_REQUIRED_ARGUMENT|/privatefixture/lib/client.dart|5|31|6|The named parameter 'contactEmail' is required, but there's no corresponding argument.",
+          "ERROR|COMPILE_TIME_ERROR|UNDEFINED_NAMED_PARAMETER|/privatefixture/lib/client.dart|5|51|5|The named parameter 'email' isn't defined.",
+          "ERROR|COMPILE_TIME_ERROR|UNDEFINED_GETTER|/privatefixture/lib/client.dart|6|29|5|The getter 'email' isn't defined for the type 'User'.",
+          "ERROR|COMPILE_TIME_ERROR|UNDEFINED_GETTER|/privatefixture/lib/client.dart|9|7|5|The getter 'email' isn't defined for the type 'UsersFields'.",
+          "ERROR|COMPILE_TIME_ERROR|UNDEFINED_GETTER|/privatefixture/lib/client.dart|12|58|5|The getter 'email' isn't defined for the type 'UsersFields'.",
+          "ERROR|COMPILE_TIME_ERROR|INVALID_ASSIGNMENT|/privatefixture/lib/client.dart|14|97|5|A value of type 'List<({dynamic bio, dynamic email, dynamic following, dynamic posts})>' can't be assigned to a variable of type 'List<({String? bio, String email, List<String> following, List<String> posts})>'."
+        ],
+        "physicalSnapshotUnchanged": true
+      },
+      "errors": [
+        {
+          "case": "unknown_field",
+          "phase": "dart",
+          "code": "undefined_getter",
+          "message": "The getter 'absent' isn't defined for the type 'User'.",
+          "offset": 891,
+          "length": 6,
+          "line": 30,
+          "column": 54,
+          "sourceLine": "final userEmail = users.unique((u) => (u.tenantId, u.absent));"
+        },
+        {
+          "case": "computed_selector",
+          "phase": "generator",
+          "code": "computed_selector",
+          "message": "Key selectors accept direct fields or positional records of fields only. (offset 2217)",
+          "offset": 1977,
+          "length": 1,
+          "line": 64,
+          "column": 36,
+          "sourceLine": "final invalid = users.index((u) => 0);"
+        },
+        {
+          "case": "duplicate_key_field",
+          "phase": "generator",
+          "code": "duplicate_key_field",
+          "message": "A key cannot repeat a field. (offset 2224)",
+          "offset": 1984,
+          "length": 4,
+          "line": 64,
+          "column": 43,
+          "sourceLine": "final invalid = users.index((u) => (u.id, u.id));"
+        },
+        {
+          "case": "non_unique_target",
+          "phase": "generator",
+          "code": "non_unique_target",
+          "message": "Foreign key target must be a primary or unique key in the same column order. (offset 1267)",
+          "offset": 1026,
+          "length": 5,
+          "line": 34,
+          "column": 16,
+          "sourceLine": "final author = posts"
+        },
+        {
+          "case": "constructor_logic",
+          "phase": "authoring",
+          "code": "unsupported_class",
+          "message": "Use an unmodified primary constructor with declaring fields only.",
+          "offset": 49,
+          "length": 193,
+          "line": 4,
+          "column": 1,
+          "sourceLine": "final class User("
+        }
+      ],
+      "finalAnalyzeMs": 464
+    },
+    {
+      "form": "table",
+      "source": "// @dart=3.13\nimport 'package:orm/schema.dart';\nimport 'package:orm/orm.dart';\n\nfinal class User extends Fields {\n  User(super.table);\n  @Id.generated()\n  late final id = column(Column('id', Codecs.integer));\n  late final tenantId = column(Column('tenant_id', Codecs.integer));\n  late final email = column(Column('email', Codecs.text));\n  late final nickname = column(\n    Column('nickname', Codecs.text.nullable(), nullable: true),\n  );\n}\n\nfinal class Post extends Fields {\n  Post(super.table);\n  @Id.generated()\n  late final id = column(Column('id', Codecs.integer));\n  late final tenantId = column(Column('tenant_id', Codecs.integer));\n  late final authorId = column(Column('author_id', Codecs.integer));\n  late final title = column(Column('title', Codecs.text));\n  @Default.sql('false')\n  late final published = column(Column('published', Codecs.boolean));\n  late final createdAt = column(Column('created_at', Codecs.dateTime));\n}\n\nfinal class Profile extends Fields {\n  Profile(super.table);\n  late final tenantId = column(Column('tenant_id', Codecs.integer));\n  late final userId = column(Column('user_id', Codecs.integer));\n  late final bio = column(\n    Column('bio', Codecs.text.nullable(), nullable: true),\n  );\n}\n\nfinal class Follow extends Fields {\n  Follow(super.table);\n  late final tenantId = column(Column('tenant_id', Codecs.integer));\n  late final followerId = column(Column('follower_id', Codecs.integer));\n  late final followedId = column(Column('followed_id', Codecs.integer));\n  late final createdAt = column(Column('created_at', Codecs.dateTime));\n}\n\nfinal users = entity<User>(table: 'users');\nfinal posts = entity<Post>(table: 'posts');\nfinal profiles = entity<Profile>(table: 'profiles');\nfinal follows = entity<Follow>(table: 'follows');\nfinal userIdentity = users.unique((u) => (u.tenantId, u.id));\nfinal userEmail = users.unique((u) => (u.tenantId, u.email));\nfinal profileIdentity = profiles.primaryKey((p) => (p.tenantId, p.userId));\nfinal followIdentity = follows.primaryKey(\n  (f) => (f.tenantId, f.followerId, f.followedId),\n);\nfinal author = posts\n    .key((p) => (p.tenantId, p.authorId))\n    .references(users.key((u) => (u.tenantId, u.id)), inverse: 'posts');\nfinal profileOwner = profiles\n    .key((p) => (p.tenantId, p.userId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'profile',\n      onDelete: .cascade,\n    );\nfinal follower = follows\n    .key((f) => (f.tenantId, f.followerId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'following',\n      onDelete: .cascade,\n    );\nfinal followed = follows\n    .key((f) => (f.tenantId, f.followedId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'followers',\n      onDelete: .cascade,\n    );\nfinal authorTimeline = posts.index(\n  (p) => (p.tenantId, p.authorId, p.createdAt, p.id),\n);\nfinal distinctUsers = follows.check('follower_id <> followed_id');\n",
+      "base": {
+        "sourceBytes": 2930,
+        "sourceLines": 82,
+        "modelDeclarationBytes": 1574,
+        "modelDeclarationLines": 43,
+        "normalizeMicros": 239366,
+        "generationMicros": 242599,
+        "schemaSha256": "cd7afdcdbf23cf25963555e46af817e1be7914e08bb0c96033290976c2dbe7c9",
+        "clientSha256": "f4b306b028261cb1c88d2c18d5e4d1dee57e65e9e1cc5561aab52e56d5c27c65",
+        "snapshotSha256": "8fdeb6639ee4f6bc1358d356f305095de9462b6a14b8c4fdd2bde8ca626afa85"
+      },
+      "initialAnalyzeMs": 465,
+      "fieldTypeEdit": {
+        "sourceBytes": 2933,
+        "sourceLines": 82,
+        "modelDeclarationBytes": 1577,
+        "modelDeclarationLines": 43,
+        "normalizeMicros": 224609,
+        "generationMicros": 241511,
+        "schemaSha256": "a9f4abceec75636c58c9e81edbdaea637aad35f9c201fa814d509e4f8ec043fa",
+        "clientSha256": "9e71d404b664a5a686f3cd460d0ab41c9cc6fe9332412e7f896f65241f914152",
+        "snapshotSha256": "4b410fc14cf017b777c36062aa71b38bd6620e6869bd3a1b22397775cb0a7866",
+        "source": "// @dart=3.13\nimport 'package:orm/schema.dart';\nimport 'package:orm/orm.dart';\n\nfinal class User extends Fields {\n  User(super.table);\n  @Id.generated()\n  late final id = column(Column('id', Codecs.integer));\n  late final tenantId = column(Column('tenant_id', Codecs.integer));\n  late final email = column(Column('email', Codecs.text));\n  late final nickname = column(\n    Column('nickname', Codecs.text.nullable(), nullable: true),\n  );\n}\n\nfinal class Post extends Fields {\n  Post(super.table);\n  @Id.generated()\n  late final id = column(Column('id', Codecs.integer));\n  late final tenantId = column(Column('tenant_id', Codecs.integer));\n  late final authorId = column(Column('author_id', Codecs.integer));\n  late final title = column(Column('title', Codecs.text));\n  @Default.sql('false')\n  late final published = column(Column('published', Codecs.boolean));\n  late final createdAt = column(Column('created_at', Codecs.dateTime));\n}\n\nfinal class Profile extends Fields {\n  Profile(super.table);\n  late final tenantId = column(Column('tenant_id', Codecs.integer));\n  late final userId = column(Column('user_id', Codecs.integer));\n  late final bio = column(\n    Column('bio', Codecs.integer.nullable(), nullable: true),\n  );\n}\n\nfinal class Follow extends Fields {\n  Follow(super.table);\n  late final tenantId = column(Column('tenant_id', Codecs.integer));\n  late final followerId = column(Column('follower_id', Codecs.integer));\n  late final followedId = column(Column('followed_id', Codecs.integer));\n  late final createdAt = column(Column('created_at', Codecs.dateTime));\n}\n\nfinal users = entity<User>(table: 'users');\nfinal posts = entity<Post>(table: 'posts');\nfinal profiles = entity<Profile>(table: 'profiles');\nfinal follows = entity<Follow>(table: 'follows');\nfinal userIdentity = users.unique((u) => (u.tenantId, u.id));\nfinal userEmail = users.unique((u) => (u.tenantId, u.email));\nfinal profileIdentity = profiles.primaryKey((p) => (p.tenantId, p.userId));\nfinal followIdentity = follows.primaryKey(\n  (f) => (f.tenantId, f.followerId, f.followedId),\n);\nfinal author = posts\n    .key((p) => (p.tenantId, p.authorId))\n    .references(users.key((u) => (u.tenantId, u.id)), inverse: 'posts');\nfinal profileOwner = profiles\n    .key((p) => (p.tenantId, p.userId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'profile',\n      onDelete: .cascade,\n    );\nfinal follower = follows\n    .key((f) => (f.tenantId, f.followerId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'following',\n      onDelete: .cascade,\n    );\nfinal followed = follows\n    .key((f) => (f.tenantId, f.followedId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'followers',\n      onDelete: .cascade,\n    );\nfinal authorTimeline = posts.index(\n  (p) => (p.tenantId, p.authorId, p.createdAt, p.id),\n);\nfinal distinctUsers = follows.check('follower_id <> followed_id');\n",
+        "staleConsumerDiagnostics": [
+          "ERROR|COMPILE_TIME_ERROR|INVALID_ASSIGNMENT|/privatefixture/lib/client.dart|14|97|5|A value of type 'List<({int? bio, String email, List<String> following, List<String> posts})>' can't be assigned to a variable of type 'List<({String? bio, String email, List<String> following, List<String> posts})>'."
+        ]
+      },
+      "fieldRename": {
+        "sourceBytes": 2944,
+        "sourceLines": 82,
+        "modelDeclarationBytes": 1581,
+        "modelDeclarationLines": 43,
+        "normalizeMicros": 224387,
+        "generationMicros": 237466,
+        "schemaSha256": "6efc4a760f465a87b05ada8a66d38a9262c21730ae586d6caaaa24418abf1943",
+        "clientSha256": "421b7bf6338dd8e2116e3acaa1c0b887f1ee8c077e79e0009a13d4734c6c9adc",
+        "snapshotSha256": "8fdeb6639ee4f6bc1358d356f305095de9462b6a14b8c4fdd2bde8ca626afa85",
+        "source": "// @dart=3.13\nimport 'package:orm/schema.dart';\nimport 'package:orm/orm.dart';\n\nfinal class User extends Fields {\n  User(super.table);\n  @Id.generated()\n  late final id = column(Column('id', Codecs.integer));\n  late final tenantId = column(Column('tenant_id', Codecs.integer));\n  late final contactEmail = column(Column('email', Codecs.text));\n  late final nickname = column(\n    Column('nickname', Codecs.text.nullable(), nullable: true),\n  );\n}\n\nfinal class Post extends Fields {\n  Post(super.table);\n  @Id.generated()\n  late final id = column(Column('id', Codecs.integer));\n  late final tenantId = column(Column('tenant_id', Codecs.integer));\n  late final authorId = column(Column('author_id', Codecs.integer));\n  late final title = column(Column('title', Codecs.text));\n  @Default.sql('false')\n  late final published = column(Column('published', Codecs.boolean));\n  late final createdAt = column(Column('created_at', Codecs.dateTime));\n}\n\nfinal class Profile extends Fields {\n  Profile(super.table);\n  late final tenantId = column(Column('tenant_id', Codecs.integer));\n  late final userId = column(Column('user_id', Codecs.integer));\n  late final bio = column(\n    Column('bio', Codecs.text.nullable(), nullable: true),\n  );\n}\n\nfinal class Follow extends Fields {\n  Follow(super.table);\n  late final tenantId = column(Column('tenant_id', Codecs.integer));\n  late final followerId = column(Column('follower_id', Codecs.integer));\n  late final followedId = column(Column('followed_id', Codecs.integer));\n  late final createdAt = column(Column('created_at', Codecs.dateTime));\n}\n\nfinal users = entity<User>(table: 'users');\nfinal posts = entity<Post>(table: 'posts');\nfinal profiles = entity<Profile>(table: 'profiles');\nfinal follows = entity<Follow>(table: 'follows');\nfinal userIdentity = users.unique((u) => (u.tenantId, u.id));\nfinal userEmail = users.unique((u) => (u.tenantId, u.contactEmail));\nfinal profileIdentity = profiles.primaryKey((p) => (p.tenantId, p.userId));\nfinal followIdentity = follows.primaryKey(\n  (f) => (f.tenantId, f.followerId, f.followedId),\n);\nfinal author = posts\n    .key((p) => (p.tenantId, p.authorId))\n    .references(users.key((u) => (u.tenantId, u.id)), inverse: 'posts');\nfinal profileOwner = profiles\n    .key((p) => (p.tenantId, p.userId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'profile',\n      onDelete: .cascade,\n    );\nfinal follower = follows\n    .key((f) => (f.tenantId, f.followerId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'following',\n      onDelete: .cascade,\n    );\nfinal followed = follows\n    .key((f) => (f.tenantId, f.followedId))\n    .references(\n      users.key((u) => (u.tenantId, u.id)),\n      inverse: 'followers',\n      onDelete: .cascade,\n    );\nfinal authorTimeline = posts.index(\n  (p) => (p.tenantId, p.authorId, p.createdAt, p.id),\n);\nfinal distinctUsers = follows.check('follower_id <> followed_id');\n",
+        "method": "lsp",
+        "lspMicros": 313547,
+        "prepare": {
+          "placeholder": "email",
+          "range": {
+            "end": {
+              "character": 18,
+              "line": 9
+            },
+            "start": {
+              "character": 13,
+              "line": 9
+            }
+          }
+        },
+        "edit": {
+          "documentChanges": [
+            {
+              "edits": [
+                {
+                  "newText": "contactEmail",
+                  "range": {
+                    "end": {
+                      "character": 18,
+                      "line": 9
+                    },
+                    "start": {
+                      "character": 13,
+                      "line": 9
+                    }
+                  }
+                },
+                {
+                  "newText": "contactEmail",
+                  "range": {
+                    "end": {
+                      "character": 58,
+                      "line": 49
+                    },
+                    "start": {
+                      "character": 53,
+                      "line": 49
+                    }
+                  }
+                }
+              ],
+              "textDocument": {
+                "uri": "fixture/lib/author.dart",
+                "version": 1
+              }
+            }
+          ]
+        },
+        "staleConsumerDiagnostics": [
+          "ERROR|COMPILE_TIME_ERROR|MISSING_REQUIRED_ARGUMENT|/privatefixture/lib/client.dart|5|31|6|The named parameter 'contactEmail' is required, but there's no corresponding argument.",
+          "ERROR|COMPILE_TIME_ERROR|UNDEFINED_NAMED_PARAMETER|/privatefixture/lib/client.dart|5|51|5|The named parameter 'email' isn't defined.",
+          "ERROR|COMPILE_TIME_ERROR|UNDEFINED_GETTER|/privatefixture/lib/client.dart|6|29|5|The getter 'email' isn't defined for the type 'User'.",
+          "ERROR|COMPILE_TIME_ERROR|UNDEFINED_GETTER|/privatefixture/lib/client.dart|9|7|5|The getter 'email' isn't defined for the type 'UsersFields'.",
+          "ERROR|COMPILE_TIME_ERROR|UNDEFINED_GETTER|/privatefixture/lib/client.dart|12|58|5|The getter 'email' isn't defined for the type 'UsersFields'.",
+          "ERROR|COMPILE_TIME_ERROR|INVALID_ASSIGNMENT|/privatefixture/lib/client.dart|14|97|5|A value of type 'List<({dynamic bio, dynamic email, dynamic following, dynamic posts})>' can't be assigned to a variable of type 'List<({String? bio, String email, List<String> following, List<String> posts})>'."
+        ],
+        "physicalSnapshotUnchanged": true
+      },
+      "errors": [
+        {
+          "case": "unknown_field",
+          "phase": "dart",
+          "code": "undefined_getter",
+          "message": "The getter 'absent' isn't defined for the type 'User'.",
+          "offset": 1880,
+          "length": 6,
+          "line": 50,
+          "column": 54,
+          "sourceLine": "final userEmail = users.unique((u) => (u.tenantId, u.absent));"
+        },
+        {
+          "case": "computed_selector",
+          "phase": "generator",
+          "code": "computed_selector",
+          "message": "Key selectors accept direct fields or positional records of fields only. (offset 2217)",
+          "offset": 2966,
+          "length": 1,
+          "line": 84,
+          "column": 36,
+          "sourceLine": "final invalid = users.index((u) => 0);"
+        },
+        {
+          "case": "duplicate_key_field",
+          "phase": "generator",
+          "code": "duplicate_key_field",
+          "message": "A key cannot repeat a field. (offset 2224)",
+          "offset": 2973,
+          "length": 4,
+          "line": 84,
+          "column": 43,
+          "sourceLine": "final invalid = users.index((u) => (u.id, u.id));"
+        },
+        {
+          "case": "non_unique_target",
+          "phase": "generator",
+          "code": "non_unique_target",
+          "message": "Foreign key target must be a primary or unique key in the same column order. (offset 1267)",
+          "offset": 2015,
+          "length": 5,
+          "line": 54,
+          "column": 16,
+          "sourceLine": "final author = posts"
+        },
+        {
+          "case": "custom_codec",
+          "phase": "authoring",
+          "code": "unsupported_codec",
+          "message": "Use the matching built-in codec and explicit SQL nullability; custom conversions cannot be discarded.",
+          "offset": 392,
+          "length": 46,
+          "line": 12,
+          "column": 24,
+          "sourceLine": "    Column('nickname', Codecs.text.map((v) => v, (v) => v).nullable(), nullable: true),"
+        }
+      ],
+      "finalAnalyzeMs": 465
+    }
+  ]
+}

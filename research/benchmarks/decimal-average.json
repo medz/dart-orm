@@ -1,0 +1,166 @@
+{
+  "recordedAt": "2026-09-15T01:00:42.064966Z",
+  "dart": "3.13.3 (stable) (Tue Sep 1 01:07:17 2026 -0700) on \"macos_arm64\"",
+  "os": "Version 26.6.2 (Build 25G83)",
+  "warmupRuns": 1,
+  "measuredRuns": 3,
+  "scope": "Single-client end-to-end query fetch and Decimal decoding; 10000 integer-valued rows; not a concurrency or percentile benchmark.",
+  "results": [
+    {
+      "backend": "sqlite",
+      "version": "3.51.0",
+      "case": "read",
+      "inputRows": 10000,
+      "rows": 10000,
+      "elapsedMs": [
+        11.392,
+        10.143,
+        9.747
+      ],
+      "sqlBytes": 70
+    },
+    {
+      "backend": "sqlite",
+      "version": "3.51.0",
+      "case": "average_half_even_scale_2",
+      "inputRows": 10000,
+      "rows": 1,
+      "elapsedMs": [
+        8.821,
+        8.78,
+        8.599
+      ],
+      "sqlBytes": 125
+    },
+    {
+      "backend": "sqlite",
+      "version": "3.51.0",
+      "case": "window_average_half_even_scale_2",
+      "inputRows": 10000,
+      "rows": 10000,
+      "elapsedMs": [
+        28.88,
+        29.125,
+        30.176
+      ],
+      "sqlBytes": 204
+    },
+    {
+      "backend": "sqlite",
+      "version": "3.51.0",
+      "case": "divide_half_even_scale_2",
+      "inputRows": 10000,
+      "rows": 10000,
+      "elapsedMs": [
+        32.28,
+        30.836,
+        30.717
+      ],
+      "sqlBytes": 154
+    },
+    {
+      "backend": "sqlite",
+      "version": "3.51.0",
+      "case": "round_half_even_scale_minus_1",
+      "inputRows": 10000,
+      "rows": 10000,
+      "elapsedMs": [
+        22.987,
+        22.628,
+        23.365
+      ],
+      "sqlBytes": 126
+    },
+    {
+      "backend": "sqlite",
+      "version": "3.51.0",
+      "case": "window_divide_half_even_scale_2",
+      "inputRows": 10000,
+      "rows": 10000,
+      "elapsedMs": [
+        52.056,
+        51.782,
+        53.221
+      ],
+      "sqlBytes": 280
+    },
+    {
+      "backend": "postgres",
+      "version": "18.4 (Homebrew)",
+      "case": "read",
+      "inputRows": 10000,
+      "rows": 10000,
+      "elapsedMs": [
+        25.067,
+        24.24,
+        25.092
+      ],
+      "sqlBytes": 43
+    },
+    {
+      "backend": "postgres",
+      "version": "18.4 (Homebrew)",
+      "case": "average_half_even_scale_2",
+      "inputRows": 10000,
+      "rows": 1,
+      "elapsedMs": [
+        2.751,
+        2.666,
+        2.739
+      ],
+      "sqlBytes": 2282
+    },
+    {
+      "backend": "postgres",
+      "version": "18.4 (Homebrew)",
+      "case": "window_average_half_even_scale_2",
+      "inputRows": 10000,
+      "rows": 10000,
+      "elapsedMs": [
+        46.994,
+        47.254,
+        49.207
+      ],
+      "sqlBytes": 2637
+    },
+    {
+      "backend": "postgres",
+      "version": "18.4 (Homebrew)",
+      "case": "divide_half_even_scale_2",
+      "inputRows": 10000,
+      "rows": 10000,
+      "elapsedMs": [
+        34.445,
+        34.518,
+        34.378
+      ],
+      "sqlBytes": 1597
+    },
+    {
+      "backend": "postgres",
+      "version": "18.4 (Homebrew)",
+      "case": "round_half_even_scale_minus_1",
+      "inputRows": 10000,
+      "rows": 10000,
+      "elapsedMs": [
+        25.926,
+        26.494,
+        25.991
+      ],
+      "sqlBytes": 1149
+    },
+    {
+      "backend": "postgres",
+      "version": "18.4 (Homebrew)",
+      "case": "window_divide_half_even_scale_2",
+      "inputRows": 10000,
+      "rows": 10000,
+      "elapsedMs": [
+        38.94,
+        38.582,
+        38.361
+      ],
+      "sqlBytes": 1773
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+# This repository now ships a Dart package, not the retired VitePress site.
+# Keep the existing published site intact; there is no site artifact to deploy.
+# https://docs.netlify.com/build/configure-builds/ignore-builds/
+[build]
+ignore = "exit 0"

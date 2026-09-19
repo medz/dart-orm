@@ -1,0 +1,206 @@
+{
+  "capturedAt": "2026-09-19T12:57:23.694966+00:00",
+  "runtimeSourceCommit": "7a54553933ae1d768576a54a4234b00b6bfcf97e",
+  "versions": {
+    "dart": "3.13.3",
+    "flutter": "3.47.4",
+    "sqlite": "3.53.4",
+    "postgres": "18.4",
+    "mysql": "8.4.11",
+    "mariadb": "11.8.9",
+    "chrome": "153"
+  },
+  "native": {
+    "initialFullSuite": {
+      "passed": 1119,
+      "failed": 5,
+      "duration": "11:50",
+      "note": "Older CLI JSON expectations and new temporary-table regressions; corrected afterwards."
+    },
+    "finalSessionRegression": {
+      "passed": 282,
+      "failed": 0
+    },
+    "finalCliAndMigrationRegression": {
+      "passed": 71,
+      "failed": 0
+    },
+    "analysis": "No issues found",
+    "flutterAnalysis": "No issues found"
+  },
+  "localLogDigests": {
+    "redesign-full.log": {
+      "sha256": "fa62e954dcd084555aa1d247add8cb4257bdc57f9697d0ea21bd2a85f040ec20"
+    },
+    "redesign-fixes-final.log": {
+      "sha256": "145c1c2142b550ddba83d1a702dad9e0ea90764016f4069a95420770cb5b658a"
+    },
+    "redesign-session-final.log": {
+      "sha256": "d8d2eb7b170bbca8ff3059ec5e7c1193aecc9fb09e2af7d25a21fc949533d5ab"
+    },
+    "redesign-analyze-final.log": {
+      "sha256": "34a0d218671a357b7042bd3be43d0134efd7f8d5b56c5d8c0ab98096c99a331e"
+    },
+    "redesign-flutter-analyze.log": {
+      "sha256": "40bbb3c2256cfd52d7e7ec89ba44c939374e2f26b6c4aa4324a9146b9ba581a0"
+    },
+    "redesign-postgres-review.log": {
+      "sha256": "2cdf97fac79070d66670313e16d39b7c333f8326f6060f4114312ba83547a479"
+    },
+    "redesign-version-final.log": {
+      "sha256": "4eea5b0361952e1c9f644d7ba88b6b288badc637be96d8e70cb42f2affe7c90b"
+    },
+    "redesign-review-analyze.log": {
+      "sha256": "34a0d218671a357b7042bd3be43d0134efd7f8d5b56c5d8c0ab98096c99a331e"
+    },
+    "linux-sqlite-final.log": {
+      "sha256": "186f12bb79c650f42e513ed9b73758d8a40b5157cd3cf75f975f6f27e6a07e15"
+    },
+    "sqlite-platform-host.log": {
+      "sha256": "81cc6734856da124e92eb0a5649a9a53548dcb2e8adb558f5f5131b163b5a8a7"
+    },
+    "redesign-linux-pg-fixtures.log": {
+      "sha256": "0ba05b46decc78fceb636726374cefb1417101fece8f0bc5311dc6c1a23fe639"
+    },
+    "mysql-statement-timeout.log": {
+      "sha256": "4d4b114f0189333e7b4adb00ff329f4816c6281cff31b0c1ef44f5fa01ce3860"
+    },
+    "redesign-final-analyze.log": {
+      "sha256": "34a0d218671a357b7042bd3be43d0134efd7f8d5b56c5d8c0ab98096c99a331e"
+    },
+    "linux-sqlite-capabilities-final.log": {
+      "sha256": "13a02dd8b95df6ffa238a966089c2b16622d81482e0643e8d1bcf3610ea1eb6d"
+    },
+    "sqlite-capabilities-host-final.log": {
+      "sha256": "e9d51ff36d51b734d67555b280a29acb8fb029f419af92c1660f3a8ed05e50f3"
+    },
+    "ci-35446420359.log": {
+      "sha256": "5a40050575da4445c076f65a1ab7f025e2614569efa8e442ad496f7d31f58054"
+    },
+    "ci-35448372437.log": {
+      "sha256": "f28d359e9d376ff16bd55247014df42c79235613d65b261e10466182ca0217f0"
+    }
+  },
+  "limits": [
+    "The final focused invocations are not described as a second complete suite; GitHub CI runs the whole suite as a merge gate.",
+    "Fresh platform records independently pin the runtime source and build inputs."
+  ],
+  "reviewRegression": {
+    "capturedAt": "2026-09-19T13:23:27.946868+00:00",
+    "runtimeSourceCommit": "46265f836e49a248c7e6a64dbc646fada929e79f",
+    "postgres": {
+      "passed": 176,
+      "failed": 0,
+      "newProxyRegressions": 4
+    },
+    "mysqlDriverAndVersionGate": {
+      "passed": 40,
+      "failed": 0
+    },
+    "analysis": "No issues found"
+  },
+  "portabilityRegression": {
+    "capturedAt": "2026-09-19T13:33:22.424576+00:00",
+    "runtimeSourceCommit": "46265f836e49a248c7e6a64dbc646fada929e79f",
+    "linux": {
+      "platform": "linux_arm64",
+      "dart": "3.13.3",
+      "passed": 21,
+      "skipped": 23,
+      "skipReason": "8 statement-interruption scenarios and 15 bounded retries require sqlite3_interrupt, absent from the default Linux asset. Explicit rejection is verified.",
+      "aotBundles": [
+        "native_execution",
+        "native_retry"
+      ]
+    },
+    "macosAndPostgres": {
+      "passed": 84,
+      "skipped": 4,
+      "skipReason": "Inverse unsupported-capability checks on drivers that support interruption."
+    },
+    "postgresFixtures": {
+      "passed": 48,
+      "failed": 0
+    }
+  },
+  "statementTimeoutRegression": {
+    "capturedAt": "2026-09-19T13:38:04.781896+00:00",
+    "runtimeSourceCommit": "3aef4e7905f6997ff2fa9c181709bdddbdcc64ad",
+    "mysqlAndMariadb": {
+      "passed": 140,
+      "failed": 0
+    },
+    "analysis": "No issues found",
+    "independentCodeReview": "No additional concrete defects found"
+  },
+  "linuxCompleteAttempt": {
+    "headCommit": "326f41e842acc840e15b4f8cd28bf159df803995",
+    "runUrl": "https://github.com/medz/dart-orm/actions/runs/35446420359",
+    "passed": 1129,
+    "failed": 17,
+    "skipped": 25,
+    "note": "All 17 failures were remaining Linux SQLite interruption assumptions in transaction/acquisition/watch tests. Runtime source was unchanged by their correction. The final PR CI run is the complete merge gate."
+  },
+  "finalCapabilityRegression": {
+    "capturedAt": "2026-09-19T14:19:05.153644+00:00",
+    "runtimeSourceCommit": "3aef4e7905f6997ff2fa9c181709bdddbdcc64ad",
+    "linux": {
+      "passed": 41,
+      "skipped": 14,
+      "skipReason": "13 transaction interruption and 1 active watched-query interruption scenarios."
+    },
+    "macosAndPostgres": {
+      "passed": 108,
+      "skipped": 4,
+      "skipReason": "Inverse unsupported-capability tests."
+    }
+  },
+  "linuxNativeAcceptance": {
+    "headCommit": "e933576a790f579477e9c8a1980eb74febe8742a",
+    "runtimeSourceCommit": "3aef4e7905f6997ff2fa9c181709bdddbdcc64ad",
+    "runUrl": "https://github.com/medz/dart-orm/actions/runs/35448372437",
+    "passed": 1136,
+    "failed": 0,
+    "skipped": 41,
+    "skipReason": "Native interruption-dependent scenarios and inverse unsupported-capability checks.",
+    "browserJs": {
+      "scenariosPassed": 21,
+      "runnerSucceeded": false,
+      "reason": "Chrome profile deletion raced with exiting child processes (ENOTEMPTY)."
+    },
+    "note": "Complete native stage succeeded. The overall workflow failed during browser runner cleanup, so the final corrected workflow remains the merge gate."
+  },
+  "browserCleanupRegression": {
+    "runtimeSourceCommit": "3aef4e7905f6997ff2fa9c181709bdddbdcc64ad",
+    "helperTestsPassed": 5,
+    "chromeJs": {
+      "passed": 21,
+      "runnerExitCode": 0
+    },
+    "chromeWasm": {
+      "passed": 21,
+      "runnerExitCode": 0
+    },
+    "flutterWeb": {
+      "js": 21,
+      "wasmNonIsolated": 21,
+      "wasmIsolated": 21,
+      "runnerExitCode": 0
+    },
+    "logs": {
+      "browser-profile-tests.log": {
+        "sha256": "7bbac204502db57154e0cefbd95a2dfd56a6bb8590fa0c0b1d37287d63ac5876"
+      },
+      "browser-cleanup-js.log": {
+        "sha256": "dee57767d28ddaf07db9be34aba8104c62f533183d36871461da723ab74ff6ab"
+      },
+      "browser-cleanup-wasm.log": {
+        "sha256": "3f650ea848b0964e753e496833574ae59e1d73c39254767645878140471c1235"
+      },
+      "flutter-web-cleanup.log": {
+        "sha256": "cd6260d768cddd523c3eb80d6eace8f7399287f9d53986d75e3d893a2f410a44"
+      }
+    },
+    "note": "Five real Chrome runs completed profile cleanup on macOS. Independent Linux browser CI remains required for the final head."
+  }
+}
