@@ -17,6 +17,10 @@ failures in older CLI output expectations and new temporary-metadata tests. All
 five have been corrected. The final CLI/import/plan/MySQL migration and SQL review
 run passes 71 tests; the session/transaction/stream/retry/acquisition/watch run
 passes 282 tests, including 18 new borrowed-connection lifecycle regressions.
+A further 176-test PostgreSQL review run passes after bounding initial backend
+PID discovery; four real TCP-proxy regressions reproduce the original hang and
+verify timeout/cancellation before any application write. Forty MySQL driver and
+migration-target checks pass after aligning the minimum MySQL version to 8.4.
 Static analysis is clean. Registry engine parsing, non-atomic plan reporting,
 temporary-history shadowing and session ownership were corrected during review.
 

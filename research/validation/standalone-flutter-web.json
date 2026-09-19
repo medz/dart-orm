@@ -1,13 +1,13 @@
 {
-  "capturedAt": "2026-09-19T12:54:31.004917+00:00",
-  "runtimeSourceCommit": "7a54553933ae1d768576a54a4234b00b6bfcf97e",
+  "capturedAt": "2026-09-19T13:23:27.946868+00:00",
+  "runtimeSourceCommit": "46265f836e49a248c7e6a64dbc646fada929e79f",
   "reports": [
     {
       "passed": true,
       "checks": [
         {
           "name": "many-to-many plans, phase observations, payloads, pagination and transaction writes preserve query counts",
-          "milliseconds": 94
+          "milliseconds": 95
         },
         {
           "name": "temporal column precision preserves epoch ties, extended ranges, defaults and keys",
@@ -15,23 +15,23 @@
         },
         {
           "name": "memory migrations and verified foreign keys",
-          "milliseconds": 16
+          "milliseconds": 15
         },
         {
           "name": "query ownership, optional guards and write validation survive JS and WASM",
-          "milliseconds": 20
+          "milliseconds": 22
         },
         {
           "name": "client factories distinguish omission, explicit null and prepared batch values",
-          "milliseconds": 17
+          "milliseconds": 18
         },
         {
           "name": "computed stored and virtual fields recompute across CRUD and migrations",
-          "milliseconds": 32
+          "milliseconds": 30
         },
         {
           "name": "generated CHECK enforcement and atomic constraint migrations",
-          "milliseconds": 28
+          "milliseconds": 27
         },
         {
           "name": "generated records, projections and typed relation batches",
@@ -43,7 +43,7 @@
         },
         {
           "name": "stream cursor batches and early release",
-          "milliseconds": 2
+          "milliseconds": 3
         },
         {
           "name": "commit invalidation and watch snapshots",
@@ -67,11 +67,11 @@
         },
         {
           "name": "worker does not block the browser event loop",
-          "milliseconds": 159
+          "milliseconds": 156
         },
         {
           "name": "startup failures are bounded and release failed workers",
-          "milliseconds": 33
+          "milliseconds": 32
         },
         {
           "name": "unified entry rejects native paths and mismatched browser assets",
@@ -79,7 +79,7 @@
         },
         {
           "name": "OPFS commit survives a closed worker and new connection",
-          "milliseconds": 103
+          "milliseconds": 98
         },
         {
           "name": "page reload recovers committed rows and rolls back interrupted transaction",
@@ -87,14 +87,14 @@
         },
         {
           "name": "persistent schema upgrades after reload preserve existing data",
-          "milliseconds": 20
+          "milliseconds": 19
         }
       ],
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
       "actualWasm": false,
-      "flutterFrames": 6,
-      "baseUri": "http://127.0.0.1:61503/nested/",
-      "dartUriBase": "http://127.0.0.1:61503/nested/detail/42?phase=recover",
+      "flutterFrames": 5,
+      "baseUri": "http://127.0.0.1:63321/nested/",
+      "dartUriBase": "http://127.0.0.1:63321/nested/detail/42?phase=recover",
       "isolated": false,
       "requests": [
         "/nested/detail/42",
@@ -106,38 +106,38 @@
         "/nested/assets/FontManifest.json",
         "/nested/assets/fonts/MaterialIcons-Regular.otf",
         "/nested/assets/fonts/fallback/Roboto-Regular.ttf",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/missing.wasm",
         "/missing-worker.js",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
         "/mismatched-worker.js",
         "/mismatched-worker.js",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
         "/nested/detail/42",
         "/nested/flutter_bootstrap.js",
@@ -147,7 +147,7 @@
         "/nested/assets/FontManifest.json",
         "/nested/assets/fonts/MaterialIcons-Regular.otf",
         "/nested/assets/fonts/fallback/Roboto-Regular.ttf",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
         "/report"
       ],
@@ -174,11 +174,11 @@
       "checks": [
         {
           "name": "many-to-many plans, phase observations, payloads, pagination and transaction writes preserve query counts",
-          "milliseconds": 93
+          "milliseconds": 91
         },
         {
           "name": "temporal column precision preserves epoch ties, extended ranges, defaults and keys",
-          "milliseconds": 39
+          "milliseconds": 40
         },
         {
           "name": "memory migrations and verified foreign keys",
@@ -190,11 +190,11 @@
         },
         {
           "name": "client factories distinguish omission, explicit null and prepared batch values",
-          "milliseconds": 18
+          "milliseconds": 17
         },
         {
           "name": "computed stored and virtual fields recompute across CRUD and migrations",
-          "milliseconds": 29
+          "milliseconds": 28
         },
         {
           "name": "generated CHECK enforcement and atomic constraint migrations",
@@ -210,11 +210,11 @@
         },
         {
           "name": "stream cursor batches and early release",
-          "milliseconds": 2
+          "milliseconds": 1
         },
         {
           "name": "commit invalidation and watch snapshots",
-          "milliseconds": 1
+          "milliseconds": 0
         },
         {
           "name": "exact BigInt, Decimal, blobs and calendar transport",
@@ -234,19 +234,19 @@
         },
         {
           "name": "worker does not block the browser event loop",
-          "milliseconds": 160
+          "milliseconds": 157
         },
         {
           "name": "startup failures are bounded and release failed workers",
-          "milliseconds": 32
+          "milliseconds": 30
         },
         {
           "name": "unified entry rejects native paths and mismatched browser assets",
-          "milliseconds": 35
+          "milliseconds": 34
         },
         {
           "name": "OPFS commit survives a closed worker and new connection",
-          "milliseconds": 100
+          "milliseconds": 96
         },
         {
           "name": "page reload recovers committed rows and rolls back interrupted transaction",
@@ -254,58 +254,58 @@
         },
         {
           "name": "persistent schema upgrades after reload preserve existing data",
-          "milliseconds": 14
+          "milliseconds": 13
         }
       ],
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
       "actualWasm": true,
-      "flutterFrames": 5,
-      "baseUri": "http://127.0.0.1:61529/nested/",
-      "dartUriBase": "http://127.0.0.1:61529/nested/detail/42?phase=recover",
+      "flutterFrames": 4,
+      "baseUri": "http://127.0.0.1:63359/nested/",
+      "dartUriBase": "http://127.0.0.1:63359/nested/detail/42?phase=recover",
       "isolated": false,
       "requests": [
         "/nested/detail/42",
         "/nested/flutter_bootstrap.js",
+        "/favicon.ico",
         "/nested/canvaskit/skwasm.wasm",
         "/nested/canvaskit/skwasm.js",
         "/nested/main.dart.mjs",
-        "/favicon.ico",
         "/nested/main.dart.wasm",
         "/nested/assets/FontManifest.json",
         "/nested/assets/fonts/MaterialIcons-Regular.otf",
         "/nested/assets/fonts/fallback/Roboto-Regular.ttf",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/missing.wasm",
         "/missing-worker.js",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
         "/mismatched-worker.js",
         "/mismatched-worker.js",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
         "/nested/detail/42",
         "/nested/flutter_bootstrap.js",
@@ -316,7 +316,7 @@
         "/nested/assets/FontManifest.json",
         "/nested/assets/fonts/MaterialIcons-Regular.otf",
         "/nested/assets/fonts/fallback/Roboto-Regular.ttf",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
         "/report"
       ],
@@ -343,11 +343,11 @@
       "checks": [
         {
           "name": "many-to-many plans, phase observations, payloads, pagination and transaction writes preserve query counts",
-          "milliseconds": 57
+          "milliseconds": 55
         },
         {
           "name": "temporal column precision preserves epoch ties, extended ranges, defaults and keys",
-          "milliseconds": 42
+          "milliseconds": 39
         },
         {
           "name": "memory migrations and verified foreign keys",
@@ -359,7 +359,7 @@
         },
         {
           "name": "client factories distinguish omission, explicit null and prepared batch values",
-          "milliseconds": 18
+          "milliseconds": 17
         },
         {
           "name": "computed stored and virtual fields recompute across CRUD and migrations",
@@ -367,7 +367,7 @@
         },
         {
           "name": "generated CHECK enforcement and atomic constraint migrations",
-          "milliseconds": 25
+          "milliseconds": 23
         },
         {
           "name": "generated records, projections and typed relation batches",
@@ -375,11 +375,11 @@
         },
         {
           "name": "rollback, savepoints and transaction lifetime",
-          "milliseconds": 0
+          "milliseconds": 1
         },
         {
           "name": "stream cursor batches and early release",
-          "milliseconds": 2
+          "milliseconds": 1
         },
         {
           "name": "commit invalidation and watch snapshots",
@@ -403,7 +403,7 @@
         },
         {
           "name": "worker does not block the browser event loop",
-          "milliseconds": 159
+          "milliseconds": 161
         },
         {
           "name": "startup failures are bounded and release failed workers",
@@ -411,11 +411,11 @@
         },
         {
           "name": "unified entry rejects native paths and mismatched browser assets",
-          "milliseconds": 35
+          "milliseconds": 36
         },
         {
           "name": "OPFS commit survives a closed worker and new connection",
-          "milliseconds": 103
+          "milliseconds": 98
         },
         {
           "name": "page reload recovers committed rows and rolls back interrupted transaction",
@@ -429,8 +429,8 @@
       "browser": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
       "actualWasm": true,
       "flutterFrames": 4,
-      "baseUri": "http://127.0.0.1:61550/nested/",
-      "dartUriBase": "http://127.0.0.1:61550/nested/detail/42?phase=recover",
+      "baseUri": "http://127.0.0.1:63377/nested/",
+      "dartUriBase": "http://127.0.0.1:63377/nested/detail/42?phase=recover",
       "isolated": true,
       "requests": [
         "/nested/detail/42",
@@ -443,39 +443,39 @@
         "/nested/assets/FontManifest.json",
         "/nested/assets/fonts/MaterialIcons-Regular.otf",
         "/nested/assets/fonts/fallback/Roboto-Regular.ttf",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/canvaskit/skwasm.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/missing.wasm",
         "/missing-worker.js",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
         "/mismatched-worker.js",
         "/mismatched-worker.js",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
         "/nested/detail/42",
         "/nested/flutter_bootstrap.js",
@@ -486,9 +486,9 @@
         "/nested/assets/FontManifest.json",
         "/nested/assets/fonts/MaterialIcons-Regular.otf",
         "/nested/assets/fonts/fallback/Roboto-Regular.ttf",
-        "/nested/assets/packages/orm/assets/sqlite/worker-6eff02011c176fe2bcf58fc218ac3c64d6df01d6793ae8c57da377d08249fcb8.js",
-        "/nested/canvaskit/skwasm.js",
+        "/nested/assets/packages/orm/assets/sqlite/worker-2012ff7b2fa7a7e007e0fdb90248874f8fa222c7e76af48335a6bb61c9a6b06e.js",
         "/nested/assets/packages/orm/assets/sqlite/sqlite3-13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4.wasm",
+        "/nested/canvaskit/skwasm.js",
         "/report"
       ],
       "build": "wasm",

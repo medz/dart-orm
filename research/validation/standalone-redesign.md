@@ -1,8 +1,10 @@
 # Standalone ORM acceptance
 
-Captured on 2026-09-19. Runtime source: `7a54553933ae1d768576a54a4234b00b6bfcf97e`.
-The following validation commit adds reports and refreshes the Flutter consumer
-lockfile/analyzer exclusions; it does not change runtime, generation or migrations.
+Captured on 2026-09-19. Initial runtime source: `7a54553933ae1d768576a54a4234b00b6bfcf97e`.
+Final server-driver fixes and refreshed Web assets: `46265f836e49a248c7e6a64dbc646fada929e79f`.
+The refreshed browser reports pin the latter revision. Android reports retain the
+initial revision: native SQLite runtime and Android packaging have not changed.
+Validation commits add reports and consumer metadata, without changing runtime.
 
 ## Actual environments
 
@@ -18,6 +20,8 @@ plain Dart browser tests use actual Chrome 153, not simulated DOM APIs.
 | Native full regression, first invocation | 1119 passed, 5 failed in 11:50. Failures were two older CLI JSON expectations and three new temporary-metadata regressions. [Structured record](standalone-native.json). |
 | Final session/transaction regression | 282 passed. Real SQLite/PostgreSQL session ownership, escaped connections, swallowed SQL failures, pending work, cursor cleanup, transaction/retry/acquisition/watch paths; MySQL/MariaDB transaction boundaries included. |
 | Final CLI/import/migration/SQL regression | 71 passed. All four engines initialize and create Dart history; SQLite lifecycle and SQLite/PostgreSQL adoption use real consumers; MySQL/MariaDB test actual DDL/backfill recovery and metadata shadowing. |
+| PostgreSQL review regression | 176 passed, including four new real TCP-proxy regressions for explicit/default timeout, cancellation before PID discovery and a shared PID/application deadline. All four new cases failed before the fix. |
+| MySQL version boundary | 40 driver/migration-target checks passed. MySQL driver and migration support now both require 8.4+; older migration targets fail before locks, journals or DDL. |
 | Static checks | Root Dart analysis and Flutter example analysis: no issues. Formatting and diff whitespace checks pass. |
 | Plain Dart Web | JS and WASM each pass 21 scenarios. [Reports](standalone-browser.json). |
 | Flutter Web release | JS, WASM without isolation and WASM with isolation each pass 21 scenarios. Assets are bundled automatically; nested routes, reload recovery, migrations and animation progress during SQL are checked. [Reports](standalone-flutter-web.json). |
@@ -39,6 +43,15 @@ transaction report success. Borrowed connections and cursors cannot escape their
 session/savepoint; unawaited accepted work drains before the boundary completes.
 MySQL/MariaDB migration failures and uncertain commits use durable checkpoints and
 catalog verification rather than assuming that DDL rolls back.
+
+## Codex review correction
+
+The first external Codex review found an unbounded first PostgreSQL backend PID
+lookup. The timer and cancellation listener now start before that lookup; an
+interruption without a PID discards the connection before sending application SQL.
+The cached PID path retains cancellation and reuse, and uncertain errors after a
+statement starts are not reclassified as confirmed interruption. A real PostgreSQL
+TCP proxy reproduces the original hang and verifies the correction.
 
 ## Explicit boundaries
 

@@ -43,10 +43,33 @@
     },
     "redesign-flutter-analyze.log": {
       "sha256": "40bbb3c2256cfd52d7e7ec89ba44c939374e2f26b6c4aa4324a9146b9ba581a0"
+    },
+    "redesign-postgres-review.log": {
+      "sha256": "2cdf97fac79070d66670313e16d39b7c333f8326f6060f4114312ba83547a479"
+    },
+    "redesign-version-final.log": {
+      "sha256": "4eea5b0361952e1c9f644d7ba88b6b288badc637be96d8e70cb42f2affe7c90b"
+    },
+    "redesign-review-analyze.log": {
+      "sha256": "34a0d218671a357b7042bd3be43d0134efd7f8d5b56c5d8c0ab98096c99a331e"
     }
   },
   "limits": [
     "The final focused invocations are not described as a second complete suite; GitHub CI runs the whole suite as a merge gate.",
     "Fresh platform records independently pin the runtime source and build inputs."
-  ]
+  ],
+  "reviewRegression": {
+    "capturedAt": "2026-09-19T13:23:27.946868+00:00",
+    "runtimeSourceCommit": "46265f836e49a248c7e6a64dbc646fada929e79f",
+    "postgres": {
+      "passed": 176,
+      "failed": 0,
+      "newProxyRegressions": 4
+    },
+    "mysqlDriverAndVersionGate": {
+      "passed": 40,
+      "failed": 0
+    },
+    "analysis": "No issues found"
+  }
 }
