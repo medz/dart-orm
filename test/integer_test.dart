@@ -34,7 +34,7 @@ void main() {
         }
       });
       tearDown(() => db.close());
-      Future<void> create() => Migrator(db).apply([
+      Future<void> create() => Migrator(db.sql).apply([
         Migration.create('0001_samples', appSchema, dialect: db.dialect),
       ]);
 
@@ -75,10 +75,10 @@ void main() {
           throwsA(isA<SqlFailure>()),
         );
         expect(
-          (await verifySchema(db, SchemaSnapshot(appSchema))).differences,
+          (await verifySchema(db.sql, SchemaSnapshot(appSchema))).differences,
           isEmpty,
         );
-        final info = await inspectTable(db, 'samples');
+        final info = await inspectTable(db.sql, 'samples');
         expect(info.columns.map((c) => c.integerBits).toList(), [
           32,
           16,
@@ -140,7 +140,7 @@ void main() {
             ],
             primaryKey: ['id'],
           );
-          await Migrator(db).apply([
+          await Migrator(db.sql).apply([
             Migration.create('0001_quoted', [table], dialect: db.dialect),
           ]);
           await db.execute(SqlCommand('INSERT INTO quoted DEFAULT VALUES'));
@@ -153,10 +153,10 @@ void main() {
             ],
           );
           expect(
-            (await verifySchema(db, SchemaSnapshot([table]))).differences,
+            (await verifySchema(db.sql, SchemaSnapshot([table]))).differences,
             isEmpty,
           );
-          expect((await inspectTable(db, 'quoted')).unmanaged, isEmpty);
+          expect((await inspectTable(db.sql, 'quoted')).unmanaged, isEmpty);
           await expectLater(
             db.execute(SqlCommand('UPDATE quoted SET "a""b CHECK(1)" = 32768')),
             throwsA(isA<SqlFailure>()),
@@ -169,7 +169,7 @@ void main() {
         final snapshot = SchemaSnapshot(appSchema);
         final restored = physical.schema;
         expect(restored.checksum, snapshot.checksum);
-        final imported = await importSchema(db);
+        final imported = await importSchema(db.sql);
         expect(imported.issues, isEmpty);
         expect(imported.dart, contains('@IntegerBits(16)'));
         expect(imported.dart, contains('@IntegerBits(32)'));
@@ -181,7 +181,7 @@ void main() {
           await file.writeAsString(imported.dart);
           final result = await generateSchema(file.path);
           expect(
-            (await verifySchema(db, result.snapshot)).differences,
+            (await verifySchema(db.sql, result.snapshot)).differences,
             isEmpty,
           );
         } finally {
@@ -201,7 +201,7 @@ void main() {
         final first = Migration.create('0001_sized', [
           sized(16),
         ], dialect: db.dialect);
-        await Migrator(db).apply([first]);
+        await Migrator(db.sql).apply([first]);
         await db.execute(
           SqlCommand('INSERT INTO sized(id, value) VALUES (1, 32767)'),
         );
@@ -215,7 +215,7 @@ void main() {
           },
           dialect: db.dialect,
         );
-        await Migrator(db).apply([first, wider]);
+        await Migrator(db.sql).apply([first, wider]);
         await db.execute(
           SqlCommand('INSERT INTO sized(id, value) VALUES (2, 32768)'),
         );
@@ -230,11 +230,14 @@ void main() {
           dialect: db.dialect,
         );
         await expectLater(
-          Migrator(db).apply([first, wider, narrow]),
+          Migrator(db.sql).apply([first, wider, narrow]),
           throwsA(isA<SqlFailure>()),
         );
-        expect((await Migrator(db).history()).length, 2);
-        expect((await verifySchema(db, wider.snapshot!)).differences, isEmpty);
+        expect((await Migrator(db.sql).history()).length, 2);
+        expect(
+          (await verifySchema(db.sql, wider.snapshot!)).differences,
+          isEmpty,
+        );
         expect(
           (await db.execute(SqlCommand('SELECT count(*) FROM sized')))
               .rows
@@ -243,8 +246,11 @@ void main() {
           2,
         );
         await db.execute(SqlCommand('DELETE FROM sized WHERE id = 2'));
-        await Migrator(db).apply([first, wider, narrow]);
-        expect((await verifySchema(db, narrow.snapshot!)).differences, isEmpty);
+        await Migrator(db.sql).apply([first, wider, narrow]);
+        expect(
+          (await verifySchema(db.sql, narrow.snapshot!)).differences,
+          isEmpty,
+        );
         if (backend == 'sqlite') {
           expect(
             (await db.execute(SqlCommand('PRAGMA foreign_keys')))
@@ -262,7 +268,7 @@ void main() {
           final first = Migration.create('0001_sized', [
             sized(16),
           ], dialect: db.dialect);
-          await Migrator(db).apply([first]);
+          await Migrator(db.sql).apply([first]);
           final renamed = Migration.diff(
             '0002_renamed',
             from: first.snapshot!,
@@ -275,9 +281,9 @@ void main() {
             ),
             dialect: db.dialect,
           );
-          await Migrator(db).apply([first, renamed]);
+          await Migrator(db.sql).apply([first, renamed]);
           expect(
-            (await verifySchema(db, renamed.snapshot!)).differences,
+            (await verifySchema(db.sql, renamed.snapshot!)).differences,
             isEmpty,
           );
           await expectLater(
@@ -303,7 +309,7 @@ void main() {
           final first = Migration.create('0001_sized', [
             table,
           ], dialect: db.dialect);
-          await Migrator(db).apply([first]);
+          await Migrator(db.sql).apply([first]);
           for (var i = 1; i <= 4; i++) {
             await db.execute(
               SqlCommand('INSERT INTO sized(id, value) VALUES ($i, 0)'),
@@ -323,10 +329,10 @@ void main() {
             previous: first.checksum,
             dialect: db.dialect,
           );
-          await Migrator(db).apply([first, second], maxBackfillBatches: 1);
-          expect((await Migrator(db).progress()).single.backfill!.rows, 2);
-          await Migrator(db).apply([first, second]);
-          expect((await Migrator(db).progress()).single.backfill!.rows, 4);
+          await Migrator(db.sql).apply([first, second], maxBackfillBatches: 1);
+          expect((await Migrator(db.sql).progress()).single.backfill!.rows, 2);
+          await Migrator(db.sql).apply([first, second]);
+          expect((await Migrator(db.sql).progress()).single.backfill!.rows, 4);
         },
       );
 
@@ -341,7 +347,7 @@ void main() {
         final first = Migration.create('0001_identity', [
           identity(32),
         ], dialect: db.dialect);
-        await Migrator(db).apply([first]);
+        await Migrator(db.sql).apply([first]);
         await db.execute(SqlCommand('INSERT INTO identities DEFAULT VALUES'));
         final narrow = Migration.diff(
           '0002_identity',
@@ -353,7 +359,7 @@ void main() {
           },
           dialect: db.dialect,
         );
-        await Migrator(db).apply([first, narrow]);
+        await Migrator(db.sql).apply([first, narrow]);
         await db.execute(SqlCommand('INSERT INTO identities DEFAULT VALUES'));
         expect(
           (await db.execute(
@@ -368,7 +374,10 @@ void main() {
           db.execute(SqlCommand('INSERT INTO identities(id) VALUES (32768)')),
           throwsA(isA<SqlFailure>()),
         );
-        expect((await verifySchema(db, narrow.snapshot!)).differences, isEmpty);
+        expect(
+          (await verifySchema(db.sql, narrow.snapshot!)).differences,
+          isEmpty,
+        );
         if (backend == 'postgres') {
           final sequence = await db.execute(
             SqlCommand(
@@ -388,13 +397,16 @@ void main() {
               "CREATE TABLE sized(id INTEGER PRIMARY KEY NOT NULL, value INTEGER NOT NULL, note TEXT DEFAULT ('CHECK (${check.replaceAll("'", "''")})')) /* CHECK ($check) */",
             ),
           );
-          final info = await inspectTable(db, 'sized');
+          final info = await inspectTable(db.sql, 'sized');
           expect(
             info.columns.singleWhere((c) => c.name == 'value').integerBits,
             64,
           );
           expect(
-            (await verifySchema(db, SchemaSnapshot([sized(16)]))).differences,
+            (await verifySchema(
+              db.sql,
+              SchemaSnapshot([sized(16)]),
+            )).differences,
             contains('sized.value integer width differs'),
           );
           await db.execute(
@@ -407,11 +419,11 @@ void main() {
               'CREATE TABLE sized (id INTEGER PRIMARY KEY NOT NULL, value INTEGER CHECK ("value" IS NULL OR (typeof("value") = \'integer\' AND "value" BETWEEN -32768 AND 32767) OR 1))',
             ),
           );
-          final info = await inspectTable(db, 'sized');
+          final info = await inspectTable(db.sql, 'sized');
           expect(info.columns.last.integerBits, 64);
           expect(info.checks.single.expression, endsWith('OR 1'));
           final verification = await verifySchema(
-            db,
+            db.sql,
             SchemaSnapshot([sized(16)]),
           );
           expect(

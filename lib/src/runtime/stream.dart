@@ -1,39 +1,19 @@
-part of '../orm.dart';
+part of '../../runtime.dart';
 
-extension QueryStreaming<R, F extends Fields> on Query<R, F> {
-  /// One database cursor, fetched on demand. Related rows are loaded per root
-  /// batch on the same connection. Pause/await-for consumption provides demand.
-  Stream<R> stream({
+extension SqlDatabaseStreaming on SqlDatabase<Backend> {
+  /// Stream raw rows from a database cursor with demand-driven batch fetches.
+  Stream<List<Object?>> stream(
+    SqlCommand command, {
     int batchSize = 128,
     ExecutionOptions options = const ExecutionOptions(),
-  }) {
-    if (batchSize < 1) throw ArgumentError.value(batchSize, 'batchSize');
-    final (plan, decode) = _plan();
-    final command = _compile(plan);
-    return database._stream(
-      command,
-      batchSize: batchSize,
-      options: options,
-      decode: (connection, rows, execution) async {
-        final expanded = await _expandRelations(
-          database,
-          connection,
-          plan,
-          rows,
-          options: execution,
-        );
-        return database._observeDecode(
-          command.sql,
-          expanded.length,
-          () => [for (final row in expanded) decode(row)],
-        );
-      },
-    );
-  }
-}
+  }) => streamRows(
+    command,
+    batchSize: batchSize,
+    options: options,
+    decode: (_, rows, _) async => rows,
+  );
 
-extension _DatabaseStreaming on Database<Backend> {
-  Stream<R> _stream<R>(
+  Stream<R> streamRows<R>(
     SqlCommand command, {
     required int batchSize,
     required ExecutionOptions options,
@@ -44,6 +24,7 @@ extension _DatabaseStreaming on Database<Backend> {
     )
     decode,
   }) {
+    if (batchSize < 1) throw ArgumentError.value(batchSize, 'batchSize');
     if (!capabilities.streaming) {
       throw const OrmException(
         'CAPABILITY.STREAM',
@@ -137,7 +118,7 @@ extension _DatabaseStreaming on Database<Backend> {
         requestStop();
       });
       try {
-        await _run(
+        await run(
           (connection) async {
             final ownsTransaction = !inTransaction;
             SqlCursor? cursor;
@@ -145,13 +126,16 @@ extension _DatabaseStreaming on Database<Backend> {
             try {
               if (stopped) return;
               if (ownsTransaction) {
-                await _execute(
-                  connection,
-                  SqlCommand(
-                    dialect == SqlDialect.postgres
-                        ? 'BEGIN READ ONLY'
-                        : 'BEGIN',
-                  ),
+                await _executeOn(
+                  connection is _SessionConnection
+                      ? connection.inner
+                      : connection,
+                  SqlCommand(switch (dialect) {
+                    SqlDialect.postgres => 'BEGIN READ ONLY',
+                    SqlDialect.mysql ||
+                    SqlDialect.mariadb => 'START TRANSACTION READ ONLY',
+                    SqlDialect.sqlite => 'BEGIN',
+                  }),
                 );
                 began = true;
               }
@@ -182,8 +166,10 @@ extension _DatabaseStreaming on Database<Backend> {
               try {
                 if (cursor != null) await observe(.cursorClose, cursor.close);
                 if (began) {
-                  await _execute(
-                    connection,
+                  await _executeOn(
+                    connection is _SessionConnection
+                        ? connection.inner
+                        : connection,
                     SqlCommand(complete ? 'COMMIT' : 'ROLLBACK'),
                   );
                 }

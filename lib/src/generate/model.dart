@@ -1,7 +1,11 @@
 part of '../generate.dart';
 
+bool _mysqlDialect(SqlDialect dialect) =>
+    dialect == SqlDialect.mysql || dialect == SqlDialect.mariadb;
+
 // A Database instance member takes precedence over a generated extension getter.
 const _databaseMembers = {
+  'sql',
   'driver',
   'onQuery',
   'onAcquire',
@@ -19,6 +23,14 @@ const _databaseMembers = {
   'transaction',
   'savepoint',
   'close',
+  'checkActive',
+  'run',
+  'executeOn',
+  'executeCommand',
+  'atomic',
+  'streamRows',
+  'observeDecode',
+  'markFailed',
   'hashCode',
   'runtimeType',
   'noSuchMethod',
@@ -96,20 +108,29 @@ final class _Entity {
   final String table;
   final String row;
   final List<_Field> fields;
+
+  /// Null for structural Record rows; otherwise the primary constructor's
+  /// named parameters. Positional parameters retain declaration order.
+  final Set<String>? constructorNamedFields;
   List<String> primaryKey;
   final List<List<String>> uniqueKeys;
   final List<_Index> indexes = [];
   final List<_Edge> edges = [];
   final List<CheckSchema> checks = [];
-  _Entity(this.name, this.table, this.row, this.fields)
-    : primaryKey = [
-        for (final f in fields)
-          if (f.id) f.name,
-      ],
-      uniqueKeys = [
-        for (final f in fields)
-          if (f.unique) [f.name],
-      ];
+  _Entity(
+    this.name,
+    this.table,
+    this.row,
+    this.fields, {
+    this.constructorNamedFields,
+  }) : primaryKey = [
+         for (final f in fields)
+           if (f.id) f.name,
+       ],
+       uniqueKeys = [
+         for (final f in fields)
+           if (f.unique) [f.name],
+       ];
   String get symbol => name[0].toUpperCase() + name.substring(1);
   String get fieldsType => '${symbol}Fields';
   String get setType => '${symbol}TableSet';

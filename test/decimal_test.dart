@@ -36,7 +36,7 @@ void main() {
         }
       });
       tearDown(() => db.close());
-      Future<void> create() => Migrator(db).apply([
+      Future<void> create() => Migrator(db.sql).apply([
         Migration.create('0001_decimal', appSchema, dialect: db.dialect),
       ]);
       Future<void> amounts(List<String> values) async {
@@ -267,11 +267,11 @@ void main() {
         await amounts(['12345678901234567890.00000000001']);
         final snapshot = SchemaSnapshot(appSchema);
         expect(physical.schema.checksum, snapshot.checksum);
-        final verification = await verifySchema(db, snapshot);
+        final verification = await verifySchema(db.sql, snapshot);
         expect(verification.differences, isEmpty);
         expect(verification.unmanaged, isEmpty);
-        expect(await verifyColumns(db, appSchema), isEmpty);
-        final imported = await importSchema(db);
+        expect(await verifyColumns(db.sql, appSchema), isEmpty);
+        final imported = await importSchema(db.sql);
         expect(imported.issues, isEmpty);
         expect(imported.dart, contains('Decimal'));
         final directory = await Directory(
@@ -282,7 +282,7 @@ void main() {
           await source.writeAsString(imported.dart);
           final generated = await generateSchema(source.path);
           expect(
-            (await verifySchema(db, generated.snapshot)).differences,
+            (await verifySchema(db.sql, generated.snapshot)).differences,
             isEmpty,
           );
         } finally {
@@ -336,9 +336,9 @@ void main() {
           previous: first.checksum,
           dialect: db.dialect,
         );
-        await Migrator(db).apply([first, second], maxBackfillBatches: 1);
+        await Migrator(db.sql).apply([first, second], maxBackfillBatches: 1);
         expect(await db.rates.where((r) => r.label.eq('done')).count(), 1);
-        await Migrator(db).apply([first, second]);
+        await Migrator(db.sql).apply([first, second]);
         expect(await db.rates.where((r) => r.label.eq('done')).count(), 4);
       });
 
@@ -354,7 +354,7 @@ void main() {
         final first = Migration.create('0001_text', [
           schema(Codecs.text),
         ], dialect: db.dialect);
-        await Migrator(db).apply([first]);
+        await Migrator(db.sql).apply([first]);
         await db.execute(
           SqlCommand(
             "INSERT INTO converted VALUES (1, '2'), (2, '2.00'), (3, '12345678901234567890.00000000001')",
@@ -375,10 +375,10 @@ void main() {
           dialect: db.dialect,
         );
         await expectLater(
-          Migrator(db).apply([first, next]),
+          Migrator(db.sql).apply([first, next]),
           throwsA(isA<SqlFailure>()),
         );
-        expect((await Migrator(db).history()).length, 1);
+        expect((await Migrator(db.sql).history()).length, 1);
         expect(
           (await db.execute(
             SqlCommand('SELECT amount FROM converted WHERE id = 2'),
@@ -386,9 +386,12 @@ void main() {
           '2.00',
         );
         await db.execute(SqlCommand('DELETE FROM converted WHERE id = 2'));
-        await Migrator(db).apply([first, next]);
-        expect((await verifySchema(db, next.snapshot!)).differences, isEmpty);
-        expect((await verifySchema(db, next.snapshot!)).unmanaged, isEmpty);
+        await Migrator(db.sql).apply([first, next]);
+        expect(
+          (await verifySchema(db.sql, next.snapshot!)).differences,
+          isEmpty,
+        );
+        expect((await verifySchema(db.sql, next.snapshot!)).unmanaged, isEmpty);
         final row = await db.execute(
           SqlCommand('SELECT amount FROM converted WHERE id = 3'),
         );
@@ -460,14 +463,14 @@ void main() {
           ['a"b'],
         ],
       );
-      await Migrator(db).apply([
+      await Migrator(db.sql).apply([
         Migration.create('0001_quoted', [table], dialect: db.dialect),
       ]);
       expect(
-        (await verifySchema(db, SchemaSnapshot([table]))).differences,
+        (await verifySchema(db.sql, SchemaSnapshot([table]))).differences,
         isEmpty,
       );
-      expect((await inspectTable(db, 'quoted')).unmanaged, isEmpty);
+      expect((await inspectTable(db.sql, 'quoted')).unmanaged, isEmpty);
       await db.execute(
         SqlCommand(
           'CREATE TABLE missing (id INTEGER NOT NULL, amount TEXT NOT NULL DEFAULT (\'COLLATE orm_decimal_v1\'), PRIMARY KEY (id))',
@@ -481,21 +484,21 @@ void main() {
         ],
         primaryKey: ['id'],
       );
-      expect(await verifyColumns(db, [expected]), [
+      expect(await verifyColumns(db.sql, [expected]), [
         'missing.amount collation differs',
       ]);
       await db.execute(
         SqlCommand('CREATE TABLE custom (amount TEXT COLLATE NOCASE)'),
       );
-      expect((await inspectTable(db, 'custom')).unmanaged, isNotEmpty);
-      final imported = await importSchema(db, tables: ['missing']);
+      expect((await inspectTable(db.sql, 'custom')).unmanaged, isNotEmpty);
+      final imported = await importSchema(db.sql, tables: ['missing']);
       expect(imported.dart, contains('String amount'));
       await db.execute(
         SqlCommand(
           'CREATE TABLE unicode_names (Ä TEXT COLLATE orm_decimal_v1, ä TEXT)',
         ),
       );
-      final unicode = await inspectColumns(db, 'unicode_names');
+      final unicode = await inspectColumns(db.sql, 'unicode_names');
       expect(unicode.map((c) => (c.name, c.collation?.toLowerCase())), [
         ('Ä', 'orm_decimal_v1'),
         ('ä', 'binary'),

@@ -12,7 +12,7 @@ Matcher code(String value) =>
     isA<OrmException>().having((e) => e.code, 'code', value);
 
 void main() {
-  for (final dialect in SqlDialect.values) {
+  for (final dialect in [SqlDialect.sqlite, SqlDialect.postgres]) {
     group(
       'unconstrained ${dialect.name}',
       () {
@@ -42,7 +42,7 @@ void main() {
               SqlCommand('CREATE SCHEMA orm_unconstrained_tests'),
             );
           }
-          await Migrator(db).apply([
+          await Migrator(db.sql).apply([
             Migration.create('0001_initial', appSchema, dialect: db.dialect),
           ]);
           await db.execute(
@@ -67,13 +67,13 @@ void main() {
           () async {
             for (final table in appSchema) {
               expect(table.foreignKeys, isEmpty);
-              final actual = await inspectTable(db, table.name);
+              final actual = await inspectTable(db.sql, table.name);
               expect(actual.foreignKeys, isEmpty);
               expect(actual.uniqueKeys, isEmpty);
               expect(actual.indexes, isEmpty);
             }
             expect(
-              (await verifySchema(db, SchemaSnapshot(appSchema))).matches,
+              (await verifySchema(db.sql, SchemaSnapshot(appSchema))).matches,
               true,
             );
             // A dangling reference and duplicate lookup keys are valid stored data.
@@ -117,18 +117,21 @@ void main() {
               dialect: db.dialect,
             );
             await expectLater(
-              Migrator(db).apply([first, enforce]),
+              Migrator(db.sql).apply([first, enforce]),
               throwsA(anything),
             );
             expect(
-              (await verifySchema(db, SchemaSnapshot(appSchema))).matches,
+              (await verifySchema(db.sql, SchemaSnapshot(appSchema))).matches,
               true,
             );
             expect(await db.entries.count(), 7);
             await db.entries.byId(2).patch(owner: .set(1));
             await db.entries.byId(6).patch(tenant: .set(1));
-            await Migrator(db).apply([first, enforce]);
-            expect((await inspectTable(db, 'entries')).foreignKeys.length, 1);
+            await Migrator(db.sql).apply([first, enforce]);
+            expect(
+              (await inspectTable(db.sql, 'entries')).foreignKeys.length,
+              1,
+            );
             final release = Migration.diff(
               '0003_unconstrain',
               from: SchemaSnapshot(constrained),
@@ -136,9 +139,9 @@ void main() {
               previous: enforce.checksum,
               dialect: db.dialect,
             );
-            await Migrator(db).apply([first, enforce, release]);
+            await Migrator(db.sql).apply([first, enforce, release]);
             expect(
-              (await verifySchema(db, SchemaSnapshot(appSchema))).matches,
+              (await verifySchema(db.sql, SchemaSnapshot(appSchema))).matches,
               true,
             );
             await db.entries.create(id: 8, tenant: 9, owner: 99);

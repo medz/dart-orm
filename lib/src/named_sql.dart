@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 /// Fixed SQL with :named bound values. Quoted text, identifiers and comments are
 /// preserved. This tokenizer is not a SQL parser; use database query checks.
@@ -8,6 +8,8 @@ final class SqlTemplate {
   final Set<String> parameters;
   SqlTemplate._(this.dialect, this._parts, this.parameters);
   factory SqlTemplate(String source, {required SqlDialect dialect}) {
+    _checkSqlText(source);
+    final mysql = dialect == SqlDialect.mysql || dialect == SqlDialect.mariadb;
     final parts = <Object>[], names = <String>{};
     final text = StringBuffer();
     var i = 0, ended = false;
@@ -24,13 +26,21 @@ final class SqlTemplate {
         i++;
         continue;
       }
-      if (source.startsWith('--', i)) {
+      if (source.startsWith('--', i) &&
+              (!mysql ||
+                  i + 2 == source.length ||
+                  source.codeUnitAt(i + 2) <= 32) ||
+          mysql && c == '#') {
         final end = source.indexOf('\n', i);
         text.write(source.substring(i, end < 0 ? source.length : end));
         i = end < 0 ? source.length : end;
         continue;
       }
       if (source.startsWith('/*', i)) {
+        if (mysql &&
+            (source.startsWith('/*!', i) || source.startsWith('/*M!', i))) {
+          fail('Executable comments are not allowed in named SQL');
+        }
         final start = i;
         i += 2;
         var depth = 1;
@@ -57,7 +67,8 @@ final class SqlTemplate {
       }
       if (c == "'" ||
           c == '"' ||
-          dialect == SqlDialect.sqlite && (c == '`' || c == '[')) {
+          (dialect == SqlDialect.sqlite || mysql) && c == '`' ||
+          dialect == SqlDialect.sqlite && c == '[') {
         final start = i, close = c == '[' ? ']' : c;
         final escapes =
             c == "'" &&
@@ -118,10 +129,11 @@ final class SqlTemplate {
         i = end;
         continue;
       }
-      if (c == '?' && dialect == SqlDialect.sqlite ||
+      if (c == '?' && (dialect == SqlDialect.sqlite || mysql) ||
           c == '@' && dialect == SqlDialect.sqlite) {
         fail('Use :name parameters');
       }
+      if (c == '\u0001' || c == '\u0002') fail('Reserved control character');
       if (identifier(source.codeUnitAt(i))) {
         var end = i + 1;
         while (end < source.length &&
@@ -159,13 +171,14 @@ final class SqlTemplate {
       temporal: capabilities.temporal,
     );
     final sql = _write(w, arguments);
-    if (w.parameters.length > capabilities.maxParameters) {
+    final command = w.finish(sql);
+    if (command.parameters.length > capabilities.maxParameters) {
       throw const OrmException(
         'QUERY.PARAMETERS',
         'Named SQL exceeds the parameter limit.',
       );
     }
-    return SqlCommand(sql, w.parameters);
+    return command;
   }
 
   String _write(_Writer w, Map<String, Expr<Object?>> arguments) {
@@ -213,7 +226,7 @@ final class SqlQueryDefinition<R, F extends Fields> {
   final Map<SqlDialect, SqlTemplate> sql;
   SqlQueryDefinition(this.result, Map<SqlDialect, SqlTemplate> sql)
     : sql = Map.unmodifiable(sql);
-  Query<R, F> bind(Database<Backend> db, Map<String, Expr<Object?>> arguments) {
+  Query<R, F> bind(QueryContext db, Map<String, Expr<Object?>> arguments) {
     final template = sql[db.dialect];
     if (template == null) {
       throw const OrmException(

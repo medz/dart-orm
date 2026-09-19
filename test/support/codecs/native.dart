@@ -9,7 +9,7 @@ Future<void> main() async {
   final db = await sqlite(const SqliteOptions.memory());
   try {
     await Migrator(
-      db,
+      db.sql,
     ).apply([Migration.create('0001_initial', appSchema, dialect: db.dialect)]);
     final first = await db.people.create(
       email: const Email('aot@example.com'),

@@ -1,6 +1,6 @@
 # Import an existing database
 
-Import reads the catalog and produces an editable Record declaration plus a review
+Import reads the catalog and produces an editable nominal model declaration plus a review
 report. It does not sample rows, create migration history, change tables, or copy
 data. Generate the client and baseline the reviewed schema as separate steps.
 
@@ -8,6 +8,9 @@ data. Generate the client and baseline the reviewed schema as separate steps.
 dart run orm db import --sqlite app.sqlite --output lib/schema.dart
 # PostgreSQL alternative:
 dart run orm db import --postgres-env DATABASE_URL --database-schema public --output lib/schema.dart
+# MySQL/MariaDB alternatives:
+dart run orm db import --mysql-env DATABASE_URL --output lib/schema.dart
+dart run orm db import --mariadb-env DATABASE_URL --output lib/schema.dart
 
 # Review lib/schema.dart and lib/schema.import.json first.
 dart run orm generate lib/schema.dart
@@ -18,8 +21,8 @@ dart run bin/migrate.dart baseline
 dart run bin/migrate.dart verify
 ```
 
-For PostgreSQL use `--dialect postgres` when initializing its registry.
-Configure the same PostgreSQL database in the [Dart migration entrypoint](migrations.md). Existing database-specific defaults and objects need reviewed migrations;
+Use `--dialect postgres`, `mysql` or `mariadb` for the matching server's registry.
+Configure the same database in the [Dart migration entrypoint](migrations.md). Existing database-specific defaults and objects need reviewed migrations;
 an imported declaration is not automatically a portable creation script for the
 other dialect. Baseline verifies the declared schema before recording history and
 does not execute the initial creation SQL.
@@ -32,7 +35,9 @@ a borrowed session without an active transaction is allowed.
 
 To import one table, use `--table accounts`. For a selected related group, use
 `importSchema(db, tables: ['accounts', 'notes'])` in Dart. Without a selection,
-discovery covers SQLite main or the current PostgreSQL schema. Internal ORM history
+discovery covers SQLite main, the current PostgreSQL schema or the selected
+MySQL/MariaDB database. `db` is a raw `SqlDatabase`; use `ormDatabase.sql` for an
+ORM connection. Internal ORM history
 tables are omitted. Include the referenced tables when importing relationships;
 missing targets and temporary objects shadowing selected tables produce issues.
 
@@ -41,10 +46,10 @@ missing targets and temporary objects shadowing selected tables produce issues.
 ```dart
 import 'package:orm/schema.dart';
 
-typedef AccountsRow = ({
-  @ColumnName('id') @Id.generated() int id,
-  @ColumnName('email') String email,
-  @ColumnName('display_name') String? displayName,
+final class AccountsRow({
+  @ColumnName('id') @Id.generated() required final int id,
+  @ColumnName('email') required final String email,
+  @ColumnName('display_name') required final String? displayName,
 });
 final accounts = entity<AccountsRow>(table: 'accounts');
 final accountsUnique = accounts.unique((row) => row.email);
@@ -56,7 +61,9 @@ Unicode-only names and collisions get valid names recorded in the report's
 the physical mappings. Primary/composite keys, unique constraints, simple named
 indexes and representable foreign keys become declarations. Relationships get names
 and inverse selections; rename these before generation if a domain name is clearer.
-Foreign-key actions include SET DEFAULT.
+Foreign-key actions include SET DEFAULT on supporting engines; MySQL/MariaDB
+reject it. Unsupported unsigned and binary storage must be reviewed explicitly;
+see [MySQL/MariaDB limits](mysql.md).
 
 Ordinary enforced [CHECK constraints](checks.md) become `.check(...)` declarations
 with their native names and SQL. A nonblocking `IMPORT.CHECK_SQL` note requests

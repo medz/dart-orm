@@ -39,7 +39,7 @@ import '../lib/target.dart';
 import '../lib/migrations/migrations.g.dart';
 Future<void> main(List<String> args) => runMigrationCli(args,
   directory: 'lib/migrations', history: migrationHistory, schema: schema,
-  connect: ({required readOnly}) => ${postgresSchema == null ? "sqlite(readOnly ? SqliteOptions.readOnly(${jsonEncode(sqlitePath ?? 'database.sqlite')}) : SqliteOptions.file(${jsonEncode(sqlitePath ?? 'database.sqlite')}))" : "postgres(PostgresOptions(url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!), tls: .disable, schema: ${jsonEncode(postgresSchema)}, maxConnections: 1))"},
+  connect: ({required readOnly}) async => (await ${postgresSchema == null ? "sqlite(readOnly ? SqliteOptions.readOnly(${jsonEncode(sqlitePath ?? 'database.sqlite')}) : SqliteOptions.file(${jsonEncode(sqlitePath ?? 'database.sqlite')}))" : "postgres(PostgresOptions(url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!), tls: .disable, schema: ${jsonEncode(postgresSchema)}, maxConnections: 1))"}).sql,
 );
 ''');
       return project;

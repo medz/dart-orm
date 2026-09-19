@@ -1,106 +1,173 @@
-# Declaration-form experiment
+# Models and typed queries
 
-The default ORM declaration remains Record schema with separate table identity.
-The design's §13.2 experiment now compares the same User/Post/Profile/Follow
-schema in three actual Dart forms: Record typedefs, primary-constructor classes,
-and classes with typed column fields. These are controlled authoring prototypes;
-the package does not add three public schema APIs or alternate runtimes.
+Declare an immutable Dart class once. The generated client returns instances of
+that class, including from inserts and relationships. It does not generate a
+second row type or convert the class into a Record.
 
-Run the experiment from the repository:
+```dart
+import 'package:orm/schema.dart';
 
-```sh
-dart run tool/compare_authoring.dart
+final class User({
+  @Id.generated() required final int id,
+  @Unique() required final String email,
+  required final String? nickname,
+  @Default.sql('false') required final bool active,
+});
+
+final class Post(
+  @Id.generated() final int id,
+  final int authorId,
+  final String title,
+);
+
+final users = entity<User>(table: 'users');
+final posts = entity<Post>(table: 'posts');
+final author = posts
+    .key((p) => p.authorId)
+    .references(users.key((u) => u.id), inverse: 'posts', onDelete: .cascade);
 ```
 
-`--smoke` checks only the Record input and writes under `.dart_tool/`. The full
-run checks all three forms and writes
-[`authoring.json`](../research/benchmarks/authoring.json). Inputs are in
-[`authoring_fixture.dart`](../tool/src/authoring_fixture.dart); the report retains
-the formatted original/edited sources, normalized schemas, physical snapshots,
-hashes, LSP edits and compiler errors. The captured run uses Dart 3.13.3.
+Primary constructors require Dart 3.13. They declare fields and constructor
+parameters together; they are ordinary Dart classes with ordinary nominal type
+identity. See the [Dart language documentation](https://dart.dev/language/primary-constructors).
 
-## One output contract
+`entity<User>()` gives the table its own identity and physical name. Two tables
+can use the same row class, and a self-join still has separate table occurrences.
+Row identity does not determine SQL scope.
 
-Every form is resolved by the Dart analyzer, then converted to a canonical Record
-schema. That schema passes through the unchanged production generator. Classes
-serve as schema declarations here; outputs are Record rows. This experiment does
-not implement materialization of nominal domain objects, inheritance, arbitrary
-constructor logic or computed getters. Its adapter accepts the fixture's built-in
-int/String/bool/DateTime codecs and nullability, and rejects custom codec behavior
-instead of silently discarding it. Constructor bodies are also rejected.
+Generate with `dart run orm generate lib/schema.dart`, then import the generated
+client and the chosen driver. [Generation](generation.md) describes standalone
+and build_runner workflows. New projects can start with `dart run orm init
+--database sqlite`; after initialization, `dart run orm generate` reads the typed
+project configuration.
 
-The fixtures contain generated identities, physical column names, nullable fields,
-a SQL boolean default, two composite user uniqueness constraints, composite profile
-and follow primary keys, four composite foreign keys, both Follow-to-User edges,
-different deletion actions, an ordered four-column index and a row CHECK.
+```dart
+final User user = await db.users.create(email: 'seven@example.com');
+await db.users.byId(user.id).patch(nickname: .set('Seven'));
+await db.users.byId(user.id).patch(nickname: .set(null));
 
-For each of these three variants, the normalized Dart schema, entire generated
-client and physical snapshot must be byte-identical across all authoring forms:
+final List<User> active = await db.users
+    .where((u) => u.active.eq(true))
+    .get();
 
-1. The base four-model schema.
-2. Changing Profile.bio from String? to int?.
-3. Renaming User.email to contactEmail while retaining physical column `email`.
+final List<Post> posts = await db.users
+    .byId(user.id)
+    .select((u) => u.posts.many())
+    .single();
+```
 
-The third variant must also retain the base physical snapshot exactly. Independent
-report readback checks the individual key/FK/default/index/CHECK metadata and that
-the type-edit snapshot changes only the intended field's storage type.
+The same field declarations determine constructor values, typed query fields,
+create parameters, patch parameters, codecs and the physical schema. Application
+code does not repeat column types in a table class or a generated row interface.
+The generated client imports `sql.dart` and binds to `QueryContext`. It can be used
+with an offline `SqlBuilder` as well as a connected ORM `Database`; the model
+declaration itself only depends on the schema/value layer.
 
-A shared consumer compiles generated create/patch methods and a typed named Record
-projection containing posts, an optional profile and nested following-user emails.
-After each schema edit, the old consumer must fail static analysis. Updating its
-affected references/types must restore clean analysis. This checks the generated
-API, not only a successful schema parse or matching snapshot hashes.
+## Full rows, writes and projections
 
-## Authoring and refactoring cost
+The model constructor represents a complete database row. Every constructor
+parameter is required, including nullable columns and generated IDs. `User.id`
+stays `int`: creating a user does not require weakening the stored row to `int?`.
 
-Formatted model declarations, including their imports/language directive and
-excluding the common table/constraint block:
+The generated `create` method has its own insert contract:
 
-| Form | UTF-8 bytes | Lines | Field rename in schema |
-| --- | ---: | ---: | --- |
-| Record | 487 | 24 | Manual declaration and selector edit |
-| Primary constructor | 585 | 24 | LSP updates declaration and unique-key selector |
-| Table class | 1,574 | 43 | LSP updates field and selector, retaining SQL name |
+- Ordinary non-null columns are required.
+- Nullable columns without defaults can be omitted and are inserted as NULL.
+- Generated values, SQL defaults and client defaults use `Change<T>` with
+  `.keep()` as the default. `.set(value)` explicitly supplies a value.
+- Computed columns are absent from writes.
 
-These are measurements of this fixture and formatter style, not a universal code
-reduction claim. Primary constructors substantially reduce class boilerplate, so
-Record has no line-count advantage in this sample. Primary constructors are a
-[Dart 3.13 language feature](https://dart.dev/language/primary-constructors).
+Patch parameters use `Change<T>` to distinguish omission from explicit NULL.
+`patch()` keeps an omitted field; `patch(nickname: .set(null))` clears it.
+Generated identities and computed columns are absent from patch parameters.
 
-The checked SDK returns null for both prepare/rename on the Record field. This
-differs from renaming its typedef, and Record aliases do not create nominal types;
-see [Dart's Record semantics](https://dart.dev/language/records). The class/table
-probes receive and apply two edits: field declaration and the constraint's typed
-reference. They use a clean Analysis Server session.
+Use `@Default.sql` for database defaults and `@ClientDefault(factory)` for Dart
+insert defaults. Constructor defaults are rejected: they would otherwise suggest
+an insert behavior that the database does not implement. Neither constructors nor
+client factories run during generation. Client factories run when building the
+insert; the model constructor runs when decoding the resulting row.
 
-All three forms still require regeneration and application-reference repair.
-The experiment's authoring classes are separate from the generated Record/client
-symbols, so their successful schema rename does not automatically refactor that
-generated API. Six stale-consumer runs—type edit and rename for every form—fail
-as expected; all repaired consumers and final projects analyze cleanly.
+Selected shapes remain independent of complete models. Project a scalar, a typed
+Record, or a separate application DTO:
 
-Retaining Record as the default preserves the current data-first contract and the
-smallest input in this fixture. Its missing automatic field rename is a real cost,
-documented for users rather than hidden by generated setters or string lookup.
-The comparison does not establish that Record is universally easier than a primary
-class, and does not add nominal class rows as an untested feature.
+```dart
+final cards = await db.users.select((u) => (
+  u.id,
+  u.email,
+  u.posts.take(3).select((p) => p.title).many(),
+).map((id, email, posts) => (id: id, email: email, posts: posts))).get();
+// List<({int id, String email, List<String> posts})>
+```
 
-## Error locations and measurement limits
+Selecting two columns does not produce a partly populated `User`. Relationships
+are explicit query selections; they do not add hidden lazy-loading properties or
+queries to the row class. A foreign key remains a separate typed declaration,
+including for composite keys and multiple edges to the same table.
 
-Every form checks an unknown member, a computed index selector, a repeated key
-field and a foreign key whose exact target uniqueness was removed. Dart catches
-the unknown member. The generator rejects the latter three and their offsets map
-back to the original authoring source, including the multiline FK expression.
-The report retains phase, code, offset, line, column and source line. Additional
-checks reject a primary-constructor body and a custom table codec: fourteen located
-failures in total. The adapter's offset mapping is an experimental tool facility,
-not a newly shipped IDE plugin or public generator diagnostic format.
+## Supported declarations and errors
 
-Stage timings are retained as single observations in a fixed Record/class/table
-order. They include analyzer/formatter JIT warmup effects and cannot rank the
-frontends' generation speed. Offline dependency resolution is outside timing;
-shared caches are warm. Actual 10/100/1000-model generation and LSP completion
-measurements remain in [generation](generation.md). The earlier mixed-session
-rename timeout is still an unverified workflow; this clean-session capture does
-not resolve it. This authoring experiment does not execute a database or prove
-native Flutter behavior.
+Generated entity classes must be public, final, non-generic classes declared in
+the selected schema file. Their unnamed primary constructor accepts public,
+explicitly typed `final` declaring parameters. Required positional parameters,
+required named parameters, and a mixture of both are supported. A constant
+primary constructor is also valid. Classes cannot have inheritance, mixins,
+implemented interfaces or members in their body. Add application behavior with
+Dart extensions; arbitrary constructor logic is outside the database decoder's
+contract.
+
+Annotations use the same validation for classes and Records. Built-in values,
+enums and explicit `@UseCodec` domain values retain their resolved Dart types.
+The generator checks codec compatibility without executing codecs. It rejects
+ambiguous field names, duplicate physical columns, invalid generated identities,
+nullable primary keys, computed-column/default conflicts, invalid selectors and
+foreign keys without a matching target key.
+
+Dart analysis rejects wrong create/patch value types, unknown query fields and
+assignment of an unrelated model with the same fields. Generation rejects
+unsupported declaration forms and database-schema conflicts. Database-specific
+capabilities are checked when selecting the migration engine.
+
+These are ordinary classes: the ORM does not generate equality, `copyWith`, JSON
+serialization or a global identity map. Two separately read rows are separate
+instances. Serialization remains application code, while column codecs control
+database encoding. In particular, SQL NULL, an omitted insert value and a missing
+JSON property are different concepts.
+
+## Records and schema history
+
+Named Record typedefs remain an explicit structural data form:
+
+```dart
+typedef Coordinate = ({@Id() int id, double x, double y});
+final coordinates = entity<Coordinate>();
+```
+
+They share the same schema validation and query runtime. A Record typedef does
+not create nominal identity; another typedef with the same shape is assignable.
+Classes are the default for models and catalog-import drafts. Records are useful
+for projections and fixed SQL result shapes.
+
+Changing a row declaration from a Record to a class does not change its physical
+schema. Snapshots and saved migrations contain standalone physical metadata,
+without imports of current model classes, constructors, codecs or client-default
+functions. A class field rename can retain the database column with
+`@ColumnName('old_name')`; absent that explicit name, normal schema diff rules
+apply and never infer a destructive rename.
+
+Class fields support Dart's normal symbol navigation and rename tools.
+Regenerate after edits and repair affected generated-API references; a model
+rename does not promise that an IDE will edit the regenerated client or all its
+consumers automatically.
+
+## Earlier authoring experiment
+
+`dart run tool/compare_authoring.dart` retains the controlled comparison of Record,
+primary-constructor and typed-table-field declarations. Its adapter deliberately
+normalizes all three forms to Records so their output can be compared. It is an
+experiment, not the production class reader.
+
+The historical [report](../research/benchmarks/authoring.json) records sources,
+LSP edits, byte-identical physical snapshots and stale-consumer errors on Dart
+3.13.3. Its measurements establish neither universal brevity nor a generation
+speed ranking. The production generator now reads class parameters directly and
+constructs the declared model type.

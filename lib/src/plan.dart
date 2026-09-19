@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 /// A physical SQL output slot, including association keys and presence markers.
 /// Expressions without a direct column source have null table/column names.
@@ -123,7 +123,7 @@ QueryPlan _inspectQuery(Query<Object?, Fields> query) {
 }
 
 QueryPlan _describeStatement(
-  Database<Backend> db,
+  QueryContext db,
   _QueryState state,
   _SelectionPlan plan,
   SqlCommand command,
@@ -170,7 +170,7 @@ QueryPlan _describeStatement(
 }
 
 RelationLoadPlan _inspectRelation(
-  Database<Backend> db,
+  QueryContext db,
   _TypedRelationBinding<Object?, Fields> binding,
 ) {
   final relation = binding.relation, width = relation._child.length;

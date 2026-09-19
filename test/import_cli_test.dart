@@ -38,6 +38,7 @@ void main() {
             'run',
             'bin/orm.dart',
             ...args,
+            '--json',
           ]);
           expect(
             result.exitCode,

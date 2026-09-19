@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show Moment, Slot, Booking;
@@ -55,6 +55,8 @@ final _momentsRounded = Column<LocalTime>(
   computed: ComputedColumn.forDialects(
     sqlite: "\"clock\"",
     postgres: "\"clock\"",
+    mysql: "\"clock\"",
+    mariadb: "\"clock\"",
     storage: ComputedStorage.stored,
   ),
   temporalPrecision: 0,
@@ -119,7 +121,7 @@ final momentsTable = Table<models.Moment, MomentsFields>(
 );
 
 final class MomentsTableSet extends TableSet<models.Moment, MomentsFields> {
-  MomentsTableSet(Database<Backend> db) : super(db, momentsTable) {
+  MomentsTableSet(QueryContext db) : super(db, momentsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Moment> create({
@@ -199,7 +201,7 @@ final slotsTable = Table<models.Slot, SlotsFields>(
 );
 
 final class SlotsTableSet extends TableSet<models.Slot, SlotsFields> {
-  SlotsTableSet(Database<Backend> db) : super(db, slotsTable) {
+  SlotsTableSet(QueryContext db) : super(db, slotsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Slot> create({
@@ -258,7 +260,7 @@ final bookingsTable = Table<models.Booking, BookingsFields>(
 );
 
 final class BookingsTableSet extends TableSet<models.Booking, BookingsFields> {
-  BookingsTableSet(Database<Backend> db) : super(db, bookingsTable) {
+  BookingsTableSet(QueryContext db) : super(db, bookingsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Booking> create({
@@ -280,7 +282,7 @@ final appSchema = List<TableSchema>.unmodifiable([
   bookingsSchema,
 ]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   MomentsTableSet get moments => MomentsTableSet(this);
   SlotsTableSet get slots => SlotsTableSet(this);
   BookingsTableSet get bookings => BookingsTableSet(this);

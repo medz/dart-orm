@@ -7,9 +7,9 @@ import 'dart:io';
 
 import 'generate.dart';
 import 'migrate.dart';
-import 'orm.dart';
+import 'runtime.dart';
 
-typedef MigrationConnection = FutureOr<Database<Backend>> Function({
+typedef MigrationConnection = FutureOr<SqlDatabase<Backend>> Function({
   required bool readOnly,
 });
 
@@ -23,9 +23,27 @@ Future<void> runMigrationCli(
   MigrationConnection? connect,
   SchemaRenames renames = const SchemaRenames(),
   Map<String, Map<String, String>> using = const {},
+  bool json = true,
 }) async {
-  void report(Object? value) =>
+  void report(Map<String, Object?> value) {
+    if (json) {
       stdout.writeln(const JsonEncoder.withIndent('  ').convert(value));
+    } else {
+      for (final entry in value.entries) {
+        stdout.writeln(
+          '${entry.key}: ${entry.value is String ? entry.value : jsonEncode(entry.value)}',
+        );
+      }
+    }
+  }
+
+  void fail(String message, int code) {
+    stderr.writeln(
+      json ? jsonEncode({'error': message, 'exitCode': code}) : message,
+    );
+    exitCode = code;
+  }
+
   try {
     if (arguments.isEmpty || arguments.singleOrNull == '--help') {
       stdout.writeln('''Migration commands:
@@ -160,7 +178,9 @@ Rebuild static imports with: dart run orm migration registry <directory>''');
           final pending = await migrator.plan(migrations);
           report({
             'atomic': !pending.any(
-              (m) => m.steps.any((s) => s is CheckedSql || s is Backfill),
+              (m) => m.steps.any(
+                (s) => s is CheckedSql || s is CheckedTableSql || s is Backfill,
+              ),
             ),
             'pending': [
               for (final m in pending)
@@ -266,13 +286,10 @@ Rebuild static imports with: dart run orm migration registry <directory>''');
       await db.close();
     }
   } on FormatException catch (error) {
-    stderr.writeln(error.message);
-    exitCode = 64;
+    fail(error.message, 64);
   } on ArgumentError catch (_) {
-    stderr.writeln('Invalid migration argument. Use --help.');
-    exitCode = 64;
+    fail('Invalid migration argument. Use --help.', 64);
   } catch (error) {
-    stderr.writeln(error);
-    exitCode = 1;
+    fail(error.toString(), 1);
   }
 }

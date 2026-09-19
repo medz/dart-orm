@@ -145,7 +145,7 @@ void main() {
           ], dialect: .postgres),
           throwsA(code('SCHEMA.COMPUTED')),
         );
-        await Migrator(db).apply([start]);
+        await Migrator(db.sql).apply([start]);
         await db.execute(SqlCommand('INSERT INTO scores(id) VALUES (7)'));
         final stored = SchemaSnapshot([
           scores(storage: .stored, indexed: true),
@@ -158,7 +158,7 @@ void main() {
           dialect: .sqlite,
         );
         expect(change.steps.single, isA<RebuildTable>());
-        await Migrator(db).apply([start, change]);
+        await Migrator(db.sql).apply([start, change]);
         final plain = SchemaSnapshot([scores(computed: false, indexed: true)]);
         final materialize = Migration.diff(
           '0003_plain',
@@ -167,14 +167,14 @@ void main() {
           previous: change.checksum,
           dialect: .sqlite,
         );
-        await Migrator(db).apply([start, change, materialize]);
+        await Migrator(db.sql).apply([start, change, materialize]);
         expect(
           (await db.execute(SqlCommand('SELECT id, value FROM scores')))
               .rows
               .single,
           [7, 14],
         );
-        expect((await verifySchema(db, plain)).matches, true);
+        expect((await verifySchema(db.sql, plain)).matches, true);
       } finally {
         await db.close();
       }
@@ -219,8 +219,8 @@ void main() {
         ], dialect: .postgres),
       ];
       for (final operation in [
-        () => Migrator(db).apply(history),
-        () => Migrator(db).plan(history),
+        () => Migrator(db.sql).apply(history),
+        () => Migrator(db.sql).plan(history),
       ]) {
         driver.statements.clear();
         await expectLater(operation(), throwsA(code('CAPABILITY.VERSION')));
@@ -278,15 +278,16 @@ void main() {
     final db = Database(base.driver, onQuery: (e) => statements.add(e.sql));
     try {
       await expectLater(
-        Migrator(db).apply(history.checked),
+        Migrator(db.sql).apply(history.checked),
         throwsA(code('MIGRATION.TARGET')),
       );
       await expectLater(
-        Migrator(db).plan(history.checked),
+        Migrator(db.sql).plan(history.checked),
         throwsA(code('MIGRATION.TARGET')),
       );
       await expectLater(
-        Migrator(db).baseline(history.checked, expected: SchemaSnapshot([])),
+        Migrator(db.sql)
+            .baseline(history.checked, expected: SchemaSnapshot([])),
         throwsA(code('MIGRATION.TARGET')),
       );
       expect(statements, isEmpty);
@@ -313,7 +314,10 @@ void main() {
           connect: ({required readOnly}) async {
             connected = true;
             final base = await sqlite(const SqliteOptions.memory());
-            return Database(base.driver, onQuery: (e) => statements.add(e.sql));
+            return SqlDatabase(
+              base.driver,
+              onQuery: (e) => statements.add(e.sql),
+            );
           },
         );
         expect(exitCode, 1, reason: args.first);
@@ -340,7 +344,7 @@ void main() {
       try {
         final wrong = Migration.create('0001_wrong', [], dialect: .sqlite);
         await expectLater(
-          Migrator(db).apply([wrong]),
+          Migrator(db.sql).apply([wrong]),
           throwsA(code('MIGRATION.TARGET')),
         );
         expect(statements, isEmpty);
@@ -353,7 +357,7 @@ void main() {
         final start = Migration.create('0001_start', [
           table(Codecs.text),
         ], dialect: .postgres);
-        await Migrator(db).apply([start]);
+        await Migrator(db.sql).apply([start]);
         await db.execute(SqlCommand('INSERT INTO "values" VALUES (\'42\')'));
         final change = Migration.diff(
           '0002_integer',
@@ -366,7 +370,7 @@ void main() {
           },
         );
         expect(migrationSource(change), isNot(contains('sqlite')));
-        await Migrator(db).apply([start, change]);
+        await Migrator(db.sql).apply([start, change]);
         expect(
           (await db.execute(SqlCommand('SELECT id FROM "values"')))
               .rows
@@ -374,7 +378,7 @@ void main() {
               .single,
           42,
         );
-        expect(await Migrator(db).apply([start, change]), isEmpty);
+        expect(await Migrator(db.sql).apply([start, change]), isEmpty);
       } finally {
         await db.execute(
           SqlCommand('DROP SCHEMA IF EXISTS orm_target_tests CASCADE'),

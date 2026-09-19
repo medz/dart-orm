@@ -3,6 +3,7 @@ part of '../../migrate.dart';
 /// Creates a new schema. Applications should execute the resulting SQL through
 /// reviewed migrations; this does not inspect or mutate an existing database.
 List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
+  if (_isMysql(dialect)) return _mysqlCreateSchema(tables, dialect);
   final commands = <SqlCommand>[];
   _validateSchema(tables, dialect);
   for (final table in tables) {
@@ -34,6 +35,9 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
 }
 
 void _validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
+  if (dialect != null && _isMysql(dialect)) {
+    _validateMysqlSchema(tables, dialect);
+  }
   String identifier(String name) {
     if (name.isEmpty ||
         name.contains('\u0000') ||
@@ -234,6 +238,7 @@ String _checkDefinition(CheckSchema check, SqlDialect dialect) =>
     '${check.name == null ? '' : 'CONSTRAINT ${_quote(check.name!)} '}CHECK (${check.expression(dialect)}\n)';
 
 String _columnDefinition(Column<Object?> c, SqlDialect dialect) {
+  if (_isMysql(dialect)) return _mysqlColumn(c, dialect);
   final b = StringBuffer('${_quote(c.name)} ${_columnStorageType(c, dialect)}');
   if (dialect == SqlDialect.sqlite &&
       _sqliteCollation(c.codec.sqlType) != 'binary') {
@@ -298,43 +303,50 @@ String _foreignKey(ForeignKey key) {
       '(${key.targetColumns.map(_quote).join(', ')}) ON DELETE ${key.onDelete}';
 }
 
-String _storageType(String type, SqlDialect dialect) =>
-    switch ((dialect, type)) {
-      (SqlDialect.sqlite, 'integer') => 'INTEGER',
-      (
-        SqlDialect.sqlite,
-        'bigint' ||
-            'text' ||
-            'timestamp' ||
-            'instant' ||
-            'json' ||
-            'decimal' ||
-            'date' ||
-            'time' ||
-            'local_datetime',
-      ) =>
-        'TEXT',
-      (SqlDialect.sqlite, 'boolean') => 'INTEGER',
-      (SqlDialect.sqlite, 'real') => 'REAL',
-      (SqlDialect.sqlite, 'blob') => 'BLOB',
-      (SqlDialect.postgres, 'integer') => 'BIGINT',
-      (SqlDialect.postgres, 'bigint' || 'decimal') => 'NUMERIC',
-      (SqlDialect.postgres, 'text') => 'TEXT',
-      (SqlDialect.postgres, 'real') => 'DOUBLE PRECISION',
-      (SqlDialect.postgres, 'boolean') => 'BOOLEAN',
-      (SqlDialect.postgres, 'timestamp' || 'instant') => 'TIMESTAMPTZ',
-      (SqlDialect.postgres, 'date') => 'DATE',
-      (SqlDialect.postgres, 'time') => 'TIME WITHOUT TIME ZONE',
-      (SqlDialect.postgres, 'local_datetime') => 'TIMESTAMP WITHOUT TIME ZONE',
-      (SqlDialect.postgres, 'json') => 'JSONB',
-      (SqlDialect.postgres, 'blob') => 'BYTEA',
-      _ => throw OrmException('SCHEMA.TYPE', 'No $dialect mapping for $type.'),
-    };
+String _storageType(String type, SqlDialect dialect) => _isMysql(dialect)
+    ? _mysqlStorageType(type)
+    : switch ((dialect, type)) {
+        (SqlDialect.sqlite, 'integer') => 'INTEGER',
+        (
+          SqlDialect.sqlite,
+          'bigint' ||
+              'text' ||
+              'timestamp' ||
+              'instant' ||
+              'json' ||
+              'decimal' ||
+              'date' ||
+              'time' ||
+              'local_datetime',
+        ) =>
+          'TEXT',
+        (SqlDialect.sqlite, 'boolean') => 'INTEGER',
+        (SqlDialect.sqlite, 'real') => 'REAL',
+        (SqlDialect.sqlite, 'blob') => 'BLOB',
+        (SqlDialect.postgres, 'integer') => 'BIGINT',
+        (SqlDialect.postgres, 'bigint' || 'decimal') => 'NUMERIC',
+        (SqlDialect.postgres, 'text') => 'TEXT',
+        (SqlDialect.postgres, 'real') => 'DOUBLE PRECISION',
+        (SqlDialect.postgres, 'boolean') => 'BOOLEAN',
+        (SqlDialect.postgres, 'timestamp' || 'instant') => 'TIMESTAMPTZ',
+        (SqlDialect.postgres, 'date') => 'DATE',
+        (SqlDialect.postgres, 'time') => 'TIME WITHOUT TIME ZONE',
+        (SqlDialect.postgres, 'local_datetime') =>
+          'TIMESTAMP WITHOUT TIME ZONE',
+        (SqlDialect.postgres, 'json') => 'JSONB',
+        (SqlDialect.postgres, 'blob') => 'BYTEA',
+        _ => throw OrmException(
+          'SCHEMA.TYPE',
+          'No $dialect mapping for $type.',
+        ),
+      };
 
 String _columnStorageType(Column<Object?> column, SqlDialect dialect) =>
-    dialect == SqlDialect.postgres &&
-        column.codec.sqlType == 'decimal' &&
-        column.decimalPrecision != null
+    _isMysql(dialect)
+    ? _mysqlColumnType(column)
+    : dialect == SqlDialect.postgres &&
+          column.codec.sqlType == 'decimal' &&
+          column.decimalPrecision != null
     ? 'NUMERIC(${column.decimalPrecision},${column.decimalScale ?? 0})'
     : dialect == SqlDialect.postgres && column.codec.sqlType == 'integer'
     ? switch (column.integerBits ?? 64) {
@@ -437,9 +449,10 @@ final class ColumnInfo {
 }
 
 Future<List<ColumnInfo>> inspectColumns(
-  Database<Backend> db,
+  SqlDatabase<Backend> db,
   String table,
 ) async {
+  if (_isMysql(db.dialect)) return _mysqlColumns(db, table);
   if (db.dialect == SqlDialect.sqlite) {
     final rows = await db.execute(
       SqlCommand('PRAGMA table_xinfo(${_quote(table)})'),
@@ -545,7 +558,7 @@ ORDER BY a.attnum''',
 /// Column drift check. Constraints, indexes and unmanaged objects are separate
 /// catalog checks; this method does not pretend that columns prove full equality.
 Future<List<String>> verifyColumns(
-  Database<Backend> db,
+  SqlDatabase<Backend> db,
   List<TableSchema> tables,
 ) async {
   final differences = <String>[];

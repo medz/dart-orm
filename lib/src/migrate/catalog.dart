@@ -37,7 +37,8 @@ final class SchemaVerification {
   bool get matches => differences.isEmpty;
 }
 
-Future<TableInfo> inspectTable(Database<Backend> db, String table) async {
+Future<TableInfo> inspectTable(SqlDatabase<Backend> db, String table) async {
+  if (_isMysql(db.dialect)) return _mysqlTable(db, table);
   final columns = await inspectColumns(db, table);
   final primary = <String>[],
       unique = <List<String>>[],
@@ -318,9 +319,10 @@ AND (c.relrowsecurity OR c.relforcerowsecurity
 }
 
 Future<SchemaVerification> verifySchema(
-  Database<Backend> db,
+  SqlDatabase<Backend> db,
   SchemaSnapshot expected,
 ) async {
+  if (_isMysql(db.dialect)) return _mysqlVerifySchema(db, expected);
   final differences = <String>[], unmanaged = <CatalogObject>[];
   for (final table in expected.tables) {
     final actual = await inspectTable(db, table.name);

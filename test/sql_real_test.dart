@@ -5,7 +5,7 @@ import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
 void main() {
-  for (final dialect in SqlDialect.values) {
+  for (final dialect in [SqlDialect.sqlite, SqlDialect.postgres]) {
     test(
       '${dialect.name} explicitly typed REAL parameters preserve floating storage',
       () async {

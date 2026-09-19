@@ -7,10 +7,10 @@ Future<void> main() async {
   final db = await sqlite(const SqliteOptions.memory());
   try {
     await Migrator(
-      db,
+      db.sql,
     ).apply([Migration.create('0001_initial', appSchema, dialect: db.dialect)]);
-    final user = await db.transaction((tx) async {
-      final user = await tx.users.create(email: 'seven@example.com');
+    final User user = await db.transaction((tx) async {
+      final User user = await tx.users.create(email: 'seven@example.com');
       await tx.posts.create(
         authorId: user.id,
         title: 'Hello Dart',

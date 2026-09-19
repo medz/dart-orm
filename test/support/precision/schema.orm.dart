@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show Wallet, Price, Receipt;
@@ -102,7 +102,7 @@ final walletsTable = Table<models.Wallet, WalletsFields>(
 );
 
 final class WalletsTableSet extends TableSet<models.Wallet, WalletsFields> {
-  WalletsTableSet(Database<Backend> db) : super(db, walletsTable) {
+  WalletsTableSet(QueryContext db) : super(db, walletsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Wallet> create({
@@ -182,7 +182,7 @@ final pricesTable = Table<models.Price, PricesFields>(
 );
 
 final class PricesTableSet extends TableSet<models.Price, PricesFields> {
-  PricesTableSet(Database<Backend> db) : super(db, pricesTable) {
+  PricesTableSet(QueryContext db) : super(db, pricesTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Price> create({required Decimal id, required String label}) =>
@@ -241,7 +241,7 @@ final receiptsTable = Table<models.Receipt, ReceiptsFields>(
 );
 
 final class ReceiptsTableSet extends TableSet<models.Receipt, ReceiptsFields> {
-  ReceiptsTableSet(Database<Backend> db) : super(db, receiptsTable) {
+  ReceiptsTableSet(QueryContext db) : super(db, receiptsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Receipt> create({
@@ -263,7 +263,7 @@ final appSchema = List<TableSchema>.unmodifiable([
   receiptsSchema,
 ]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   WalletsTableSet get wallets => WalletsTableSet(this);
   PricesTableSet get prices => PricesTableSet(this);
   ReceiptsTableSet get receipts => ReceiptsTableSet(this);

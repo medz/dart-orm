@@ -26,6 +26,8 @@ final schema = SchemaSnapshot([
         computed: ComputedColumn.forDialects(
           sqlite: "length(label)",
           postgres: "char_length(label)",
+          mysql: "length(label)",
+          mariadb: "length(label)",
           storage: ComputedStorage.virtual,
         ),
       ),

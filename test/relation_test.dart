@@ -44,7 +44,7 @@ void runTests(
     final events = <QueryEvent>[];
     setUp(() async {
       db = await open(events.add);
-      await Migrator(db).apply([
+      await Migrator(db.sql).apply([
         Migration.create('0001_initial', appSchema, dialect: db.dialect),
       ]);
       await db.execute(

@@ -6,7 +6,7 @@ import 'schema.orm.dart';
 Future<void> main() async {
   final db = await sqlite(const SqliteOptions.memory());
   try {
-    await Migrator(db).apply([
+    await Migrator(db.sql).apply([
       Migration.create('0001_precision', appSchema, dialect: db.dialect),
     ]);
     final row = await db.wallets.create(
@@ -37,7 +37,7 @@ Future<void> main() async {
     if (!rejected || await db.prices.count() != 1) {
       throw StateError('Precision overflow was not rejected');
     }
-    final check = await verifySchema(db, SchemaSnapshot(appSchema));
+    final check = await verifySchema(db.sql, SchemaSnapshot(appSchema));
     if (!check.matches || check.unmanaged.isNotEmpty) {
       throw StateError('Constrained decimal catalog differs');
     }

@@ -6,7 +6,8 @@ same schema validation, emission and in-process formatter. Generation reads
 declarations and produces source/metadata; it does not connect to or migrate a
 database.
 
-Generated clients export their row typedefs and an immutable `appSchema`; entity
+Generated clients export their nominal model classes or explicit Record aliases
+and an immutable `appSchema`; entity
 declaration values remain in the source library. Import the generated client and
 the chosen driver in application code. Programmatic generation is in
 `generate.dart`; build_runner factories are exported only by `builder.dart`.
@@ -20,8 +21,15 @@ and identifier restrictions are checked when selecting the migration engine.
 ## Standalone command
 
 ```sh
+dart run orm init --database sqlite
+dart run orm generate
+# Or select a source explicitly:
 dart run orm generate lib/schema.dart
 ```
+
+Initialization creates typed `orm.config.dart`, a model and static migration
+history without connecting. The path-free command uses `OrmConfig.schema` (or
+`lib/schema.dart` when no config exists). See [project CLI](cli.md).
 
 This writes `lib/schema.orm.dart` and `lib/schema.snapshot.dart`. The latter is the
 physical schema snapshot used by migration tools. It is a standalone Dart library
@@ -67,7 +75,7 @@ dart run build_runner watch
 ```
 
 The builder is opt-in and uses the explicit `generate_for` list. Select schema
-libraries containing `entity<Record>()` declarations, rather than every Dart
+libraries containing `entity<Model>()` declarations, rather than every Dart
 file or a `part of` file. Additional roots produce their own clients and snapshots
 next to their input files. Import generated clients with prefixes if their
 declaration names overlap.

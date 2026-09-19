@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../values.dart';
 
 // Intersection of PostgreSQL's finite lower bound and Dart DateTime's range.
 const _minInstantMicros = -210866803200000000;

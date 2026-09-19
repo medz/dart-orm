@@ -69,7 +69,7 @@ void main() {
       primaryKey: ['id'],
     );
     final snapshot = SchemaSnapshot([other, table]);
-    for (final dialect in SqlDialect.values) {
+    for (final dialect in [SqlDialect.sqlite, SqlDialect.postgres]) {
       final migration = Migration.steps(
         '0001_literals',
         dialect == SqlDialect.sqlite
@@ -154,7 +154,7 @@ Future<void> main(List<String> args) => runMigrationCli(args,
   history: migrationHistory,
   directory: 'lib/migrations',
   schema: schema,
-  connect: ({required readOnly}) => sqlite(readOnly ? SqliteOptions.readOnly('database.sqlite') : SqliteOptions.file('database.sqlite')),
+  connect: ({required readOnly}) async => (await sqlite(readOnly ? SqliteOptions.readOnly('database.sqlite') : SqliteOptions.file('database.sqlite'))).sql,
 );
 ''');
     Future<Map<String, Object?>> command(
@@ -274,7 +274,7 @@ import '../lib/target.dart';
 import '../lib/migrations/migrations.g.dart';
 Future<void> main(List<String> args) => runMigrationCli(args,
   directory: 'lib/migrations', history: migrationHistory, schema: schema,
-  connect: ({required readOnly}) => sqlite(readOnly ? const SqliteOptions.readOnly('database.sqlite') : const SqliteOptions.file('database.sqlite')),
+  connect: ({required readOnly}) async => (await sqlite(readOnly ? const SqliteOptions.readOnly('database.sqlite') : const SqliteOptions.file('database.sqlite'))).sql,
 );
 """);
       await fixture.run([
@@ -323,7 +323,7 @@ Future<void> main(List<String> args) => runMigrationCli(args,
           ],
         );
         expect(
-          (await Migrator(db).history()).single.checksum,
+          (await Migrator(db.sql).history()).single.checksum,
           initial.checksum,
         );
       } finally {

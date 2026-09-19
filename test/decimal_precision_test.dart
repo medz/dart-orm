@@ -36,7 +36,7 @@ void main() {
         }
       });
       tearDown(() => db.close());
-      Future<void> create() => Migrator(db).apply([
+      Future<void> create() => Migrator(db.sql).apply([
         Migration.create('0001_precision', appSchema, dialect: db.dialect),
       ]);
 
@@ -192,11 +192,11 @@ void main() {
         await create();
         final snapshot = SchemaSnapshot(appSchema);
         expect(physical.schema.checksum, snapshot.checksum);
-        final verification = await verifySchema(db, snapshot);
+        final verification = await verifySchema(db.sql, snapshot);
         expect(verification.differences, isEmpty);
         expect(verification.unmanaged, isEmpty);
-        expect(await verifyColumns(db, appSchema), isEmpty);
-        final info = await inspectTable(db, 'wallets');
+        expect(await verifyColumns(db.sql, appSchema), isEmpty);
+        final info = await inspectTable(db.sql, 'wallets');
         expect(info.columns.map((c) => (c.decimalPrecision, c.decimalScale)), [
           (null, null),
           (5, 2),
@@ -205,7 +205,7 @@ void main() {
           (5, 2),
           (5, 2),
         ]);
-        final draft = await importSchema(db);
+        final draft = await importSchema(db.sql);
         expect(draft.issues, isEmpty);
         expect(draft.dart, contains('@DecimalDigits(3, -2)'));
         final dir = await Directory('.dart_tool/orm-precision-import-$backend')
@@ -214,7 +214,7 @@ void main() {
           final file = File('${dir.path}/schema.dart');
           await file.writeAsString(draft.dart);
           final generated = await generateSchema(file.path);
-          final check = await verifySchema(db, generated.snapshot);
+          final check = await verifySchema(db.sql, generated.snapshot);
           expect(check.differences, isEmpty);
         } finally {
           await dir.delete(recursive: true);
@@ -241,7 +241,7 @@ void main() {
         final first = Migration.create('0001_sized', [
           sized(3),
         ], dialect: db.dialect);
-        await Migrator(db).apply([first]);
+        await Migrator(db.sql).apply([first]);
         await db.execute(
           SqlCommand("INSERT INTO sized VALUES (1, '1.231'), (2, '1.234')"),
         );
@@ -256,14 +256,20 @@ void main() {
           dialect: db.dialect,
         );
         await expectLater(
-          Migrator(db).apply([first, next]),
+          Migrator(db.sql).apply([first, next]),
           throwsA(isA<SqlFailure>()),
         );
-        expect((await Migrator(db).history()).length, 1);
-        expect((await verifySchema(db, first.snapshot!)).differences, isEmpty);
+        expect((await Migrator(db.sql).history()).length, 1);
+        expect(
+          (await verifySchema(db.sql, first.snapshot!)).differences,
+          isEmpty,
+        );
         await db.execute(SqlCommand('DELETE FROM sized WHERE id = 2'));
-        await Migrator(db).apply([first, next]);
-        expect((await verifySchema(db, next.snapshot!)).differences, isEmpty);
+        await Migrator(db.sql).apply([first, next]);
+        expect(
+          (await verifySchema(db.sql, next.snapshot!)).differences,
+          isEmpty,
+        );
         expect(
           Codecs.decimal.decode(
             (await db.execute(SqlCommand('SELECT amount FROM sized')))
@@ -298,7 +304,7 @@ void main() {
         final first = Migration.create('0001_before', [
           schema('amount', 5, 3, "'1.2345'"),
         ], dialect: db.dialect);
-        await Migrator(db).apply([first]);
+        await Migrator(db.sql).apply([first]);
         await db.execute(SqlCommand('INSERT INTO renamed (id) VALUES (1)'));
         final next = Migration.diff(
           '0002_after',
@@ -315,7 +321,7 @@ void main() {
           },
           dialect: db.dialect,
         );
-        await Migrator(db).apply([first, next]);
+        await Migrator(db.sql).apply([first, next]);
         await db.execute(SqlCommand('INSERT INTO renamed (id) VALUES (2)'));
         final rows = await db.execute(
           SqlCommand('SELECT price FROM renamed ORDER BY id'),
@@ -324,7 +330,7 @@ void main() {
           d('1.24'),
           d('2.35'),
         ]);
-        final check = await verifySchema(db, next.snapshot!);
+        final check = await verifySchema(db.sql, next.snapshot!);
         expect(check.differences, isEmpty);
         expect(check.unmanaged, isEmpty);
       });
@@ -352,7 +358,7 @@ void main() {
             columns: columns,
             primaryKey: ['id'],
           );
-          await Migrator(db).apply([
+          await Migrator(db.sql).apply([
             Migration.create('0001_bounds', [schema], dialect: db.dialect),
           ]);
           final parameter = backend == 'sqlite' ? '?1' : r'$1';
@@ -368,7 +374,7 @@ void main() {
           )).rows.single;
           expect(row.map(Codecs.decimal.decode), [d('9e1999'), d('9e-1000')]);
           expect(
-            (await verifySchema(db, SchemaSnapshot([schema]))).differences,
+            (await verifySchema(db.sql, SchemaSnapshot([schema]))).differences,
             isEmpty,
           );
         },
@@ -399,8 +405,8 @@ void main() {
             previous: first.checksum,
             dialect: db.dialect,
           );
-          await Migrator(db).apply([first, next], maxBackfillBatches: 1);
-          await Migrator(db).apply([first, next]);
+          await Migrator(db.sql).apply([first, next], maxBackfillBatches: 1);
+          await Migrator(db.sql).apply([first, next]);
           expect(await db.prices.where((p) => p.label.eq('done')).count(), 3);
         },
       );
@@ -424,7 +430,7 @@ void main() {
         ],
         primaryKey: ['id'],
       );
-      await Migrator(db).apply([
+      await Migrator(db.sql).apply([
         Migration.create('0001_quoted', [expected], dialect: db.dialect),
       ]);
       await db.execute(SqlCommand('INSERT INTO quoted (id) VALUES (1)'));
@@ -438,10 +444,10 @@ void main() {
         d('1.24'),
       );
       expect(
-        (await verifySchema(db, SchemaSnapshot([expected]))).differences,
+        (await verifySchema(db.sql, SchemaSnapshot([expected]))).differences,
         isEmpty,
       );
-      final draft = await importSchema(db, tables: ['quoted']);
+      final draft = await importSchema(db.sql, tables: ['quoted']);
       expect(draft.dart, contains("printf('%s.%s', '1', '235')"));
       for (final value in ['1.234', '1000', 'invalid', 'NaN']) {
         await expectLater(
@@ -498,9 +504,10 @@ void main() {
         ],
         primaryKey: ['id'],
       );
-      expect((await verifySchema(db, SchemaSnapshot([table]))).differences, [
-        'missing.amount default differs',
-      ]);
+      expect(
+        (await verifySchema(db.sql, SchemaSnapshot([table]))).differences,
+        ['missing.amount default differs'],
+      );
     } finally {
       await db.close();
     }

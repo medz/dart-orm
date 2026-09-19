@@ -1,4 +1,4 @@
-import '../../orm.dart';
+import '../../driver.dart';
 
 typedef OpenedSqlite = ({
   SqlConnection connection,

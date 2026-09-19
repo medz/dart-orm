@@ -3,6 +3,10 @@ part of '../../migrate.dart';
 Map<String, Object?> _computedJson(ComputedColumn value) => {
   'sqlite': value.sqlite,
   'postgres': value.postgres,
+  if (value.mysql != null && value.mysql != value.postgres)
+    'mysql': value.mysql,
+  if (value.mariadb != null && value.mariadb != value.postgres)
+    'mariadb': value.mariadb,
   'storage': value.storage.name,
 };
 
@@ -124,7 +128,7 @@ ComputedColumn? _declarationComputed(ColumnInfo column) {
 }
 
 Future<List<String>> _verifyComputed(
-  Database<Backend> db,
+  SqlDatabase<Backend> db,
   TableSchema table,
   List<ColumnInfo> actual, {
   bool contextMatches = true,

@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 /// SQL records have no Dart mapping step. Set operations compare their stored
 /// columns before any subsequent Record/DTO mapping.
@@ -83,6 +83,14 @@ extension SetQueries<R, F extends Fields> on Query<R, F> {
     }
     // SQL set columns are positional: selecting (id, id) still exports two.
     final (left, decode) = _plan(deduplicate: false);
+    if ((database.dialect == SqlDialect.mysql ||
+            database.dialect == SqlDialect.mariadb) &&
+        left.columns.any((e) => e.codec.sqlType == 'decimal')) {
+      throw const OrmException(
+        'CAPABILITY.DECIMAL_PRECISION',
+        'MySQL/MariaDB decimal UNION may silently narrow mixed precision; use explicit native SQL when its precision is acceptable.',
+      );
+    }
     final (right, _) = other._plan(deduplicate: false);
     if (left.columns.length != right.columns.length ||
         left.relations.isNotEmpty ||
@@ -95,8 +103,7 @@ extension SetQueries<R, F extends Fields> on Query<R, F> {
     for (var i = 0; i < left.columns.length; i++) {
       final a = left.columns[i].codec;
       final b = right.columns[i].codec;
-      if (a._storageIdentity != b._storageIdentity ||
-          a.acceptsNull != b.acceptsNull) {
+      if (!a.sameStorageAs(b) || a.acceptsNull != b.acceptsNull) {
         throw OrmException(
           'QUERY.UNION_CODEC',
           'UNION column ${i + 1} requires the same codec and nullability.',
@@ -164,8 +171,7 @@ final class UnionFields<F extends Fields> extends Fields {
         'Reference this UNION column with a nullable expression.',
       );
     }
-    if (_plan.columns[index].codec._storageIdentity !=
-        original.codec._storageIdentity) {
+    if (!_plan.columns[index].codec.sameStorageAs(original.codec)) {
       throw const OrmException(
         'QUERY.UNION_CODEC',
         'Reference the exported UNION codec.',
@@ -183,7 +189,7 @@ final class _UnionSource(
   final bool all,
 ) {
   String write(_Writer w) =>
-      'SELECT * FROM (${left._write(w, leftPlan, aliasColumns: true)}) AS "_union_left" '
+      'SELECT * FROM (${left._write(w, leftPlan, aliasColumns: true)}) AS ${w.quote('_union_left')} '
       'UNION${all ? ' ALL' : ''} '
-      'SELECT * FROM (${right._write(w, rightPlan, aliasColumns: true)}) AS "_union_right"';
+      'SELECT * FROM (${right._write(w, rightPlan, aliasColumns: true)}) AS ${w.quote('_union_right')}';
 }

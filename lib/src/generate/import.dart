@@ -54,12 +54,12 @@ final class ImportedSchema {
   };
 }
 
-/// Reads the current PostgreSQL schema or SQLite main database in one consistent
+/// Reads the selected database's physical catalog in one consistent
 /// catalog snapshot. No user rows are read, inferred, or changed. Omit [tables]
 /// to discover user tables; pass exact physical names to restrict the import.
 /// Unsupported columns exclude their whole table and produce blocking issues.
 Future<ImportedSchema> importSchema(
-  Database<Backend> db, {
+  SqlDatabase<Backend> db, {
   List<String>? tables,
 }) {
   final requested = tables == null ? null : List<String>.unmodifiable(tables);
@@ -75,28 +75,43 @@ Future<ImportedSchema> importSchema(
   }
   return db.transaction(
     (tx) => _importCatalog(tx, requested),
-    options: db.dialect == SqlDialect.postgres
-        ? const PostgresTransaction(isolation: .repeatableRead, readOnly: true)
-        : const SqliteTransaction(),
+    options: switch (db.dialect) {
+      SqlDialect.sqlite => const SqliteTransaction(),
+      SqlDialect.postgres => const PostgresTransaction(
+        isolation: .repeatableRead,
+        readOnly: true,
+      ),
+      SqlDialect.mysql => const MysqlTransaction(
+        isolation: .repeatableRead,
+        readOnly: true,
+      ),
+      SqlDialect.mariadb => const MariadbTransaction(
+        isolation: .repeatableRead,
+        readOnly: true,
+      ),
+    },
   );
 }
 
 Future<ImportedSchema> _importCatalog(
-  Database<Backend> db,
+  SqlDatabase<Backend> db,
   List<String>? requested,
 ) async {
   final issues = <SchemaImportIssue>[];
   final schema = db.dialect == SqlDialect.sqlite
       ? 'main'
-      : (await db.execute(SqlCommand('SELECT current_schema()')))
-                .rows
-                .single
-                .single
+      : (await db.execute(
+              SqlCommand(
+                _mysqlDialect(db.dialect)
+                    ? 'SELECT DATABASE()'
+                    : 'SELECT current_schema()',
+              ),
+            )).rows.single.single
             as String?;
   if (schema == null) {
     throw const OrmException(
       'IMPORT.SCHEMA',
-      'Select an existing PostgreSQL schema.',
+      'Select an existing database or schema in the connection options.',
     );
   }
   final sqliteKinds = <String, String>{};
@@ -116,13 +131,24 @@ Future<ImportedSchema> _importCatalog(
     SqlCommand(
       db.dialect == SqlDialect.sqlite
           ? "SELECT name, type, sql FROM main.sqlite_schema WHERE type IN ('table', 'view') AND substr(name, 1, 7) <> 'sqlite_' ORDER BY name"
+          : _mysqlDialect(db.dialect)
+          ? "SELECT TABLE_NAME, TABLE_TYPE, '' FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME"
           : '''SELECT c.relname, c.relkind::text,
         CASE WHEN c.relkind IN ('v', 'm') THEN pg_get_viewdef(c.oid) ELSE '' END
         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p', 'v', 'm', 'f') ORDER BY c.relname''',
     ),
   );
-  final objects = {for (final row in inventory.rows) row[0] as String: row};
+  final inventoryRows = _mysqlDialect(db.dialect)
+      ? [
+          for (final row in inventory.rows)
+            [
+              for (final value in row)
+                value is List<int> ? utf8.decode(value) : value,
+            ],
+        ]
+      : inventory.rows;
+  final objects = {for (final row in inventoryRows) row[0] as String: row};
   final selected =
       requested?.toList() ??
       objects.keys
@@ -147,14 +173,15 @@ Future<ImportedSchema> _importCatalog(
       continue;
     }
     final kind = sqliteKinds[name] ?? object[1] as String;
-    if (!{'r', 'table'}.contains(kind)) {
+    if (!{'r', 'table', 'BASE TABLE'}.contains(kind)) {
       issues.add(
         SchemaImportIssue(
           'IMPORT.OBJECT',
           name,
           '$kind: ${object[2] ?? ''}',
           blocking:
-              requested != null || !{'v', 'm', 'view', 'shadow'}.contains(kind),
+              requested != null ||
+              !{'v', 'm', 'view', 'VIEW', 'shadow'}.contains(kind),
         ),
       );
       continue;
@@ -176,7 +203,7 @@ Future<ImportedSchema> _importCatalog(
         );
         continue;
       }
-    } else {
+    } else if (db.dialect == SqlDialect.postgres) {
       final shape = await db.execute(
         SqlCommand(
           r'''SELECT pg_table_is_visible(c.oid),
@@ -197,6 +224,7 @@ Future<ImportedSchema> _importCatalog(
         continue;
       }
     }
+    final before = issues.where((i) => i.blocking).length;
     final info = await inspectTable(db, name);
     for (final extra in info.unmanaged) {
       // SQLite inspection conservatively returns all views. Report each once;
@@ -215,18 +243,19 @@ Future<ImportedSchema> _importCatalog(
           'IMPORT.UNMANAGED',
           object,
           extra.definition,
-          blocking: false,
+          blocking:
+              _mysqlDialect(db.dialect) &&
+              {'column', 'table options'}.contains(extra.kind),
         ),
       );
     }
     final identities = <String>{};
-    final before = issues.where((i) => i.blocking).length;
     if (info.columns.isEmpty) {
       issues.add(
         SchemaImportIssue(
           'IMPORT.EMPTY',
           name,
-          'A Record model requires at least one column.',
+          'A model requires at least one column.',
         ),
       );
     }
@@ -253,6 +282,27 @@ Future<ImportedSchema> _importCatalog(
           ),
         );
       }
+      if (_mysqlDialect(db.dialect) &&
+          column.storageType.startsWith('DATETIME')) {
+        issues.add(
+          SchemaImportIssue(
+            'IMPORT.TEMPORAL_SEMANTICS',
+            path,
+            'DATETIME does not identify an application timezone. Imported as LocalDateTime; explicitly choose a UTC instant codec if that is the application contract.',
+            blocking: false,
+          ),
+        );
+      }
+      if (_mysqlDialect(db.dialect) && column.storageType == 'TINYINT(1)') {
+        issues.add(
+          SchemaImportIssue(
+            'IMPORT.BOOLEAN_SEMANTICS',
+            path,
+            'TINYINT(1) is MySQL boolean storage but does not enforce a 0/1 value domain. Review this bool declaration against the application contract; no rows were sampled.',
+            blocking: false,
+          ),
+        );
+      }
       if (info.primaryKey.contains(column.name) && column.nullable) {
         issues.add(
           SchemaImportIssue(
@@ -263,7 +313,12 @@ Future<ImportedSchema> _importCatalog(
         );
       }
       if (column.generated && column.computed == null) {
-        if (db.dialect == SqlDialect.postgres &&
+        if (_mysqlDialect(db.dialect) &&
+            {'SMALLINT', 'INT', 'BIGINT'}.contains(column.storageType) &&
+            !column.nullable &&
+            _same(info.primaryKey, [column.name])) {
+          identities.add(column.name);
+        } else if (db.dialect == SqlDialect.postgres &&
             modes[column.name]![1] == 'd' &&
             modes[column.name]![2] == '' &&
             {'SMALLINT', 'INTEGER', 'BIGINT'}.contains(column.storageType) &&
@@ -315,54 +370,79 @@ Future<ImportedSchema> _importCatalog(
 
 // Match physical types exactly. In particular, NUMERIC does not prove BigInt,
 // and SQLite TEXT does not prove an application DateTime, enum, or JSON codec.
-(String, String?)? _importType(ColumnInfo column, SqlDialect dialect) =>
-    switch ((
-      dialect,
-      column.temporalPrecision == null
-          ? column.storageType
-          : column.storageType.replaceFirst(RegExp(r'\([0-6]\)'), ''),
-    )) {
-      (SqlDialect.sqlite, 'TEXT')
-          when column.collation?.toLowerCase() == 'orm_decimal_v1' =>
-        ('Decimal', null),
-      (SqlDialect.postgres, 'NUMERIC') => ('Decimal', null),
-      (SqlDialect.postgres, _) when column.decimalPrecision != null => (
-        'Decimal',
-        null,
-      ),
-      (SqlDialect.sqlite, 'INTEGER') ||
-      (
-        SqlDialect.postgres,
-        'SMALLINT' || 'INTEGER' || 'BIGINT',
-      ) => ('int', null),
-      (SqlDialect.sqlite, 'TEXT')
-          when column.collation?.toLowerCase() == 'orm_date_v1' =>
-        ('LocalDate', null),
-      (SqlDialect.sqlite, 'TEXT')
-          when column.collation?.toLowerCase() == 'orm_time_v1' =>
-        ('LocalTime', null),
-      (SqlDialect.sqlite, 'TEXT')
-          when column.collation?.toLowerCase() == 'orm_local_datetime_v1' =>
-        ('LocalDateTime', null),
-      (SqlDialect.sqlite, 'TEXT')
-          when column.collation?.toLowerCase() == 'orm_instant_v1' =>
-        ('DateTime', null),
-      (_, 'TEXT') => ('String', null),
-      (SqlDialect.sqlite, 'REAL') ||
-      (SqlDialect.postgres, 'DOUBLE PRECISION') => ('double', null),
-      (SqlDialect.sqlite, 'BLOB') ||
-      (SqlDialect.postgres, 'BYTEA') => ('Uint8List', null),
-      (SqlDialect.postgres, 'BOOLEAN') => ('bool', null),
-      (SqlDialect.postgres, 'TIMESTAMPTZ') => ('DateTime', null),
-      (SqlDialect.postgres, 'DATE') => ('LocalDate', null),
-      (SqlDialect.postgres, 'TIME WITHOUT TIME ZONE') => ('LocalTime', null),
-      (SqlDialect.postgres, 'TIMESTAMP WITHOUT TIME ZONE') => (
-        'LocalDateTime',
-        null,
-      ),
-      (SqlDialect.postgres, 'JSONB') => ('SqlJson', 'Codecs.jsonDocument'),
-      _ => null,
-    };
+(String, String?)? _importType(ColumnInfo column, SqlDialect dialect) {
+  if (_mysqlDialect(dialect)) return _importMysqlType(column);
+  return switch ((
+    dialect,
+    column.temporalPrecision == null
+        ? column.storageType
+        : column.storageType.replaceFirst(RegExp(r'\([0-6]\)'), ''),
+  )) {
+    (SqlDialect.sqlite, 'TEXT')
+        when column.collation?.toLowerCase() == 'orm_decimal_v1' =>
+      ('Decimal', null),
+    (SqlDialect.postgres, 'NUMERIC') => ('Decimal', null),
+    (SqlDialect.postgres, _) when column.decimalPrecision != null => (
+      'Decimal',
+      null,
+    ),
+    (SqlDialect.sqlite, 'INTEGER') ||
+    (SqlDialect.postgres, 'SMALLINT' || 'INTEGER' || 'BIGINT') => ('int', null),
+    (SqlDialect.sqlite, 'TEXT')
+        when column.collation?.toLowerCase() == 'orm_date_v1' =>
+      ('LocalDate', null),
+    (SqlDialect.sqlite, 'TEXT')
+        when column.collation?.toLowerCase() == 'orm_time_v1' =>
+      ('LocalTime', null),
+    (SqlDialect.sqlite, 'TEXT')
+        when column.collation?.toLowerCase() == 'orm_local_datetime_v1' =>
+      ('LocalDateTime', null),
+    (SqlDialect.sqlite, 'TEXT')
+        when column.collation?.toLowerCase() == 'orm_instant_v1' =>
+      ('DateTime', null),
+    (_, 'TEXT') => ('String', null),
+    (SqlDialect.sqlite, 'REAL') ||
+    (SqlDialect.postgres, 'DOUBLE PRECISION') => ('double', null),
+    (SqlDialect.sqlite, 'BLOB') ||
+    (SqlDialect.postgres, 'BYTEA') => ('Uint8List', null),
+    (SqlDialect.postgres, 'BOOLEAN') => ('bool', null),
+    (SqlDialect.postgres, 'TIMESTAMPTZ') => ('DateTime', null),
+    (SqlDialect.postgres, 'DATE') => ('LocalDate', null),
+    (SqlDialect.postgres, 'TIME WITHOUT TIME ZONE') => ('LocalTime', null),
+    (SqlDialect.postgres, 'TIMESTAMP WITHOUT TIME ZONE') => (
+      'LocalDateTime',
+      null,
+    ),
+    (SqlDialect.postgres, 'JSONB') => ('SqlJson', 'Codecs.jsonDocument'),
+    _ => null,
+  };
+}
+
+(String, String?)? _importMysqlType(ColumnInfo column) {
+  final type = column.storageType.toUpperCase();
+  // Exact declared storage only: unsigned widths, binary text and arbitrary
+  // lengths must not be silently rewritten into the ORM's default types.
+  if (type.contains('UNSIGNED') || type.contains('ZEROFILL')) return null;
+  if (RegExp(r'^DECIMAL\([0-9]+,[0-9]+\)$').hasMatch(type) &&
+      column.decimalPrecision != null) {
+    return ('Decimal', null);
+  }
+  final temporal = column.temporalPrecision == null
+      ? type
+      : type.replaceFirst(RegExp(r'\([0-6]\)'), '');
+  return switch (temporal) {
+    'SMALLINT' || 'INT' || 'BIGINT' => ('int', null),
+    'TINYINT(1)' => ('bool', null),
+    'VARCHAR(255)' => ('String', null),
+    'DOUBLE' => ('double', null),
+    'LONGBLOB' => ('Uint8List', null),
+    'DATE' => ('LocalDate', null),
+    'TIME' => ('LocalTime', null),
+    'DATETIME' => ('LocalDateTime', null),
+    'JSON' => ('SqlJson', 'Codecs.jsonDocument'),
+    _ => null,
+  };
+}
 
 String _importQuote(String name) => '"${name.replaceAll('"', '""')}"';
 String _importCap(String name) => name[0].toUpperCase() + name.substring(1);
@@ -478,7 +558,7 @@ ImportedSchema _importDeclarations(
   }
   for (final info in infos.values) {
     final entity = entities[info.name]!;
-    b.writeln('\ntypedef ${_importCap(entity)}Row = ({');
+    b.writeln('\nfinal class ${_importCap(entity)}Row({');
     for (final c in info.columns) {
       final type = _importType(c, dialect)!;
       b.writeln('@ColumnName(${_literal(c.name)})');
@@ -513,7 +593,7 @@ ImportedSchema _importDeclarations(
       }
       if (type.$2 != null) b.writeln('@UseCodec(${type.$2})');
       b.writeln(
-        '${type.$1}${c.nullable ? '?' : ''} ${fields[info.name]![c.name]},',
+        'required final ${type.$1}${c.nullable ? '?' : ''} ${fields[info.name]![c.name]},',
       );
     }
     b.writeln(

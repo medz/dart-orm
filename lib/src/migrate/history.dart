@@ -40,9 +40,14 @@ final class Migration {
     String id,
     List<TableSchema> schema, {
     required SqlDialect dialect,
-  }) => Migration(
+  }) => Migration.steps(
     id,
-    [for (final command in createSchema(schema, dialect)) command.sql],
+    _isMysql(dialect)
+        ? _mysqlCreateSteps(schema, dialect)
+        : [
+            for (final command in createSchema(schema, dialect))
+              ExecuteSql(command.sql),
+          ],
     dialect: dialect,
     snapshot: SchemaSnapshot(schema),
   );
@@ -80,6 +85,13 @@ final class Migration {
 
 MigrationStep _targetStep(MigrationStep step, SqlDialect dialect) =>
     switch (step) {
+      CheckedTableSql() => CheckedTableSql(
+        step.sql,
+        before: step.before == null
+            ? null
+            : _targetTable(step.before!, dialect),
+        after: step.after == null ? null : _targetTable(step.after!, dialect),
+      ),
       RebuildTable() => RebuildTable(
         _targetTable(step.before, dialect),
         _targetTable(step.after, dialect),
@@ -102,7 +114,7 @@ final class MigrationStatus {
 }
 
 final class Migrator {
-  final Database<Backend> database;
+  final SqlDatabase<Backend> database;
   final Duration lockTimeout;
   const Migrator(
     this.database, {
@@ -114,6 +126,9 @@ final class Migrator {
     List<Migration> migrations, {
     required SchemaSnapshot expected,
   }) async {
+    if (_isMysql(database.dialect)) {
+      return _mysqlBaseline(this, migrations, expected);
+    }
     validateMigrations(migrations, dialect: database.dialect);
     if (database.inTransaction) {
       throw const OrmException(
@@ -251,12 +266,21 @@ final class Migrator {
         }
         return applied.last;
       },
-      options: database.dialect == SqlDialect.postgres
-          ? const PostgresTransaction(
-              isolation: .repeatableRead,
-              readOnly: true,
-            )
-          : const SqliteTransaction(),
+      options: switch (database.dialect) {
+        SqlDialect.postgres => const PostgresTransaction(
+          isolation: .repeatableRead,
+          readOnly: true,
+        ),
+        SqlDialect.mysql => const MysqlTransaction(
+          isolation: .repeatableRead,
+          readOnly: true,
+        ),
+        SqlDialect.mariadb => const MariadbTransaction(
+          isolation: .repeatableRead,
+          readOnly: true,
+        ),
+        SqlDialect.sqlite => const SqliteTransaction(),
+      },
     );
   }
 
@@ -282,7 +306,14 @@ final class Migrator {
       );
     }
     validateMigrations(migrations, dialect: database.dialect);
-    Future<List<String>> run(Database<Backend> session) async {
+    Future<List<String>> run(SqlDatabase<Backend> session) async {
+      if (_isMysql(session.dialect)) {
+        return _applyRecoverableMysql(
+          session,
+          migrations,
+          _BackfillBudget(maxBackfillBatches),
+        );
+      }
       if (migrations.any(
         (m) => m.steps.any((s) => s is CheckedSql || s is Backfill),
       )) {
@@ -364,7 +395,41 @@ void validateMigrations(
         '${migration.id} targets ${migration.dialect.name}, but this history requires ${dialect.name}.',
       );
     }
+    if (_isMysql(dialect) && migration.id.length > 191) {
+      throw const OrmException(
+        'MIGRATION.ID',
+        'MySQL migration IDs must not exceed 191 characters.',
+      );
+    }
     for (final step in migration.steps) {
+      if (step is CheckedTableSql) {
+        if (!_isMysql(dialect)) {
+          throw const OrmException(
+            'MIGRATION.TARGET',
+            'CheckedTableSql requires MySQL or MariaDB.',
+          );
+        }
+        for (final table in [
+          step.before,
+          step.after,
+        ].whereType<TableSchema>()) {
+          _validateSchema([table], dialect);
+        }
+        _validateSql(step.sql, transactional: false);
+        _validateMysqlStatement(step.sql);
+        if (!{
+          'CREATE',
+          'ALTER',
+          'DROP',
+          'RENAME',
+        }.contains(_sqlWords(step.sql).first)) {
+          throw const OrmException(
+            'MIGRATION.DDL',
+            'CheckedTableSql must contain a reviewed table DDL statement.',
+          );
+        }
+        continue;
+      }
       if (step is Backfill) {
         _validateSchema([step.table], dialect);
         continue;
@@ -387,7 +452,15 @@ void validateMigrations(
         }
         continue;
       }
-      if (step is DropTable) continue;
+      if (step is DropTable) {
+        if (_isMysql(dialect)) {
+          throw const OrmException(
+            'MIGRATION.RECOVERY',
+            'MySQL table removal requires CheckedTableSql with its before schema.',
+          );
+        }
+        continue;
+      }
       if (step is RebuildTable) {
         if (dialect != SqlDialect.sqlite) {
           throw const OrmException(
@@ -408,7 +481,23 @@ void validateMigrations(
         }
         continue;
       }
-      _validateSql((step as ExecuteSql).sql, transactional: true);
+      final sql = (step as ExecuteSql).sql;
+      _validateSql(sql, transactional: true);
+      if (_isMysql(dialect)) {
+        _validateMysqlStatement(sql);
+      }
+      if (_isMysql(dialect) &&
+          !{
+            'INSERT',
+            'UPDATE',
+            'DELETE',
+            'REPLACE',
+          }.contains(_sqlWords(sql).first)) {
+        throw const OrmException(
+          'MIGRATION.RECOVERY',
+          'MySQL ExecuteSql accepts DML only. DDL requires CheckedTableSql with reviewed before/after schemas.',
+        );
+      }
     }
   }
 }
@@ -441,10 +530,13 @@ void _validateSql(String sql, {required bool transactional}) {
   }
 }
 
-Future<void> _recordMigration(Database<Backend> db, Migration migration) => db
+Future<void> _recordMigration(
+  SqlDatabase<Backend> db,
+  Migration migration,
+) => db
     .execute(
       SqlCommand(
-        'INSERT INTO "_orm_migrations" (id, checksum, applied_at) VALUES (${db.dialect == SqlDialect.sqlite ? '?1, ?2, ?3' : '\$1, \$2, \$3'})',
+        'INSERT INTO "_orm_migrations" (id, checksum, applied_at) VALUES (${[for (var i = 1; i <= 3; i++) _mark(db.dialect, i)].join(', ')})',
         [
           migration.id,
           migration.checksum,

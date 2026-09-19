@@ -5,8 +5,9 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
-import 'orm.dart';
-export 'orm.dart'
+import 'runtime.dart';
+import 'schema_model.dart';
+export 'schema_model.dart'
     show
         SqlDialect,
         TableSchema,
@@ -32,6 +33,10 @@ part 'src/migrate/backfill.dart';
 part 'src/migrate/sqlite_checks.dart';
 part 'src/migrate/checks.dart';
 part 'src/migrate/computed.dart';
+part 'src/migrate/mysql_schema.dart';
+part 'src/migrate/mysql_catalog.dart';
+part 'src/migrate/mysql_diff.dart';
+part 'src/migrate/mysql_recovery.dart';
 
 String _quote(String identifier) => '"${identifier.replaceAll('"', '""')}"';
 

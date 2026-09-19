@@ -55,20 +55,23 @@ void main() {
     final path = '${directory.path}/db.sqlite';
     final writer = await sqlite(SqliteOptions.file(path));
     try {
-      await Migrator(writer).apply([initial]);
+      await Migrator(writer.sql).apply([initial]);
       await writer.table(users).createRow((u) => [u.email.set('retained')]);
     } finally {
       await writer.close();
     }
     final reader = await sqlite(SqliteOptions.readOnly(path));
     try {
-      expect((await Migrator(reader).requireVersion([initial])).id, initial.id);
+      expect(
+        (await Migrator(reader.sql).requireVersion([initial])).id,
+        initial.id,
+      );
       expect((await reader.table(users).single()).email, 'retained');
       await expectLater(
-        Migrator(reader).requireVersion(history),
+        Migrator(reader.sql).requireVersion(history),
         throwsA(code('MIGRATION.VERSION')),
       );
-      expect((await Migrator(reader).history()).length, 1);
+      expect((await Migrator(reader.sql).history()).length, 1);
     } finally {
       await reader.close();
       await directory.delete(recursive: true);
@@ -86,7 +89,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
     setUp(() async {
       final base = await open();
       db = Database(base.driver, onQuery: (event) => commands.add(event.sql));
-      runner = Migrator(db);
+      runner = Migrator(db.sql);
       for (final table in [
         'users',
         '_orm_migration_steps',
@@ -125,7 +128,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
         expect(commands, isEmpty);
         await db.transaction((tx) async {
           expect(
-            () => Migrator(tx).requireVersion(history),
+            () => Migrator(tx.sql).requireVersion(history),
             throwsA(code('MIGRATION.SESSION')),
           );
           expect(
@@ -146,7 +149,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
           runner.requireVersion(history),
           throwsA(code('MIGRATION.VERSION')),
         );
-        expect(await inspectColumns(db, '_orm_migrations'), isEmpty);
+        expect(await inspectColumns(db.sql, '_orm_migrations'), isEmpty);
         expect((await db.table(users).single()).email, 'retained');
         expect(
           commands.any(
@@ -214,7 +217,10 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
           ['retained'],
         ]);
         expect(
-          (await inspectColumns(db, 'users')).any((c) => c.name == 'nickname'),
+          (await inspectColumns(
+            db.sql,
+            'users',
+          )).any((c) => c.name == 'nickname'),
           false,
         );
         expect((await runner.history()).length, 3);
@@ -250,7 +256,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
           SqlCommand('ALTER TABLE users RENAME COLUMN email TO renamed_email'),
         );
         expect((await runner.requireVersion([initial])).id, initial.id);
-        expect((await verifySchema(db, initial.snapshot!)).matches, false);
+        expect((await verifySchema(db.sql, initial.snapshot!)).matches, false);
       },
     );
 
@@ -277,11 +283,11 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
         commands.clear();
         await db.session((session) async {
           expect(
-            (await Migrator(session).requireVersion([initial])).id,
+            (await Migrator(session.sql).requireVersion([initial])).id,
             initial.id,
           );
           await expectLater(
-            Migrator(session).requireVersion(history),
+            Migrator(session.sql).requireVersion(history),
             throwsA(code('MIGRATION.VERSION')),
           );
           expect(
@@ -363,13 +369,13 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
           upgraded = true;
           supplied.clear();
           await expectLater(
-            Migrator(other).apply([initial, pending]),
+            Migrator(other.sql).apply([initial, pending]),
             throwsA(code('MIGRATION.STEP')),
           );
         });
         try {
           // After the history SELECT, another runner creates recovery checkpoints.
-          final accepted = await Migrator(Database(driver))
+          final accepted = await Migrator(SqlDatabase(driver))
               .requireVersion(supplied, maximum: initial.id);
           expect(accepted.id, initial.id);
           expect(upgraded, true);
@@ -380,7 +386,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
           await other.execute(
             SqlCommand("UPDATE users SET email = 'repaired'"),
           );
-          await Migrator(other).apply([initial, pending]);
+          await Migrator(other.sql).apply([initial, pending]);
           expect(
             (await runner.requireVersion([initial, pending])).id,
             pending.id,

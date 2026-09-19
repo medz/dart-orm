@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 /// A null divisor denotes rounding one value. Operands are evaluated once.
 final class _DecimalRatio(
@@ -9,6 +9,12 @@ final class _DecimalRatio(
 ) extends _Node {
   @override
   String writeSql(_Writer w) {
+    if (w.mysql) {
+      throw const OrmException(
+        'CAPABILITY.DECIMAL_ROUNDING',
+        'Exact SQL division and rounding are not implemented for MySQL/MariaDB; use an explicit DECIMAL expression.',
+      );
+    }
     final a = numerator.write(w), b = divisor?.write(w);
     if (w.dialect == SqlDialect.sqlite) {
       return b == null

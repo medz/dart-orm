@@ -78,7 +78,7 @@ void main() {
           final initial = Migration.create('0001_keys', [
             table,
           ], dialect: db.dialect);
-          final runner = Migrator(db);
+          final runner = Migrator(db.sql);
           await runner.apply([initial]);
           for (final key in sample.value.$2) {
             final stored = switch ((backend, key)) {
@@ -136,7 +136,7 @@ void main() {
         final initial = Migration.create('0001_keys', [
           table,
         ], dialect: db.dialect);
-        final runner = Migrator(limited);
+        final runner = Migrator(limited.sql);
         await runner.apply([initial]);
         for (var i = 0; i < 20; i++) {
           await limited.execute(

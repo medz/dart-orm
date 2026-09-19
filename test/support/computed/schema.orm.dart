@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show Line, Band;
@@ -43,6 +43,8 @@ final _linesTotal = Column<int>(
   computed: ComputedColumn.forDialects(
     sqlite: "price * quantity",
     postgres: "price * quantity",
+    mysql: "price * quantity",
+    mariadb: "price * quantity",
     storage: ComputedStorage.stored,
   ),
 );
@@ -54,6 +56,8 @@ final _linesLabelSize = Column<int>(
   computed: ComputedColumn.forDialects(
     sqlite: "length(label)",
     postgres: "char_length(label)",
+    mysql: "length(label)",
+    mariadb: "length(label)",
     storage: ComputedStorage.virtual,
   ),
 );
@@ -65,6 +69,8 @@ final _linesNormalizedNote = Column<String?>(
   computed: ComputedColumn.forDialects(
     sqlite: "upper(note)",
     postgres: "upper(note)",
+    mysql: "upper(note)",
+    mariadb: "upper(note)",
     storage: ComputedStorage.stored,
   ),
 );
@@ -90,6 +96,8 @@ final linesSchema = TableSchema(
       "nonnegative",
       sqlite: "price >= 0 AND quantity >= 0",
       postgres: "price >= 0 AND quantity >= 0",
+      mysql: "price >= 0 AND quantity >= 0",
+      mariadb: "price >= 0 AND quantity >= 0",
     ),
   ],
   foreignKeys: [],
@@ -147,7 +155,7 @@ final linesTable = Table<models.Line, LinesFields>(
 );
 
 final class LinesTableSet extends TableSet<models.Line, LinesFields> {
-  LinesTableSet(Database<Backend> db) : super(db, linesTable) {
+  LinesTableSet(QueryContext db) : super(db, linesTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Line> create({
@@ -222,7 +230,7 @@ final bandsTable = Table<models.Band, BandsFields>(
 );
 
 final class BandsTableSet extends TableSet<models.Band, BandsFields> {
-  BandsTableSet(Database<Backend> db) : super(db, bandsTable) {
+  BandsTableSet(QueryContext db) : super(db, bandsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Band> create({required int id, required String name}) =>
@@ -241,7 +249,7 @@ extension BandsUpdates on Query<models.Band, BandsFields> {
 
 final appSchema = List<TableSchema>.unmodifiable([linesSchema, bandsSchema]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   LinesTableSet get lines => LinesTableSet(this);
   BandsTableSet get bands => BandsTableSet(this);
 }

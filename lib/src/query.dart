@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 final class _QueryState {
   final TableRef source;
@@ -51,7 +51,7 @@ final class _QueryState {
 }
 
 class Query<R, F extends Fields> {
-  final Database<Backend> database;
+  final QueryContext database;
   final F _fields;
   final _QueryState _state;
   final Selection<R> _selection;
@@ -159,10 +159,24 @@ class Query<R, F extends Fields> {
       exactDecimal: database.capabilities.exactDecimal,
       temporal: database.capabilities.temporal,
     );
-    return SqlCommand(_write(w, plan), w.parameters);
+    return w.finish(_write(w, plan, decodeResult: true));
   }
 
-  String _write(_Writer w, _SelectionPlan plan, {bool aliasColumns = false}) {
+  String _write(
+    _Writer w,
+    _SelectionPlan plan, {
+    bool aliasColumns = false,
+    bool decodeResult = false,
+  }) {
+    if (w.mysql &&
+        decodeResult &&
+        _state.distinct &&
+        plan.columns.any((e) => e.codec.sqlType == 'json')) {
+      throw const OrmException(
+        'CAPABILITY.JSON_DISTINCT',
+        'Project native JSON DISTINCT through a CTE before decoding the result.',
+      );
+    }
     if (!identical(w.database, database)) {
       throw const OrmException(
         'QUERY.SESSION',
@@ -263,7 +277,7 @@ class Query<R, F extends Fields> {
       try {
         for (var i = 0; i < plan.columns.length; i++) {
           columns.add(
-            '${plan.columns[i]._node.write(w)}${aliasColumns ? ' AS ${w.quote('c$i')}' : ''}',
+            '${decodeResult ? _projection(plan.columns[i], w) : plan.columns[i]._node.write(w)}${aliasColumns ? ' AS ${w.quote('c$i')}' : ''}',
           );
         }
         for (final term in _state.order) {
@@ -345,8 +359,9 @@ class Query<R, F extends Fields> {
         buffer.write(' LIMIT ${w.parameter(limit)}');
       }
       if (_state.offset case final offset?) {
-        if (_state.limit == null && database.dialect == SqlDialect.sqlite) {
-          buffer.write(' LIMIT -1');
+        if (_state.limit == null) {
+          if (database.dialect == SqlDialect.sqlite) buffer.write(' LIMIT -1');
+          if (w.mysql) buffer.write(' LIMIT 18446744073709551615');
         }
         buffer.write(' OFFSET ${w.parameter(offset)}');
       }
@@ -368,12 +383,23 @@ class Query<R, F extends Fields> {
   /// This does not ask the database optimizer for an execution plan.
   QueryPlan inspect() => _inspectQuery(this);
 
+  /// Physical read dependencies used by subscriptions, including relation batches.
+  ({Set<TableSchema> tables, bool opaque}) get dependencies {
+    final reads = _ReadTables()..query(this);
+    return (tables: Set.unmodifiable(reads.tables), opaque: reads.opaque);
+  }
+
+  /// Rebind the root description to an execution context. Nested queries retain
+  /// their original context and are rejected when they do not match.
+  Query<R, F> bind(QueryContext context) =>
+      Query._(context, _fields, _state, _selection);
+
   Future<List<R>> get({ExecutionOptions options = const ExecutionOptions()}) {
     options.check();
-    return database._run((connection) async {
+    return database.run((connection) async {
       final (plan, decode) = _plan();
       final command = _compile(plan);
-      final result = await database._execute(
+      final result = await database.executeOn(
         connection,
         command,
         options: options,
@@ -385,12 +411,12 @@ class Query<R, F extends Fields> {
         result.rows,
         options: options,
       );
-      return database._observeDecode(
+      return database.observeDecode(
         command.sql,
         rows.length,
         () => [for (final row in rows) decode(row)],
       );
-    }, acquire: options._acquisition);
+    }, acquire: options.acquisition);
   }
 
   Future<R?> first({
@@ -421,7 +447,7 @@ class Query<R, F extends Fields> {
     final inner = compile();
     final result = await database.execute(
       SqlCommand(
-        'SELECT COUNT(*) FROM (${inner.sql}) AS "orm_count"',
+        'SELECT COUNT(*) FROM (${inner.sql}) AS ${_Writer(database.dialect, {}).quote('orm_count')}',
         inner.parameters,
       ),
       options: options,
@@ -517,13 +543,13 @@ final class _WindowStage(final _Writer writer, {final bool preWindow = false}) {
 
 class TableSet<R, F extends Fields> extends Query<R, F> {
   final Table<R, F> definition;
-  TableSet(Database<Backend> database, Table<R, F> definition)
+  TableSet(QueryContext database, Table<R, F> definition)
     : this._(
         database,
         definition,
         definition.createFields(TableRef(definition.schema)),
       );
-  TableSet._(Database<Backend> database, this.definition, F fields)
+  TableSet._(QueryContext database, this.definition, F fields)
     : super._(
         database,
         fields,
@@ -548,7 +574,7 @@ class TableSet<R, F extends Fields> extends Query<R, F> {
   ]);
 
   List<Assignment> _insertDefaults(List<Assignment> assignments) {
-    final defaults = definition.schema._clientDefaults;
+    final defaults = definition.schema.clientDefaults;
     if (defaults.isEmpty) return assignments;
     final assigned = {for (final a in assignments) a.field.definition.name};
     return [
@@ -562,8 +588,89 @@ class TableSet<R, F extends Fields> extends Query<R, F> {
   Future<R> createRow(
     List<Assignment> Function(F) assignments, {
     ExecutionOptions options = const ExecutionOptions(),
-  }) =>
-      insert(assignments)
-          .returning(definition.selectRow)
-          .single(options: options);
+  }) {
+    final mutation = insert(assignments);
+    if (database.capabilities.returning) {
+      return mutation.returning(definition.selectRow).single(options: options);
+    }
+    final keys = definition.schema.primaryKey;
+    final values = <String, _Parameter>{};
+    final generated = <String>{};
+    for (final key in keys) {
+      final column = definition.schema.columns.firstWhere((c) => c.name == key);
+      final assignment = mutation._assignments
+          .where((a) => a.field.definition.name == key)
+          .firstOrNull;
+      if (assignment?._value case final _Parameter parameter) {
+        values[key] = parameter;
+      } else if (column.generated && assignment?._value == null) {
+        generated.add(key);
+      } else {
+        throw const OrmException(
+          'CAPABILITY.CREATE_KEY',
+          'Reading an inserted row without RETURNING requires literal primary keys or a generated identity.',
+        );
+      }
+    }
+    if (keys.isEmpty || generated.length > 1) {
+      throw const OrmException(
+        'CAPABILITY.CREATE_KEY',
+        'Reading an inserted row requires a primary key and at most one generated identity.',
+      );
+    }
+    Future<R> create(QueryContext tx) async {
+      try {
+        final bound = Mutation._(
+          tx,
+          mutation._fields,
+          mutation._state,
+          mutation._kind,
+          mutation._assignments,
+          createFields: mutation._createFields,
+        );
+        final result = await tx.executeCommand(
+          bound.compile(),
+          options: options,
+          changedTables: [definition.schema],
+          affectedOnly: true,
+          cascade: false,
+        );
+        if (generated.isNotEmpty) {
+          if (result.lastInsertId == null) {
+            throw const OrmException(
+              'DRIVER.IDENTITY',
+              'The driver did not return the generated identity.',
+            );
+          }
+          values[generated.single] = _Parameter(result.lastInsertId);
+        }
+        _Node? predicate;
+        for (final key in keys) {
+          final equal = _Binary(
+            _ColumnNode(_state.source, key),
+            '=',
+            values[key]!,
+          );
+          predicate = predicate == null
+              ? equal
+              : _Binary(predicate, 'AND', equal);
+        }
+        return await Query._(
+          tx,
+          _fields,
+          _state.copy(
+            predicate: Expr<bool?>._(predicate!, Codecs.boolean.nullable()),
+          ),
+          definition.selectRow(_fields),
+        ).single(options: options);
+      } catch (_) {
+        tx.markFailed();
+        rethrow;
+      }
+    }
+
+    return database.inTransaction
+        ? create(database)
+        : database.atomic(create, acquire: options.acquisition);
+  }
 }

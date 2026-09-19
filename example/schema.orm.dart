@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show User, Post;
@@ -55,13 +55,12 @@ final usersTable = Table<models.User, UsersFields>(
   usersSchema,
   UsersFields.new,
   (row) => (row.id, row.email, row.nickname, row.score).map(
-    (id, email, nickname, score) =>
-        (id: id, email: email, nickname: nickname, score: score),
+    (v0, v1, v2, v3) => models.User(id: v0, email: v1, nickname: v2, score: v3),
   ),
 );
 
 final class UsersTableSet extends TableSet<models.User, UsersFields> {
-  UsersTableSet(Database<Backend> db) : super(db, usersTable) {
+  UsersTableSet(QueryContext db) : super(db, usersTable) {
     db.registerSchema(appSchema);
   }
   Future<models.User> create({
@@ -149,13 +148,13 @@ final postsTable = Table<models.Post, PostsFields>(
   postsSchema,
   PostsFields.new,
   (row) => (row.id, row.authorId, row.title, row.createdAt).map(
-    (id, authorId, title, createdAt) =>
-        (id: id, authorId: authorId, title: title, createdAt: createdAt),
+    (v0, v1, v2, v3) =>
+        models.Post(id: v0, authorId: v1, title: v2, createdAt: v3),
   ),
 );
 
 final class PostsTableSet extends TableSet<models.Post, PostsFields> {
-  PostsTableSet(Database<Backend> db) : super(db, postsTable) {
+  PostsTableSet(QueryContext db) : super(db, postsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Post> create({
@@ -190,7 +189,7 @@ extension PostsUpdates on Query<models.Post, PostsFields> {
 
 final appSchema = List<TableSchema>.unmodifiable([usersSchema, postsSchema]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   UsersTableSet get users => UsersTableSet(this);
   PostsTableSet get posts => PostsTableSet(this);
 }

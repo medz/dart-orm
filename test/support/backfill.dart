@@ -34,7 +34,7 @@ Migration fill({
 );
 
 Future<void> seed(Database<Backend> db, {int count = 8}) async {
-  await Migrator(db).apply([initialFor(db.dialect)]);
+  await Migrator(db.sql).apply([initialFor(db.dialect)]);
   for (var i = 1; i <= count; i++) {
     await db.execute(
       SqlCommand(

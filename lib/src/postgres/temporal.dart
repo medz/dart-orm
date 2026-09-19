@@ -1,4 +1,4 @@
-part of '../../postgres.dart';
+part of '../../drivers/postgres.dart';
 
 /// Native calendar values and UTC instants, without integer overflow.
 /// Local calendar types cover PostgreSQL's full finite range; UTC instants

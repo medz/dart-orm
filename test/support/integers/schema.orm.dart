@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show Sample, Owner;
@@ -80,7 +80,7 @@ final samplesTable = Table<models.Sample, SamplesFields>(
 );
 
 final class SamplesTableSet extends TableSet<models.Sample, SamplesFields> {
-  SamplesTableSet(Database<Backend> db) : super(db, samplesTable) {
+  SamplesTableSet(QueryContext db) : super(db, samplesTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Sample> create({
@@ -160,7 +160,7 @@ final ownersTable = Table<models.Owner, OwnersFields>(
 );
 
 final class OwnersTableSet extends TableSet<models.Owner, OwnersFields> {
-  OwnersTableSet(Database<Backend> db) : super(db, ownersTable) {
+  OwnersTableSet(QueryContext db) : super(db, ownersTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Owner> create({required int id, required int sampleId}) =>
@@ -180,7 +180,7 @@ extension OwnersUpdates on Query<models.Owner, OwnersFields> {
 
 final appSchema = List<TableSchema>.unmodifiable([samplesSchema, ownersSchema]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   SamplesTableSet get samples => SamplesTableSet(this);
   OwnersTableSet get owners => OwnersTableSet(this);
 }

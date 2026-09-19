@@ -151,7 +151,7 @@ void main() {
     },
   );
 
-  test('generated APIs reject missing/wrong parameters, result types and unsupported backends', () async {
+  test('generated APIs reject missing/wrong parameters and result types', () async {
     final invalid = [
       'db.authorStats();',
       'db.authorStats(minimum: "wrong");',
@@ -159,7 +159,6 @@ void main() {
       'db.authorStats(minimum: 0).select((s) => s.missing);',
       'db.authorStats(minimum: 0).where((s) => s.points.eq("wrong"));',
       'final Future<List<String>> wrong = db.authorStats(minimum: 0).get();',
-      'db.postgresOnly();',
     ];
     final negative = file('negative.dart').absolute;
     await negative.writeAsString(
@@ -224,6 +223,7 @@ void main() {
       await database.execute(SqlCommand('CREATE TABLE entries (n INTEGER)'));
       await database.close();
       final args = [
+        '--json',
         'queries',
         'check',
         '--source',

@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "queries.dart" as models;
 export "queries.dart" show AuthorStats, Echo, Constant;
@@ -58,7 +58,7 @@ final _sqlDefinitionAuthorStats =
       },
     );
 
-extension AuthorStatsSql<B extends Backend> on Database<B> {
+extension AuthorStatsSql on QueryContext {
   Query<models.AuthorStats, AuthorStatsFields> authorStats({
     required int minimum,
     String? author,
@@ -118,7 +118,7 @@ final _sqlDefinitionEcho = SqlQueryDefinition<models.Echo, EchoFields>(
   },
 );
 
-extension EchoSql<B extends Backend> on Database<B> {
+extension EchoSql on QueryContext {
   Query<models.Echo, EchoFields> echo({
     required String value,
     required DateTime at,
@@ -158,7 +158,7 @@ final _sqlDefinitionConstant =
       },
     );
 
-extension ConstantSql<B extends Backend> on Database<B> {
+extension ConstantSql on QueryContext {
   Query<models.Constant, ConstantFields> constant() =>
       _sqlDefinitionConstant.bind(this, {});
 }
@@ -192,7 +192,7 @@ final _sqlDefinitionPostgresOnly =
       },
     );
 
-extension PostgresOnlySql on Database<Postgres> {
+extension PostgresOnlySql on QueryContext {
   Query<models.Constant, PostgresOnlyFields> postgresOnly() =>
       _sqlDefinitionPostgresOnly.bind(this, {});
 }

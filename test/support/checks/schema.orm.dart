@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show Product, Line;
@@ -61,31 +61,43 @@ final productsSchema = TableSchema(
       "stock_nonnegative",
       sqlite: "stock >= 0",
       postgres: "stock >= 0",
+      mysql: "stock >= 0",
+      mariadb: "stock >= 0",
     ),
     CheckSchema.forDialects(
       "nonnegative_price",
       sqlite: "price >= 0",
       postgres: "price >= 0",
+      mysql: "price >= 0",
+      mariadb: "price >= 0",
     ),
     CheckSchema.forDialects(
       "valid_discount",
       sqlite: "discount >= 0 AND discount <= price",
       postgres: "discount >= 0 AND discount <= price",
+      mysql: "discount >= 0 AND discount <= price",
+      mariadb: "discount >= 0 AND discount <= price",
     ),
     CheckSchema.forDialects(
       "valid_state",
       sqlite: "state IN ('draft', 'published')",
       postgres: "state IN ('draft', 'published')",
+      mysql: "state IN ('draft', 'published')",
+      mariadb: "state IN ('draft', 'published')",
     ),
     CheckSchema.forDialects(
       "short_label",
       sqlite: "length(label) <= 20",
       postgres: "char_length(label) <= 20",
+      mysql: "length(label) <= 20",
+      mariadb: "length(label) <= 20",
     ),
     CheckSchema.forDialects(
       null,
       sqlite: "label <> '; CHECK (0)'",
       postgres: "label <> '; CHECK (0)'",
+      mysql: "label <> '; CHECK (0)'",
+      mariadb: "label <> '; CHECK (0)'",
     ),
   ],
   foreignKeys: [],
@@ -120,7 +132,7 @@ final productsTable = Table<models.Product, ProductsFields>(
 );
 
 final class ProductsTableSet extends TableSet<models.Product, ProductsFields> {
-  ProductsTableSet(Database<Backend> db) : super(db, productsTable) {
+  ProductsTableSet(QueryContext db) : super(db, productsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Product> create({
@@ -203,7 +215,7 @@ final linesTable = Table<models.Line, LinesFields>(
 );
 
 final class LinesTableSet extends TableSet<models.Line, LinesFields> {
-  LinesTableSet(Database<Backend> db) : super(db, linesTable) {
+  LinesTableSet(QueryContext db) : super(db, linesTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Line> create({
@@ -221,7 +233,7 @@ extension LinesUpdates on Query<models.Line, LinesFields> {
 
 final appSchema = List<TableSchema>.unmodifiable([productsSchema, linesSchema]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   ProductsTableSet get products => ProductsTableSet(this);
   LinesTableSet get lines => LinesTableSet(this);
 }

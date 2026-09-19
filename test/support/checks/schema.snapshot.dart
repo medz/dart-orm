@@ -23,6 +23,8 @@ final schema = SchemaSnapshot([
         "short_label",
         sqlite: "length(label) <= 20",
         postgres: "char_length(label) <= 20",
+        mysql: "length(label) <= 20",
+        mariadb: "length(label) <= 20",
       ),
       CheckSchema(null, "label <> '; CHECK (0)'"),
     ],

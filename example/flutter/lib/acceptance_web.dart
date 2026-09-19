@@ -31,9 +31,12 @@ Future<Map<String, Object?>> runAcceptance({
         .rows
         .single
         .single;
-    await Migrator(db).apply(migrationHistory.checked);
+    await Migrator(db.sql).apply(migrationHistory.checked);
     check(
-      (await verifySchema(db, migrationHistory.checked.last.snapshot!)).matches,
+      (await verifySchema(
+        db.sql,
+        migrationHistory.checked.last.snapshot!,
+      )).matches,
       'Bundled Dart migrations match the browser database',
     );
     if (await db.notes.count() == 0) {

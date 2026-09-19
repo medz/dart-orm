@@ -36,7 +36,7 @@ void main() {
             SqlCommand('CREATE SCHEMA orm_decimal_division_tests'),
           );
         }
-        await Migrator(db).apply([
+        await Migrator(db.sql).apply([
           Migration.create('0001_decimal', appSchema, dialect: db.dialect),
         ]);
       });

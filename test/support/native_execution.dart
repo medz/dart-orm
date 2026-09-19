@@ -14,8 +14,8 @@ Future<void> main() async {
       appSchema,
       dialect: db.dialect,
     );
-    await Migrator(db).apply([initial]);
-    if ((await Migrator(db).requireVersion([initial])).checksum !=
+    await Migrator(db.sql).apply([initial]);
+    if ((await Migrator(db.sql).requireVersion([initial])).checksum !=
         initial.checksum) {
       throw StateError('Schema version compatibility failed');
     }
@@ -26,7 +26,7 @@ Future<void> main() async {
       dialect: SqlDialect.sqlite,
     );
     try {
-      await Migrator(db).requireVersion([initial, pending]);
+      await Migrator(db.sql).requireVersion([initial, pending]);
       throw StateError('Schema version requirement was ignored');
     } on OrmException catch (error) {
       if (error.code != 'MIGRATION.VERSION') rethrow;

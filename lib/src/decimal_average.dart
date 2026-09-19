@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 final class _DecimalAverage(
   final _Node child,
@@ -9,6 +9,12 @@ final class _DecimalAverage(
   String writeSql(_Writer w) => writeAverage(w);
 
   String writeAverage(_Writer w, {_WindowNode? window}) {
+    if (w.mysql) {
+      throw const OrmException(
+        'CAPABILITY.DECIMAL_ROUNDING',
+        'Exact decimal averages are not supported on MySQL/MariaDB.',
+      );
+    }
     if (w.averageInputs == null) {
       throw const OrmException(
         'QUERY.AGGREGATE',

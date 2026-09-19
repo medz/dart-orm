@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Dart, databases and browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: orm
+          POSTGRES_PASSWORD: orm
+          POSTGRES_DB: orm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready --username=orm --dbname=orm_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: orm_root
+          MYSQL_USER: orm
+          MYSQL_PASSWORD: orm
+          MYSQL_DATABASE: orm_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysql --protocol=TCP --host=127.0.0.1 --user=orm --password=orm --database=orm_test --execute='SELECT 1'"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: orm_root
+          MARIADB_USER: orm
+          MARIADB_PASSWORD: orm
+          MARIADB_DATABASE: orm_test
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      ORM_TEST_POSTGRES: postgres://orm:orm@127.0.0.1:5432/orm_test
+      # Migration recovery tests create an isolated database per test process.
+      ORM_TEST_MYSQL: mysql://root:orm_root@127.0.0.1:3306/orm_test
+      ORM_TEST_MARIADB: mariadb://root:orm_root@127.0.0.1:3307/orm_test
+      # Both containers generate self-signed certificates. Still require TLS.
+      ORM_TEST_MYSQL_TLS: require
+      ORM_TEST_MARIADB_TLS: require
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.3
+      - name: Install dependencies
+        run: dart pub get --enforce-lockfile
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed bin lib test tool example
+      - name: Analyze Dart package and examples
+        # The Flutter example is a separate package with its own SDK dependency.
+        run: |
+          for target in bin lib test tool example/*.dart example/migrations example/teams; do
+            dart analyze "$target"
+          done
+      - name: Check committed SQLite web assets
+        run: dart run tool/build_sqlite_web.dart --check
+      - name: Test SQLite, PostgreSQL, MySQL and MariaDB
+        run: dart test --concurrency=1
+      - name: Locate Chrome
+        run: echo "CHROME_EXECUTABLE=$(command -v google-chrome)" >> "$GITHUB_ENV"
+      - name: Test Chrome with JavaScript
+        run: dart run tool/test_browser.dart
+      - name: Test Chrome with WebAssembly
+        run: dart run tool/test_browser.dart --wasm

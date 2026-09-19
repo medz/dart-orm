@@ -56,7 +56,7 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
     test(
       'generated client, DDL, relations, dates and patches work together',
       () async {
-        expect(await Migrator(db).apply([initial]), ['0001_initial']);
+        expect(await Migrator(db.sql).apply([initial]), ['0001_initial']);
         final time = DateTime.utc(2026, 9, 15, 1, 2, 3, 456, 789);
         final user = await db.transaction((tx) async {
           final user = await tx.users.create(
@@ -80,33 +80,36 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
             .single();
         expect(titles, ['Hello']);
         expect((await db.posts.single()).createdAt, time);
-        expect(await verifyColumns(db, appSchema), isEmpty);
+        expect(await verifyColumns(db.sql, appSchema), isEmpty);
         await db.users.byId(user.id).delete().execute();
         expect(await db.posts.count(), 0);
       },
     );
 
     test('planning is read-only and repeat migration is a no-op', () async {
-      expect((await Migrator(db).plan([initial])).map((m) => m.id), [
+      expect((await Migrator(db.sql).plan([initial])).map((m) => m.id), [
         '0001_initial',
       ]);
-      expect(await inspectColumns(db, '_orm_migrations'), isEmpty);
-      await Migrator(db).apply([initial]);
-      expect(await Migrator(db).apply([initial]), isEmpty);
-      expect((await Migrator(db).history()).single.checksum, initial.checksum);
+      expect(await inspectColumns(db.sql, '_orm_migrations'), isEmpty);
+      await Migrator(db.sql).apply([initial]);
+      expect(await Migrator(db.sql).apply([initial]), isEmpty);
+      expect(
+        (await Migrator(db.sql).history()).single.checksum,
+        initial.checksum,
+      );
     });
 
     test(
       'compiled physical snapshot and full managed catalog comparison',
       () async {
         final snapshot = physical.schema;
-        await Migrator(db).apply([initial]);
-        final verification = await verifySchema(db, snapshot);
+        await Migrator(db.sql).apply([initial]);
+        final verification = await verifySchema(db.sql, snapshot);
         expect(verification.differences, isEmpty);
         expect(verification.unmanaged, isEmpty);
         await db.execute(SqlCommand('DROP INDEX author_timeline'));
         expect(
-          (await verifySchema(db, snapshot)).differences,
+          (await verifySchema(db.sql, snapshot)).differences,
           contains('posts indexes differs'),
         );
       },
@@ -117,13 +120,14 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
         await db.execute(statement);
       }
       final user = await db.users.create(email: 'already-exists');
-      final verification = await Migrator(db)
+      final verification = await Migrator(db.sql)
           .baseline([initial], expected: SchemaSnapshot(appSchema));
       expect(verification.matches, true);
       expect((await db.users.byId(user.id).single()).email, 'already-exists');
-      expect(await Migrator(db).plan([initial]), isEmpty);
+      expect(await Migrator(db.sql).plan([initial]), isEmpty);
       await expectLater(
-        Migrator(db).baseline([initial], expected: SchemaSnapshot(appSchema)),
+        Migrator(db.sql)
+            .baseline([initial], expected: SchemaSnapshot(appSchema)),
         throwsA(isA<OrmException>()),
       );
     });
@@ -131,7 +135,7 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
     test(
       'full verification sees defaults and additional unique constraints',
       () async {
-        await Migrator(db).apply([initial]);
+        await Migrator(db.sql).apply([initial]);
         await db.execute(
           SqlCommand(
             'CREATE UNIQUE INDEX unexpected_unique ON users(nickname)',
@@ -149,23 +153,26 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
           ),
           postsSchema,
         ]);
-        final differences = (await verifySchema(db, changed)).differences;
+        final differences = (await verifySchema(db.sql, changed)).differences;
         expect(differences, contains('users.score default differs'));
         expect(differences, contains('users indexes differs'));
       },
     );
 
     test('history tampering and missing applied migrations fail', () async {
-      await Migrator(db).apply([initial]);
+      await Migrator(db.sql).apply([initial]);
       final changed = Migration.steps(initial.id, [
         ...initial.steps,
         ExecuteSql('SELECT 1'),
       ], dialect: db.dialect);
       await expectLater(
-        Migrator(db).plan([changed]),
+        Migrator(db.sql).plan([changed]),
         throwsA(isA<OrmException>()),
       );
-      await expectLater(Migrator(db).plan([]), throwsA(isA<OrmException>()));
+      await expectLater(
+        Migrator(db.sql).plan([]),
+        throwsA(isA<OrmException>()),
+      );
       expect(await db.users.count(), 0);
     });
 
@@ -175,28 +182,30 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
         'INSERT INTO table_does_not_exist VALUES (1)',
       ], dialect: db.dialect);
       await expectLater(
-        Migrator(db).apply([initial, broken]),
+        Migrator(db.sql).apply([initial, broken]),
         throwsA(anything),
       );
-      expect(await inspectColumns(db, 'users'), isEmpty);
-      expect(await Migrator(db).history(), isEmpty);
-      await Migrator(db).apply([initial]);
+      expect(await inspectColumns(db.sql, 'users'), isEmpty);
+      expect(await Migrator(db.sql).history(), isEmpty);
+      await Migrator(db.sql).apply([initial]);
       await expectLater(
-        Migrator(db).apply([initial, broken]),
+        Migrator(db.sql).apply([initial, broken]),
         throwsA(anything),
       );
       expect(
-        (await inspectColumns(db, 'users')).map((c) => c.name),
+        (await inspectColumns(db.sql, 'users')).map((c) => c.name),
         isNot(contains('migrated')),
       );
-      expect((await Migrator(db).history()).length, 1);
+      expect((await Migrator(db.sql).history()).length, 1);
     });
 
     test('actual column drift is detected independently of history', () async {
-      await Migrator(db).apply([initial]);
+      await Migrator(db.sql).apply([initial]);
       await db.execute(SqlCommand('ALTER TABLE users ADD COLUMN extra TEXT'));
-      expect(await verifyColumns(db, appSchema), ['users.extra is unmanaged']);
-      expect(await Migrator(db).plan([initial]), isEmpty);
+      expect(await verifyColumns(db.sql, appSchema), [
+        'users.extra is unmanaged',
+      ]);
+      expect(await Migrator(db.sql).plan([initial]), isEmpty);
     });
 
     test('transaction control cannot be hidden behind SQL comments', () async {
@@ -204,21 +213,21 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
         '/* outer /* nested */ */ -- comment\n COMMIT',
       ], dialect: db.dialect);
       await expectLater(
-        Migrator(db).apply([bad]),
+        Migrator(db.sql).apply([bad]),
         throwsA(isA<OrmException>()),
       );
-      expect(await Migrator(db).history(), isEmpty);
+      expect(await Migrator(db.sql).history(), isEmpty);
     });
 
     test(
       'concurrent migration callers serialize against shared history',
       () async {
         final result = await Future.wait([
-          Migrator(db).apply([initial]),
-          Migrator(db).apply([initial]),
+          Migrator(db.sql).apply([initial]),
+          Migrator(db.sql).apply([initial]),
         ]);
         expect(result.expand((v) => v), ['0001_initial']);
-        expect((await Migrator(db).history()).length, 1);
+        expect((await Migrator(db.sql).history()).length, 1);
       },
     );
   });

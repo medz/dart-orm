@@ -71,13 +71,13 @@ void main() {
             "INSERT INTO notes(id, account_id, body) VALUES (7, 1, 'kept')",
           ),
         );
-        final draft = await importSchema(db);
+        final draft = await importSchema(db.sql);
         expect(draft.issues, isEmpty);
         expect(draft.entities, {'accounts': 'accounts', 'notes': 'notes'});
         expect(draft.dart, contains('@Id.generated()'));
         final client = await generate(draft);
         final snapshot = client.snapshot;
-        expect((await verifySchema(db, snapshot)).differences, isEmpty);
+        expect((await verifySchema(db.sql, snapshot)).differences, isEmpty);
         final history = [
           Migration.create(
             '0001_baseline',
@@ -85,7 +85,7 @@ void main() {
             dialect: db.dialect,
           ),
         ];
-        await Migrator(db).baseline(history, expected: snapshot);
+        await Migrator(db.sql).baseline(history, expected: snapshot);
         expect(
           (await db.execute(SqlCommand('SELECT email FROM accounts'))).rows,
           [
@@ -95,7 +95,7 @@ void main() {
         expect((await db.execute(SqlCommand('SELECT body FROM notes'))).rows, [
           ['kept'],
         ]);
-        expect((await importSchema(db)).entities, draft.entities);
+        expect((await importSchema(db.sql)).entities, draft.entities);
         final connection = backend == 'sqlite'
             ? 'await sqlite(SqliteOptions.file(${jsonEncode('${directory.absolute.path}/data.sqlite')}))'
             : "postgres(PostgresOptions(url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!), tls: .disable, schema: 'orm_import_tests'))";
@@ -200,14 +200,17 @@ Future<void> main() async {
         await db.execute(
           SqlCommand('CREATE TABLE foo_bar (baz $integer NOT NULL)'),
         );
-        final draft = await importSchema(db);
+        final draft = await importSchema(db.sql);
         expect(draft.issues, isEmpty);
         expect(draft.entities.values.toSet().length, names.length + 2);
         for (final name in names) {
           expect(draft.fields[name]!.values.toSet().length, columns.length);
         }
         final client = await generate(draft);
-        expect((await verifySchema(db, client.snapshot)).differences, isEmpty);
+        expect(
+          (await verifySchema(db.sql, client.snapshot)).differences,
+          isEmpty,
+        );
         final analysis = await Process.run(Platform.resolvedExecutable, [
           'analyze',
           '${directory.path}/schema.dart',
@@ -218,7 +221,7 @@ Future<void> main() async {
           0,
           reason: '${analysis.stdout}\n${analysis.stderr}',
         );
-        expect((await importSchema(db)).dart, draft.dart);
+        expect((await importSchema(db.sql)).dart, draft.dart);
       });
 
       test('composite and self relations preserve key order and unique indexes', () async {
@@ -241,11 +244,14 @@ Future<void> main() async {
             'CREATE TABLE links (tenant $integer NOT NULL, label TEXT NOT NULL, FOREIGN KEY(tenant, label) REFERENCES labels(tenant, name))',
           ),
         );
-        final draft = await importSchema(db);
+        final draft = await importSchema(db.sql);
         expect(draft.issues, isEmpty);
         final result = await generate(draft);
-        expect((await verifySchema(db, result.snapshot)).differences, isEmpty);
-        final subset = await importSchema(db, tables: ['links']);
+        expect(
+          (await verifySchema(db.sql, result.snapshot)).differences,
+          isEmpty,
+        );
+        final subset = await importSchema(db.sql, tables: ['links']);
         expect(subset.hasBlockingIssues, true);
         expect(subset.issues.single.code, 'IMPORT.RELATION');
         await generate(subset);
@@ -266,7 +272,7 @@ Future<void> main() async {
             'CREATE TABLE computed (id $integer NOT NULL PRIMARY KEY, doubled $integer GENERATED ALWAYS AS (id * 2) STORED)',
           ),
         );
-        final draft = await importSchema(db);
+        final draft = await importSchema(db.sql);
         expect(draft.entities.keys, ['computed', 'supported']);
         expect(
           draft.issues.map((i) => i.code),
@@ -275,7 +281,7 @@ Future<void> main() async {
         expect(draft.hasBlockingIssues, true);
         await generate(draft);
         expect(
-          (await importSchema(db, tables: ['missing'])).issues.single.code,
+          (await importSchema(db.sql, tables: ['missing'])).issues.single.code,
           'IMPORT.MISSING',
         );
       });
@@ -290,7 +296,7 @@ Future<void> main() async {
             SqlCommand('CREATE TEMP TABLE stored (wrong TEXT)'),
           );
           try {
-            final draft = await importSchema(session, tables: ['stored']);
+            final draft = await importSchema(session.sql, tables: ['stored']);
             expect(draft.issues.single.code, 'IMPORT.SCOPE');
             expect(draft.entities, isEmpty);
           } finally {
@@ -301,12 +307,12 @@ Future<void> main() async {
             );
           }
           await session.transaction((tx) async {
-            expect(() => importSchema(tx), throwsA(isA<OrmException>()));
+            expect(() => importSchema(tx.sql), throwsA(isA<OrmException>()));
           });
         });
-        expect(() => importSchema(db, tables: []), throwsArgumentError);
+        expect(() => importSchema(db.sql, tables: []), throwsArgumentError);
         expect(
-          () => importSchema(db, tables: ['stored', 'stored']),
+          () => importSchema(db.sql, tables: ['stored', 'stored']),
           throwsArgumentError,
         );
         if (backend == 'sqlite') {
@@ -314,7 +320,9 @@ Future<void> main() async {
             SqliteOptions.readOnly('${directory.path}/data.sqlite'),
           );
           try {
-            expect((await importSchema(readOnly)).entities.keys, ['stored']);
+            expect((await importSchema(readOnly.sql)).entities.keys, [
+              'stored',
+            ]);
           } finally {
             await readOnly.close();
           }
@@ -330,7 +338,7 @@ Future<void> main() async {
                 'CREATE TABLE values_table (id INTEGER NOT NULL PRIMARY KEY, document TEXT, timestamp TEXT, flag INTEGER NOT NULL, data BLOB, score REAL)',
               ),
             );
-            final draft = await importSchema(db);
+            final draft = await importSchema(db.sql);
             expect(draft.dart, contains('String? document'));
             expect(draft.dart, contains('String? timestamp'));
             expect(draft.dart, contains('int flag'));
@@ -341,12 +349,12 @@ Future<void> main() async {
                 'CREATE TABLE values_table (id BIGINT NOT NULL PRIMARY KEY, document JSONB, timestamp TIMESTAMPTZ, flag BOOLEAN NOT NULL, data BYTEA, score DOUBLE PRECISION)',
               ),
             );
-            final draft = await importSchema(db);
+            final draft = await importSchema(db.sql);
             expect(draft.dart, contains('@UseCodec(Codecs.jsonDocument)'));
             expect(draft.dart, contains('SqlJson? document'));
             final result = await generate(draft);
             expect(
-              (await verifySchema(db, result.snapshot)).differences,
+              (await verifySchema(db.sql, result.snapshot)).differences,
               isEmpty,
             );
           }
@@ -409,7 +417,7 @@ FOR EACH ROW EXECUTE FUNCTION normalize_label()'''),
             ),
           );
         }
-        final draft = await importSchema(db);
+        final draft = await importSchema(db.sql);
         expect(draft.entities.keys, ['records']);
         expect(
           draft.issues.any((i) => i.object.contains('label_partial')),
@@ -436,7 +444,10 @@ FOR EACH ROW EXECUTE FUNCTION normalize_label()'''),
           }
         }
         final result = await generate(draft);
-        expect((await verifySchema(db, result.snapshot)).differences, isEmpty);
+        expect(
+          (await verifySchema(db.sql, result.snapshot)).differences,
+          isEmpty,
+        );
         // Read-only import and verification must leave the trigger operational.
         await db.execute(
           SqlCommand(
@@ -462,7 +473,7 @@ FOR EACH ROW EXECUTE FUNCTION normalize_label()'''),
           await db.execute(
             SqlCommand('CREATE VIRTUAL TABLE search USING fts5(body)'),
           );
-          final draft = await importSchema(db);
+          final draft = await importSchema(db.sql);
           expect(draft.entities, isEmpty);
           expect(
             draft.issues.any((i) => i.code == 'IMPORT.NULLABLE_KEY'),
@@ -485,7 +496,7 @@ FOR EACH ROW EXECUTE FUNCTION normalize_label()'''),
                 'CREATE TABLE child (parent_id INTEGER REFERENCES parent(id))',
               ),
             );
-            final draft = await importSchema(db);
+            final draft = await importSchema(db.sql);
             expect(draft.issues.single.code, 'IMPORT.RELATION');
             await generate(draft);
           },
@@ -505,7 +516,7 @@ CREATE POLICY positive ON protected AS RESTRICTIVE FOR ALL TO PUBLIC
 USING (id > 0) WITH CHECK (id < 100)'''),
             );
             Future<Map<String, Object?>> security() async {
-              final table = await inspectTable(db, 'protected');
+              final table = await inspectTable(db.sql, 'protected');
               final policy = jsonDecode(
                 table.unmanaged
                     .singleWhere((o) => o.kind == 'policy')
@@ -533,7 +544,7 @@ USING (id > 0) WITH CHECK (id < 100)'''),
               SqlCommand('ALTER TABLE protected FORCE ROW LEVEL SECURITY'),
             );
             expect(await security(), {'enabled': true, 'forced': true});
-            final draft = await importSchema(db);
+            final draft = await importSchema(db.sql);
             expect(draft.hasBlockingIssues, false);
             expect(
               draft.issues.where((i) => i.object.contains('protected')),
@@ -541,7 +552,7 @@ USING (id > 0) WITH CHECK (id < 100)'''),
             );
             final generated = await generate(draft);
             final expected = generated.snapshot;
-            final baseline = await Migrator(db).baseline([
+            final baseline = await Migrator(db.sql).baseline([
               Migration.create(
                 '0001_protected',
                 expected.tables,
@@ -562,7 +573,10 @@ USING (id > 0) WITH CHECK (id < 100)'''),
               SqlCommand('ALTER TABLE protected NO FORCE ROW LEVEL SECURITY'),
             );
             await db.execute(SqlCommand('DROP POLICY positive ON protected'));
-            expect((await inspectTable(db, 'protected')).unmanaged, isEmpty);
+            expect(
+              (await inspectTable(db.sql, 'protected')).unmanaged,
+              isEmpty,
+            );
           },
         );
 
@@ -578,7 +592,7 @@ USING (id > 0) WITH CHECK (id < 100)'''),
           await db.execute(
             SqlCommand('CREATE TABLE descendant () INHERITS (ancestor)'),
           );
-          final draft = await importSchema(db);
+          final draft = await importSchema(db.sql);
           expect(draft.entities, isEmpty);
           expect(draft.issues.any((i) => i.code == 'IMPORT.GENERATED'), true);
           expect(

@@ -7,7 +7,7 @@ import 'package:test/test.dart';
 import 'support/tables.dart';
 
 void main() {
-  for (final dialect in SqlDialect.values) {
+  for (final dialect in [SqlDialect.sqlite, SqlDialect.postgres]) {
     group(
       'selection ${dialect.name}',
       () {

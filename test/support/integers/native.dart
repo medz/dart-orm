@@ -7,7 +7,7 @@ Future<void> main() async {
   final db = await sqlite(const SqliteOptions.memory());
   try {
     await Migrator(
-      db,
+      db.sql,
     ).apply([Migration.create('0001_initial', appSchema, dialect: db.dialect)]);
     final first = await db.samples.create(
       small: 32767,
@@ -39,7 +39,7 @@ Future<void> main() async {
       rejected = true;
     }
     if (!rejected) throw StateError('Narrow integer accepted overflow');
-    final verification = await verifySchema(db, SchemaSnapshot(appSchema));
+    final verification = await verifySchema(db.sql, SchemaSnapshot(appSchema));
     if (!verification.matches) {
       throw StateError(verification.differences.join('\n'));
     }

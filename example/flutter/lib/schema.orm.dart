@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show Note, Comment;
@@ -59,7 +59,7 @@ final notesTable = Table<models.Note, NotesFields>(
 );
 
 final class NotesTableSet extends TableSet<models.Note, NotesFields> {
-  NotesTableSet(Database<Backend> db) : super(db, notesTable) {
+  NotesTableSet(QueryContext db) : super(db, notesTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Note> create({
@@ -141,7 +141,7 @@ final commentsTable = Table<models.Comment, CommentsFields>(
 );
 
 final class CommentsTableSet extends TableSet<models.Comment, CommentsFields> {
-  CommentsTableSet(Database<Backend> db) : super(db, commentsTable) {
+  CommentsTableSet(QueryContext db) : super(db, commentsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Comment> create({
@@ -166,7 +166,7 @@ extension CommentsUpdates on Query<models.Comment, CommentsFields> {
 
 final appSchema = List<TableSchema>.unmodifiable([notesSchema, commentsSchema]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   NotesTableSet get notes => NotesTableSet(this);
   CommentsTableSet get comments => CommentsTableSet(this);
 }

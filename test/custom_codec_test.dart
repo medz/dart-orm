@@ -46,7 +46,7 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
       for (final table in ['notes', 'people', '_orm_migrations']) {
         await db.execute(SqlCommand('DROP TABLE IF EXISTS "$table"'));
       }
-      await Migrator(db).apply([initial]);
+      await Migrator(db.sql).apply([initial]);
     });
     tearDown(() => db.close());
 
@@ -313,13 +313,16 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
       final snapshot = SchemaSnapshot(appSchema);
       final restored = physical.schema;
       expect(restored.toJson(), snapshot.toJson());
-      final verification = await verifySchema(db, restored);
+      final verification = await verifySchema(db.sql, restored);
       expect(verification.differences, isEmpty);
       expect(verification.unmanaged, isEmpty);
-      final columns = await inspectColumns(db, 'people');
+      final columns = await inspectColumns(db.sql, 'people');
       expect(columns.firstWhere((c) => c.name == 'location').nullable, true);
       expect(columns.firstWhere((c) => c.name == 'membership').nullable, false);
-      expect((await Migrator(db).history()).single.checksum, initial.checksum);
+      expect(
+        (await Migrator(db.sql).history()).single.checksum,
+        initial.checksum,
+      );
     });
   });
 }

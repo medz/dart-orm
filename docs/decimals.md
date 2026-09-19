@@ -5,6 +5,12 @@ typed writes and reads never pass through `double`. Equal values such as `2`,
 `2.00` and `20e-1` have the same equality and hash code. Display precision is not
 retained; `toString()` produces ordinary canonical decimal text.
 
+The SQL arithmetic examples below apply to SQLite and PostgreSQL. MySQL/MariaDB
+support exact values, storage, comparisons and MIN/MAX within 65-digit/30-scale
+limits, require declared column precision, and reject typed operations that can
+silently lose precision. See [engine-specific boundaries](mysql.md). Pure Dart
+`Decimal` value arithmetic is independent of the selected database.
+
 ```dart
 import 'package:orm/schema.dart';
 

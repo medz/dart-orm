@@ -12,6 +12,10 @@ final class _SchemaReader(
       for (final d in unit.declarations.whereType<GenericTypeAlias>())
         d.name.lexeme: d,
     };
+    final classes = {
+      for (final d in unit.declarations.whereType<ClassDeclaration>())
+        d.namePart.typeName.lexeme: d,
+    };
     final variables = [
       for (final d
           in unit.declarations.whereType<TopLevelVariableDeclaration>())
@@ -28,26 +32,38 @@ final class _SchemaReader(
       }
       final types = call.typeArguments?.arguments;
       if (types == null || types.length != 1) {
-        _fail(call, 'entity requires an explicit record typedef.');
+        _fail(call, 'entity requires an explicit model type.');
       }
       final row = types.single.toSource();
       final alias = aliases[row];
-      if (alias == null ||
-          alias.type is! RecordTypeAnnotation ||
-          alias.typeParameters != null) {
+      final declaration = classes[row];
+      final List<_Field> fields;
+      final AstNode model;
+      Set<String>? constructorNamedFields;
+      if (declaration != null) {
+        model = declaration;
+        final parsed = _readClass(declaration);
+        fields = parsed.$1;
+        constructorNamedFields = parsed.$2;
+      } else if (alias != null &&
+          alias.type is RecordTypeAnnotation &&
+          alias.typeParameters == null) {
+        final record = alias.type as RecordTypeAnnotation;
+        model = record;
+        if (record.positionalFields.isNotEmpty || record.namedFields == null) {
+          _fail(record, 'Model records must have named fields only.');
+        }
+        fields = [
+          for (final f in record.namedFields!.fields)
+            _readField(f, f.name.lexeme, f.type.type, f.metadata),
+        ];
+      } else {
         _fail(
           call,
-          'entity<$row> requires a non-generic named record typedef in this file.',
+          'entity<$row> requires a final primary-constructor class or a non-generic named record typedef in this file.',
         );
       }
-      final record = alias.type as RecordTypeAnnotation;
-      if (record.positionalFields.isNotEmpty || record.namedFields == null) {
-        _fail(record, 'Model records must have named fields only.');
-      }
-      final fields = [
-        for (final f in record.namedFields!.fields) _readField(f),
-      ];
-      if (fields.isEmpty) _fail(record, 'A model needs fields.');
+      if (fields.isEmpty) _fail(model, 'A model needs fields.');
       final name = variable.name.lexeme;
       if (name.startsWith('_') || _databaseMembers.contains(name)) {
         _fail(
@@ -60,15 +76,19 @@ final class _SchemaReader(
         _fail(call, 'Duplicate physical table $table.');
       }
       if (fields.map((f) => f.column).toSet().length != fields.length) {
-        _fail(record, 'Duplicate physical column name.');
+        _fail(model, 'Duplicate physical column name.');
       }
-      final entity = _Entity(name, table, row, fields);
+      final entity = _Entity(
+        name,
+        table,
+        row,
+        fields,
+        constructorNamedFields: constructorNamedFields,
+      );
       entities[name] = entity;
     }
     if (entities.isEmpty) {
-      throw const GenerationException(
-        'No entity<Record>() declarations found.',
-      );
+      throw const GenerationException('No entity<Model>() declarations found.');
     }
     // Keys and indexes are collected before relations, independent of source order.
     for (final variable in variables) {
@@ -92,8 +112,12 @@ final class _SchemaReader(
           name,
           sqlite: _namedString(call, 'sqlite') ?? expression.value,
           postgres: _namedString(call, 'postgres') ?? expression.value,
+          mysql: _namedString(call, 'mysql') ?? expression.value,
+          mariadb: _namedString(call, 'mariadb') ?? expression.value,
         );
-        if (check.sqlite.trim().isEmpty && check.postgres.trim().isEmpty ||
+        if (SqlDialect.values.every(
+              (d) => check.expression(d).trim().isEmpty,
+            ) ||
             name != null &&
                 (name.isEmpty || entity.checks.any((c) => c.name == name))) {
           _fail(
@@ -241,11 +265,55 @@ final class _SchemaReader(
     return entities.values.toList();
   }
 
-  _Field _readField(RecordTypeAnnotationNamedField field) {
-    final type = field.type.type;
+  (List<_Field>, Set<String>) _readClass(ClassDeclaration declaration) {
+    final primary = declaration.namePart;
+    if (primary is! PrimaryConstructorDeclaration ||
+        primary.typeName.lexeme.startsWith('_') ||
+        declaration.finalKeyword == null ||
+        declaration.abstractKeyword != null ||
+        declaration.extendsClause != null ||
+        declaration.implementsClause != null ||
+        declaration.withClause != null ||
+        declaration.body.members.isNotEmpty ||
+        primary.typeParameters != null ||
+        primary.constructorName != null) {
+      _fail(
+        declaration,
+        'Use a public final class with an unnamed primary constructor, declaring fields only, and no inheritance or type parameters. Put behavior in extensions.',
+      );
+    }
+    final fields = <_Field>[];
+    final named = <String>{};
+    for (final parameter in primary.formalParameters.parameters) {
+      if (!parameter.isFinal ||
+          !parameter.isRequired ||
+          parameter.defaultClause != null ||
+          parameter.functionTypedSuffix != null ||
+          parameter.type == null ||
+          parameter.name == null ||
+          parameter.name!.lexeme.startsWith('_')) {
+        _fail(
+          parameter,
+          'Model parameters must be public, explicitly typed, required final declaring fields without Dart defaults. Use @Default.sql or @ClientDefault for insert defaults.',
+        );
+      }
+      final name = parameter.name!.lexeme;
+      fields.add(
+        _readField(parameter, name, parameter.type!.type, parameter.metadata),
+      );
+      if (parameter.isNamed) named.add(name);
+    }
+    return (fields, named);
+  }
+
+  _Field _readField(
+    AstNode field,
+    String name,
+    DartType? type,
+    Iterable<Annotation> metadata,
+  ) {
     if (type == null) _fail(field, 'Cannot resolve the field type.');
     final nullable = typeSystem.isNullable(type);
-    final name = field.name.lexeme;
     if ({'table', 'column', 'readColumn'}.contains(name)) {
       _fail(
         field,
@@ -258,7 +326,7 @@ final class _SchemaReader(
     int? integerBits;
     int? decimalPrecision, decimalScale, temporalPrecision;
     Annotation? custom;
-    for (final annotation in field.metadata) {
+    for (final annotation in metadata) {
       final value = annotation.elementAnnotation?.computeConstantValue();
       final annotationType = value?.type;
       if (annotationType is! InterfaceType ||
@@ -284,14 +352,17 @@ final class _SchemaReader(
           computed = ComputedColumn.forDialects(
             sqlite: value.getField('sqlite')?.toStringValue() ?? sql,
             postgres: value.getField('postgres')?.toStringValue() ?? sql,
+            mysql: value.getField('mysql')?.toStringValue() ?? sql,
+            mariadb: value.getField('mariadb')?.toStringValue() ?? sql,
             storage:
                 ComputedStorage.values[value
                     .getField('storage')!
                     .getField('index')!
                     .toIntValue()!],
           );
-          if (computed.sqlite.trim().isEmpty &&
-              computed.postgres.trim().isEmpty) {
+          if (SqlDialect.values.every(
+            (d) => computed!.expression(d).trim().isEmpty,
+          )) {
             _fail(annotation, 'Computed SQL expressions must be non-empty.');
           }
         case 'ClientDefault':
@@ -363,7 +434,8 @@ final class _SchemaReader(
       final codecType = reference.staticType;
       if (codecType is! InterfaceType ||
           codecType.element.name != 'Codec' ||
-          codecType.element.library.uri.toString() != 'package:orm/orm.dart') {
+          codecType.element.library.uri.toString() !=
+              'package:orm/values.dart') {
         _fail(custom, 'Use a const Codec<T>.');
       }
       final domain = codecType.typeArguments.single;
@@ -401,7 +473,7 @@ final class _SchemaReader(
           !{
             'dart:core',
             'dart:typed_data',
-            'package:orm/orm.dart',
+            'package:orm/values.dart',
           }.contains(type.element.library.uri.toString())) {
         _fail(field, 'This type needs an explicit @UseCodec.');
       }

@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../values.dart';
 
 /// A non-SQL-null JSON document. Its value may itself be JSON null.
 /// Drivers use this envelope for parsed JSON, including JSON string scalars.
@@ -20,7 +20,11 @@ final class Codec<T> {
   // Nullable wrappers share a comparison identity, while remaining distinct
   // from a codec whose own decoder handles SQL NULL.
   final Object? _identity;
-  Object get _storageIdentity => _identity ?? this;
+
+  /// Whether two codecs have the same storage and decoding identity.
+  /// Nullable wrappers preserve identity; independently mapped codecs do not.
+  bool sameStorageAs(Codec<Object?> other) =>
+      (_identity ?? this) == (other._identity ?? other);
   final T Function(Object? value) _decode;
   final Object? Function(T value) _encode;
 

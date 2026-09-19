@@ -39,7 +39,7 @@ Future<void> main(List<String> args) async {
     File('tool/build_sqlite_web.dart'),
   ]..sort((a, b) => a.path.compareTo(b.path));
   final fingerprint = BytesBuilder();
-  fingerprint.add(utf8.encode(Platform.version));
+  fingerprint.add(utf8.encode(Platform.version.split(' ').first));
   fingerprint.addByte(0);
   for (final file in sources) {
     fingerprint.add(utf8.encode(file.path));

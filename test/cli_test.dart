@@ -14,6 +14,7 @@ void main() {
     final result = await Process.run(Platform.resolvedExecutable, [
       'run',
       'bin/orm.dart',
+      '--json',
       'db',
       'inspect',
       '--sqlite',
@@ -112,7 +113,7 @@ void main() {
       final read = await sqlite(SqliteOptions.readOnly(project.databasePath));
       try {
         expect((await read.users.single()).email, 'existing');
-        expect(await Migrator(read).history(), hasLength(1));
+        expect(await Migrator(read.sql).history(), hasLength(1));
         await expectLater(
           read.users.create(email: 'forbidden'),
           throwsA(isA<SqliteFailure>()),

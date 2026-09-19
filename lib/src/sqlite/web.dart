@@ -3,7 +3,7 @@ import 'dart:js_interop';
 
 import 'package:web/web.dart' as web;
 
-import '../../orm.dart';
+import '../../driver.dart';
 import 'failure.dart';
 import 'opened.dart';
 import 'options.dart';

@@ -26,7 +26,7 @@ Future<void> crashMigration(
     },
   );
   try {
-    await Migrator(db).apply(migrations);
+    await Migrator(db.sql).apply(migrations);
   } finally {
     await db.close();
   }

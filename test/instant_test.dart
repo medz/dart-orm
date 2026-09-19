@@ -118,7 +118,7 @@ void main() {
         }
       });
       tearDown(() => db.close());
-      Future<void> create() => Migrator(db).apply([
+      Future<void> create() => Migrator(db.sql).apply([
         Migration.create('0001_instant', appSchema, dialect: db.dialect),
       ]);
       Migration upgrade(Migration first) => Migration.diff(
@@ -295,10 +295,10 @@ void main() {
       test('current snapshots, physical catalog and imported DateTime declarations agree', () async {
         await create();
         final snapshot = SchemaSnapshot(appSchema);
-        expect((await verifySchema(db, snapshot)).differences, isEmpty);
-        expect((await verifySchema(db, snapshot)).unmanaged, isEmpty);
-        expect(await verifyColumns(db, appSchema), isEmpty);
-        final imported = await importSchema(db);
+        expect((await verifySchema(db.sql, snapshot)).differences, isEmpty);
+        expect((await verifySchema(db.sql, snapshot)).unmanaged, isEmpty);
+        expect(await verifyColumns(db.sql, appSchema), isEmpty);
+        final imported = await importSchema(db.sql);
         expect(imported.issues, isEmpty);
         expect(imported.dart, contains('DateTime'));
         final directory = await Directory(
@@ -309,7 +309,7 @@ void main() {
           await file.writeAsString(imported.dart);
           final generated = await generateSchema(file.path);
           expect(
-            (await verifySchema(db, generated.snapshot)).differences,
+            (await verifySchema(db.sql, generated.snapshot)).differences,
             isEmpty,
           );
         } finally {
@@ -327,9 +327,9 @@ void main() {
         final migration = Migration.create('0001_defaults', [
           table,
         ], dialect: db.dialect);
-        await Migrator(db).apply([migration]);
+        await Migrator(db.sql).apply([migration]);
         expect(
-          (await verifySchema(db, migration.snapshot!)).differences,
+          (await verifySchema(db.sql, migration.snapshot!)).differences,
           isEmpty,
         );
         final row = await db.execute(
@@ -357,13 +357,16 @@ void main() {
               ],
             ),
           ]);
-          expect((await verifySchema(db, expected)).differences, isNotEmpty);
+          expect(
+            (await verifySchema(db.sql, expected)).differences,
+            isNotEmpty,
+          );
         }
       });
 
       test('reviewed migration preserves history and repairs legacy timestamp ordering', () async {
         final first = await legacy(db.dialect);
-        await Migrator(db).apply([first]);
+        await Migrator(db.sql).apply([first]);
         await db.execute(
           SqlCommand(
             "INSERT INTO moments (at) VALUES ('2024-01-01T00:00:00.000Z'), ('2024-01-01T00:00:00.000001Z')",
@@ -371,9 +374,15 @@ void main() {
         );
         final second = upgrade(first);
         expect(second.snapshot!.checksum, isNot(first.snapshot!.checksum));
-        await Migrator(db).apply([first, second]);
-        expect((await Migrator(db).history()).first.checksum, first.checksum);
-        expect((await verifySchema(db, second.snapshot!)).differences, isEmpty);
+        await Migrator(db.sql).apply([first, second]);
+        expect(
+          (await Migrator(db.sql).history()).first.checksum,
+          first.checksum,
+        );
+        expect(
+          (await verifySchema(db.sql, second.snapshot!)).differences,
+          isEmpty,
+        );
         expect(
           await db.moments
               .orderBy((m) => [m.at.asc()])
@@ -386,7 +395,7 @@ void main() {
       if (backend == 'sqlite') {
         test('legacy key collisions and invalid calendar values roll back conversion', () async {
           final first = await legacy(db.dialect);
-          await Migrator(db).apply([first]);
+          await Migrator(db.sql).apply([first]);
           await db.execute(
             SqlCommand(
               "INSERT INTO moments (at) VALUES ('2024-01-01T00:00:00Z'), ('2024-01-01 08:00+08')",
@@ -394,12 +403,12 @@ void main() {
           );
           final second = upgrade(first);
           await expectLater(
-            Migrator(db).apply([first, second]),
+            Migrator(db.sql).apply([first, second]),
             throwsA(isA<SqlFailure>()),
           );
-          expect((await Migrator(db).history()).length, 1);
+          expect((await Migrator(db.sql).history()).length, 1);
           expect(
-            (await verifySchema(db, first.snapshot!)).differences,
+            (await verifySchema(db.sql, first.snapshot!)).differences,
             isEmpty,
           );
           await db.execute(
@@ -409,14 +418,14 @@ void main() {
             SqlCommand("INSERT INTO moments (at) VALUES ('2024-02-31 00:00')"),
           );
           await expectLater(
-            Migrator(db).apply([first, second]),
+            Migrator(db.sql).apply([first, second]),
             throwsA(isA<SqlFailure>()),
           );
-          expect((await Migrator(db).history()).length, 1);
+          expect((await Migrator(db.sql).history()).length, 1);
           await db.execute(
             SqlCommand("DELETE FROM moments WHERE at = '2024-02-31 00:00'"),
           );
-          await Migrator(db).apply([first, second]);
+          await Migrator(db.sql).apply([first, second]);
           expect((await db.moments.single()).at, DateTime.utc(2024));
         });
       }
@@ -450,12 +459,12 @@ void main() {
           previous: first.checksum,
           dialect: db.dialect,
         );
-        await Migrator(db).apply([first, second], maxBackfillBatches: 1);
+        await Migrator(db.sql).apply([first, second], maxBackfillBatches: 1);
         expect(
           (await db.moments.where((m) => m.label.eq('done')).single()).at,
           DateTime.utc(0),
         );
-        await Migrator(db).apply([first, second]);
+        await Migrator(db.sql).apply([first, second]);
         expect(await db.moments.where((m) => m.label.eq('done')).count(), 3);
       });
 

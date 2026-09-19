@@ -36,7 +36,7 @@ Future<void> check(String name, Future<void> Function() body) async {
 }
 
 Future<Database<Sqlite>> memory() => sqlite(const SqliteOptions.memory());
-Future<void> initialize(Database<Sqlite> db) => Migrator(db)
+Future<void> initialize(Database<Sqlite> db) => Migrator(db.sql)
     .apply([
       Migration.create('0001_browser', appSchema, dialect: SqlDialect.sqlite),
     ])
@@ -88,9 +88,9 @@ Future<void> main() async {
               previous: first.checksum,
               dialect: SqlDialect.sqlite,
             );
-            await Migrator(recovered).apply([first, second]);
+            await Migrator(recovered.sql).apply([first, second]);
             expect(
-              (await verifySchema(recovered, target)).matches,
+              (await verifySchema(recovered.sql, target)).matches,
               'Upgrade schema differs',
             );
             expect(
@@ -118,7 +118,7 @@ Future<void> main() async {
       await check('memory migrations and verified foreign keys', () async {
         await initialize(db);
         expect(
-          (await verifySchema(db, SchemaSnapshot(appSchema))).matches,
+          (await verifySchema(db.sql, SchemaSnapshot(appSchema))).matches,
           'Schema differs',
         );
         await rejects(() => db.posts.create(authorId: 999, title: 'invalid'));
@@ -286,13 +286,13 @@ Future<void> main() async {
             previous: initial.checksum,
             dialect: SqlDialect.sqlite,
           );
-          await Migrator(isolated).apply([initial, migration]);
+          await Migrator(isolated.sql).apply([initial, migration]);
           expect(
             (await isolated.users.single()).emailSize == 7,
             'Migration did not recompute existing row',
           );
           expect(
-            (await verifySchema(isolated, target)).matches,
+            (await verifySchema(isolated.sql, target)).matches,
             'Computed catalog differs',
           );
         } finally {
@@ -304,7 +304,7 @@ Future<void> main() async {
         () async {
           await rejects(() => db.users.create(email: ''));
           expect(
-            (await inspectTable(db, 'users')).checks.length == 1,
+            (await inspectTable(db.sql, 'users')).checks.length == 1,
             'Generated CHECK missing',
           );
           final isolated = await memory();
@@ -320,7 +320,7 @@ Future<void> main() async {
               start.tables,
               dialect: SqlDialect.sqlite,
             );
-            await Migrator(isolated).apply([first]);
+            await Migrator(isolated.sql).apply([first]);
             await isolated.execute(
               SqlCommand('INSERT INTO scores VALUES (-1)'),
             );
@@ -334,19 +334,19 @@ Future<void> main() async {
               previous: first.checksum,
               dialect: SqlDialect.sqlite,
             );
-            await rejects(() => Migrator(isolated).apply([first, second]));
+            await rejects(() => Migrator(isolated.sql).apply([first, second]));
             expect(
-              (await verifySchema(isolated, start)).matches,
+              (await verifySchema(isolated.sql, start)).matches,
               'Failed CHECK migration changed schema',
             );
             expect(
-              (await Migrator(isolated).history()).length == 1,
+              (await Migrator(isolated.sql).history()).length == 1,
               'Failed CHECK migration changed history',
             );
             await isolated.execute(SqlCommand('UPDATE scores SET value = 2'));
-            await Migrator(isolated).apply([first, second]);
+            await Migrator(isolated.sql).apply([first, second]);
             expect(
-              (await verifySchema(isolated, target)).matches,
+              (await verifySchema(isolated.sql, target)).matches,
               'CHECK migration differs',
             );
             await rejects(

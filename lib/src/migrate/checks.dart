@@ -75,7 +75,7 @@ String _checkSignature(String expression) {
 // expressions by deleting casts or precedence-bearing syntax. EXPLAIN does not
 // run the SELECT, though PostgreSQL can evaluate immutable constants in planning.
 Future<List<String>> _checkExpressions(
-  Database<Backend> db,
+  SqlDatabase<Backend> db,
   String table,
   List<String> expressions,
 ) async {
@@ -101,7 +101,7 @@ Future<List<String>> _checkExpressions(
 
 /// One actual constraint is consumed per declaration, including unnamed copies.
 Future<List<int?>> _matchChecks(
-  Database<Backend> db,
+  SqlDatabase<Backend> db,
   String table,
   List<CheckSchema> expected,
   List<CheckInfo> actual,
@@ -136,7 +136,7 @@ Future<List<int?>> _matchChecks(
 }
 
 Future<void> _dropCheck(
-  Database<Backend> db,
+  SqlDatabase<Backend> db,
   String table,
   CheckSchema check,
 ) async {

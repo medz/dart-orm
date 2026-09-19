@@ -43,7 +43,7 @@ void main() {
         }
       });
       tearDown(() => db.close());
-      Future<void> create() => Migrator(db).apply([
+      Future<void> create() => Migrator(db.sql).apply([
         Migration.create('0001_precision', appSchema, dialect: db.dialect),
       ]);
       Future<models.Moment> sample() => db.moments.create(
@@ -79,8 +79,8 @@ void main() {
             )
             .execute();
         expect((await db.moments.byId(a.id).single()).clock, t('01:00:00.778'));
-        expect(await verifyColumns(db, appSchema), isEmpty);
-        final verified = await verifySchema(db, SchemaSnapshot(appSchema));
+        expect(await verifyColumns(db.sql, appSchema), isEmpty);
+        final verified = await verifySchema(db.sql, SchemaSnapshot(appSchema));
         expect(verified.differences, isEmpty);
         expect(verified.unmanaged, isEmpty);
       });
@@ -240,7 +240,7 @@ void main() {
         () async {
           await create();
           await sample();
-          final info = await inspectColumns(db, 'moments');
+          final info = await inspectColumns(db.sql, 'moments');
           expect(
             {for (final c in info) c.name: c.temporalPrecision},
             {
@@ -254,7 +254,7 @@ void main() {
             },
           );
           final draft = await importSchema(
-            db,
+            db.sql,
             tables: ['moments', 'slots', 'bookings'],
           );
           expect(draft.issues.where((i) => i.blocking), isEmpty);
@@ -266,7 +266,7 @@ void main() {
             final file = File('${dir.path}/schema.dart');
             await file.writeAsString(draft.dart);
             final generated = await generateSchema(file.path);
-            final verification = await verifySchema(db, generated.snapshot);
+            final verification = await verifySchema(db.sql, generated.snapshot);
             expect(verification.differences, isEmpty);
             expect(verification.unmanaged, isEmpty);
           } finally {
@@ -291,7 +291,7 @@ void main() {
           schema(6),
         ], dialect: db.dialect);
         final oldChecksum = first.checksum;
-        await Migrator(db).apply([first]);
+        await Migrator(db.sql).apply([first]);
         await db.execute(
           SqlCommand(
             "INSERT INTO narrow VALUES (1,'2024-01-01 00:00:00.1231'),(2,'2024-01-01 00:00:00.1232')",
@@ -323,15 +323,21 @@ void main() {
           dialect: db.dialect,
         );
         await expectLater(
-          Migrator(db).apply([first, next]),
+          Migrator(db.sql).apply([first, next]),
           throwsA(isA<SqlFailure>()),
         );
-        expect((await Migrator(db).history()).length, 1);
-        expect((await verifySchema(db, first.snapshot!)).differences, isEmpty);
+        expect((await Migrator(db.sql).history()).length, 1);
+        expect(
+          (await verifySchema(db.sql, first.snapshot!)).differences,
+          isEmpty,
+        );
         expect(first.checksum, oldChecksum);
         await db.execute(SqlCommand('DELETE FROM narrow WHERE id=2'));
-        await Migrator(db).apply([first, next]);
-        expect((await verifySchema(db, next.snapshot!)).differences, isEmpty);
+        await Migrator(db.sql).apply([first, next]);
+        expect(
+          (await verifySchema(db.sql, next.snapshot!)).differences,
+          isEmpty,
+        );
         final row = await db.execute(SqlCommand('SELECT recorded FROM narrow'));
         expect(
           Codecs.localDateTime.decode(row.rows.single.single),
@@ -339,11 +345,11 @@ void main() {
         );
         final wrong = SchemaSnapshot([schema(2, column: 'recorded')]);
         expect(
-          (await verifySchema(db, wrong)).differences.join(),
+          (await verifySchema(db.sql, wrong)).differences.join(),
           contains('precision'),
         );
         expect(
-          (await verifyColumns(db, wrong.tables)).join(),
+          (await verifyColumns(db.sql, wrong.tables)).join(),
           contains('precision'),
         );
       });
@@ -368,7 +374,7 @@ void main() {
               ),
             ],
           );
-          await Migrator(db).apply([
+          await Migrator(db.sql).apply([
             Migration.create('0001_defaults', [table], dialect: db.dialect),
           ]);
           await db.execute(SqlCommand('INSERT INTO defaults DEFAULT VALUES'));
@@ -384,7 +390,7 @@ void main() {
             instant('1999-12-31 23:59:59Z'),
           );
           expect(
-            (await verifySchema(db, SchemaSnapshot([table]))).differences,
+            (await verifySchema(db.sql, SchemaSnapshot([table]))).differences,
             isEmpty,
           );
           if (backend == 'postgres') {
@@ -405,12 +411,15 @@ void main() {
                 Column('instant', Codecs.dateTime.nullable(), nullable: true),
               ],
             );
-            expect(await verifyColumns(db, [expected]), isEmpty);
+            expect(await verifyColumns(db.sql, [expected]), isEmpty);
             expect(
-              (await verifySchema(db, SchemaSnapshot([expected]))).differences,
+              (await verifySchema(
+                db.sql,
+                SchemaSnapshot([expected]),
+              )).differences,
               isEmpty,
             );
-            final draft = await importSchema(db, tables: ['explicit_six']);
+            final draft = await importSchema(db.sql, tables: ['explicit_six']);
             expect(draft.issues.where((i) => i.blocking), isEmpty);
             expect(draft.dart, isNot(contains('@TemporalPrecision')));
           }

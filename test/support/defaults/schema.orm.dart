@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show Ticket, SequenceRow;
@@ -76,7 +76,7 @@ final ticketsTable = Table<models.Ticket, TicketsFields>(
 );
 
 final class TicketsTableSet extends TableSet<models.Ticket, TicketsFields> {
-  TicketsTableSet(Database<Backend> db) : super(db, ticketsTable) {
+  TicketsTableSet(QueryContext db) : super(db, ticketsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Ticket> create({
@@ -145,7 +145,7 @@ final sequencesTable = Table<models.SequenceRow, SequencesFields>(
 
 final class SequencesTableSet
     extends TableSet<models.SequenceRow, SequencesFields> {
-  SequencesTableSet(Database<Backend> db) : super(db, sequencesTable) {
+  SequencesTableSet(QueryContext db) : super(db, sequencesTable) {
     db.registerSchema(appSchema);
   }
   Future<models.SequenceRow> create({Change<int> id = const Change.keep()}) =>
@@ -159,7 +159,7 @@ final appSchema = List<TableSchema>.unmodifiable([
   sequencesSchema,
 ]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   TicketsTableSet get tickets => TicketsTableSet(this);
   SequencesTableSet get sequences => SequencesTableSet(this);
 }

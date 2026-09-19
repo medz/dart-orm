@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 enum NullOrder { first, last }
 
@@ -27,7 +27,7 @@ extension KeysetQuery<R, F extends Fields> on Query<R, F> {
         comparison = _Binary(
           node,
           term.order.descending ? '<' : '>',
-          _Parameter(last),
+          _Parameter(last, storageType: term.order.expression.codec.sqlType),
         );
         if (term.order.nulls == NullOrder.last) {
           comparison = _Binary(comparison, 'OR', isNull);
@@ -39,7 +39,14 @@ extension KeysetQuery<R, F extends Fields> on Query<R, F> {
       predicate = predicate == null ? branch : _Binary(predicate, 'OR', branch);
       final equal = last == null
           ? isNull
-          : _Binary(node, '=', _Parameter(last));
+          : _Binary(
+              node,
+              '=',
+              _Parameter(
+                last,
+                storageType: term.order.expression.codec.sqlType,
+              ),
+            );
       prefix = prefix == null ? equal : _Binary(prefix, 'AND', equal);
     }
     final next = Expr<bool?>._(predicate!, Codecs.boolean.nullable());

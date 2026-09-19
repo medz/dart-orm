@@ -1,9 +1,9 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 /// Inserts consecutive rows of the same shape together, splitting at the
 /// driver's parameter limit. All chunks share one transaction by default.
 final class BatchInsert<F extends Fields> {
-  final Database<Backend> database;
+  final QueryContext database;
   final F _fields;
   final _QueryState _state;
   final List<List<Assignment>> _rows;
@@ -90,12 +90,12 @@ final class BatchInsert<F extends Fields> {
     options.check();
     final commands = _compile(selection);
     if (commands.isEmpty) return const SqlResult([]);
-    Future<SqlResult> execute(Database<Backend> db) async {
+    Future<SqlResult> execute(QueryContext db) async {
       var count = 0;
       final rows = <List<Object?>>[];
       try {
         for (final command in commands) {
-          final result = await db._executeCommand(
+          final result = await db.executeCommand(
             command,
             options: options,
             changedTables: [_state.source.schema],
@@ -108,7 +108,7 @@ final class BatchInsert<F extends Fields> {
       } catch (_) {
         // Cancellation can happen between statements, after earlier chunks
         // succeeded. Catching it must not allow a partial batch to commit.
-        if (db.inTransaction) db._statementFailed = true;
+        if (db.inTransaction) db.markFailed();
         rethrow;
       }
       return SqlResult(rows, affectedRows: count);
@@ -116,7 +116,7 @@ final class BatchInsert<F extends Fields> {
 
     return database.inTransaction
         ? execute(database)
-        : database.transaction(execute, acquire: options._acquisition);
+        : database.atomic(execute, acquire: options.acquisition);
   }
 
   Future<int> execute({
@@ -136,7 +136,7 @@ final class BatchReturning<R> {
     final plan = _SelectionPlan();
     final decode = _selection._bind(plan);
     final result = await _batch._run(selection: plan, options: options);
-    return _batch.database._observeDecode(
+    return _batch.database.observeDecode(
       null,
       result.rows.length,
       () => [for (final row in result.rows) decode(row)],

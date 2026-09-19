@@ -124,15 +124,22 @@ String _columnSource(Column<Object?> column) {
 }
 
 String _computedSource(ComputedColumn column) =>
-    column.sqlite == column.postgres
+    column.sqlite == column.postgres &&
+        column.mysql == column.sqlite &&
+        column.mariadb == column.sqlite
     ? 'ComputedColumn(${_dartValue(column.sqlite)}, storage: ComputedStorage.${column.storage.name})'
-    : 'ComputedColumn.forDialects(sqlite: ${_dartValue(column.sqlite)}, postgres: ${_dartValue(column.postgres)}, storage: ComputedStorage.${column.storage.name})';
-String _checkSource(CheckSchema check) => check.sqlite == check.postgres
+    : 'ComputedColumn.forDialects(sqlite: ${_dartValue(column.sqlite)}, postgres: ${_dartValue(column.postgres)}, mysql: ${_dartValue(column.mysql)}, mariadb: ${_dartValue(column.mariadb)}, storage: ComputedStorage.${column.storage.name})';
+String _checkSource(CheckSchema check) =>
+    check.sqlite == check.postgres &&
+        check.mysql == check.sqlite &&
+        check.mariadb == check.sqlite
     ? 'CheckSchema(${_dartValue(check.name)}, ${_dartValue(check.sqlite)})'
-    : 'CheckSchema.forDialects(${_dartValue(check.name)}, sqlite: ${_dartValue(check.sqlite)}, postgres: ${_dartValue(check.postgres)})';
+    : 'CheckSchema.forDialects(${_dartValue(check.name)}, sqlite: ${_dartValue(check.sqlite)}, postgres: ${_dartValue(check.postgres)}, mysql: ${_dartValue(check.mysql)}, mariadb: ${_dartValue(check.mariadb)})';
 
 String _stepSource(MigrationStep step) => switch (step) {
   ExecuteSql() => 'ExecuteSql(${_dartValue(step.sql)})',
+  CheckedTableSql() =>
+    'CheckedTableSql(${_dartValue(step.sql)}, before: ${step.before == null ? 'null' : _tableSource(step.before!)}, after: ${step.after == null ? 'null' : _tableSource(step.after!)})',
   DropTable() => 'DropTable(${_dartValue(step.table)})',
   DropConstraint() =>
     'DropConstraint(${_dartValue(step.table)}, ${_dartValue(step.constraint)})',

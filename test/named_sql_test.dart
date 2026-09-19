@@ -33,33 +33,41 @@ GeneratedQueries fixed(
 });
 
 void main() {
-  test('template binds repeated names once and preserves quotes/comments', () {
-    for (final dialect in SqlDialect.values) {
-      final template = SqlTemplate(
-        "SELECT :input AS n, ':ignored;''text' AS s, \"quoted:field\" -- :line\n"
-        '/* :comment */ FROM data WHERE n = :input; -- trailing',
-        dialect: dialect,
+  test(
+    'template preserves quotes/comments and binds each protocol correctly',
+    () {
+      for (final dialect in SqlDialect.values) {
+        final template = SqlTemplate(
+          "SELECT :input AS n, ':ignored;''text' AS s, \"quoted:field\" -- :line\n"
+          '/* :comment */ FROM data WHERE n = :input; -- trailing',
+          dialect: dialect,
+        );
+        final command = template.compile(
+          Capabilities(dialect: dialect, maxParameters: 2),
+          {'input': value(3, Codecs.integer)},
+        );
+        expect(template.parameters, {'input'});
+        expect(
+          command.parameters,
+          dialect == SqlDialect.mysql || dialect == SqlDialect.mariadb
+              ? [3, 3]
+              : [3],
+        );
+        expect(command.sql, contains("':ignored;''text'"));
+        expect(command.sql, endsWith(' -- trailing'));
+      }
+      final pg = SqlTemplate(
+        r'''SELECT :n::bigint, $tag$:ignored; '$tag$, E'\:ignored', payload ? 'key' /* nested /* :ignored */ end */''',
+        dialect: SqlDialect.postgres,
       );
-      final command = template.compile(
-        Capabilities(dialect: dialect, maxParameters: 1),
-        {'input': value(3, Codecs.integer)},
+      expect(pg.parameters, {'n'});
+      final sqlite = SqlTemplate(
+        'SELECT :n, [name:ignored], `name:ignored`',
+        dialect: SqlDialect.sqlite,
       );
-      expect(template.parameters, {'input'});
-      expect(command.parameters, [3]);
-      expect(command.sql, contains("':ignored;''text'"));
-      expect(command.sql, endsWith(' -- trailing'));
-    }
-    final pg = SqlTemplate(
-      r'''SELECT :n::bigint, $tag$:ignored; '$tag$, E'\:ignored', payload ? 'key' /* nested /* :ignored */ end */''',
-      dialect: SqlDialect.postgres,
-    );
-    expect(pg.parameters, {'n'});
-    final sqlite = SqlTemplate(
-      'SELECT :n, [name:ignored], `name:ignored`',
-      dialect: SqlDialect.sqlite,
-    );
-    expect(sqlite.parameters, {'n'});
-  });
+      expect(sqlite.parameters, {'n'});
+    },
+  );
 
   test(
     'templates reject ambiguous bindings and incomplete or multiple statements',
@@ -117,7 +125,7 @@ void main() {
     expect((await checkGeneratedQueries(source)).dart, generated.dart);
   });
 
-  for (final dialect in SqlDialect.values) {
+  for (final dialect in [SqlDialect.sqlite, SqlDialect.postgres]) {
     group(
       dialect.name,
       () {
@@ -289,7 +297,7 @@ void main() {
 
         test('native checks accept declared shape and preserve prepared-statement state', () async {
           final result = await checkSqlQueries(
-            db,
+            db.sql,
             await generateQueries(source),
           );
           expect(result.length, dialect == SqlDialect.sqlite ? 3 : 4);
@@ -321,14 +329,17 @@ void main() {
             'SELECT 1 AS wrong',
           ]) {
             await expectLater(
-              checkSqlQueries(db, fixed(dialect, sql)),
+              checkSqlQueries(db.sql, fixed(dialect, sql)),
               throwsA(isA<GenerationException>()),
               reason: sql,
             );
           }
           if (dialect == SqlDialect.postgres) {
             await expectLater(
-              checkSqlQueries(db, fixed(dialect, "SELECT 'text'::text AS n")),
+              checkSqlQueries(
+                db.sql,
+                fixed(dialect, "SELECT 'text'::text AS n"),
+              ),
               throwsA(isA<GenerationException>()),
             );
           }
@@ -339,12 +350,15 @@ void main() {
           final sql = dialect == SqlDialect.sqlite
               ? 'SELECT abs(-9223372036854775808) AS n'
               : 'SELECT 1 / 0 AS n';
-          expect(await checkSqlQueries(db, fixed(dialect, sql)), hasLength(1));
+          expect(
+            await checkSqlQueries(db.sql, fixed(dialect, sql)),
+            hasLength(1),
+          );
           await expectLater(db.execute(SqlCommand(sql)), throwsA(anything));
           if (dialect == SqlDialect.postgres) {
             await db.execute(SqlCommand('CREATE SEQUENCE query_check_counter'));
             await checkSqlQueries(
-              db,
+              db.sql,
               fixed(dialect, "SELECT nextval('query_check_counter') AS n"),
             );
             expect(

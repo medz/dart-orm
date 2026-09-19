@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show Entry, Rate, Allocation;
@@ -70,7 +70,7 @@ final entriesTable = Table<models.Entry, EntriesFields>(
 );
 
 final class EntriesTableSet extends TableSet<models.Entry, EntriesFields> {
-  EntriesTableSet(Database<Backend> db) : super(db, entriesTable) {
+  EntriesTableSet(QueryContext db) : super(db, entriesTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Entry> create({
@@ -144,7 +144,7 @@ final ratesTable = Table<models.Rate, RatesFields>(
 );
 
 final class RatesTableSet extends TableSet<models.Rate, RatesFields> {
-  RatesTableSet(Database<Backend> db) : super(db, ratesTable) {
+  RatesTableSet(QueryContext db) : super(db, ratesTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Rate> create({required Decimal id, required String label}) =>
@@ -201,7 +201,7 @@ final allocationsTable = Table<models.Allocation, AllocationsFields>(
 
 final class AllocationsTableSet
     extends TableSet<models.Allocation, AllocationsFields> {
-  AllocationsTableSet(Database<Backend> db) : super(db, allocationsTable) {
+  AllocationsTableSet(QueryContext db) : super(db, allocationsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Allocation> create({
@@ -223,7 +223,7 @@ final appSchema = List<TableSchema>.unmodifiable([
   allocationsSchema,
 ]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   EntriesTableSet get entries => EntriesTableSet(this);
   RatesTableSet get rates => RatesTableSet(this);
   AllocationsTableSet get allocations => AllocationsTableSet(this);

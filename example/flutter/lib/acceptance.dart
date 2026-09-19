@@ -67,7 +67,7 @@ Future<Map<String, Object?>> runAcceptance({
       report['legacyRows'] = rows;
     } else {
       check(phase == 'upgrade' || phase == 'reopen', 'Known execution phase');
-      final before = await Migrator(db).history();
+      final before = await Migrator(db.sql).history();
       check(
         before.map((m) => m.id).join(',') ==
             (phase == 'upgrade'
@@ -75,14 +75,14 @@ Future<Map<String, Object?>> runAcceptance({
                 : '0001_initial,0002_comments'),
         'Expected previous migration history',
       );
-      final applied = await Migrator(db).apply(migrations);
+      final applied = await Migrator(db.sql).apply(migrations);
       check(
         applied.join(',') == (phase == 'upgrade' ? '0002_comments' : ''),
         phase == 'upgrade'
             ? 'Only version 2 migration applied'
             : 'No migration replay',
       );
-      final schema = await verifySchema(db, migrations.last.snapshot!);
+      final schema = await verifySchema(db.sql, migrations.last.snapshot!);
       check(schema.matches, 'Live schema matches bundled snapshot');
       report['unmanaged'] = schema.unmanaged.map((o) => o.name).toList();
       final original = await db.notes.byId(1).single();
@@ -238,13 +238,13 @@ Future<Map<String, Object?>> runAcceptance({
       await subscription.cancel();
       subscription = null;
     }
-    final versionState = await Migrator(db).requireVersion(migrations);
+    final versionState = await Migrator(db.sql).requireVersion(migrations);
     check(
       versionState.id == migrations.last.id,
       'Application schema compatibility',
     );
     report['history'] = [
-      for (final m in await Migrator(db).history())
+      for (final m in await Migrator(db.sql).history())
         {'id': m.id, 'checksum': m.checksum},
     ];
     await db.close();

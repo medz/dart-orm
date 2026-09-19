@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show Person, Note;
@@ -136,7 +136,7 @@ final peopleTable = Table<models.Person, PeopleFields>(
 );
 
 final class PeopleTableSet extends TableSet<models.Person, PeopleFields> {
-  PeopleTableSet(Database<Backend> db) : super(db, peopleTable) {
+  PeopleTableSet(QueryContext db) : super(db, peopleTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Person> create({
@@ -235,7 +235,7 @@ final notesTable = Table<models.Note, NotesFields>(
 );
 
 final class NotesTableSet extends TableSet<models.Note, NotesFields> {
-  NotesTableSet(Database<Backend> db) : super(db, notesTable) {
+  NotesTableSet(QueryContext db) : super(db, notesTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Note> create({
@@ -263,7 +263,7 @@ extension NotesUpdates on Query<models.Note, NotesFields> {
 
 final appSchema = List<TableSchema>.unmodifiable([peopleSchema, notesSchema]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   PeopleTableSet get people => PeopleTableSet(this);
   NotesTableSet get notes => NotesTableSet(this);
 }

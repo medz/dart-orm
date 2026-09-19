@@ -9,7 +9,7 @@ import '../example/schema.orm.dart';
 
 void main() {
   test('generated clients expose row types and an immutable schema', () {
-    const User user = (id: 1, email: 'a', nickname: null, score: 0);
+    final user = User(id: 1, email: 'a', nickname: null, score: 0);
     expect(user.id, 1);
     expect(appSchema.clear, throwsUnsupportedError);
   });

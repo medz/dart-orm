@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show Account, Entry, Reading;
@@ -84,7 +84,7 @@ final accountsTable = Table<models.Account, AccountsFields>(
 );
 
 final class AccountsTableSet extends TableSet<models.Account, AccountsFields> {
-  AccountsTableSet(Database<Backend> db) : super(db, accountsTable) {
+  AccountsTableSet(QueryContext db) : super(db, accountsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Account> create({
@@ -187,7 +187,7 @@ final entriesTable = Table<models.Entry, EntriesFields>(
 );
 
 final class EntriesTableSet extends TableSet<models.Entry, EntriesFields> {
-  EntriesTableSet(Database<Backend> db) : super(db, entriesTable) {
+  EntriesTableSet(QueryContext db) : super(db, entriesTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Entry> create({
@@ -261,7 +261,7 @@ final readingsTable = Table<models.Reading, ReadingsFields>(
 );
 
 final class ReadingsTableSet extends TableSet<models.Reading, ReadingsFields> {
-  ReadingsTableSet(Database<Backend> db) : super(db, readingsTable) {
+  ReadingsTableSet(QueryContext db) : super(db, readingsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Reading> create({required int id, required double value}) =>
@@ -285,7 +285,7 @@ final appSchema = List<TableSchema>.unmodifiable([
   readingsSchema,
 ]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   AccountsTableSet get accounts => AccountsTableSet(this);
   EntriesTableSet get entries => EntriesTableSet(this);
   ReadingsTableSet get readings => ReadingsTableSet(this);

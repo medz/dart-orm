@@ -47,7 +47,7 @@ void main() {
         final base = await open();
         db = Database(_Driver(base.driver, commands));
         initial = initialFor(db.dialect);
-        runner = Migrator(db);
+        runner = Migrator(db.sql);
         for (final table in [
           'children',
           'payload',
@@ -206,7 +206,7 @@ void main() {
           try {
             final results = await Future.wait([
               runner.apply([initial, migration]),
-              Migrator(other).apply([initial, migration]),
+              Migrator(other.sql).apply([initial, migration]),
             ]);
             expect(results.expand((r) => r).toList(), [migration.id]);
             expect((await progress()).rows, 35);
@@ -251,7 +251,7 @@ void main() {
         expect((await runner.requireVersion([initial])).id, initial.id);
         expect(
           (await inspectColumns(
-            db,
+            db.sql,
             '_orm_migration_steps',
           )).any((c) => c.name == 'backfill'),
           false,
@@ -316,7 +316,7 @@ void main() {
           initial.id,
           migration.id,
         ]);
-        expect(await inspectColumns(db, 'audit'), isEmpty);
+        expect(await inspectColumns(db.sql, 'audit'), isEmpty);
         expect((await data()).every((r) => r[2] == 1), true);
         await db.execute(SqlCommand('CREATE TABLE flags (ready INTEGER)'));
         expect(await runner.apply([initial, migration, add, fail]), [
@@ -451,7 +451,10 @@ void main() {
           );
           expect((await data()).where((r) => r[2] == 1).length, 3);
           await runner.apply([initial, migration]);
-          expect((await verifySchema(db, migration.snapshot!)).matches, true);
+          expect(
+            (await verifySchema(db.sql, migration.snapshot!)).matches,
+            true,
+          );
           expect((await data()).every((r) => r[2] == 1), true);
           expect(
             (await db.execute(SqlCommand('PRAGMA foreign_keys')))
@@ -510,7 +513,7 @@ void main() {
           );
           try {
             await expectLater(
-              Migrator(session).apply([initial, fill(dialect: db.dialect)]),
+              Migrator(session.sql).apply([initial, fill(dialect: db.dialect)]),
               throwsA(code('MIGRATION.STEP')),
             );
           } finally {
@@ -545,7 +548,8 @@ void main() {
                 );
               }
               await expectLater(
-                Migrator(session).apply([initial, fill(dialect: db.dialect)]),
+                Migrator(session.sql)
+                    .apply([initial, fill(dialect: db.dialect)]),
                 throwsA(code('MIGRATION.SESSION')),
               );
             } finally {
@@ -590,7 +594,8 @@ void main() {
               await session.execute(SqlCommand('SET ROLE "$role"'));
               try {
                 await expectLater(
-                  Migrator(session).apply([initial, fill(dialect: db.dialect)]),
+                  Migrator(session.sql)
+                      .apply([initial, fill(dialect: db.dialect)]),
                   throwsA(
                     isA<OrmException>().having(
                       (e) => e.cause,

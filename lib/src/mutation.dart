@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 final class Assignment {
   final Field<Object?> field;
@@ -9,7 +9,7 @@ final class Assignment {
 enum _MutationKind { insert, update, delete }
 
 final class Mutation<F extends Fields> {
-  final Database<Backend> database;
+  final QueryContext database;
   final F _fields;
   final _QueryState _state;
   final _MutationKind _kind;
@@ -31,6 +31,39 @@ final class Mutation<F extends Fields> {
   Mutation<F> onConflictDoNothing({
     List<ReadField<Object?>> Function(F)? target,
   }) => _withConflict(target == null ? [] : target(_fields), const [], null);
+
+  /// MySQL/MariaDB update on any duplicate unique key, matching native semantics.
+  Mutation<F> onDuplicateKeyUpdate({
+    required List<Assignment> Function(F existing, F incoming) set,
+  }) {
+    if (_kind != _MutationKind.insert || _createFields == null) {
+      throw const OrmException(
+        'MUTATION.CONFLICT',
+        'Upsert applies to an insert.',
+      );
+    }
+    final incoming = _createFields(TableRef(_state.source.schema));
+    final assignments = set(_fields, incoming);
+    if (assignments.isEmpty) {
+      throw const OrmException(
+        'MUTATION.EMPTY',
+        'Conflict update needs assignments.',
+      );
+    }
+    return Mutation._(
+      database,
+      _fields,
+      _state,
+      _kind,
+      _assignments,
+      createFields: _createFields,
+      conflict: _Conflict(
+        const [],
+        List.unmodifiable(assignments),
+        incoming.table,
+      ),
+    );
+  }
 
   Mutation<F> onConflictUpdate({
     required List<ReadField<Object?>> Function(F) target,
@@ -216,14 +249,19 @@ final class Mutation<F extends Fields> {
       return 'DEFAULT';
     }
 
-    final table = '${w.quote(_state.source.schema.name)} AS "t0"';
+    final table = w.mysql && _kind == _MutationKind.insert
+        ? w.quote(_state.source.schema.name)
+        : '${w.quote(_state.source.schema.name)} AS ${w.quote('t0')}';
+    if (w.mysql && _kind == _MutationKind.insert) {
+      w.unqualifiedTable = _state.source;
+    }
     final b = StringBuffer();
     switch (_kind) {
       case _MutationKind.insert:
         final values = _assignments.where((a) => a._value != null).toList();
         b.write('INSERT INTO $table');
         if (values.isEmpty) {
-          b.write(' DEFAULT VALUES');
+          b.write(w.mysql ? ' () VALUES ()' : ' DEFAULT VALUES');
         } else {
           b.write(
             ' (${values.map((a) => w.quote(a.field.definition.name)).join(', ')})',
@@ -250,18 +288,50 @@ final class Mutation<F extends Fields> {
       b.write(' WHERE ${predicate._node.write(w)}');
     }
     if (_conflict case final conflict?) {
-      b.write(' ON CONFLICT');
-      if (conflict.target.isNotEmpty) {
-        b.write(' (${conflict.target.map(w.quote).join(', ')})');
-      }
-      if (conflict.assignments.isEmpty) {
-        b.write(' DO NOTHING');
+      if (w.mysql) {
+        if (conflict.target.isNotEmpty) {
+          throw const OrmException(
+            'CAPABILITY.CONFLICT_TARGET',
+            'MySQL/MariaDB cannot select a conflict target. Use onDuplicateKeyUpdate.',
+          );
+        }
+        b.write(' ON DUPLICATE KEY UPDATE ');
+        if (conflict.assignments.isEmpty) {
+          throw const OrmException(
+            'CAPABILITY.DO_NOTHING',
+            'MySQL/MariaDB cannot ignore only duplicate keys without update side effects.',
+          );
+        } else {
+          w.aliases[conflict.incoming!] = 'excluded';
+          b.write(
+            conflict.assignments
+                .map(
+                  (a) => '${w.quote(a.field.definition.name)} = ${assigned(a)}',
+                )
+                .join(', '),
+          );
+          w.aliases.remove(conflict.incoming);
+        }
       } else {
-        w.aliases[conflict.incoming!] = 'excluded';
-        b.write(
-          ' DO UPDATE SET ${conflict.assignments.map((a) => '${w.quote(a.field.definition.name)} = ${assigned(a)}').join(', ')}',
-        );
-        w.aliases.remove(conflict.incoming);
+        if (conflict.target.isEmpty && conflict.assignments.isNotEmpty) {
+          throw const OrmException(
+            'CAPABILITY.DUPLICATE_KEY',
+            'Use onConflictUpdate with a declared target on this database.',
+          );
+        }
+        b.write(' ON CONFLICT');
+        if (conflict.target.isNotEmpty) {
+          b.write(' (${conflict.target.map(w.quote).join(', ')})');
+        }
+        if (conflict.assignments.isEmpty) {
+          b.write(' DO NOTHING');
+        } else {
+          w.aliases[conflict.incoming!] = 'excluded';
+          b.write(
+            ' DO UPDATE SET ${conflict.assignments.map((a) => '${w.quote(a.field.definition.name)} = ${assigned(a)}').join(', ')}',
+          );
+          w.aliases.remove(conflict.incoming);
+        }
       }
     }
     if (selection != null) {
@@ -276,13 +346,13 @@ final class Mutation<F extends Fields> {
         ' RETURNING ${selection.columns.map((e) => e._node.write(w)).join(', ')}',
       );
     }
-    return SqlCommand(b.toString(), w.parameters);
+    return w.finish(b.toString());
   }
 
   SqlCommand compile() => _compile();
   Future<int> execute({
     ExecutionOptions options = const ExecutionOptions(),
-  }) async => (await database._executeCommand(
+  }) async => (await database.executeCommand(
     compile(),
     options: options,
     changedTables: [_state.source.schema],
@@ -303,14 +373,14 @@ final class Returning<R> {
     final plan = _SelectionPlan();
     final decode = _selection._bind(plan);
     final command = _mutation._compile(plan);
-    final result = await _mutation.database._executeCommand(
+    final result = await _mutation.database.executeCommand(
       command,
       options: options,
       changedTables: [_mutation._state.source.schema],
       affectedOnly: true,
       cascade: _mutation._kind == _MutationKind.delete,
     );
-    return _mutation.database._observeDecode(
+    return _mutation.database.observeDecode(
       command.sql,
       result.rows.length,
       () => [for (final row in result.rows) decode(row)],

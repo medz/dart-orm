@@ -2,7 +2,7 @@ part of '../generate.dart';
 
 String _emit(List<_Entity> schema, String import, _DartNames names) {
   final b = StringBuffer('// GENERATED CODE - DO NOT MODIFY BY HAND.\n\n')
-    ..writeln("import 'package:orm/orm.dart';")
+    ..writeln("import 'package:orm/sql.dart';")
     ..writeln("import ${_literal(import)} as models;")
     ..writeln(
       "export ${_literal(import)} show ${schema.map((e) => e.row).toSet().join(', ')};",
@@ -27,7 +27,7 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
       'primaryKey: ${_strings(entity.columns(entity.primaryKey))}, '
       'uniqueKeys: [${entity.uniqueKeys.map((k) => _strings(entity.columns(k))).join(', ')}], '
       'indexes: [${entity.indexes.map((i) => 'IndexSchema(${_literal(i.name)}, ${_strings(entity.columns(i.keys))}, unique: ${i.unique})').join(', ')}], '
-      '${entity.checks.isEmpty ? '' : 'checks: [${entity.checks.map((c) => 'CheckSchema.forDialects(${c.name == null ? 'null' : _literal(c.name!)}, sqlite: ${_literal(c.sqlite)}, postgres: ${_literal(c.postgres)})').join(', ')}], '}'
+      '${entity.checks.isEmpty ? '' : 'checks: [${entity.checks.map((c) => 'CheckSchema.forDialects(${c.name == null ? 'null' : _literal(c.name!)}, sqlite: ${_literal(c.sqlite)}, postgres: ${_literal(c.postgres)}, mysql: ${c.mysql == null ? 'null' : _literal(c.mysql!)}, mariadb: ${c.mariadb == null ? 'null' : _literal(c.mariadb!)})').join(', ')}], '}'
       'foreignKeys: [${entity.edges.where((e) => e.isForeignKey).map((e) => 'ForeignKey(${_strings(entity.columns(e.parentKeys))}, ${_literal(e.target.table)}, ${_strings(e.target.columns(e.childKeys))}, onDelete: ${_literal(e.onDelete!)})').join(', ')}]);',
     );
     b.writeln(
@@ -51,14 +51,14 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
       );
     }
     b.writeln('}');
-    final selection = _recordSelection(entity.fields, 'row');
+    final selection = _modelSelection(entity, 'row');
     b.writeln(
       'final ${entity.name}Table = Table<${entity.rowType}, ${entity.fieldsType}>('
       '${entity.name}Schema, ${entity.fieldsType}.new, (row) => $selection);',
     );
     b.writeln(
       'final class ${entity.setType} extends TableSet<${entity.rowType}, ${entity.fieldsType}> {'
-      '${entity.setType}(Database<Backend> db) : super(db, ${entity.name}Table) { db.registerSchema(appSchema); }',
+      '${entity.setType}(QueryContext db) : super(db, ${entity.name}Table) { db.registerSchema(appSchema); }',
     );
     final parameters = <String>[];
     final assignments = <String>[];
@@ -102,12 +102,33 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
   b.writeln(
     'final appSchema = List<TableSchema>.unmodifiable([${schema.map((e) => '${e.name}Schema').join(', ')}]);',
   );
-  b.writeln('extension AppTables<B extends Backend> on Database<B> {');
+  b.writeln('extension AppTables on QueryContext {');
   for (final e in schema) {
     b.writeln('${e.setType} get ${e.name} => ${e.setType}(this);');
   }
   b.writeln('}');
   return b.toString();
+}
+
+String _modelSelection(_Entity entity, String row) {
+  final named = entity.constructorNamedFields;
+  if (named == null) return _recordSelection(entity.fields, row);
+  String construct(String Function(_Field) value) =>
+      '${entity.rowType}(${entity.fields.map((f) => '${named.contains(f.name) ? '${f.name}: ' : ''}${value(f)}').join(', ')})';
+  final fields = entity.fields;
+  if (fields.length == 1) {
+    return '$row.${fields.single.name}.map((value) => ${construct((_) => 'value')})';
+  }
+  if (fields.length <= 6) {
+    return '(${fields.map((f) => '$row.${f.name}').join(', ')})'
+        '.map((${List.generate(fields.length, (i) => 'v$i').join(', ')}) => '
+        '${construct((f) => 'v${fields.indexOf(f)}')})';
+  }
+  final left = fields.take(5).toList(), right = fields.skip(5).toList();
+  final leftNames = left.map((f) => f.name).toSet();
+  return '(${_recordSelection(left, row)}, ${_recordSelection(right, row)})'
+      '.map((left, right) => '
+      '${construct((f) => '${leftNames.contains(f.name) ? 'left' : 'right'}.${f.name}')})';
 }
 
 String _recordSelection(List<_Field> fields, String row) {
@@ -127,4 +148,4 @@ String _recordSelection(List<_Field> fields, String row) {
 }
 
 String _computedLiteral(ComputedColumn value) =>
-    'ComputedColumn.forDialects(sqlite: ${_literal(value.sqlite)}, postgres: ${_literal(value.postgres)}, storage: ComputedStorage.${value.storage.name})';
+    'ComputedColumn.forDialects(sqlite: ${_literal(value.sqlite)}, postgres: ${_literal(value.postgres)}, mysql: ${value.mysql == null ? 'null' : _literal(value.mysql!)}, mariadb: ${value.mariadb == null ? 'null' : _literal(value.mariadb!)}, storage: ComputedStorage.${value.storage.name})';

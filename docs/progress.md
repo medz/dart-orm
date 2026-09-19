@@ -1,5 +1,31 @@
 # Implementation status
 
+## Standalone ORM redesign — in progress
+
+Current branch: `refactor/standalone-orm`. The delivery scope is SQLite (native,
+Dart Web and Flutter Web), PostgreSQL, MySQL 8.4 and MariaDB 11.8. The user has
+authorized commits, push, a Codex-reviewed PR and merge after verification.
+
+Independent values, metadata, driver, raw runtime and typed SQL entrypoints are
+implemented. Generated clients use the SQL layer; the ORM composes a raw
+`SqlDatabase`. Nominal Dart model classes, four-dialect generation, engine-specific
+migrations and the typed project CLI are implemented. Raw migration/catalog
+operations now use `.sql` when starting from an ORM database.
+
+The first complete native regression invocation passed 1119 tests and found five
+failures in older CLI output expectations and new temporary-metadata tests. All
+five have been corrected. The final CLI/import/plan/MySQL migration and SQL review
+run passes 71 tests; the session/transaction/stream/retry/acquisition/watch run
+passes 282 tests, including 18 new borrowed-connection lifecycle regressions.
+Static analysis is clean. Registry engine parsing, non-atomic plan reporting,
+temporary-history shadowing and session ownership were corrected during review.
+
+Final full CI and fresh Web/Flutter acceptance remain pending. Earlier platform
+captures below are historical and do not establish acceptance of this revision.
+
+Design: [standalone redesign](../research/standalone-orm-redesign.md).
+Research: [Prisma v8 reassessment](../research/prisma-v8-reassessment.md).
+
 ## Unified SQLite integration
 
 The current refactor uses `sqlite.dart` for native and browser connections. Shared

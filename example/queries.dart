@@ -19,7 +19,7 @@ Future<Map<String, Object?>> queryCookbook(
   }
 
   await Migrator(
-    db,
+    db.sql,
   ).apply([Migration.create('0001_example', appSchema, dialect: db.dialect)]);
   final (z, a) = await db.transaction((tx) async {
     final z = await tx.users.create(
@@ -152,7 +152,7 @@ Future<Map<String, Object?>> queryCookbook(
     'Versioned cursor preserves NULL order and unique tie breaker',
   );
   check(
-    (await verifySchema(db, SchemaSnapshot(appSchema))).matches,
+    (await verifySchema(db.sql, SchemaSnapshot(appSchema))).matches,
     'Generated schema matches the live database',
   );
   return {'backend': db.dialect.name, 'checks': checks, 'status': 'passed'};

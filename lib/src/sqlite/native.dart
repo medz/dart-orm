@@ -4,7 +4,7 @@ import 'dart:ffi' as ffi;
 
 import 'package:sqlite3/sqlite3.dart' as native;
 
-import '../../orm.dart';
+import '../../driver.dart';
 import 'execution.dart';
 import 'failure.dart';
 import 'opened.dart';

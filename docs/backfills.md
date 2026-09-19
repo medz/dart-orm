@@ -4,6 +4,9 @@
 batches with durable primary-key cursors and verifies completion before recording
 the migration as applied. Import `package:orm/migrate.dart` alongside your database
 entry point.
+The examples use a raw `SqlDatabase` named `db`; for an ORM `Database`, pass
+`db.sql` to `Migrator`. MySQL/MariaDB recovery details are documented in
+[their migration guide](mysql-migrations.md).
 
 ```dart
 // Use the snapshot committed with the expand migration, not current app models.

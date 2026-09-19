@@ -19,7 +19,7 @@ Future<void> checkTeams() async {
 
   try {
     await Migrator(
-      db,
+      db.sql,
     ).apply([Migration.create('0001_teams', appSchema, dialect: db.dialect)]);
     await db.transaction((tx) async {
       await tx.users.create(id: 1, name: 'Ada');
@@ -159,7 +159,7 @@ Future<void> checkTeams() async {
       'Cascade removed an endpoint or retained invalid associations',
     );
     expect(
-      (await verifySchema(db, SchemaSnapshot(appSchema))).matches,
+      (await verifySchema(db.sql, SchemaSnapshot(appSchema))).matches,
       'Junction schema differs',
     );
   } finally {

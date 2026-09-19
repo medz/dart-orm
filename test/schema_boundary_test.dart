@@ -81,7 +81,7 @@ void main() {
     }
   });
 
-  for (final dialect in SqlDialect.values) {
+  for (final dialect in [SqlDialect.sqlite, SqlDialect.postgres]) {
     test(
       'generated ${dialect.name} schema executes its native computed-key contract',
       () async {
@@ -122,7 +122,7 @@ final upper = items.check('source < 10', name: 'VALID');
               SqlCommand('CREATE SCHEMA orm_schema_boundary_tests'),
             );
           }
-          await Migrator(db).apply([
+          await Migrator(db.sql).apply([
             Migration.create(
               '0001_native',
               generated.snapshot.tables,
@@ -144,11 +144,14 @@ final upper = items.check('source < 10', name: 'VALID');
             ),
           );
           expect(result.rows.single.single, 2);
-          expect((await verifySchema(db, generated.snapshot)).matches, true);
+          expect(
+            (await verifySchema(db.sql, generated.snapshot)).matches,
+            true,
+          );
           await db.execute(
             SqlCommand('CREATE TABLE on_query (id INTEGER NOT NULL)'),
           );
-          final imported = await importSchema(db);
+          final imported = await importSchema(db.sql);
           expect(
             imported.hasBlockingIssues,
             false,
@@ -158,7 +161,10 @@ final upper = items.check('source < 10', name: 'VALID');
           final importedFile = File('${directory.path}/imported.dart');
           await importedFile.writeAsString(imported.dart);
           final regenerated = await generateSchema(importedFile.path);
-          expect((await verifySchema(db, regenerated.snapshot)).matches, true);
+          expect(
+            (await verifySchema(db.sql, regenerated.snapshot)).matches,
+            true,
+          );
         } finally {
           await db.close();
           await directory.delete(recursive: true);

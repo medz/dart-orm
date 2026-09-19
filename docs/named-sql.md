@@ -86,6 +86,15 @@ codecs. Its checker is verified against PostgreSQL 18.4, including the
 and [SQLite EXPLAIN behavior](https://www.sqlite.org/lang_explain.html). The checker
 does not parse SQLite's version-dependent EXPLAIN output.
 
+MySQL and MariaDB use SQL `PREPARE` and `DEALLOCATE PREPARE` on one session,
+without `EXECUTE`. The checker binds its SQL text through a temporary session
+variable and clears it afterwards. It validates syntax, table references and
+declared result aliases, but reports storage types and nullability as unchecked.
+This follows the [MySQL PREPARE lifecycle](https://dev.mysql.com/doc/refman/8.4/en/prepare.html)
+and [MariaDB PREPARE lifecycle](https://mariadb.com/docs/server/reference/sql-statements/prepared-statements/prepare-statement).
+Ordinary `EXPLAIN` is unsuitable for this guarantee: our MariaDB 11.8 fixture
+executes a stored function with an INSERT side effect during planning.
+
 These checks do not infer expression nullability, integer range, decimal scale,
 enum labels or custom codec correctness. Integer declarations can accept native
 NUMERIC metadata, but a fractional or out-of-range value still fails integer

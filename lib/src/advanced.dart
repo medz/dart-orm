@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 /// Explicit aliases support self joins and any number of joins without adding
 /// a growing number of generic join-result types.

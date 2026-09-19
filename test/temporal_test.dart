@@ -201,7 +201,7 @@ void main() {
       });
       tearDown(() => db.close());
       Future<void> create() => Migrator(
-        db,
+        db.sql,
       ).apply([Migration.create('0001_local', appSchema, dialect: db.dialect)]);
 
       if (backend == 'postgres') {
@@ -221,9 +221,9 @@ void main() {
             final first = Migration.create('0001_default', [
               schema,
             ], dialect: db.dialect);
-            await Migrator(db).apply([first]);
+            await Migrator(db.sql).apply([first]);
             expect(
-              (await verifySchema(db, first.snapshot!)).differences,
+              (await verifySchema(db.sql, first.snapshot!)).differences,
               isEmpty,
             );
             await db.execute(
@@ -232,7 +232,7 @@ void main() {
               ),
             );
             expect(
-              (await verifySchema(db, first.snapshot!)).differences,
+              (await verifySchema(db.sql, first.snapshot!)).differences,
               contains('defaults.moment default differs'),
             );
           },
@@ -512,7 +512,7 @@ void main() {
         final first = Migration.create('0001_text', [
           schema(Codecs.text),
         ], dialect: db.dialect);
-        await Migrator(db).apply([first]);
+        await Migrator(db.sql).apply([first]);
         await db.execute(
           SqlCommand(
             "INSERT INTO converted VALUES (1, '12:30'), (2, '12:30:00.000000')",
@@ -535,14 +535,20 @@ void main() {
           dialect: db.dialect,
         );
         await expectLater(
-          Migrator(db).apply([first, second]),
+          Migrator(db.sql).apply([first, second]),
           throwsA(isA<SqlFailure>()),
         );
-        expect((await Migrator(db).history()).length, 1);
-        expect((await verifySchema(db, first.snapshot!)).differences, isEmpty);
+        expect((await Migrator(db.sql).history()).length, 1);
+        expect(
+          (await verifySchema(db.sql, first.snapshot!)).differences,
+          isEmpty,
+        );
         await db.execute(SqlCommand('DELETE FROM converted WHERE id = 2'));
-        await Migrator(db).apply([first, second]);
-        expect((await verifySchema(db, second.snapshot!)).differences, isEmpty);
+        await Migrator(db.sql).apply([first, second]);
+        expect(
+          (await verifySchema(db.sql, second.snapshot!)).differences,
+          isEmpty,
+        );
         expect(
           Codecs.time.decode(
             (await db.execute(SqlCommand('SELECT clock FROM converted')))
@@ -584,10 +590,10 @@ void main() {
           await create();
           final snapshot = SchemaSnapshot(appSchema);
           expect(physical.schema.checksum, snapshot.checksum);
-          expect((await verifySchema(db, snapshot)).differences, isEmpty);
-          expect((await verifySchema(db, snapshot)).unmanaged, isEmpty);
-          expect(await verifyColumns(db, appSchema), isEmpty);
-          final imported = await importSchema(db);
+          expect((await verifySchema(db.sql, snapshot)).differences, isEmpty);
+          expect((await verifySchema(db.sql, snapshot)).unmanaged, isEmpty);
+          expect(await verifyColumns(db.sql, appSchema), isEmpty);
+          final imported = await importSchema(db.sql);
           expect(imported.issues, isEmpty);
           expect(imported.dart, contains('LocalDateTime'));
           final directory = await Directory(
@@ -598,7 +604,7 @@ void main() {
             await file.writeAsString(imported.dart);
             final generated = await generateSchema(file.path);
             expect(
-              (await verifySchema(db, generated.snapshot)).differences,
+              (await verifySchema(db.sql, generated.snapshot)).differences,
               isEmpty,
             );
           } finally {
@@ -636,12 +642,12 @@ void main() {
             previous: first.checksum,
             dialect: db.dialect,
           );
-          await Migrator(db).apply([first, second], maxBackfillBatches: 1);
+          await Migrator(db.sql).apply([first, second], maxBackfillBatches: 1);
           expect(
             (await db.holidays.where((h) => h.label.eq('done')).single()).day,
             LocalDate(-10, 1, 1),
           );
-          await Migrator(db).apply([first, second]);
+          await Migrator(db.sql).apply([first, second]);
           expect(await db.holidays.where((h) => h.label.eq('done')).count(), 4);
         },
       );

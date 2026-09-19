@@ -10,7 +10,7 @@ or a successful test on another platform.
 | Design §5 requirement | Implementation and evidence | Explicit boundary |
 | --- | --- | --- |
 | Integer widths and web-safe exact values | `IntegerBits`, integer/BigInt codecs, integer/native/browser checks, catalog metadata and reviewed migrations | Native `int` is signed 64-bit; JS-safe `int` is narrower. BigInt uses exact digits, but SQLite BigInt text does not promise numeric ordering/arithmetic. |
-| Exact decimal | Decimal arithmetic, comparisons, keys, aggregates/windows, precision/rounding, generated/imported metadata and migration/backfill checks | Finite values only; use the documented precision/range. No implicit conversion to approximate double. |
+| Exact decimal | Exact storage, comparisons, keys and generated/imported metadata on all four engines; arithmetic, aggregates/windows and rounding on SQLite/PostgreSQL | MySQL/MariaDB reject operations that can silently lose precision, including arithmetic, SUM, explicit narrowing and decimal set operations. See [engine limits](mysql.md) and [reproductions](../research/mysql-precision-boundaries.md). |
 | Distinct instant/date/time/local timestamp | UTC DateTime, LocalDate/LocalTime/LocalDateTime, explicit temporal precision, native binary decoding, SQLite collations, catalog/import/migration tests and browser transport | An IANA zone name is a separate application value, not an instant or local clock value. Calendar SQL arithmetic and timezone-rule conversion have no typed API. |
 | JSON versus arbitrary objects | SqlJson distinguishes JSON null from SQL NULL; explicit domain codecs validate custom objects, including generated create/result/relationship types | A Dart Map is not an automatic entity mapping. Backend-specific JSON path APIs are extensions. |
 | Stable enum text | EnumValue labels and checked enum codecs; generated/native/negative tests | Native PostgreSQL enums require separate metadata and migration support. |
@@ -39,7 +39,7 @@ of adopting an existing database; import is not a universal database backup.
 | Joins, grouping/HAVING, subqueries, CTEs, windows, UNION | `test/support/advanced.dart`, set and numeric suites on both backends; SQL scope and aggregate validation | INTERSECT/EXCEPT and arbitrary database functions do not have dedicated typed methods. Parameterized raw/named SQL is the formal extension path. |
 | Relations and relation ordering | Joined or batched to-one; batched collections, composite/self/multiple edges, many-to-many payloads, per-parent limits, any/none/every/count | Order root rows through a typed alias or correlated count. Loaded Record fields are not SQL expressions. No cross-database relation or invisible lazy I/O. |
 | Writes and transactions | Generated create/patch, explicit NULL/default, computed/client defaults, batch/upsert/RETURNING, savepoints, rollback, escaped-session rejection | No graph tracking, implicit flush or distributed transaction. |
-| Failure handling and streaming | Real interruption, unknown commit, bounded acquisition/retries, real cursors and awaited cleanup | An external side effect is not rolled back by SQL or safe to repeat automatically. Web interruption remains unsupported and is rejected. |
+| Failure handling and streaming | Real interruption, unknown commit, bounded acquisition/retries, real cursors and awaited cleanup | An external side effect is not rolled back by SQL or safe to repeat automatically. Web interruption and MySQL/MariaDB streaming/cancellation are unsupported and rejected. |
 | Plans and observations | SQL/column/key/join/batch descriptions and actual acquisition/query/decode events | No general optimizer, result cache or hidden EXPLAIN ANALYZE. Timing scopes are documented, not total CPU attribution. |
 
 See [query examples](queries.md), [relationships](relations.md),
@@ -52,6 +52,12 @@ one step list and only that engine's frozen physical expressions. Mixed historie
 and mismatched connections fail before migration SQL. PostgreSQL migration
 execution requires 18+, and SQLite opening requires 3.35+; arbitrary reviewed SQL
 can require additional capabilities.
+
+MySQL 8.0+ and MariaDB 10.6+ use separate engine identities and histories. Their
+DDL can commit implicitly: checked before/after table metadata and durable
+checkpoints support recovery, while backfill writes and completion checkpoints
+share a transaction. See [MySQL/MariaDB migrations](mysql-migrations.md). Current
+live acceptance uses MySQL 8.4 and MariaDB 11.8, not every supported minimum version.
 
 Saved migrations contain immutable snapshots, operations, predecessor checksums
 and explicit renames/conversions. Tests exercise fresh replay, older-version
@@ -70,26 +76,30 @@ grants, every extension, authorization behavior or the whole database environmen
 ## Platform and tooling scope
 
 Native SQLite and PostgreSQL are checked against SQLite 3.53.4/PostgreSQL 18.4.
+MySQL 8.4 and MariaDB 11.8 have separate live driver, typed query, import,
+transaction and migration-recovery suites.
 Browser reports cover real Chrome JS and Dart WASM, worker memory/OPFS storage,
 reopen, interruption recovery, upgrade and watch. Android Flutter checks cover
 actual debug-to-AOT APK replacement and independent-process restart. These do
 not certify every database version, browser, physical device, iOS or macOS Flutter.
 Current source/validation revisions are recorded in [progress](progress.md).
-The single-engine migration correction rechecks native and Chrome execution;
-the earlier Android capture does not validate the latest migration API.
+Each platform capture is tied to its recorded source revision; consult the latest
+acceptance record before relying on a historical platform result.
 
 Driver configuration is typed and explicit. PostgreSQL reuses its driver's pool,
 offers borrowed-pool ownership and certificate-verifying TLS by default; SQLite
 owns one background connection behind a unified native/browser entrypoint.
 Memory and named persistent settings are shared; native paths remain explicit.
 Flutter Web bundles default assets, with optional browser resource overrides. URL options are
-not silently merged with typed settings. Unsupported transports, serverless
-sessions, MySQL, replica routing and connection-pool variants need their own
-adapters and verification.
+not silently merged with typed settings. MySQL/MariaDB own one queued physical
+connection each, with certificate-verifying TLS by default and explicit capability
+limits. Unsupported transports, serverless sessions, replica routing and additional
+connection-pool variants need their own adapters and verification.
 
 Generation and completion measurements cover 10/100/1000 models. The declaration
-experiment normalizes three input forms to identical generated APIs while the
-public package ships Record authoring. Named Record field rename is unavailable
+experiment normalized three input forms to identical generated APIs. The current
+package supports ordinary immutable model classes with nominal results, alongside
+Record declarations; see [authoring](authoring.md). Named Record field rename is unavailable
 in the checked SDK. The captured same-session class rename timeout has a checked
 server-restart path; it is not described as a working general IDE workflow.
 Runtime cost reports compare identical SQL/driver/result workloads, including a

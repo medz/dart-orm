@@ -11,7 +11,7 @@ import 'support/defaults/schema.snapshot.dart' as physical;
 import 'support/defaults/types.dart' as d;
 
 void main() {
-  for (final dialect in SqlDialect.values) {
+  for (final dialect in [SqlDialect.sqlite, SqlDialect.postgres]) {
     group(
       'client defaults ${dialect.name}',
       () {
@@ -37,7 +37,7 @@ void main() {
               SqlCommand('CREATE SCHEMA orm_client_default_tests'),
             );
           }
-          await Migrator(db).apply([
+          await Migrator(db.sql).apply([
             Migration.create('0001_initial', appSchema, dialect: db.dialect),
           ]);
           expect(
@@ -210,13 +210,13 @@ void main() {
             ).steps.isEmpty,
             true,
           );
-          expect((await verifySchema(db, original)).matches, true);
-          final info = await inspectTable(db, 'tickets');
+          expect((await verifySchema(db.sql, original)).matches, true);
+          final info = await inspectTable(db.sql, 'tickets');
           expect(
             info.columns.where((c) => c.defaultSql != null).map((c) => c.name),
             ['state'],
           );
-          final imported = await importSchema(db);
+          final imported = await importSchema(db.sql);
           expect(imported.dart, isNot(contains('ClientDefault')));
           expect(
             [d.idCalls, d.nameCalls, d.stateCalls, d.nullCalls],

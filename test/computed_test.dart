@@ -36,7 +36,7 @@ TableSchema scores({
 );
 
 void main() {
-  for (final dialect in SqlDialect.values) {
+  for (final dialect in [SqlDialect.sqlite, SqlDialect.postgres]) {
     group(
       'computed ${dialect.name}',
       () {
@@ -77,7 +77,7 @@ void main() {
             primaryKey: ['id'],
           );
           final snapshot = SchemaSnapshot([table]);
-          await Migrator(db).apply([
+          await Migrator(db.sql).apply([
             Migration.create(
               '0001_initial',
               snapshot.tables,
@@ -92,14 +92,14 @@ void main() {
               [') AS (,'],
             ],
           );
-          final info = await inspectTable(db, 'quoted');
+          final info = await inspectTable(db.sql, 'quoted');
           expect(info.unmanaged, isEmpty);
           expect(info.columns.last.computed!.storage, ComputedStorage.stored);
-          expect((await verifySchema(db, snapshot)).differences, isEmpty);
+          expect((await verifySchema(db.sql, snapshot)).differences, isEmpty);
         });
 
         test('generated CRUD, projections, batch and conflict writes compute stored and virtual values', () async {
-          await Migrator(db).apply([
+          await Migrator(db.sql).apply([
             Migration.create('0001_initial', appSchema, dialect: db.dialect),
           ]);
           final row = await db.lines.create(
@@ -178,7 +178,7 @@ void main() {
             throwsA(isA<SqlFailure>()),
           );
           expect(
-            (await verifySchema(db, SchemaSnapshot(appSchema))).differences,
+            (await verifySchema(db.sql, SchemaSnapshot(appSchema))).differences,
             isEmpty,
           );
         });
@@ -186,10 +186,10 @@ void main() {
         test(
           'catalog/import roundtrip preserves SQL and modes and detects drift',
           () async {
-            await Migrator(db).apply([
+            await Migrator(db.sql).apply([
               Migration.create('0001_initial', appSchema, dialect: db.dialect),
             ]);
-            final info = await inspectTable(db, 'lines');
+            final info = await inspectTable(db.sql, 'lines');
             expect(info.unmanaged, isEmpty);
             expect(info.columns.where((c) => c.computed != null), hasLength(3));
             expect(
@@ -205,12 +205,12 @@ void main() {
                   .every((c) => c.defaultSql == null),
               true,
             );
-            expect(await verifyColumns(db, appSchema), isEmpty);
+            expect(await verifyColumns(db.sql, appSchema), isEmpty);
             final dir = await Directory(
               '.dart_tool/orm-computed-import-${dialect.name}',
             ).create(recursive: true);
             try {
-              final imported = await importSchema(db);
+              final imported = await importSchema(db.sql);
               expect(
                 imported.hasBlockingIssues,
                 false,
@@ -221,7 +221,7 @@ void main() {
               await source.writeAsString(imported.dart);
               final generated = await generateSchema(source.path);
               expect(
-                (await verifySchema(db, generated.snapshot)).differences,
+                (await verifySchema(db.sql, generated.snapshot)).differences,
                 isEmpty,
               );
             } finally {
@@ -235,11 +235,11 @@ void main() {
               scores(computed: const ComputedColumn('value * 3')),
             ]);
             expect(
-              (await verifySchema(db, changed)).differences,
+              (await verifySchema(db.sql, changed)).differences,
               contains('scores.total computed expression or storage differs'),
             );
             expect(
-              await verifyColumns(db, changed.tables),
+              await verifyColumns(db.sql, changed.tables),
               contains('scores.total computed expression or storage differs'),
             );
           },
@@ -255,7 +255,7 @@ void main() {
                 start.tables,
                 dialect: db.dialect,
               );
-              await Migrator(db).apply([initial]);
+              await Migrator(db.sql).apply([initial]);
               await db.execute(SqlCommand('INSERT INTO scores VALUES (1, 3)'));
               final withTotal = SchemaSnapshot([
                 scores(computed: ComputedColumn('value * 2', storage: storage)),
@@ -273,14 +273,17 @@ void main() {
                   storage == ComputedStorage.stored ? 1 : 0,
                 );
               }
-              await Migrator(db).apply([initial, add]);
+              await Migrator(db.sql).apply([initial, add]);
               expect(
                 (await db.execute(SqlCommand('SELECT total FROM scores'))).rows,
                 [
                   [6],
                 ],
               );
-              expect((await verifySchema(db, withTotal)).differences, isEmpty);
+              expect(
+                (await verifySchema(db.sql, withTotal)).differences,
+                isEmpty,
+              );
               final changed = SchemaSnapshot([
                 scores(
                   computed: ComputedColumn('value * 3', storage: storage),
@@ -294,14 +297,17 @@ void main() {
                 previous: add.checksum,
                 dialect: db.dialect,
               );
-              await Migrator(db).apply([initial, add, change]);
+              await Migrator(db.sql).apply([initial, add, change]);
               expect(
                 (await db.execute(SqlCommand('SELECT total FROM scores'))).rows,
                 [
                   [9.0],
                 ],
               );
-              expect((await verifySchema(db, changed)).differences, isEmpty);
+              expect(
+                (await verifySchema(db.sql, changed)).differences,
+                isEmpty,
+              );
               final remove = Migration.diff(
                 '0004_drop',
                 from: changed,
@@ -310,14 +316,14 @@ void main() {
                 allowDestructive: true,
                 dialect: db.dialect,
               );
-              await Migrator(db).apply([initial, add, change, remove]);
+              await Migrator(db.sql).apply([initial, add, change, remove]);
               expect(
                 (await db.execute(SqlCommand('SELECT * FROM scores'))).rows,
                 [
                   [1, 3],
                 ],
               );
-              expect((await verifySchema(db, start)).differences, isEmpty);
+              expect((await verifySchema(db.sql, start)).differences, isEmpty);
             },
           );
         }
@@ -329,7 +335,7 @@ void main() {
             start.tables,
             dialect: db.dialect,
           );
-          await Migrator(db).apply([initial]);
+          await Migrator(db.sql).apply([initial]);
           await db.execute(
             SqlCommand('INSERT INTO scores (id, value) VALUES (1, 3)'),
           );
@@ -341,7 +347,7 @@ void main() {
             previous: initial.checksum,
             dialect: db.dialect,
           );
-          await Migrator(db).apply([initial, materialize]);
+          await Migrator(db.sql).apply([initial, materialize]);
           expect(
             (await db.execute(SqlCommand('SELECT total FROM scores'))).rows,
             [
@@ -357,7 +363,7 @@ void main() {
               [20],
             ],
           );
-          expect((await verifySchema(db, target)).differences, isEmpty);
+          expect((await verifySchema(db.sql, target)).differences, isEmpty);
         });
 
         test('explicit renamed expressions preserve indexes, checks, references and views', () async {
@@ -378,7 +384,7 @@ void main() {
             start.tables,
             dialect: db.dialect,
           );
-          await Migrator(db).apply([initial]);
+          await Migrator(db.sql).apply([initial]);
           await db.execute(
             SqlCommand('INSERT INTO scores (id, value) VALUES (1, 3)'),
           );
@@ -411,11 +417,11 @@ void main() {
           if (dialect == SqlDialect.sqlite) {
             expect(rename.steps.whereType<RebuildTable>(), hasLength(2));
           }
-          await Migrator(db).apply([initial, rename]);
+          await Migrator(db.sql).apply([initial, rename]);
           expect((await db.execute(SqlCommand('SELECT * FROM totals'))).rows, [
             [9],
           ]);
-          expect((await verifySchema(db, target)).differences, isEmpty);
+          expect((await verifySchema(db.sql, target)).differences, isEmpty);
           await expectLater(
             db.execute(SqlCommand('DELETE FROM marks')),
             throwsA(anything),
@@ -435,7 +441,7 @@ void main() {
               start.tables,
               dialect: db.dialect,
             );
-            await Migrator(db).apply([initial]);
+            await Migrator(db.sql).apply([initial]);
             await db.execute(
               SqlCommand('INSERT INTO scores (id, value) VALUES (1, 3)'),
             );
@@ -450,7 +456,7 @@ void main() {
               dialect: db.dialect,
             );
             await expectLater(
-              Migrator(db).apply([initial, change]),
+              Migrator(db.sql).apply([initial, change]),
               throwsA(anything),
             );
             expect(
@@ -465,7 +471,7 @@ void main() {
               )).rows.single.single,
               1,
             );
-            expect((await verifySchema(db, start)).differences, isEmpty);
+            expect((await verifySchema(db.sql, start)).differences, isEmpty);
           },
         );
 
@@ -485,7 +491,7 @@ void main() {
             primaryKey: ['id'],
           );
           final snapshot = SchemaSnapshot([table]);
-          await Migrator(db).apply([
+          await Migrator(db.sql).apply([
             Migration.create(
               '0001_initial',
               snapshot.tables,
@@ -501,18 +507,18 @@ void main() {
                 .toString(),
             '12.35',
           );
-          expect((await verifySchema(db, snapshot)).differences, isEmpty);
+          expect((await verifySchema(db.sql, snapshot)).differences, isEmpty);
           final dir = await Directory(
             '.dart_tool/orm-computed-decimal-${dialect.name}',
           ).create(recursive: true);
           try {
-            final imported = await importSchema(db);
+            final imported = await importSchema(db.sql);
             expect(imported.hasBlockingIssues, false);
             final file = File('${dir.path}/schema.dart');
             await file.writeAsString(imported.dart);
             final result = await generateSchema(file.path);
             expect(
-              (await verifySchema(db, result.snapshot)).differences,
+              (await verifySchema(db.sql, result.snapshot)).differences,
               isEmpty,
             );
           } finally {

@@ -61,9 +61,9 @@ final class DropConstraint extends MigrationStep {
   };
 }
 
-Future<void> _executeStep(Database<Backend> db, MigrationStep step) async {
+Future<void> _executeStep(SqlDatabase<Backend> db, MigrationStep step) async {
   switch (step) {
-    case CheckedSql() || Backfill():
+    case CheckedSql() || CheckedTableSql() || Backfill():
       throw const OrmException(
         'MIGRATION.TRANSACTION',
         'This step requires the recovery runner.',
@@ -139,7 +139,7 @@ WHERE n.nspname = current_schema() AND r.relname = $1''',
   }
 }
 
-Future<void> _rebuild(Database<Backend> db, RebuildTable step) async {
+Future<void> _rebuild(SqlDatabase<Backend> db, RebuildTable step) async {
   final before = step.before, after = step.after, name = after.name;
   final actual = await inspectTable(db, name);
   final checkMatches = await _matchChecks(

@@ -10,7 +10,7 @@ Future<void> checkTemporalPrecision() async {
   }
 
   try {
-    await Migrator(db).apply([
+    await Migrator(db.sql).apply([
       Migration.create('0001_precision', appSchema, dialect: db.dialect),
     ]);
     final moment = await db.moments.create(
@@ -66,7 +66,7 @@ Future<void> checkTemporalPrecision() async {
         .single();
     expect(label == 'key', 'Rounded relationship key failed');
     expect(
-      (await verifySchema(db, SchemaSnapshot(appSchema))).matches,
+      (await verifySchema(db.sql, SchemaSnapshot(appSchema))).matches,
       'Precision catalog differs',
     );
   } finally {

@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 enum ToOneStrategy { automatic, join, batch }
 
@@ -243,10 +243,10 @@ final class _RelationSelection<R, F extends Fields>(
 }
 
 abstract class _RelationBinding {
-  RelationLoadPlan inspect(Database<Backend> db);
-  void collectReads(Database<Backend> db, _ReadTables reads);
+  RelationLoadPlan inspect(QueryContext db);
+  void collectReads(QueryContext db, _ReadTables reads);
   Future<List<Object?>> load(
-    Database<Backend> db,
+    QueryContext db,
     SqlConnection connection,
     List<List<Object?>> parents, {
     ExecutionOptions options = const ExecutionOptions(),
@@ -258,15 +258,15 @@ final class _TypedRelationBinding<R, F extends Fields>(
   final List<int> parentIndices,
 ) extends _RelationBinding {
   @override
-  RelationLoadPlan inspect(Database<Backend> db) => _inspectRelation(db, this);
+  RelationLoadPlan inspect(QueryContext db) => _inspectRelation(db, this);
   @override
-  void collectReads(Database<Backend> db, _ReadTables reads) => reads.query(
+  void collectReads(QueryContext db, _ReadTables reads) => reads.query(
     Query._(db, relation._fields, relation._state, relation._selection),
   );
 
   @override
   Future<List<Object?>> load(
-    Database<Backend> db,
+    QueryContext db,
     SqlConnection connection,
     List<List<Object?>> parents, {
     ExecutionOptions options = const ExecutionOptions(),
@@ -306,7 +306,7 @@ final class _TypedRelationBinding<R, F extends Fields>(
           ? offset + chunkSize
           : all.length;
       final command = _compile(db, plan, all.sublist(offset, end));
-      final result = await db._execute(connection, command, options: options);
+      final result = await db.executeOn(connection, command, options: options);
       final rows = await _expandRelations(
         db,
         connection,
@@ -314,7 +314,7 @@ final class _TypedRelationBinding<R, F extends Fields>(
         result.rows,
         options: options,
       );
-      db._observeDecode(command.sql, rows.length, () {
+      db.observeDecode(command.sql, rows.length, () {
         for (final row in rows) {
           final key = _RelationKey([
             for (var i = 0; i < childIndices.length; i++)
@@ -330,7 +330,7 @@ final class _TypedRelationBinding<R, F extends Fields>(
   }
 
   SqlCommand _compile(
-    Database<Backend> db,
+    QueryContext db,
     _SelectionPlan plan,
     List<_RelationKey> keys, {
     _ReadTables? reads,
@@ -376,24 +376,24 @@ final class _TypedRelationBinding<R, F extends Fields>(
       ),
       relation._selection,
     );
-    var text = query._write(w, sqlPlan, aliasColumns: true);
+    var text = query._write(w, sqlPlan, aliasColumns: true, decodeResult: true);
     if (paginated) {
       final offset = state.offset ?? 0;
       final rank = w.quote('c${plan.columns.length}');
       text =
           'SELECT ${[for (var i = 0; i < plan.columns.length; i++) w.quote('c$i')].join(', ')} '
-          'FROM ($text) AS "orm_partition" WHERE $rank > ${w.parameter(offset)}';
+          'FROM ($text) AS ${w.quote('orm_partition')} WHERE $rank > ${w.parameter(offset)}';
       if (state.limit case final limit?) {
         text += ' AND $rank <= ${w.parameter(offset + limit)}';
       }
       text += ' ORDER BY $rank';
     }
-    return SqlCommand(text, w.parameters);
+    return w.finish(text);
   }
 }
 
 Future<List<List<Object?>>> _expandRelations(
-  Database<Backend> db,
+  QueryContext db,
   SqlConnection connection,
   _SelectionPlan plan,
   List<List<Object?>> source, {
@@ -438,11 +438,15 @@ final class _RelationKeys(
         : value;
     if (columns.length == 1) {
       return _In(columns.single._node, [
-        for (final key in keys) _Parameter(parameter(0, key.values.single)),
+        for (final key in keys)
+          _Parameter(
+            parameter(0, key.values.single),
+            storageType: columns.single.codec.sqlType,
+          ),
       ]).write(w);
     }
     return '(${columns.map((c) => c._node.write(w)).join(', ')}) IN (${w.dialect == SqlDialect.sqlite ? 'VALUES ' : ''}'
-        '${keys.map((key) => '(${[for (var i = 0; i < key.values.length; i++) w.parameter(parameter(i, key.values[i]))].join(', ')})').join(', ')})';
+        '${keys.map((key) => '(${[for (var i = 0; i < key.values.length; i++) _Parameter(parameter(i, key.values[i]), storageType: columns[i].codec.sqlType).write(w)].join(', ')})').join(', ')})';
   }
 }
 

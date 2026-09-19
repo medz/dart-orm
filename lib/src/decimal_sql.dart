@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 // Attach collation to every decimal expression, including computed projections,
 // CTE references and UNION outputs. Native PostgreSQL NUMERIC needs no wrapper.
@@ -21,11 +21,12 @@ final class _DecimalNode(final _Node child) extends _Node {
 final class _DecimalCast(
   final _Node child,
   final int precision,
-  final int scale,
-) extends _Node {
+  final int scale, {
+  final bool columnAssignment = false,
+}) extends _Node {
   @override
   String writeSql(_Writer w) {
-    Decimal._checkDigits(precision, scale);
+    Decimal.validateDigits(precision, scale);
     if (!w.exactDecimal) {
       throw const OrmException(
         'CAPABILITY.DECIMAL',
@@ -33,6 +34,19 @@ final class _DecimalCast(
       );
     }
     final expression = child.write(w);
+    if (w.mysql) {
+      if (precision > 65 || scale < 0 || scale > 30 || scale > precision) {
+        throw const OrmException(
+          'CAPABILITY.DECIMAL',
+          'MySQL/MariaDB decimals require precision 1–65 and scale 0–min(precision, 30).',
+        );
+      }
+      if (columnAssignment) return expression;
+      throw const OrmException(
+        'CAPABILITY.DECIMAL_PRECISION',
+        'MySQL/MariaDB decimal casts may clamp overflow; use explicit native SQL when its precision is acceptable.',
+      );
+    }
     return w.dialect == SqlDialect.postgres
         ? 'CAST($expression AS NUMERIC($precision,$scale))'
         : 'orm_decimal_cast_v1($expression, $precision, $scale)';
@@ -46,8 +60,14 @@ final class _DecimalArithmetic(
 ) extends _Node {
   @override
   String writeSql(_Writer w) {
+    if (w.mysql) {
+      throw const OrmException(
+        'CAPABILITY.DECIMAL_PRECISION',
+        'MySQL/MariaDB arithmetic may silently truncate decimal digits; use explicit native SQL when its precision is acceptable.',
+      );
+    }
     final a = left.write(w), b = right.write(w);
-    if (w.dialect == SqlDialect.postgres) return '($a $op $b)';
+    if (w.dialect != SqlDialect.sqlite) return '($a $op $b)';
     final name = switch (op) {
       '+' => 'add',
       '-' => 'sub',
@@ -65,7 +85,7 @@ extension DecimalExpression<T extends Decimal?> on Expr<T> {
     required int scale,
     DecimalRounding rounding = DecimalRounding.exact,
   }) {
-    Decimal._checkScale(scale);
+    Decimal.validateScale(scale);
     if (_window(_node)) {
       throw const OrmException(
         'QUERY.WINDOW',
@@ -83,7 +103,7 @@ extension DecimalExpression<T extends Decimal?> on Expr<T> {
     int scale, {
     DecimalRounding rounding = DecimalRounding.exact,
   }) {
-    Decimal._checkScale(scale);
+    Decimal.validateScale(scale);
     return Expr._(_DecimalRatio(_node, null, scale, rounding), codec);
   }
 
@@ -93,7 +113,7 @@ extension DecimalExpression<T extends Decimal?> on Expr<T> {
     required int scale,
     DecimalRounding rounding = DecimalRounding.exact,
   }) {
-    Decimal._checkScale(scale);
+    Decimal.validateScale(scale);
     return Expr._(
       _DecimalRatio(
         _node,
@@ -111,7 +131,7 @@ extension DecimalExpression<T extends Decimal?> on Expr<T> {
     required int scale,
     DecimalRounding rounding = DecimalRounding.exact,
   }) {
-    Decimal._checkScale(scale);
+    Decimal.validateScale(scale);
     return Expr._(
       _DecimalRatio(_node, divisor._node, scale, rounding),
       Codecs.decimal.nullable(),
@@ -119,7 +139,7 @@ extension DecimalExpression<T extends Decimal?> on Expr<T> {
   }
 
   Expr<T> constrained(int precision, int scale) {
-    Decimal._checkDigits(precision, scale);
+    Decimal.validateDigits(precision, scale);
     return Expr._(_DecimalCast(_node, precision, scale), codec);
   }
 

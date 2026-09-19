@@ -8,7 +8,7 @@ import 'dart:typed_data';
 import 'package:sqlite3/wasm.dart' as sqlite;
 import 'package:web/web.dart' as web;
 
-import 'orm.dart';
+import 'driver.dart';
 import 'src/sqlite/execution.dart';
 import 'src/sqlite/web_build.dart';
 import 'src/sqlite/web_wire.dart';

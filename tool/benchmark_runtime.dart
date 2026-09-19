@@ -346,7 +346,7 @@ Future<void> _worker(String backend) async {
       await db.execute(SqlCommand('CREATE SCHEMA "$schema"'));
       created = true;
     }
-    await Migrator(db).apply([
+    await Migrator(db.sql).apply([
       Migration.create('0001_benchmark', appSchema, dialect: db.dialect),
     ]);
     final nick = List.filled(16, 'long nickname 漢字').join();

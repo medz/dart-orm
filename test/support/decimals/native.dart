@@ -7,7 +7,7 @@ Future<void> main() async {
   final db = await sqlite(const SqliteOptions.memory());
   try {
     await Migrator(
-      db,
+      db.sql,
     ).apply([Migration.create('0001_decimal', appSchema, dialect: db.dialect)]);
     final exact = Decimal.parse('9007199254740993.1234567890123456789');
     await db.entries.create(amount: exact, bucket: 'a');
@@ -75,7 +75,7 @@ Future<void> main() async {
     if (runningMean.first != exact || runningMean.last != average) {
       throw StateError('Exact window average differs');
     }
-    final verification = await verifySchema(db, SchemaSnapshot(appSchema));
+    final verification = await verifySchema(db.sql, SchemaSnapshot(appSchema));
     if (!verification.matches || verification.unmanaged.isNotEmpty) {
       throw StateError('Decimal catalog differs');
     }

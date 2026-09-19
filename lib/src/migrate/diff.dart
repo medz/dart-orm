@@ -18,6 +18,18 @@ Migration _diff(
   required bool allowDestructive,
   required Map<String, Map<String, String>> using,
 }) {
+  if (_isMysql(dialect)) {
+    return _mysqlDiff(
+      id,
+      dialect: dialect,
+      from: from,
+      to: to,
+      renames: renames,
+      previous: previous,
+      allowDestructive: allowDestructive,
+      using: using,
+    );
+  }
   final renameSql = <MigrationStep>[];
   final oldNames = from.tables.map((t) => t.name).toSet();
   final newNames = to.tables.map((t) => t.name).toSet();

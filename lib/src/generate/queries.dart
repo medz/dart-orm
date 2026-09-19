@@ -117,7 +117,7 @@ Future<GeneratedQueries> _generateQueries(
     final fields = [
       for (final f
           in record.namedFields?.fields ?? <RecordTypeAnnotationNamedField>[])
-        reader._readField(f),
+        reader._readField(f, f.name.lexeme, f.type.type, f.metadata),
     ];
     for (final f in fields) {
       if (f.id ||
@@ -264,7 +264,7 @@ String _emitQueries(
   _DartNames names,
 ) {
   final b = StringBuffer('// GENERATED CODE - DO NOT MODIFY BY HAND.\n\n')
-    ..writeln("import 'package:orm/orm.dart';")
+    ..writeln("import 'package:orm/sql.dart';")
     ..writeln('import ${_literal(sourceImport)} as models;')
     ..writeln(
       'export ${_literal(sourceImport)} show ${queries.map((q) => q.result.row).toSet().join(', ')};',
@@ -299,13 +299,8 @@ String _emitQueries(
       '${query.sql.entries.map((entry) => 'SqlDialect.${entry.key.name}: SqlTemplate(${_literal(entry.value)}, dialect: SqlDialect.${entry.key.name})').join(', ')}'
       '});',
     );
-    final backend = query.sql.length == 2
-        ? 'B'
-        : query.sql.keys.single == SqlDialect.sqlite
-        ? 'Sqlite'
-        : 'Postgres';
     b.writeln(
-      'extension ${entity.symbol}Sql${backend == 'B' ? '<B extends Backend>' : ''} on Database<$backend> {'
+      'extension ${entity.symbol}Sql on QueryContext {'
       'Query<${entity.rowType}, ${entity.fieldsType}> ${entity.name}('
       '${query.parameters.isEmpty ? '' : '{${query.parameters.map((f) => '${f.nullable ? '' : 'required '}${f.type} ${f.name}').join(', ')}}'}'
       ') => _sqlDefinition${entity.symbol}.bind(this, {'
@@ -322,10 +317,11 @@ String _queryColumn(_Entity entity, _Field field) =>
 var _queryCheckSerial = 0;
 
 /// Compile each declared query on one backend, without executing its SELECT.
-/// SQLite reports structure only. PostgreSQL additionally checks native storage
-/// families. Neither backend proves expression nullability or custom codecs.
+/// SQLite, MySQL and MariaDB report structure only. PostgreSQL additionally
+/// checks native storage families. These checks do not prove expression
+/// nullability or custom codecs.
 Future<List<Map<String, Object?>>> checkSqlQueries(
-  Database<Backend> db,
+  SqlDatabase<Backend> db,
   GeneratedQueries generated,
 ) => db.session((session) async {
   final reports = <Map<String, Object?>>[];
@@ -347,13 +343,44 @@ Future<List<Map<String, Object?>>> checkSqlQueries(
           ),
       },
     );
-    String quote(String name) => '"${name.replaceAll('"', '""')}"';
+    String quote(String name) => _mysqlDialect(db.dialect)
+        ? '`${name.replaceAll('`', '``')}`'
+        : '"${name.replaceAll('"', '""')}"';
+    final alias = quote('_orm_check');
     final projected =
-        'SELECT ${columns.map((c) => '"_orm_check".${quote(c['name']! as String)}').join(', ')} '
-        'FROM (\n${command.sql}\n) AS "_orm_check"';
+        'SELECT ${columns.map((c) => '$alias.${quote(c['name']! as String)}').join(', ')} '
+        'FROM (\n${command.sql}\n) AS $alias';
     List<String>? nativeTypes;
     try {
-      if (db.dialect == SqlDialect.sqlite) {
+      if (_mysqlDialect(db.dialect)) {
+        final name =
+            '_orm_check_${DateTime.now().microsecondsSinceEpoch}_${_queryCheckSerial++}';
+        var prepared = false;
+        await session.execute(SqlCommand('SET @$name = ?', [projected]));
+        try {
+          // EXPLAIN can execute stored functions while planning a derived
+          // table (verified on MariaDB 11.8). PREPARE resolves the projection
+          // and placeholders without executing the application statement.
+          await session.execute(
+            SqlCommand('PREPARE ${quote(name)} FROM @$name'),
+          );
+          prepared = true;
+        } finally {
+          try {
+            if (prepared) {
+              await session.execute(
+                SqlCommand('DEALLOCATE PREPARE ${quote(name)}'),
+              );
+            }
+            await session.execute(SqlCommand('SET @$name = NULL'));
+          } catch (_) {
+            // A failed cleanup must not leave a prepared statement or query
+            // text attached to a connection returned to another borrower.
+            await session.discard();
+            rethrow;
+          }
+        }
+      } else if (db.dialect == SqlDialect.sqlite) {
         await session.execute(
           SqlCommand('EXPLAIN $projected', command.parameters),
         );
@@ -402,6 +429,7 @@ Future<List<Map<String, Object?>>> checkSqlQueries(
       'name': query['name'],
       'dialect': db.dialect.name,
       'structureChecked': true,
+      'storageTypesChecked': nativeTypes != null,
       'nullabilityChecked': false,
       'columns': [
         for (var i = 0; i < columns.length; i++)

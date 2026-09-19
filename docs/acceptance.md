@@ -1,6 +1,12 @@
 # Design acceptance map
 
-The latest [API/correctness audit](../research/api-correctness-audit.md) passes
+The current redesign adds independently usable modules, nominal model results,
+typed project configuration and MySQL/MariaDB support. Its current acceptance state
+is recorded in [progress](progress.md); engine-specific limitations are in
+[capabilities](capabilities.md). The table below also preserves earlier evidence
+for unchanged feature families.
+
+The earlier [API/correctness audit](../research/api-correctness-audit.md) passes
 872 native tests and 20 real Chrome checks for each of JavaScript and Dart WASM.
 [Its validation record](../research/validation/api-audit.md) pins the runtime source
 and preserves platform/performance limits. The [API guide](api.md) documents the
@@ -18,7 +24,10 @@ or deployment target. Historical measurements remain pinned to their source.
 
 | Design requirement | Current evidence |
 | --- | --- |
-| §§2, 4–5: Record declarations, separate table identity, restricted selectors, static input/result types | `lib/schema.dart`, `lib/src/generate/`; `generator_test`, `types_test`, generated fixtures and `generated_database_test` |
+| §§2, 4–5: nominal class and Record declarations, separate table identity, restricted selectors, static input/result types | `lib/schema.dart`, `lib/src/generate/`; `generator_test`, `types_test`, `nominal_generation_test`, `nominal_database_test`, generated fixtures and `generated_database_test` |
+| Standalone driver, runtime, metadata and typed SQL libraries | `layer_boundaries_test`, `runtime_test`, `runtime_lifecycle_review_test`, `sql_builder_test`; offline generated queries and independent raw sessions |
+| MySQL/MariaDB typed writes, values, sessions, import and migration recovery | `mysql_driver_test`, `mysql_database_test`, `mysql_import_test`, `mysql_transaction_boundary_test`, `mysql_migration_test`; both engines run against separate real servers |
+| Typed project CLI and four-engine generation | `cli_workflow_test`, `generator_dialects_test`; offline initialization, current-source regeneration and reviewed Dart migration lifecycle |
 | §§4–5: compound keys, physical names, indexes, FK navigation, domain codecs | Generator, `relation_test`, `integer_test`, `custom_codec_test`, catalog/import tests |
 | §§5, 10–11: temporal column precision | `temporal_precision_test`: generated declarations and SQL coercion, epoch ties, finite ranges, defaults/computed values, rounded relation keys, import/catalog drift and reviewed migration rollback; real JS/WASM worker scenario; [semantics](types.md#temporal-precision) |
 | §4.2: explicit navigation without database FKs | `relatesTo`; `unconstrained_relation_test` checks missing/duplicate targets, composite/self/inverse edges, no FK/index/cascade, watch and constraint transitions; generator/type negatives |
@@ -76,8 +85,8 @@ records a full run with 845 passes and two incorrectly configured crash-test
 registries, then 21 passing target/recovery tests after correcting them. It also
 verifies native AOT bundles, real Chrome JS/WASM and the public CLI workflow.
 Each history now fixes one engine, selected expressions alone affect fingerprints,
-and wrong connections fail before migration SQL. The latest Android runtime was
-not rerun; its earlier capture remains tied to its original revision.
+and wrong connections fail before migration SQL. Android runtime was
+not rerun for that correction; its earlier capture remains tied to its original revision.
 
 The [Dart migration acceptance](../research/validation/dart-migrations.json) records
 the replacement of JSON artifacts with Dart snapshots, fixed history and static

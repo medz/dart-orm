@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 abstract interface class _CteDefinition {
   String get name;

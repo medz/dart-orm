@@ -1,145 +1,10 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 /// A table occurrence has nominal identity, even when two row records have the
 /// same structural Dart type or a query joins the same physical table twice.
 final class TableRef {
   final TableSchema schema;
   TableRef(this.schema);
-}
-
-final class Column<T> {
-  final String name;
-  final Codec<T> codec;
-  final bool nullable;
-  final bool generated;
-  final String? defaultSql;
-  final ComputedColumn? computed;
-
-  /// Called once for an omitted value when constructing an insert. Prepared
-  /// mutations retain that value; compilation and updates never call this.
-  final T Function()? clientDefault;
-
-  /// Signed integer storage width (16, 32 or 64). The default is 64.
-  /// This describes the column, not the result width of SQL arithmetic.
-  final int? integerBits;
-  final int? decimalPrecision;
-  final int? decimalScale;
-  final int? temporalPrecision;
-  const Column(
-    this.name,
-    this.codec, {
-    this.nullable = false,
-    this.generated = false,
-    this.defaultSql,
-    this.computed,
-    this.clientDefault,
-    this.integerBits,
-    this.decimalPrecision,
-    this.decimalScale,
-    this.temporalPrecision,
-  });
-}
-
-enum ComputedStorage { stored, virtual }
-
-/// Database-computed SQL using physical column names.
-final class ComputedColumn {
-  final String sqlite, postgres;
-  final ComputedStorage storage;
-  const ComputedColumn(
-    String expression, {
-    this.storage = ComputedStorage.stored,
-  }) : sqlite = expression,
-       postgres = expression;
-  const ComputedColumn.forDialects({
-    required this.sqlite,
-    required this.postgres,
-    this.storage = ComputedStorage.stored,
-  });
-  String expression(SqlDialect dialect) =>
-      dialect == SqlDialect.sqlite ? sqlite : postgres;
-}
-
-final class ForeignKey {
-  final List<String> columns;
-  final String target;
-  final List<String> targetColumns;
-  final String onDelete;
-  const ForeignKey(
-    this.columns,
-    this.target,
-    this.targetColumns, {
-    this.onDelete = 'RESTRICT',
-  });
-}
-
-/// A row CHECK expression. A null name leaves naming to the database.
-final class CheckSchema {
-  final String? name;
-  final String sqlite;
-  final String postgres;
-  const CheckSchema(this.name, String expression)
-    : sqlite = expression,
-      postgres = expression;
-  const CheckSchema.forDialects(
-    this.name, {
-    required this.sqlite,
-    required this.postgres,
-  });
-  String expression(SqlDialect dialect) =>
-      dialect == SqlDialect.sqlite ? sqlite : postgres;
-}
-
-final class IndexSchema {
-  final String name;
-  final List<String> columns;
-  final bool unique;
-  const IndexSchema(this.name, this.columns, {this.unique = false});
-}
-
-final class TableSchema {
-  final String name;
-  final List<Column<Object?>> columns;
-  final List<String> primaryKey;
-  final List<List<String>> uniqueKeys;
-  final List<ForeignKey> foreignKeys;
-  final List<IndexSchema> indexes;
-  final List<CheckSchema> checks;
-  final List<Column<Object?>> _clientDefaults;
-  TableSchema(
-    this.name, {
-    required List<Column<Object?>> columns,
-    List<String> primaryKey = const [],
-    List<List<String>> uniqueKeys = const [],
-    List<ForeignKey> foreignKeys = const [],
-    List<IndexSchema> indexes = const [],
-    List<CheckSchema> checks = const [],
-  }) : columns = List.unmodifiable(columns),
-       _clientDefaults = List.unmodifiable(
-         columns.where((c) => c.clientDefault != null),
-       ),
-       primaryKey = List.unmodifiable(primaryKey),
-       uniqueKeys = List.unmodifiable(
-         uniqueKeys.map(List<String>.unmodifiable),
-       ),
-       foreignKeys = List.unmodifiable([
-         for (final key in foreignKeys)
-           ForeignKey(
-             List.unmodifiable(key.columns),
-             key.target,
-             List.unmodifiable(key.targetColumns),
-             onDelete: key.onDelete,
-           ),
-       ]),
-       checks = List.unmodifiable(checks),
-       indexes = List.unmodifiable([
-         for (final index in indexes)
-           IndexSchema(
-             index.name,
-             List.unmodifiable(index.columns),
-             unique: index.unique,
-           ),
-       ]);
 }
 
 abstract class Fields {
@@ -165,7 +30,8 @@ final class Field<T> extends ReadField<T> {
       );
     }
   }
-  Assignment set(T value) => _assign(_Parameter(codec.encode(value)));
+  Assignment set(T value) =>
+      _assign(_Parameter(codec.encode(value), storageType: codec.sqlType));
   Assignment setExpression(Expr<T> expression) => _assign(expression._node);
   Assignment _assign(_Node node) => Assignment._(
     this,
@@ -176,11 +42,13 @@ final class Field<T> extends ReadField<T> {
                   node,
                   definition.codec.sqlType,
                   definition.temporalPrecision!,
+                  columnAssignment: true,
                 )
         : _DecimalCast(
             node,
             definition.decimalPrecision!,
             definition.decimalScale ?? 0,
+            columnAssignment: true,
           ),
   );
   Assignment defaultValue() => Assignment._(this, null);

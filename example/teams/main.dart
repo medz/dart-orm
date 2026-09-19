@@ -16,7 +16,7 @@ Future<void> main() async {
   );
   try {
     await Migrator(
-      db,
+      db.sql,
     ).apply([Migration.create('0001_teams', appSchema, dialect: db.dialect)]);
     await db.transaction((tx) async {
       await tx.users.create(id: 1, name: 'Ada');

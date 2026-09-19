@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show User, Post, Value, Reading;
@@ -34,6 +34,8 @@ final _usersEmailSize = Column<int>(
   computed: ComputedColumn.forDialects(
     sqlite: "length(email)",
     postgres: "length(email)",
+    mysql: "length(email)",
+    mariadb: "length(email)",
     storage: ComputedStorage.stored,
   ),
 );
@@ -45,6 +47,8 @@ final _usersUpperNickname = Column<String?>(
   computed: ComputedColumn.forDialects(
     sqlite: "upper(nickname)",
     postgres: "upper(nickname)",
+    mysql: "upper(nickname)",
+    mariadb: "upper(nickname)",
     storage: ComputedStorage.virtual,
   ),
 );
@@ -67,6 +71,8 @@ final usersSchema = TableSchema(
       "valid_email",
       sqlite: "length(email) > 0",
       postgres: "length(email) > 0",
+      mysql: "length(email) > 0",
+      mariadb: "length(email) > 0",
     ),
   ],
   foreignKeys: [],
@@ -99,7 +105,7 @@ final usersTable = Table<models.User, UsersFields>(
 );
 
 final class UsersTableSet extends TableSet<models.User, UsersFields> {
-  UsersTableSet(Database<Backend> db) : super(db, usersTable) {
+  UsersTableSet(QueryContext db) : super(db, usersTable) {
     db.registerSchema(appSchema);
   }
   Future<models.User> create({
@@ -174,7 +180,7 @@ final postsTable = Table<models.Post, PostsFields>(
 );
 
 final class PostsTableSet extends TableSet<models.Post, PostsFields> {
-  PostsTableSet(Database<Backend> db) : super(db, postsTable) {
+  PostsTableSet(QueryContext db) : super(db, postsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Post> create({
@@ -306,7 +312,7 @@ final valuesTable = Table<models.Value, ValuesFields>(
 );
 
 final class ValuesTableSet extends TableSet<models.Value, ValuesFields> {
-  ValuesTableSet(Database<Backend> db) : super(db, valuesTable) {
+  ValuesTableSet(QueryContext db) : super(db, valuesTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Value> create({
@@ -401,7 +407,7 @@ final readingsTable = Table<models.Reading, ReadingsFields>(
 );
 
 final class ReadingsTableSet extends TableSet<models.Reading, ReadingsFields> {
-  ReadingsTableSet(Database<Backend> db) : super(db, readingsTable) {
+  ReadingsTableSet(QueryContext db) : super(db, readingsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Reading> create({required int id, required double value}) =>
@@ -426,7 +432,7 @@ final appSchema = List<TableSchema>.unmodifiable([
   readingsSchema,
 ]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   UsersTableSet get users => UsersTableSet(this);
   PostsTableSet get posts => PostsTableSet(this);
   ValuesTableSet get values => ValuesTableSet(this);

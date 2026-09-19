@@ -12,7 +12,7 @@ import '../example/teams/schema.orm.dart';
 final day1 = DateTime.utc(2026, 1, 1), day2 = DateTime.utc(2026, 1, 2);
 
 void main() {
-  for (final dialect in SqlDialect.values) {
+  for (final dialect in [SqlDialect.sqlite, SqlDialect.postgres]) {
     group(
       'many-to-many ${dialect.name}',
       () {
@@ -42,7 +42,7 @@ void main() {
               SqlCommand('CREATE SCHEMA orm_many_to_many_tests'),
             );
           }
-          await Migrator(db).apply([
+          await Migrator(db.sql).apply([
             Migration.create('0001_teams', appSchema, dialect: db.dialect),
           ]);
           await db.transaction((tx) async {
@@ -76,7 +76,7 @@ void main() {
         tearDown(() => db.close());
 
         test('two declared FKs and a composite primary key enforce association identity', () async {
-          final info = await inspectTable(db, 'memberships');
+          final info = await inspectTable(db.sql, 'memberships');
           expect(info.primaryKey, ['team_id', 'user_id']);
           expect(info.foreignKeys.map((k) => k.target).toSet(), {
             'teams',
@@ -85,7 +85,7 @@ void main() {
           expect(info.foreignKeys.every((k) => k.onDelete == 'CASCADE'), true);
           expect(info.indexes.map((i) => i.name), ['user_memberships']);
           expect(
-            (await verifySchema(db, SchemaSnapshot(appSchema))).differences,
+            (await verifySchema(db.sql, SchemaSnapshot(appSchema))).differences,
             isEmpty,
           );
           await expectLater(

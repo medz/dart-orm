@@ -69,7 +69,7 @@ void main() {
             SqlCommand('CREATE SCHEMA orm_decimal_average_tests'),
           );
         }
-        await Migrator(db).apply([
+        await Migrator(db.sql).apply([
           Migration.create('0001_average', appSchema, dialect: db.dialect),
         ]);
       });

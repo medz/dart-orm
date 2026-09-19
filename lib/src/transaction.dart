@@ -1,14 +1,4 @@
-part of '../orm.dart';
-
-/// Adapter classification. Retrying also requires a confirmed rollback and an
-/// explicitly repeatable application callback; these flags alone are not enough.
-abstract interface class SqlFailure implements Exception {
-  bool get retryTransaction;
-
-  /// Retry the same COMMIT only while the adapter confirms the transaction is active.
-  bool get retryCommit;
-  bool get commitRejected;
-}
+part of '../runtime.dart';
 
 /// Explicit opt-in: callback logic must be safe to repeat after rollback.
 /// The budget counts every scheduled retry, including commit-only retries.

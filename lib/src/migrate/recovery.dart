@@ -86,7 +86,12 @@ final class MigrationProgress {
   };
 }
 
-Future<List<MigrationProgress>> _progress(Database<Backend> db) async {
+// The history schema owns these TEXT cells. MySQL can expose a binary-collated
+// TEXT field as bytes; this does not change decoding of application BLOB values.
+String? _migrationText(Object? value) =>
+    value is List<int> ? utf8.decode(value) : value as String?;
+
+Future<List<MigrationProgress>> _progress(SqlDatabase<Backend> db) async {
   if (!await _hasMigrationTable(db, '_orm_migration_steps')) {
     return [];
   }
@@ -121,10 +126,10 @@ Future<List<MigrationProgress>> _progress(Database<Backend> db) async {
         row[fields[2]] as int,
         MigrationStepState.values.byName(row[fields[3]] as String),
         row[fields[4]] as String,
-        row[fields[5]] as String?,
+        _migrationText(row[fields[5]]),
         backfill: data < 0 || row[data] == null
             ? null
-            : BackfillProgress._read(jsonDecode(row[data] as String)),
+            : BackfillProgress._read(jsonDecode(_migrationText(row[data])!)),
       ),
   ];
 }
@@ -202,16 +207,18 @@ void _validateProgress(
 }
 
 Future<R> _migrationSession<R>(
-  Database<Backend> database,
+  SqlDatabase<Backend> database,
   Duration lockTimeout,
-  Future<R> Function(Database<Backend>) action,
+  Future<R> Function(SqlDatabase<Backend>) action,
 ) {
   if (lockTimeout.isNegative) {
     throw ArgumentError.value(lockTimeout, 'lockTimeout');
   }
-  Future<R> run(Database<Backend> session) async {
+  Future<R> run(SqlDatabase<Backend> session) async {
     await _checkMigrationVersion(session);
-    return session.dialect == SqlDialect.postgres
+    return _isMysql(session.dialect)
+        ? _mysqlMigrationLock(session, lockTimeout, () => action(session))
+        : session.dialect == SqlDialect.postgres
         ? _withMigrationLock(session, lockTimeout, () => action(session))
         : action(session);
   }
@@ -221,7 +228,25 @@ Future<R> _migrationSession<R>(
 
 // Generated PostgreSQL DDL/catalog behavior is supported on 18+. Check the
 // actual server before locks, journal creation or recoverable partial commits.
-Future<void> _checkMigrationVersion(Database<Backend> db) async {
+Future<void> _checkMigrationVersion(SqlDatabase<Backend> db) async {
+  if (_isMysql(db.dialect)) {
+    final raw =
+        '${(await db.execute(SqlCommand('SELECT VERSION()'))).rows.single.single}';
+    final maria = raw.toLowerCase().contains('mariadb');
+    final match = RegExp(r'(\d+)\.(\d+)\.(\d+)').firstMatch(raw);
+    final major = match == null ? 0 : int.parse(match[1]!);
+    final minor = match == null ? 0 : int.parse(match[2]!);
+    if (maria != (db.dialect == SqlDialect.mariadb) ||
+        (maria
+            ? major < 11 || major == 11 && minor < 8
+            : major < 8 || major == 8 && minor < 4)) {
+      throw const OrmException(
+        'CAPABILITY.VERSION',
+        'Migrations require MySQL 8.4+ or MariaDB 11.8+ with the matching driver.',
+      );
+    }
+    return;
+  }
   if (db.dialect != SqlDialect.postgres) return; // SQLite driver checks 3.35+.
   final result = await db.execute(SqlCommand('SHOW server_version_num'));
   final version = int.tryParse('${result.rows.single.single}');
@@ -234,7 +259,7 @@ Future<void> _checkMigrationVersion(Database<Backend> db) async {
 }
 
 Future<R> _withMigrationLock<R>(
-  Database<Backend> session,
+  SqlDatabase<Backend> session,
   Duration timeout,
   Future<R> Function() action,
 ) async {
@@ -306,7 +331,7 @@ Future<R> _withMigrationLock<R>(
 }
 
 Future<List<String>> _applyRecoverable(
-  Database<Backend> session,
+  SqlDatabase<Backend> session,
   List<Migration> migrations,
   _BackfillBudget budget,
 ) async {
@@ -429,8 +454,8 @@ bool _needsRebuild(List<Migration> migrations, SqlDialect dialect) =>
     );
 
 Future<R> _migrationTransaction<R>(
-  Database<Backend> session,
-  Future<R> Function(Database<Backend>) action, {
+  SqlDatabase<Backend> session,
+  Future<R> Function(SqlDatabase<Backend>) action, {
   bool rebuild = false,
 }) async {
   int? foreignKeys;
@@ -501,7 +526,7 @@ Future<R> _migrationTransaction<R>(
 /// SQLite serializes each chunk using BEGIN IMMEDIATE. Re-read durable history
 /// inside that lock, so other workers may contribute chunks without replaying any.
 Future<List<String>> _applyRecoverableSqlite(
-  Database<Backend> session,
+  SqlDatabase<Backend> session,
   List<Migration> migrations,
   _BackfillBudget budget,
 ) async {
@@ -618,12 +643,12 @@ Future<List<String>> _applyRecoverableSqlite(
   return completed;
 }
 
-Future<bool> _probe(Database<Backend> db, String sql) async {
+Future<bool> _probe(SqlDatabase<Backend> db, String sql) async {
   final result = await db.execute(SqlCommand(sql));
   if (result.rows.length != 1 ||
       result.rows.single.length != 1 ||
       !(result.rows.single.single is bool ||
-          db.dialect == SqlDialect.sqlite &&
+          db.dialect != SqlDialect.postgres &&
               result.rows.single.single is int &&
               {0, 1}.contains(result.rows.single.single))) {
     throw const OrmException(
@@ -635,7 +660,7 @@ Future<bool> _probe(Database<Backend> db, String sql) async {
 }
 
 Future<void> _checkpoint(
-  Database<Backend> db,
+  SqlDatabase<Backend> db,
   Migration migration,
   int step,
   MigrationStepState state,
@@ -648,9 +673,7 @@ Future<void> _checkpoint(
       '''
 INSERT INTO "_orm_migration_steps" (migration_id, checksum, step, state, phase, failure, backfill)
 VALUES (${[for (var i = 1; i <= 7; i++) _mark(db.dialect, i)].join(', ')})
-ON CONFLICT (migration_id, step) DO UPDATE SET state = EXCLUDED.state, phase = EXCLUDED.phase, failure = EXCLUDED.failure,
-backfill = coalesce(EXCLUDED.backfill, "_orm_migration_steps".backfill)
-WHERE "_orm_migration_steps".state <> 'complete' ''',
+${_isMysql(db.dialect) ? "ON DUPLICATE KEY UPDATE phase = IF(state = 'complete', phase, VALUES(phase)), failure = IF(state = 'complete', failure, VALUES(failure)), backfill = IF(state = 'complete', backfill, COALESCE(VALUES(backfill), backfill)), state = IF(state = 'complete', state, VALUES(state))" : "ON CONFLICT (migration_id, step) DO UPDATE SET state = EXCLUDED.state, phase = EXCLUDED.phase, failure = EXCLUDED.failure, backfill = coalesce(EXCLUDED.backfill, \"_orm_migration_steps\".backfill) WHERE \"_orm_migration_steps\".state <> 'complete'"} ''',
       [
         migration.id,
         migration.checksum,
@@ -664,7 +687,7 @@ WHERE "_orm_migration_steps".state <> 'complete' ''',
   );
 }
 
-Future<void> _recoveryTables(Database<Backend> tx) async {
+Future<void> _recoveryTables(SqlDatabase<Backend> tx) async {
   await tx.execute(SqlCommand(_historyDdl));
   await tx.execute(
     SqlCommand('''CREATE TABLE IF NOT EXISTS "_orm_migration_steps" (
@@ -683,7 +706,7 @@ Future<void> _recoveryTables(Database<Backend> tx) async {
 }
 
 Future<BackfillProgress?> _savedBackfill(
-  Database<Backend> tx,
+  SqlDatabase<Backend> tx,
   String id,
   int step,
 ) async {
@@ -696,12 +719,40 @@ Future<BackfillProgress?> _savedBackfill(
   final data = row.rows.single.single;
   return data == null
       ? null
-      : BackfillProgress._read(jsonDecode(data as String));
+      : BackfillProgress._read(jsonDecode(_migrationText(data)!));
 }
 
 const _historyDdl =
     'CREATE TABLE IF NOT EXISTS "_orm_migrations" (id TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)';
-Future<bool> _hasMigrationTable(Database<Backend> db, String table) async {
+Future<bool> _hasMigrationTable(SqlDatabase<Backend> db, String table) async {
+  if (_isMysql(db.dialect)) {
+    final rows = await db.execute(
+      SqlCommand(
+        'SELECT TABLE_TYPE, ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+        [table],
+      ),
+    );
+    if (rows.rows.any((r) => r[0] != 'BASE TABLE' || r[1] != 'InnoDB')) {
+      throw const OrmException(
+        'MIGRATION.SESSION',
+        'Durable migration metadata must use InnoDB base tables.',
+      );
+    }
+    if (rows.rows.isNotEmpty) {
+      final definition = await db.execute(
+        SqlCommand('SHOW CREATE TABLE ${_quote(table)}'),
+      );
+      if ((definition.rows.single[1] as String).toUpperCase().startsWith(
+        'CREATE TEMPORARY TABLE',
+      )) {
+        throw const OrmException(
+          'MIGRATION.SESSION',
+          'A temporary table shadows durable migration metadata.',
+        );
+      }
+    }
+    return rows.rows.isNotEmpty;
+  }
   if (db.dialect == SqlDialect.sqlite) {
     final rows = await db.execute(
       SqlCommand(

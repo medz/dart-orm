@@ -99,6 +99,7 @@ final class Backfill extends MigrationStep {
         switch (_keys[i].codec.sqlType) {
           'integer' => int.parse(row[i]),
           'real' => double.parse(row[i]),
+          'instant' when _isMysql(dialect) => Codecs.dateTime.decode(row[i]),
           'timestamp' when dialect == SqlDialect.postgres => DateTime.parse(
             row[i],
           ),
@@ -163,8 +164,8 @@ final class BackfillProgress {
   };
 }
 
-Future<void> _verifyBackfill(Database<Backend> db, Backfill step) async {
-  if (!db.capabilities.returning ||
+Future<void> _verifyBackfill(SqlDatabase<Backend> db, Backfill step) async {
+  if ((!db.capabilities.returning && !_isMysql(db.dialect)) ||
       db.capabilities.maxParameters < 7 ||
       db.capabilities.maxParameters < step._keys.length * 2) {
     throw const OrmException(
@@ -173,8 +174,15 @@ Future<void> _verifyBackfill(Database<Backend> db, Backfill step) async {
     );
   }
   final result = await verifySchema(db, SchemaSnapshot([step.table]));
-  if (!result.matches) {
-    throw OrmException('MIGRATION.DRIFT', result.differences.join('\n'));
+  if (!result.matches ||
+      (_isMysql(db.dialect) && result.unmanaged.isNotEmpty)) {
+    throw OrmException(
+      'MIGRATION.DRIFT',
+      [
+        ...result.differences,
+        ...result.unmanaged.map((o) => '${o.kind}: ${o.name}'),
+      ].join('\n'),
+    );
   }
   if (db.dialect == SqlDialect.postgres) {
     final security = await db.execute(
@@ -191,12 +199,13 @@ WHERE n.nspname = current_schema() AND c.relname = $1''',
         'The historical table is shadowed or has active row security. Backfill requires an unshadowed table and a role that sees all its rows.',
       );
     }
-  } else if ((await db.execute(
-    SqlCommand(
-      "SELECT 1 FROM sqlite_temp_schema WHERE type IN ('table', 'view') AND name = ?1 COLLATE NOCASE",
-      [step.table.name],
-    ),
-  )).rows.isNotEmpty) {
+  } else if (db.dialect == SqlDialect.sqlite &&
+      (await db.execute(
+        SqlCommand(
+          "SELECT 1 FROM sqlite_temp_schema WHERE type IN ('table', 'view') AND name = ?1 COLLATE NOCASE",
+          [step.table.name],
+        ),
+      )).rows.isNotEmpty) {
     throw const OrmException(
       'MIGRATION.BACKFILL_SCOPE',
       'A temporary object shadows the historical table.',
@@ -204,14 +213,17 @@ WHERE n.nspname = current_schema() AND c.relname = $1''',
   }
 }
 
-String _mark(SqlDialect dialect, int n) =>
-    dialect == SqlDialect.sqlite ? '?$n' : '\$$n';
+String _mark(SqlDialect dialect, int n) => switch (dialect) {
+  SqlDialect.sqlite => '?$n',
+  SqlDialect.postgres => '\$$n',
+  SqlDialect.mysql || SqlDialect.mariadb => '?',
+};
 String _tuple(List<String> values) =>
     values.length == 1 ? values.single : '(${values.join(', ')})';
 
 /// Exactly one transaction: selected rows, writes and frontier advance commit together.
 Future<bool> _backfillChunk(
-  Database<Backend> tx,
+  SqlDatabase<Backend> tx,
   Migration migration,
   int index,
   Backfill step,
@@ -243,7 +255,11 @@ Future<bool> _backfillChunk(
     final start = parameters.length + 1;
     parameters.addAll(step._loadKey(values, tx.dialect));
     return _tuple([
-      for (var i = 0; i < values.length; i++) _mark(tx.dialect, start + i),
+      for (var i = 0; i < values.length; i++)
+        _isMysql(tx.dialect) &&
+                {'bigint', 'decimal'}.contains(step._keys[i].codec.sqlType)
+            ? 'CAST(${_mark(tx.dialect, start + i)} AS ${_mysqlColumnType(step._keys[i])})'
+            : _mark(tx.dialect, start + i),
     ]);
   }
 
@@ -258,7 +274,7 @@ Future<bool> _backfillChunk(
       ? const SqlResult([])
       : await tx.execute(
           SqlCommand(
-            'SELECT $columns FROM $table WHERE ${conditions.join(' AND ')} ORDER BY ${names.map((n) => '$n ASC').join(', ')} LIMIT $size${tx.dialect == SqlDialect.postgres ? ' FOR UPDATE' : ''}',
+            'SELECT $columns FROM $table WHERE ${conditions.join(' AND ')} ORDER BY ${names.map((n) => '$n ASC').join(', ')} LIMIT $size${tx.dialect != SqlDialect.sqlite ? ' FOR UPDATE' : ''}',
             parameters,
           ),
         );
@@ -296,14 +312,17 @@ Future<bool> _backfillChunk(
   phase('update');
   final updated = await tx.execute(
     SqlCommand(
-      'UPDATE $table SET ${step.set.entries.map((e) => '${_quote(e.key)} = ${e.value}').join(', ')} WHERE $predicate AND (${step.where}) RETURNING $columns',
+      'UPDATE $table SET ${step.set.entries.map((e) => '${_quote(e.key)} = ${e.value}').join(', ')} WHERE $predicate${_isMysql(tx.dialect) ? '' : ' AND (${step.where}) RETURNING $columns'}',
       parameters,
     ),
-    changedTables: [step.table],
+    changedTables: [step.table.name],
   );
   final expected = keys.map(jsonEncode).toSet(),
-      actual = updated.rows.map(step._saveKey).map(jsonEncode).toSet();
-  if (updated.rows.length != keys.length ||
+      actual = (_isMysql(tx.dialect) ? selected.rows : updated.rows)
+          .map(step._saveKey)
+          .map(jsonEncode)
+          .toSet();
+  if ((!_isMysql(tx.dialect) && updated.rows.length != keys.length) ||
       actual.length != expected.length ||
       !actual.containsAll(expected)) {
     throw const OrmException(

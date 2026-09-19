@@ -1,4 +1,4 @@
-import '../../orm.dart';
+import '../../driver.dart';
 
 final class SqliteFailure implements SqlFailure {
   @override

@@ -7,7 +7,7 @@ Future<void> main() async {
   final db = await sqlite(const SqliteOptions.memory());
   try {
     await Migrator(
-      db,
+      db.sql,
     ).apply([Migration.create('0001_instant', appSchema, dialect: db.dialect)]);
     final expected = DateTime.utc(2024);
     if (Codecs.dateTime.decode('2024-01-01 00:00:00') != expected) {
@@ -45,7 +45,7 @@ Future<void> main() async {
       throw StateError('Equivalent instant keys differ');
     }
     if ((await verifySchema(
-      db,
+      db.sql,
       SchemaSnapshot(appSchema),
     )).differences.isNotEmpty) {
       throw StateError('Instant catalog differs');

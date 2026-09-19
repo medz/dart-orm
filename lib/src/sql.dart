@@ -1,14 +1,4 @@
-part of '../orm.dart';
-
-enum SqlDialect { sqlite, postgres }
-
-/// SQL text and separately bound values. Values are never interpolated into SQL.
-final class SqlCommand {
-  final String sql;
-  final List<Object?> parameters;
-  SqlCommand(this.sql, [List<Object?> parameters = const []])
-    : parameters = List.unmodifiable(parameters);
-}
+part of '../sql.dart';
 
 sealed class _Node {
   const _Node();
@@ -31,18 +21,45 @@ final class _ColumnNode(final TableRef table, final String name) extends _Node {
         'Column belongs to another query.',
       );
     }
-    return w.unqualified ? w.quote(name) : '${w.quote(alias)}.${w.quote(name)}';
+    if (w.mysql && alias == 'excluded') return 'VALUES(${w.quote(name)})';
+    return w.unqualified || w.unqualifiedTable == table
+        ? w.quote(name)
+        : '${w.quote(alias)}.${w.quote(name)}';
   }
 }
 
-final class _Parameter(final Object? value, {final String? sqlType})
-    extends _Node {
+final class _Parameter(
+  final Object? value, {
+  final String? sqlType,
+  final String? storageType,
+}) extends _Node {
   @override
   String writeSql(_Writer w) {
-    final parameter = w.parameter(value);
+    final parameter = w.parameter(value, storageType: storageType ?? sqlType);
+    if (w.mysql && (storageType ?? sqlType) == 'json') {
+      return w.dialect == SqlDialect.mysql
+          ? 'CAST($parameter AS JSON)'
+          : "JSON_EXTRACT($parameter, '\$')";
+    }
+    if (w.mysql &&
+        {'decimal', 'bigint'}.contains(storageType ?? sqlType) &&
+        value != null) {
+      final decimal = Decimal.parse(value as String);
+      final text = decimal.toString();
+      final digits = text.replaceAll('-', '').split('.');
+      final scale = digits.length == 2 ? digits[1].length : 0;
+      final precision = digits[0].length + scale;
+      if (precision > 65 || scale > 30) {
+        throw const OrmException(
+          'CAPABILITY.DECIMAL',
+          'MySQL/MariaDB SQL decimals require at most 65 digits and scale 30.',
+        );
+      }
+      return 'CAST($parameter AS DECIMAL(65,$scale))';
+    }
     // A standalone SELECT parameter has no column context in PostgreSQL and
     // otherwise resolves to text, including inside a UNION operand.
-    if (sqlType == null || w.dialect == SqlDialect.sqlite) return parameter;
+    if (sqlType == null || w.dialect != SqlDialect.postgres) return parameter;
     final type = switch (sqlType) {
       'integer' => 'BIGINT',
       'bigint' || 'decimal' => 'NUMERIC',
@@ -87,9 +104,16 @@ final class _Function(
   final bool decimal = false,
 }) extends _Node {
   @override
-  String writeSql(_Writer w) =>
-      '${decimal && w.dialect == SqlDialect.sqlite ? 'orm_decimal_${name.toLowerCase()}_v1' : name}(${distinct ? 'DISTINCT ' : ''}'
-      '${arguments.map((e) => e.write(w)).join(', ')})';
+  String writeSql(_Writer w) {
+    if (decimal && w.mysql && name == 'SUM') {
+      throw const OrmException(
+        'CAPABILITY.DECIMAL_PRECISION',
+        'MySQL/MariaDB decimal sums can silently saturate in subqueries; use explicit native SQL when its precision is acceptable.',
+      );
+    }
+    return '${decimal && w.dialect == SqlDialect.sqlite ? 'orm_decimal_${name.toLowerCase()}_v1' : name}(${distinct ? 'DISTINCT ' : ''}'
+        '${arguments.map((e) => e.write(w)).join(', ')})';
+  }
 }
 
 final class _In(final _Node expression, final List<_Node> values)
@@ -118,7 +142,7 @@ final class _Raw(final List<String> parts, final List<_Node> values)
 
 final class _Writer {
   final SqlDialect dialect;
-  final Database<Backend>? database;
+  final QueryContext? database;
   final Map<TableRef, String> aliases;
   final List<Object?> parameters = [];
   final Set<TableRef> leftJoins = {};
@@ -126,6 +150,7 @@ final class _Writer {
   final bool exactDecimal;
   final bool temporal;
   bool unqualified = false;
+  TableRef? unqualifiedTable;
   String? Function(_Node)? project;
   _AverageInputs? averageInputs;
   _Writer(
@@ -136,8 +161,27 @@ final class _Writer {
     this.exactDecimal = false,
     this.temporal = false,
   });
-  String quote(String name) => '"${name.replaceAll('"', '""')}"';
-  String parameter(Object? value) {
+  bool get mysql =>
+      dialect == SqlDialect.mysql || dialect == SqlDialect.mariadb;
+  String quote(String name) {
+    _checkSqlText(name);
+    return mysql
+        ? '`${name.replaceAll('`', '``')}`'
+        : '"${name.replaceAll('"', '""')}"';
+  }
+
+  String parameter(Object? value, {String? storageType}) {
+    // Codec storage, not string pattern guessing, determines temporal binding.
+    if (mysql && value is String && storageType == 'instant') {
+      final instant = Codecs.dateTime.decode(value).toUtc();
+      if (instant.year < 1000 || instant.year > 9999) {
+        throw const OrmException(
+          'CAPABILITY.TEMPORAL',
+          'MySQL timestamps require years 1000 through 9999.',
+        );
+      }
+      value = value.substring(0, value.length - 3);
+    }
     parameters.add(switch ((dialect, value)) {
       (SqlDialect.sqlite, bool v) => v ? 1 : 0,
       (SqlDialect.sqlite, DateTime v) => v.toUtc().toIso8601String(),
@@ -145,7 +189,32 @@ final class _Writer {
     });
     return dialect == SqlDialect.postgres
         ? '\$${parameters.length}'
+        : mysql
+        ? '\u0001${parameters.length}\u0002'
         : '?${parameters.length}';
+  }
+
+  SqlCommand finish(String sql) {
+    SqlCommand checked(String text, List<Object?> values) {
+      if (database != null &&
+          values.length > database!.capabilities.maxParameters) {
+        throw const OrmException(
+          'QUERY.PARAMETERS',
+          'SQL exceeds the parameter limit.',
+        );
+      }
+      return SqlCommand(text, values);
+    }
+
+    if (!mysql) return checked(sql, parameters);
+    // Construction may render ORDER BY before WHERE, and window staging may
+    // reuse a fragment. Positional protocols bind in final SQL occurrence order.
+    final ordered = <Object?>[];
+    final text = sql.replaceAllMapped(RegExp('\u0001([0-9]+)\u0002'), (match) {
+      ordered.add(parameters[int.parse(match[1]!) - 1]);
+      return '?';
+    });
+    return checked(text, ordered);
   }
 }
 
@@ -166,18 +235,36 @@ class Expr<T> extends Selection<T> {
           _Unary('IS NULL', _node, postfix: true),
           Codecs.boolean.nullable(),
         )
-      : _compare('=', _Parameter(codec.encode(value)));
+      : _compare(
+          '=',
+          _Parameter(codec.encode(value), storageType: codec.sqlType),
+        );
   Expr<bool?> ne(T value) => value == null
       ? Expr._(
           _Unary('IS NOT NULL', _node, postfix: true),
           Codecs.boolean.nullable(),
         )
-      : _compare('<>', _Parameter(codec.encode(value)));
+      : _compare(
+          '<>',
+          _Parameter(codec.encode(value), storageType: codec.sqlType),
+        );
   Expr<bool?> equals(Expr<T> other) => _compare('=', other._node);
-  Expr<bool?> gt(T value) => _compare('>', _Parameter(codec.encode(value)));
-  Expr<bool?> gte(T value) => _compare('>=', _Parameter(codec.encode(value)));
-  Expr<bool?> lt(T value) => _compare('<', _Parameter(codec.encode(value)));
-  Expr<bool?> lte(T value) => _compare('<=', _Parameter(codec.encode(value)));
+  Expr<bool?> gt(T value) => _compare(
+    '>',
+    _Parameter(codec.encode(value), storageType: codec.sqlType),
+  );
+  Expr<bool?> gte(T value) => _compare(
+    '>=',
+    _Parameter(codec.encode(value), storageType: codec.sqlType),
+  );
+  Expr<bool?> lt(T value) => _compare(
+    '<',
+    _Parameter(codec.encode(value), storageType: codec.sqlType),
+  );
+  Expr<bool?> lte(T value) => _compare(
+    '<=',
+    _Parameter(codec.encode(value), storageType: codec.sqlType),
+  );
   Expr<bool?> _compare(String op, _Node right) =>
       Expr._(_Binary(_node, op, right), Codecs.boolean.nullable());
   Expr<bool> isNull() =>
@@ -185,7 +272,10 @@ class Expr<T> extends Selection<T> {
   Expr<bool> isNotNull() =>
       Expr._(_Unary('IS NOT NULL', _node, postfix: true), Codecs.boolean);
   Expr<bool?> isIn(Iterable<T> values) => Expr._(
-    _In(_node, [for (final value in values) _Parameter(codec.encode(value))]),
+    _In(_node, [
+      for (final value in values)
+        _Parameter(codec.encode(value), storageType: codec.sqlType),
+    ]),
     Codecs.boolean.nullable(),
   );
   Expr<bool?> isInQuery<F extends Fields>(Query<T, F> query) {
@@ -258,7 +348,19 @@ Expr<T> sql<T>(List<String> parts, List<Expr<Object?>> values, Codec<T> codec) {
   if (parts.length != values.length + 1) {
     throw ArgumentError('SQL needs one more text part than expression.');
   }
+  for (final part in parts) {
+    _checkSqlText(part);
+  }
   return Expr._(_Raw(List.of(parts), [for (final v in values) v._node]), codec);
+}
+
+void _checkSqlText(String text) {
+  if (text.contains('\u0001') || text.contains('\u0002')) {
+    throw const OrmException(
+      'SQL.TEXT',
+      'SQL text contains a reserved control character.',
+    );
+  }
 }
 
 extension Predicate on Expr<bool?> {
@@ -276,12 +378,30 @@ extension TextExpression on Expr<String> {
 }
 
 extension NumericExpression<T extends num> on Expr<T> {
-  Expr<T> plus(T n) =>
-      Expr._(_Binary(_node, '+', _Parameter(codec.encode(n))), codec);
-  Expr<T> minus(T n) =>
-      Expr._(_Binary(_node, '-', _Parameter(codec.encode(n))), codec);
-  Expr<T> times(T n) =>
-      Expr._(_Binary(_node, '*', _Parameter(codec.encode(n))), codec);
+  Expr<T> plus(T n) => Expr._(
+    _Binary(
+      _node,
+      '+',
+      _Parameter(codec.encode(n), storageType: codec.sqlType),
+    ),
+    codec,
+  );
+  Expr<T> minus(T n) => Expr._(
+    _Binary(
+      _node,
+      '-',
+      _Parameter(codec.encode(n), storageType: codec.sqlType),
+    ),
+    codec,
+  );
+  Expr<T> times(T n) => Expr._(
+    _Binary(
+      _node,
+      '*',
+      _Parameter(codec.encode(n), storageType: codec.sqlType),
+    ),
+    codec,
+  );
   Expr<T?> sum() => Expr._(_Function('SUM', [_node]), codec.nullable());
   Expr<double?> average() =>
       Expr._(_Function('AVG', [_node]), Codecs.real.nullable());
@@ -292,8 +412,24 @@ final class OrderTerm {
   final bool descending;
   final NullOrder? nulls;
   const OrderTerm._(this.expression, this.descending, [this.nulls]);
-  String _write(_Writer writer) => '${expression._node.write(writer)}$_suffix';
+  String _write(_Writer writer) {
+    final text = expression._node.write(writer);
+    if (writer.mysql && nulls != null) {
+      return '($text IS NULL) ${nulls == NullOrder.first ? 'DESC' : 'ASC'}, '
+          '${expression._node.write(writer)} ${descending ? 'DESC' : 'ASC'}';
+    }
+    return '$text$_suffix';
+  }
+
   String get _suffix =>
       ' ${descending ? 'DESC' : 'ASC'}'
       '${nulls == null ? '' : ' NULLS ${nulls!.name.toUpperCase()}'}';
+}
+
+String _projection(Expr<Object?> expression, _Writer writer) {
+  final text = expression._node.write(writer);
+  // Preserve JSON null separately from SQL NULL through native driver decoders.
+  return writer.mysql && expression.codec.sqlType == 'json'
+      ? 'CAST($text AS CHAR CHARACTER SET utf8mb4)'
+      : text;
 }

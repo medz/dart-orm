@@ -21,10 +21,10 @@ void main() {
           ),
         ], dialect: SqlDialect.sqlite);
         await expectLater(
-          Migrator(db).apply([migration]),
+          Migrator(db.sql).apply([migration]),
           throwsA(isA<OrmException>()),
         );
-        expect(await Migrator(db).history(), isEmpty);
+        expect(await Migrator(db.sql).history(), isEmpty);
         expect(
           () => validateMigrations([
             Migration.steps('0001_control', [
@@ -80,7 +80,7 @@ void main() {
     ]) {
       await db.execute(SqlCommand('DROP TABLE IF EXISTS "$table"'));
     }
-    await Migrator(db).apply([initial]);
+    await Migrator(db.sql).apply([initial]);
   });
   tearDown(() => db.close());
 
@@ -96,16 +96,18 @@ void main() {
         index,
         ExecuteSql('UPDATE payload SET touches = touches + 1'),
       ]);
-      expect(await Migrator(db).apply([initial, migration]), [migration.id]);
+      expect(await Migrator(db.sql).apply([initial, migration]), [
+        migration.id,
+      ]);
       expect(
         (await db.execute(SqlCommand(index.doneWhen))).rows.single.single,
         true,
       );
       expect(
-        (await Migrator(db).progress()).map((p) => p.state),
+        (await Migrator(db.sql).progress()).map((p) => p.state),
         everyElement(MigrationStepState.complete),
       );
-      expect(await Migrator(db).apply([initial, migration]), isEmpty);
+      expect(await Migrator(db.sql).apply([initial, migration]), isEmpty);
       expect(
         (await db.execute(SqlCommand('SELECT touches FROM payload'))).rows
             .map((r) => r.single),
@@ -120,16 +122,16 @@ void main() {
       await db.execute(SqlCommand('CREATE INDEX value_lookup ON payload(id)'));
       final migration = build([index]);
       await expectLater(
-        Migrator(db).apply([initial, migration]),
+        Migrator(db.sql).apply([initial, migration]),
         throwsA(
           isA<OrmException>().having((e) => e.code, 'code', 'MIGRATION.STEP'),
         ),
       );
-      final progress = (await Migrator(db).progress()).single;
+      final progress = (await Migrator(db.sql).progress()).single;
       expect(progress.state, MigrationStepState.failed);
       expect(progress.phase, 'inspect');
       expect(progress.failure, 'MIGRATION.RECOVERY');
-      expect((await Migrator(db).history()).length, 1);
+      expect((await Migrator(db.sql).history()).length, 1);
     },
   );
 
@@ -139,7 +141,7 @@ void main() {
       await db.execute(SqlCommand("UPDATE payload SET value = 'duplicate'"));
       final migration = build([index]);
       await expectLater(
-        Migrator(db).apply([initial, migration]),
+        Migrator(db.sql).apply([initial, migration]),
         throwsA(isA<OrmException>()),
       );
       final invalid = await db.execute(
@@ -148,20 +150,20 @@ void main() {
         ),
       );
       expect(invalid.rows.single.single, false);
-      expect((await Migrator(db).progress()).single.phase, 'execute');
+      expect((await Migrator(db.sql).progress()).single.phase, 'execute');
       await expectLater(
-        Migrator(db).apply([initial, migration]),
+        Migrator(db.sql).apply([initial, migration]),
         throwsA(isA<OrmException>()),
       );
       expect(
-        (await Migrator(db).progress()).single.failure,
+        (await Migrator(db.sql).progress()).single.failure,
         'MIGRATION.RECOVERY',
       );
       await db.execute(SqlCommand('DROP INDEX CONCURRENTLY value_lookup'));
       await db.execute(
         SqlCommand("UPDATE payload SET value = 'repaired' WHERE id = 2"),
       );
-      await Migrator(db).apply([initial, migration]);
+      await Migrator(db.sql).apply([initial, migration]);
       expect(
         (await db.execute(SqlCommand(index.doneWhen))).rows.single.single,
         true,
@@ -180,11 +182,11 @@ void main() {
         ),
       ]);
       await expectLater(
-        Migrator(db).apply([initial, migration]),
+        Migrator(db.sql).apply([initial, migration]),
         throwsA(isA<OrmException>()),
       );
       await expectLater(
-        Migrator(db).plan([
+        Migrator(db.sql).plan([
           initial,
           build([index]),
         ]),
@@ -197,7 +199,7 @@ void main() {
         ),
       );
       await expectLater(
-        Migrator(db).plan([initial]),
+        Migrator(db.sql).plan([initial]),
         throwsA(
           isA<OrmException>().having(
             (e) => e.code,
@@ -215,7 +217,7 @@ void main() {
         dialect: db.dialect,
       );
       await expectLater(
-        Migrator(db).baseline([baseline], expected: snapshot),
+        Migrator(db.sql).baseline([baseline], expected: snapshot),
         throwsA(
           isA<OrmException>().having(
             (e) => e.code,
@@ -236,14 +238,14 @@ void main() {
       ),
     ]);
     await expectLater(
-      Migrator(db).apply([initial, migration]),
+      Migrator(db.sql).apply([initial, migration]),
       throwsA(isA<OrmException>()),
     );
     expect(
-      (await Migrator(db).progress()).single.failure,
+      (await Migrator(db.sql).progress()).single.failure,
       'MIGRATION.POSTCONDITION',
     );
-    expect((await Migrator(db).progress()).single.phase, 'verify');
+    expect((await Migrator(db.sql).progress()).single.phase, 'verify');
   });
 
   test('recovery probes must produce one boolean value', () async {
@@ -255,11 +257,14 @@ void main() {
       ),
     ]);
     await expectLater(
-      Migrator(db).apply([initial, migration]),
+      Migrator(db.sql).apply([initial, migration]),
       throwsA(isA<OrmException>()),
     );
-    expect((await Migrator(db).progress()).single.failure, 'MIGRATION.PROBE');
-    expect((await Migrator(db).progress()).single.phase, 'inspect');
+    expect(
+      (await Migrator(db.sql).progress()).single.failure,
+      'MIGRATION.PROBE',
+    );
+    expect((await Migrator(db.sql).progress()).single.phase, 'inspect');
   });
 
   test(
@@ -270,8 +275,8 @@ void main() {
         index,
       ]);
       final results = await Future.wait([
-        Migrator(db).apply([initial, migration]),
-        Migrator(db).apply([initial, migration]),
+        Migrator(db.sql).apply([initial, migration]),
+        Migrator(db.sql).apply([initial, migration]),
       ]);
       expect(results.expand((r) => r), [migration.id]);
       expect(
@@ -297,7 +302,7 @@ void main() {
           );
           try {
             final migrator = Migrator(
-              db,
+              db.sql,
               lockTimeout: const Duration(milliseconds: 25),
             );
             await expectLater(
@@ -327,7 +332,7 @@ void main() {
             );
           }
         });
-        await Migrator(db).apply([
+        await Migrator(db.sql).apply([
           initial,
           build([index]),
         ]);
@@ -344,17 +349,17 @@ void main() {
       index,
     ]);
     await expectLater(
-      Migrator(db).apply([initial, migration]),
+      Migrator(db.sql).apply([initial, migration]),
       throwsA(isA<OrmException>()),
     );
-    expect((await Migrator(db).progress()).map((p) => p.state), [
+    expect((await Migrator(db.sql).progress()).map((p) => p.state), [
       MigrationStepState.complete,
       MigrationStepState.failed,
     ]);
     await db.execute(
       SqlCommand('CREATE TABLE repair_target (id BIGINT PRIMARY KEY)'),
     );
-    await Migrator(db).apply([initial, migration]);
+    await Migrator(db.sql).apply([initial, migration]);
     expect(
       (await db.execute(SqlCommand('SELECT touches FROM payload'))).rows
           .map((r) => r.single),
@@ -419,8 +424,8 @@ Future<void> main(List<String> args) => crashMigration(migrationHistory.checked,
             91,
             reason: '${process.stdout}\n${process.stderr}',
           );
-          expect((await Migrator(db).history()).length, 1);
-          final progress = await Migrator(db).progress();
+          expect((await Migrator(db.sql).history()).length, 1);
+          final progress = await Migrator(db.sql).progress();
           expect(
             progress.single.state,
             crashAtCommit
@@ -433,13 +438,13 @@ Future<void> main(List<String> args) => crashMigration(migrationHistory.checked,
               true,
             );
           }
-          await Migrator(db).apply([initial, migration]);
+          await Migrator(db.sql).apply([initial, migration]);
           expect(
             (await db.execute(SqlCommand('SELECT touches FROM payload'))).rows
                 .map((r) => r.single),
             [1, 1],
           );
-          expect((await Migrator(db).history()).length, 2);
+          expect((await Migrator(db.sql).history()).length, 2);
         } finally {
           await project.dispose();
         }

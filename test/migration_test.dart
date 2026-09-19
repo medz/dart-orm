@@ -163,7 +163,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
         start.tables,
         dialect: db.dialect,
       );
-      await Migrator(db).apply([initial]);
+      await Migrator(db.sql).apply([initial]);
       await db.execute(
         SqlCommand(
           "INSERT INTO accounts(id, email, nickname, score) VALUES (1, 'seven', NULL, 17)",
@@ -200,7 +200,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
           ),
           dialect: db.dialect,
         );
-        await Migrator(db).apply([initial, migration]);
+        await Migrator(db.sql).apply([initial, migration]);
         expect(
           (await db.execute(
             SqlCommand('SELECT id, email, label, score, status FROM members'),
@@ -211,8 +211,8 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
           (await db.execute(SqlCommand('SELECT body FROM notes'))).rows.single,
           ['preserve'],
         );
-        expect((await verifySchema(db, target)).differences, isEmpty);
-        expect(await inspectColumns(db, 'accounts'), isEmpty);
+        expect((await verifySchema(db.sql, target)).differences, isEmpty);
+        expect(await inspectColumns(db.sql, 'accounts'), isEmpty);
       },
     );
 
@@ -228,8 +228,8 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
         previous: initial.checksum,
         dialect: db.dialect,
       );
-      await Migrator(db).apply([initial, migration]);
-      expect((await verifySchema(db, target)).differences, isEmpty);
+      await Migrator(db.sql).apply([initial, migration]);
+      expect((await verifySchema(db.sql, target)).differences, isEmpty);
       expect(
         (await db.execute(SqlCommand('SELECT COUNT(*) FROM notes')))
             .rows
@@ -255,11 +255,11 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
           dialect: db.dialect,
         );
         await expectLater(
-          Migrator(db).apply([initial, migration]),
+          Migrator(db.sql).apply([initial, migration]),
           throwsA(anything),
         );
-        expect((await verifySchema(db, start)).differences, isEmpty);
-        expect((await Migrator(db).history()).length, 1);
+        expect((await verifySchema(db.sql, start)).differences, isEmpty);
+        expect((await Migrator(db.sql).history()).length, 1);
         expect(
           (await db.execute(SqlCommand('SELECT nickname FROM accounts')))
               .rows
@@ -289,8 +289,8 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
           previous: fill.checksum,
           dialect: db.dialect,
         );
-        await Migrator(db).apply([initial, fill, required]);
-        expect((await verifySchema(db, target)).differences, isEmpty);
+        await Migrator(db.sql).apply([initial, fill, required]);
+        expect((await verifySchema(db.sql, target)).differences, isEmpty);
         expect(
           (await db.execute(SqlCommand('SELECT nickname FROM accounts')))
               .rows
@@ -316,7 +316,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
         },
         dialect: db.dialect,
       );
-      await Migrator(db).apply([initial, migration]);
+      await Migrator(db.sql).apply([initial, migration]);
       expect(
         (await db.execute(SqlCommand('SELECT score FROM accounts')))
             .rows
@@ -324,7 +324,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
             .single,
         '17',
       );
-      expect((await verifySchema(db, target)).differences, isEmpty);
+      expect((await verifySchema(db.sql, target)).differences, isEmpty);
     });
 
     test('additive changes use ALTER without a table rebuild', () async {
@@ -337,8 +337,8 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
         dialect: db.dialect,
       );
       expect(migration.steps.whereType<RebuildTable>(), isEmpty);
-      await Migrator(db).apply([initial, migration]);
-      expect((await verifySchema(db, target)).differences, isEmpty);
+      await Migrator(db.sql).apply([initial, migration]);
+      expect((await verifySchema(db.sql, target)).differences, isEmpty);
       expect(
         (await db.execute(SqlCommand('SELECT status FROM accounts')))
             .rows
@@ -362,7 +362,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
           previous: initial.checksum,
           dialect: db.dialect,
         );
-        await Migrator(db).apply([initial, change]);
+        await Migrator(db.sql).apply([initial, change]);
         final remove = Migration.diff(
           '0003_remove',
           from: restricted,
@@ -371,10 +371,10 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
           allowDestructive: true,
           dialect: db.dialect,
         );
-        await Migrator(db).apply([initial, change, remove]);
-        expect(await inspectColumns(db, 'accounts'), isEmpty);
-        expect(await inspectColumns(db, 'notes'), isEmpty);
-        expect((await Migrator(db).history()).length, 3);
+        await Migrator(db.sql).apply([initial, change, remove]);
+        expect(await inspectColumns(db.sql, 'accounts'), isEmpty);
+        expect(await inspectColumns(db.sql, 'notes'), isEmpty);
+        expect((await Migrator(db.sql).history()).length, 3);
         if (db.dialect == SqlDialect.sqlite) {
           expect(
             (await db.execute(SqlCommand('PRAGMA foreign_keys')))
@@ -396,12 +396,12 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
         dialect: db.dialect,
       );
       await expectLater(
-        Migrator(db).apply([initial, migration]),
+        Migrator(db.sql).apply([initial, migration]),
         throwsA(
           isA<OrmException>().having((e) => e.code, 'code', 'MIGRATION.CHAIN'),
         ),
       );
-      expect((await verifySchema(db, start)).differences, isEmpty);
+      expect((await verifySchema(db.sql, start)).differences, isEmpty);
     });
 
     if (backend == 'sqlite') {
@@ -409,12 +409,12 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
         await db.execute(
           SqlCommand('CREATE TABLE audit (id TEXT PRIMARY KEY)'),
         );
-        expect((await inspectColumns(db, 'audit')).single.nullable, true);
+        expect((await inspectColumns(db.sql, 'audit')).single.nullable, true);
         await db.execute(SqlCommand('DROP TABLE audit'));
         await db.execute(
           SqlCommand('CREATE TABLE audit (id INTEGER PRIMARY KEY)'),
         );
-        expect((await inspectColumns(db, 'audit')).single.nullable, false);
+        expect((await inspectColumns(db.sql, 'audit')).single.nullable, false);
       });
 
       test(
@@ -437,7 +437,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
             ),
           );
           final target = SchemaSnapshot([accounts(scoreDefault: '9'), notes()]);
-          await Migrator(db).apply([
+          await Migrator(db.sql).apply([
             initial,
             Migration.diff(
               '0002_default',
@@ -462,7 +462,10 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
             [1, 'updated'],
           );
           expect(
-            (await inspectTable(db, 'accounts')).unmanaged.map((o) => o.name),
+            (await inspectTable(
+              db.sql,
+              'accounts',
+            )).unmanaged.map((o) => o.name),
             containsAll(['email_search', 'account_audit', 'account_cards']),
           );
         },
@@ -486,7 +489,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
           dialect: SqlDialect.sqlite,
         );
         await expectLater(
-          Migrator(db).apply([initial, bad]),
+          Migrator(db.sql).apply([initial, bad]),
           throwsA(
             isA<OrmException>().having(
               (e) => e.code,
@@ -556,7 +559,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
           dialect: db.dialect,
         );
         await expectLater(
-          Migrator(db).apply([initial, migration]),
+          Migrator(db.sql).apply([initial, migration]),
           throwsA(
             isA<OrmException>().having(
               (e) => e.code,
@@ -569,7 +572,7 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
           db.execute(SqlCommand('UPDATE accounts SET checked = -1')),
           throwsA(anything),
         );
-        expect((await Migrator(db).history()).length, 1);
+        expect((await Migrator(db.sql).history()).length, 1);
       });
     }
   });

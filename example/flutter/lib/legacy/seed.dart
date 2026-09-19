@@ -4,7 +4,7 @@ import 'package:orm/sqlite.dart';
 import 'schema.orm.dart';
 
 Future<void> seedLegacy(Database<Sqlite> db, Migration initial) async {
-  await Migrator(db).apply([initial]);
+  await Migrator(db.sql).apply([initial]);
   await db.transaction((tx) async {
     await tx.notes.create(
       body: 'Written by version 1',

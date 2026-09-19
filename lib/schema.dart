@@ -2,18 +2,8 @@
 /// never called with synthetic row values.
 library;
 
-import 'orm.dart' show Codec, ComputedStorage;
-export 'orm.dart'
-    show
-        Codec,
-        ComputedStorage,
-        Codecs,
-        SqlJson,
-        Decimal,
-        DecimalRounding,
-        LocalDate,
-        LocalTime,
-        LocalDateTime;
+import 'schema_model.dart' show Codec, ComputedStorage;
+export 'schema_model.dart';
 
 /// A public const codec reference. Generation reads its type and storage tag;
 /// it never executes the application's encode/decode functions.
@@ -58,12 +48,14 @@ final class ClientDefault<T> {
 /// SQL computed by the database; omitted from generated writes.
 final class Computed {
   final String expression;
-  final String? sqlite, postgres;
+  final String? sqlite, postgres, mysql, mariadb;
   final ComputedStorage storage;
   const Computed.sql(
     this.expression, {
     this.sqlite,
     this.postgres,
+    this.mysql,
+    this.mariadb,
     this.storage = ComputedStorage.stored,
   });
 }
@@ -91,12 +83,16 @@ enum ReferentialAction { restrict, cascade, setNull, setDefault, noAction }
 
 /// A fixed SQL file with declared result and parameter Record types.
 /// Run query generation, then check the manifest against each target database.
-SqlDeclaration<R, P> sqlQuery<R, P>({String? sqlite, String? postgres}) =>
-    SqlDeclaration(sqlite, postgres);
+SqlDeclaration<R, P> sqlQuery<R, P>({
+  String? sqlite,
+  String? postgres,
+  String? mysql,
+  String? mariadb,
+}) => SqlDeclaration(sqlite, postgres, mysql, mariadb);
 
 final class SqlDeclaration<R, P> {
-  final String? sqlite, postgres;
-  const SqlDeclaration(this.sqlite, this.postgres);
+  final String? sqlite, postgres, mysql, mariadb;
+  const SqlDeclaration(this.sqlite, this.postgres, this.mysql, this.mariadb);
 }
 
 Entity<M> entity<M>({String? table}) => Entity<M>(table);
@@ -117,6 +113,8 @@ final class Entity<M> {
     String? name,
     String? sqlite,
     String? postgres,
+    String? mysql,
+    String? mariadb,
   }) => const SchemaConstraint();
   SchemaConstraint index<K>(
     K Function(M) selector, {

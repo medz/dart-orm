@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show Appointment, Holiday, Visit;
@@ -62,7 +62,7 @@ final appointmentsTable = Table<models.Appointment, AppointmentsFields>(
 
 final class AppointmentsTableSet
     extends TableSet<models.Appointment, AppointmentsFields> {
-  AppointmentsTableSet(Database<Backend> db) : super(db, appointmentsTable) {
+  AppointmentsTableSet(QueryContext db) : super(db, appointmentsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Appointment> create({
@@ -132,7 +132,7 @@ final holidaysTable = Table<models.Holiday, HolidaysFields>(
 );
 
 final class HolidaysTableSet extends TableSet<models.Holiday, HolidaysFields> {
-  HolidaysTableSet(Database<Backend> db) : super(db, holidaysTable) {
+  HolidaysTableSet(QueryContext db) : super(db, holidaysTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Holiday> create({
@@ -190,7 +190,7 @@ final visitsTable = Table<models.Visit, VisitsFields>(
 );
 
 final class VisitsTableSet extends TableSet<models.Visit, VisitsFields> {
-  VisitsTableSet(Database<Backend> db) : super(db, visitsTable) {
+  VisitsTableSet(QueryContext db) : super(db, visitsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Visit> create({
@@ -212,7 +212,7 @@ final appSchema = List<TableSchema>.unmodifiable([
   visitsSchema,
 ]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   AppointmentsTableSet get appointments => AppointmentsTableSet(this);
   HolidaysTableSet get holidays => HolidaysTableSet(this);
   VisitsTableSet get visits => VisitsTableSet(this);

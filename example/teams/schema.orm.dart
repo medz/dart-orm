@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show User, Team, Membership;
@@ -41,7 +41,7 @@ final usersTable = Table<models.User, UsersFields>(
 );
 
 final class UsersTableSet extends TableSet<models.User, UsersFields> {
-  UsersTableSet(Database<Backend> db) : super(db, usersTable) {
+  UsersTableSet(QueryContext db) : super(db, usersTable) {
     db.registerSchema(appSchema);
   }
   Future<models.User> create({required int id, required String name}) =>
@@ -94,7 +94,7 @@ final teamsTable = Table<models.Team, TeamsFields>(
 );
 
 final class TeamsTableSet extends TableSet<models.Team, TeamsFields> {
-  TeamsTableSet(Database<Backend> db) : super(db, teamsTable) {
+  TeamsTableSet(QueryContext db) : super(db, teamsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Team> create({required int id, required String name}) =>
@@ -185,7 +185,7 @@ final membershipsTable = Table<models.Membership, MembershipsFields>(
 
 final class MembershipsTableSet
     extends TableSet<models.Membership, MembershipsFields> {
-  MembershipsTableSet(Database<Backend> db) : super(db, membershipsTable) {
+  MembershipsTableSet(QueryContext db) : super(db, membershipsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Membership> create({
@@ -229,7 +229,7 @@ final appSchema = List<TableSchema>.unmodifiable([
   membershipsSchema,
 ]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   UsersTableSet get users => UsersTableSet(this);
   TeamsTableSet get teams => TeamsTableSet(this);
   MembershipsTableSet get memberships => MembershipsTableSet(this);

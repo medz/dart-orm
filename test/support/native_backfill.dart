@@ -17,14 +17,14 @@ Future<void> main() async {
   try {
     await seed(db, count: 25);
     final migration = historical.migrationHistory.checked.last;
-    final runner = Migrator(db);
+    final runner = Migrator(db.sql);
     await runner.apply([initial, migration], maxBackfillBatches: 1);
     if ((await runner.progress()).single.backfill!.rows != 3) {
       throw StateError('Backfill pause failed');
     }
     final results = await Future.wait([
       runner.apply([initial, migration]),
-      Migrator(other).apply([initial, migration]),
+      Migrator(other.sql).apply([initial, migration]),
     ]);
     if (results.expand((r) => r).length != 1) {
       throw StateError('Concurrent history recording failed');

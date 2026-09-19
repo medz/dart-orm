@@ -1,4 +1,4 @@
-part of '../orm.dart';
+part of '../sql.dart';
 
 typedef _Decoder<T> = T Function(List<Object?> row);
 

@@ -1,6 +1,6 @@
 import 'package:sqlite3/common.dart' as native;
 
-import '../../orm.dart';
+import '../../driver.dart';
 
 part 'decimal.dart';
 part 'temporal.dart';

@@ -22,41 +22,48 @@ final class SchemaSnapshot {
   String get checksum => _hash(toJson());
 }
 
-TableSchema _targetTable(TableSchema table, SqlDialect dialect) => TableSchema(
-  table.name,
-  columns: [
-    for (final c in table.columns)
-      Column<Object?>(
-        c.name,
-        c.codec,
-        nullable: c.nullable,
-        generated: c.generated,
-        defaultSql: c.defaultSql,
-        computed: c.computed == null
-            ? null
-            : ComputedColumn(
-                c.computed!.expression(dialect),
-                storage: c.computed!.storage,
-              ),
-        integerBits: c.integerBits,
-        decimalPrecision: c.decimalPrecision,
-        decimalScale: c.decimalScale,
-        temporalPrecision: c.temporalPrecision,
-      ),
-  ],
-  primaryKey: table.primaryKey,
-  uniqueKeys: table.uniqueKeys,
-  indexes: table.indexes,
-  foreignKeys: table.foreignKeys,
-  checks: [
-    for (final c in table.checks) CheckSchema(c.name, c.expression(dialect)),
-  ],
-);
+TableSchema _targetTable(TableSchema table, SqlDialect dialect) {
+  final target = TableSchema(
+    table.name,
+    columns: [
+      for (final c in table.columns)
+        Column<Object?>(
+          c.name,
+          c.codec,
+          nullable: c.nullable,
+          generated: c.generated,
+          defaultSql: c.defaultSql,
+          computed: c.computed == null
+              ? null
+              : ComputedColumn(
+                  c.computed!.expression(dialect),
+                  storage: c.computed!.storage,
+                ),
+          integerBits: c.integerBits,
+          decimalPrecision: c.decimalPrecision,
+          decimalScale: c.decimalScale,
+          temporalPrecision: c.temporalPrecision,
+        ),
+    ],
+    primaryKey: table.primaryKey,
+    uniqueKeys: table.uniqueKeys,
+    indexes: table.indexes,
+    foreignKeys: table.foreignKeys,
+    checks: [
+      for (final c in table.checks) CheckSchema(c.name, c.expression(dialect)),
+    ],
+  );
+  return _isMysql(dialect) ? _mysqlPhysicalTable(target) : target;
+}
 
 Map<String, Object?> _checkJson(CheckSchema check) => {
   'name': check.name,
   'sqlite': check.sqlite,
   'postgres': check.postgres,
+  if (check.mysql != null && check.mysql != check.postgres)
+    'mysql': check.mysql,
+  if (check.mariadb != null && check.mariadb != check.postgres)
+    'mariadb': check.mariadb,
 };
 
 Map<String, Object?> _columnJson(Column<Object?> column) => {

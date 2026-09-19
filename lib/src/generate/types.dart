@@ -23,6 +23,8 @@ final class _DartNames(final Uri source, final String Function(Uri) importUri) {
       'dart:core',
       'dart:typed_data',
       'package:orm/orm.dart',
+      'package:orm/values.dart',
+      'package:orm/schema_model.dart',
     }.contains(uri.toString())) {
       return element.name!;
     }

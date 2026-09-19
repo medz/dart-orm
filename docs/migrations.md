@@ -1,19 +1,44 @@
 # Migrations
 
-Schema snapshots, saved migrations and their registry are Dart libraries. Generate
-current physical facts separately from the application client:
+Schema snapshots, saved migrations and their registry are Dart libraries. Start
+with one typed project configuration and one fixed database engine:
 
 ```sh
-dart run orm generate lib/schema.dart
-# Creates lib/schema.orm.dart and lib/schema.snapshot.dart.
-dart run orm migration registry migrations --dialect sqlite
+dart run orm init --database sqlite
+dart run orm migrate create 0001_initial
+# Review migrations/m0001_initial.dart.
+dart run orm migrate check
+dart run orm migrate apply
+dart run orm migrate plan
+dart run orm migrate status
+dart run orm migrate verify
+dart run orm migrate inspect tasks
 ```
 
-Create `bin/migrate.dart` once:
+`init` also accepts `postgres`, `mysql` and `mariadb`. It generates a nominal model,
+client, physical snapshot, empty static registry and `orm.config.dart`. Existing
+files are never replaced, and initialization does not connect or execute DDL.
+See the [project CLI](cli.md) for the generated typed configuration and all options.
+
+The config is an explicit Dart entrypoint with `runOrmCli(args, config: OrmConfig(...))`.
+It statically imports its current snapshot and migration history. Connection
+factories return the independent `SqlDatabase` runtime, built with the selected
+low-level driver; migrations do not need ORM models or typed query generation.
+Server connection factories read environment variables only when connecting.
+
+Run from the project root. `migrate create` first regenerates the model's physical
+snapshot before diffing, so an edited declaration cannot use a stale snapshot.
+Other commands use their statically imported snapshot/history without changing
+source artifacts. Standalone generation remains `dart run orm generate
+lib/schema.dart`, and registry regeneration is `dart run orm migration registry
+migrations --dialect sqlite` for a new empty registry.
+
+Projects can also call the lower-level `runMigrationCli` in their own executable:
 
 ```dart
 import 'package:orm/migrate_cli.dart';
-import 'package:orm/sqlite.dart';
+import 'package:orm/runtime.dart';
+import 'package:orm/drivers/sqlite.dart';
 import '../lib/schema.snapshot.dart';
 import '../migrations/migrations.g.dart';
 
@@ -22,34 +47,17 @@ Future<void> main(List<String> args) => runMigrationCli(
   directory: 'migrations',
   history: migrationHistory,
   schema: schema,
-  connect: ({required readOnly}) => sqlite(
-    readOnly
+  connect: ({required readOnly}) async => SqlDatabase(
+    await SqliteDriver.open(readOnly
         ? const SqliteOptions.readOnly('app.sqlite')
-        : const SqliteOptions.file('app.sqlite'),
+        : const SqliteOptions.file('app.sqlite')),
   ),
 );
 ```
 
-Run from the project root. Connections, schema, renames and conversions are
-ordinary typed Dart configuration; no schema or migration JSON loader is involved.
-For a PostgreSQL project, initialize a **separate registry** with `--dialect postgres`,
-import `dart:io` and `package:orm/postgres.dart`, and provide
-`connect: ({required readOnly}) => postgres(PostgresOptions(url:
-Uri.parse(Platform.environment['DATABASE_URL']!), schema: 'public'))`.
-TLS defaults to certificate verification. SQLite inspection commands require an
-existing read-only file; `apply` can create one. Offline commands never call the
-connection factory. Database migration/verification operations enforce their own
-transaction and locking boundaries.
-
-```sh
-dart run bin/migrate.dart create 0001_initial
-dart run bin/migrate.dart check
-dart run bin/migrate.dart apply
-dart run bin/migrate.dart plan
-dart run bin/migrate.dart status
-dart run bin/migrate.dart verify
-dart run bin/migrate.dart inspect users
-```
+Offline commands never call the connection factory. SQLite inspection requires
+an existing read-only file; `apply` can create one. Database migration/verification
+operations enforce their own transaction and locking boundaries.
 
 Each new migration is an `m<id>.dart` file with fixed operations, an independent
 historical schema and a recorded `migrationChecksum`. The adjacent
@@ -97,7 +105,7 @@ that every older server feature is unsupported by the query driver. See the nati
 [SQLite ALTER TABLE](https://www.sqlite.org/lang_altertable.html) boundaries.
 
 Edit the latest **unpublished** migration when a generated change needs a reviewed
-backfill or manual SQL, then run `dart run bin/migrate.dart record 0002_name`.
+backfill or manual SQL, then run `dart run orm migrate record 0002_name`.
 This explicit command updates its fingerprint while preserving the surrounding
 source. It cannot know whether a migration was deployed. Never edit or re-record
 an applied migration: database history also records checksums and rejects the
@@ -130,11 +138,13 @@ checking nor generation applies them.
 
 Start with [catalog import](importing.md) for an existing database, then run
 `baseline` to verify and register its final historical schema without replaying
-creation SQL. Commands return JSON reports (not migration artifacts). Exit code 2
+creation SQL. Add `--json` for machine reports (not migration artifacts). The lower-level `runMigrationCli` defaults to JSON reports. Exit code 2
 indicates catalog drift, 64 invalid CLI arguments, and 1 an execution failure.
 Dart's launcher may print build-hook progress on stderr.
 
 Application startup uses the same static history without the CLI/tooling imports:
+Here and below, `db` is a `SqlDatabase`; use `ormDatabase.sql` when starting from
+the typed ORM `Database`.
 
 ```dart
 import 'migrations/migrations.g.dart';
@@ -152,13 +162,16 @@ steps; it must not call `Migration.diff` against current models when it runs.
 Fingerprints cover the engine, SQL, operation data, historical schema and predecessor, while
 formatting and comments do not affect them.
 
-`apply` runs a pending batch without `CheckedSql` or `Backfill` in one transaction. A failed copy, required
+SQLite and PostgreSQL `apply` run a pending batch without `CheckedSql` or `Backfill` in one transaction. A failed copy, required
 column, unique constraint, or foreign key rolls back earlier steps and history
 records from that invocation. PostgreSQL uses a dedicated connection and a session advisory lock scoped to the
 current database/schema; SQLite obtains an immediate write transaction. PostgreSQL
 lock acquisition uses short `pg_try_advisory_lock` queries outside a transaction,
 with `Migrator(db, lockTimeout: ...)` defaulting to 30 seconds. Waiting does not
 hold an old SQL snapshot that could deadlock concurrent index creation.
+MySQL/MariaDB DDL commits independently and uses exact catalog preconditions,
+postconditions and durable checkpoints; see [MySQL/MariaDB migrations](mysql-migrations.md).
+
 Migration planning checks applied history and checksums. Catalog verification is
 an explicit separate operation; SQL history alone does not prove schema equality.
 
@@ -167,9 +180,9 @@ an explicit separate operation; SQL history alone does not prove schema equality
 The project entrypoint can be compiled with the SDK's native-asset-aware CLI build:
 
 ```sh
-dart build cli --target bin/migrate.dart --output build/migration
-./build/migration/bundle/bin/migrate check
-./build/migration/bundle/bin/migrate apply
+dart build cli --target orm.config.dart --output build/migration
+./build/migration/bundle/bin/orm.config migrate check
+./build/migration/bundle/bin/orm.config migrate apply
 ```
 
 Deploy the complete `bundle` directory, including its native libraries. Migration
@@ -228,7 +241,7 @@ rejected downgrade does not delete or rebuild tables.
 
 ## Schema evolution
 
-`diff` generates PostgreSQL and SQLite operations together:
+`diff` generates operations for the history's selected engine only:
 
 - New nullable/defaulted columns use `ALTER TABLE` when SQLite permits the default.
 - SQLite changes to existing columns or keys use an explicit `RebuildTable` step.
@@ -236,7 +249,7 @@ rejected downgrade does not delete or rebuild tables.
   the file; the resulting file makes each removal visible to review.
 - A new required column without a default needs a separate add/backfill/constrain
   sequence. Identity changes require a manual migration.
-- Type changes require SQL conversion expressions for each dialect. Expressions
+- Type changes require SQL conversion expressions for the selected dialect. Expressions
   are trusted migration code and use column names after declared renames.
 
 [Computed target columns](computed.md) use their own expressions to populate old
@@ -334,8 +347,8 @@ connection; baseline and ordinary migration runners use the same lock protocol.
 Session lock behavior is documented by
 [PostgreSQL](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS).
 
-Use `Migrator(db).progress()` or `dart run bin/migrate.dart status` to inspect step states, failed
-phases and failure codes. `dart run bin/migrate.dart plan` reports `atomic: false` for pending
+Use `Migrator(db).progress()` or `dart run orm migrate status` to inspect step states, failed
+phases and failure codes. `dart run orm migrate plan` reports `atomic: false` for pending
 nontransactional work and includes progress. A `MIGRATION.STEP` exception retains
 the underlying error as `cause`. A failed lock release discards its connection.
 SQLite rejects `CheckedSql`; its schema rebuild path remains transactional.

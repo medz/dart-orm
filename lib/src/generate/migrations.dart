@@ -161,7 +161,7 @@ Future<SqlDialect> _registryDialect(
   if (kind == FileSystemEntityType.notFound) {
     return requested ??
         (throw const GenerationException(
-          'Choose --dialect sqlite or --dialect postgres when initializing a migration registry.',
+          'Choose --dialect sqlite, postgres, mysql or mariadb when initializing a migration registry.',
         ));
   }
   if (kind != FileSystemEntityType.file) {
@@ -178,6 +178,8 @@ Future<SqlDialect> _registryDialect(
       ? switch (values.single) {
           'SqlDialect.sqlite' => SqlDialect.sqlite,
           'SqlDialect.postgres' => SqlDialect.postgres,
+          'SqlDialect.mysql' => SqlDialect.mysql,
+          'SqlDialect.mariadb' => SqlDialect.mariadb,
           _ => null,
         }
       : null;

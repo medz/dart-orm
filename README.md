@@ -1,15 +1,45 @@
 # Dart ORM
 
-A new Dart 3.13 ORM designed around record schemas, typed relationships,
-composable selections, and explicit database sessions.
+A Dart 3.13 ORM with ordinary immutable Dart models, typed relationships,
+composable selections, and explicit database sessions. Declare a class once;
+generated queries return that class directly.
 
-The implementation has separate real SQLite, PostgreSQL, Chrome, Flutter Web and Android
+The implementation has separate real SQLite, PostgreSQL, MySQL, MariaDB, Chrome, Flutter Web and Android
 verification records. See [current progress](docs/progress.md),
 [capability limits](docs/capabilities.md) and [design acceptance](docs/acceptance.md)
 for which revision and scenarios each record covers.
 
-One package, independent SQLite and PostgreSQL entry points, no runtime reflection.
+One package, independent modules and database adapters, no runtime reflection.
 This branch is unrelated to earlier ORM implementations.
+
+For a new application with the `orm` dependency:
+
+```sh
+dart run orm init --database sqlite
+dart run orm migrate create 0001_initial
+# Review the generated Dart migration.
+dart run orm migrate apply
+```
+
+Choose `postgres`, `mysql` or `mariadb` to initialize that engine's own history.
+The [project CLI](docs/cli.md) creates typed Dart configuration, a nominal model,
+the generated client and a static migration registry. Initialization and
+generation never connect or apply DDL.
+
+| Module | Independent use |
+| --- | --- |
+| `values.dart` | Codecs and precise domain values |
+| `driver.dart`, `drivers/*.dart` | Parameterized SQL contracts and database adapters |
+| `runtime.dart` | Raw SQL sessions, transactions and cursor lifetimes |
+| `schema_model.dart` | Physical table metadata |
+| `sql.dart` | Typed query construction and offline SQL compilation |
+| `orm.dart` | Typed execution and query subscriptions over `SqlDatabase` |
+| `migrate.dart` | Schema inspection, plans and immutable migration execution |
+| `schema.dart`, `generate.dart`, `cli.dart` | Declaration, static generation and project tools |
+
+These are separate Dart libraries with directed dependencies. Use a raw driver
+without the ORM, compile a typed query without a connection, or run migrations
+without current application models. See [API boundaries](docs/api.md).
 
 The [SQLite entry point](docs/sqlite-web.md) works on native platforms and the web,
 with background execution and the same generated query API. Flutter Web bundles
@@ -33,10 +63,10 @@ reproducible generation measurements.
 Declare data once in [schema.dart](example/schema.dart):
 
 ```dart
-typedef User = ({
-  @Id.generated() int id,
-  @Unique() String email,
-  String? nickname,
+final class User({
+  @Id.generated() required final int id,
+  @Unique() required final String email,
+  required final String? nickname,
 });
 final users = entity<User>();
 ```
@@ -52,7 +82,7 @@ import 'schema.orm.dart';
 Future<void> main() async {
   final db = await sqlite(const SqliteOptions.memory());
   try {
-    await Migrator(db).apply([
+    await Migrator(db.sql).apply([
       Migration.create('0001_initial', appSchema, dialect: .sqlite),
     ]);
     final User user = await db.users.create(email: 'seven@example.com');
@@ -67,6 +97,8 @@ Future<void> main() async {
 
 For PostgreSQL, import `postgres.dart` and use
 `postgres(PostgresOptions(url: url))`; TLS certificate verification is the default.
+[MySQL and MariaDB](docs/mysql.md) use `mysql.dart` / `mariadb.dart` with
+`await mysql(MysqlOptions(url: url))` / `await mariadb(MariadbOptions(url: url))`.
 Each backend has its own transaction options and migration history. Choose the
 engine when initializing that history, and keep its reviewed Dart migrations and
 static registry in version control. A connection change does not translate history.
@@ -82,7 +114,7 @@ historical schemas, prepared versus executed operations, selection nullability,
 and transaction ownership. Inside a transaction, build every query from `tx`;
 subqueries, CTEs and UNION operands must share that same view.
 
-For an existing database, [import a Record declaration](docs/importing.md), review
+For an existing database, [import a model declaration](docs/importing.md), review
 its report, generate the client, and baseline the current schema without copying
 existing rows.
 
@@ -142,3 +174,8 @@ nullability and codec requirements.
 
 Set `ORM_TEST_POSTGRES` to a **disposable** local PostgreSQL database to include
 PostgreSQL integration tests. The tests create and drop their own test tables.
+Set `ORM_TEST_MYSQL` and `ORM_TEST_MARIADB` for their live suites; migration
+recovery tests additionally create and drop isolated databases. Use dedicated test
+servers and credentials with the necessary privileges. Their TLS setting defaults
+to `verifyFull`; self-signed local fixtures can explicitly set
+`ORM_TEST_MYSQL_TLS=require` / `ORM_TEST_MARIADB_TLS=require`.

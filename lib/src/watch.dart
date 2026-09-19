@@ -76,32 +76,6 @@ final class _ChangeHub {
   }
 }
 
-/// SQL compilation visits subqueries and CTE definitions with the same writer.
-/// Batch relationships are additional queries and must be visited separately.
-final class _ReadTables {
-  final bool includeRaw;
-  _ReadTables({this.includeRaw = false});
-  bool opaque = false;
-  final Set<TableSchema> tables = Set.identity();
-  void query(Query<Object?, Fields> query) {
-    final (plan, _) = query._plan();
-    query._write(
-      _Writer(
-        query.database.dialect,
-        {},
-        database: query.database,
-        reads: this,
-        exactDecimal: query.database.capabilities.exactDecimal,
-        temporal: query.database.capabilities.temporal,
-      ),
-      plan,
-    );
-    for (final binding in plan.relations) {
-      binding.collectReads(query.database, this);
-    }
-  }
-}
-
 extension WatchQuery<R, F extends Fields> on Query<R, F> {
   /// Initial snapshot followed by fresh snapshots after relevant committed writes.
   /// Add tables hidden inside raw SQL with [reads]. Read errors are emitted without
@@ -134,8 +108,15 @@ final class _QueryWatch<R, F extends Fields> {
 
   void _start() {
     try {
-      final db = query.database;
-      db._checkActive();
+      final context = query.database;
+      if (context is! Database<Backend>) {
+        throw const OrmException(
+          'QUERY.UNBOUND',
+          'Watch requires an ORM Database query.',
+        );
+      }
+      final db = context;
+      db.checkActive();
       options.check();
       if (db.inSession) {
         throw const OrmException(
@@ -146,7 +127,7 @@ final class _QueryWatch<R, F extends Fields> {
       if (db._changes.closed) {
         throw const OrmException('SESSION.CLOSED', 'Database is closed.');
       }
-      final reads = _ReadTables()..query(query);
+      final reads = query.dependencies;
       if (reads.opaque && extraReads.isEmpty) {
         throw const OrmException(
           'WATCH.READS',
@@ -229,7 +210,9 @@ final class _QueryWatch<R, F extends Fields> {
     final done = Completer<void>();
     _stopping = done.future;
     _stopped = true;
-    query.database._changes.watches.remove(this);
+    if (query.database case final Database<Backend> db) {
+      db._changes.watches.remove(this);
+    }
     _removeCancellation?.call();
     _readCancellation?.cancel();
     unawaited(() async {

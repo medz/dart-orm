@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show Account, Event;
@@ -111,7 +111,7 @@ final accountsTable = Table<models.Account, AccountsFields>(
 );
 
 final class AccountsTableSet extends TableSet<models.Account, AccountsFields> {
-  AccountsTableSet(Database<Backend> db) : super(db, accountsTable) {
+  AccountsTableSet(QueryContext db) : super(db, accountsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Account> create({
@@ -259,7 +259,7 @@ final eventsTable = Table<models.Event, EventsFields>(
 );
 
 final class EventsTableSet extends TableSet<models.Event, EventsFields> {
-  EventsTableSet(Database<Backend> db) : super(db, eventsTable) {
+  EventsTableSet(QueryContext db) : super(db, eventsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Event> create({
@@ -308,7 +308,7 @@ final appSchema = List<TableSchema>.unmodifiable([
   eventsSchema,
 ]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   AccountsTableSet get accounts => AccountsTableSet(this);
   EventsTableSet get events => EventsTableSet(this);
 }

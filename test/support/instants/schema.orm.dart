@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
-import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show Event, Moment, Link;
@@ -57,7 +57,7 @@ final eventsTable = Table<models.Event, EventsFields>(
 );
 
 final class EventsTableSet extends TableSet<models.Event, EventsFields> {
-  EventsTableSet(Database<Backend> db) : super(db, eventsTable) {
+  EventsTableSet(QueryContext db) : super(db, eventsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Event> create({
@@ -128,7 +128,7 @@ final momentsTable = Table<models.Moment, MomentsFields>(
 );
 
 final class MomentsTableSet extends TableSet<models.Moment, MomentsFields> {
-  MomentsTableSet(Database<Backend> db) : super(db, momentsTable) {
+  MomentsTableSet(QueryContext db) : super(db, momentsTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Moment> create({
@@ -186,7 +186,7 @@ final linksTable = Table<models.Link, LinksFields>(
 );
 
 final class LinksTableSet extends TableSet<models.Link, LinksFields> {
-  LinksTableSet(Database<Backend> db) : super(db, linksTable) {
+  LinksTableSet(QueryContext db) : super(db, linksTable) {
     db.registerSchema(appSchema);
   }
   Future<models.Link> create({
@@ -207,7 +207,7 @@ final appSchema = List<TableSchema>.unmodifiable([
   linksSchema,
 ]);
 
-extension AppTables<B extends Backend> on Database<B> {
+extension AppTables on QueryContext {
   EventsTableSet get events => EventsTableSet(this);
   MomentsTableSet get moments => MomentsTableSet(this);
   LinksTableSet get links => LinksTableSet(this);

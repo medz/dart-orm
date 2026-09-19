@@ -12,10 +12,10 @@ Future<void> main(List<String> args) => runMigrationCli(
   directory: 'example/migrations',
   history: migrationHistory,
   schema: schema,
-  connect: ({required readOnly}) {
+  connect: ({required readOnly}) async {
     final path = Platform.environment['ORM_SQLITE_PATH'] ?? 'app.sqlite';
-    return sqlite(
+    return (await sqlite(
       readOnly ? SqliteOptions.readOnly(path) : SqliteOptions.file(path),
-    );
+    )).sql;
   },
 );

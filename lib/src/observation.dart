@@ -1,18 +1,5 @@
 part of '../orm.dart';
 
-/// Time until a driver lease is granted or acquisition fails. Includes native
-/// pool wait/connection setup; it does not separate those driver internals.
-final class AcquisitionEvent {
-  final Duration elapsed;
-  final bool reusedConnection;
-  final Object? error;
-  const AcquisitionEvent({
-    required this.elapsed,
-    required this.reusedConnection,
-    this.error,
-  });
-}
-
 /// Synchronous ORM decoding/mapping and associated row grouping. Excludes SQL,
 /// acquisition, compilation, waiting for the consumer and other client work.
 final class DecodeEvent {
