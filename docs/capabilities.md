@@ -53,11 +53,13 @@ and mismatched connections fail before migration SQL. PostgreSQL migration
 execution requires 18+, and SQLite opening requires 3.35+; arbitrary reviewed SQL
 can require additional capabilities.
 
-MySQL 8.0+ and MariaDB 10.6+ use separate engine identities and histories. Their
-DDL can commit implicitly: checked before/after table metadata and durable
-checkpoints support recovery, while backfill writes and completion checkpoints
+MySQL 8.4+ and MariaDB 10.6+ use separate driver identities. Migration execution
+requires MySQL 8.4+ or MariaDB 11.8+. Their DDL can commit implicitly: checked
+before/after table metadata and durable checkpoints support recovery, while
+backfill writes and completion checkpoints
 share a transaction. See [MySQL/MariaDB migrations](mysql-migrations.md). Current
-live acceptance uses MySQL 8.4 and MariaDB 11.8, not every supported minimum version.
+live acceptance uses MySQL 8.4 and MariaDB 11.8; the MariaDB driver's lower
+connection minimum has not received that full acceptance suite.
 
 Saved migrations contain immutable snapshots, operations, predecessor checksums
 and explicit renames/conversions. Tests exercise fresh replay, older-version

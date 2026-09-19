@@ -312,21 +312,22 @@ final class _PostgresConnection implements SqlConnection {
     }
     _busy = true;
     Future<void>? cancelling;
-    var completed = false, timedOut = false;
+    var completed = false, timedOut = false, statementStarted = false;
     Timer? deadline;
     void Function()? unsubscribe;
     try {
       if (options.cancellation != null || timeout != null) {
-        final pid = _backendIds[connection.info] ??=
-            (await _query(SqlCommand('SELECT pg_backend_pid()')))
-                    .rows
-                    .single
-                    .single
-                as int;
-        options.check();
+        var backendId = _backendIds[connection.info];
         void cancel() {
           if (completed || cancelling != null) return;
+          final pid = backendId;
           cancelling = () async {
+            // PID discovery is part of the same deadline. Until it completes,
+            // discard this connection; the application SQL has not been sent.
+            if (pid == null) {
+              await connection.close(force: true);
+              return;
+            }
             try {
               final control = await _control!();
               try {
@@ -361,18 +362,35 @@ final class _PostgresConnection implements SqlConnection {
             cancel();
           });
         }
+        options.check();
+        backendId ??= _backendIds[connection.info] =
+            (await _query(SqlCommand('SELECT pg_backend_pid()')))
+                    .rows
+                    .single
+                    .single
+                as int;
+        options.check();
+        if (timedOut) {
+          throw const OrmException(
+            'OPERATION.TIMEOUT',
+            'PostgreSQL PID discovery exceeded the statement deadline.',
+          );
+        }
       }
+      statementStarted = true;
       return await _query(command);
-    } on pg.ServerException catch (error) {
-      if (error.code == '57014' &&
-          (timedOut || options.cancellation?.isCancelled == true)) {
+    } catch (error) {
+      if ((timedOut || options.cancellation?.isCancelled == true) &&
+          (!statementStarted ||
+              error is pg.ServerException && error.code == '57014')) {
         throw OrmException(
           timedOut ? 'OPERATION.TIMEOUT' : 'OPERATION.CANCELLED',
-          'PostgreSQL stopped the statement.',
+          statementStarted ? 'PostgreSQL stopped the statement.' : 'PostgreSQL PID discovery was interrupted before the statement.',
           cause: error,
         );
       }
-      throw PostgresFailure(error);
+      if (error is pg.ServerException) throw PostgresFailure(error);
+      rethrow;
     } finally {
       completed = true;
       deadline?.cancel();

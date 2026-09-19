@@ -160,6 +160,10 @@ control cleanup before permitting another statement. This may temporarily use
 one connection beyond the pool limit. The control role must be allowed to cancel
 the original backend; the default uses the same connection credentials.
 
+The deadline also covers the first backend PID lookup. Cancellation before that
+lookup completes discards the connection without sending the application SQL.
+Successful lookups are cached for reuse of the same physical connection.
+
 Owned PostgreSQL drivers default to a 30-second statement deadline, configurable
 with `PostgresOptions.queryTimeout`. `PostgresDriver.borrow` needs a
 `cancellationConnection` factory for cancellation or deadlines, and accepts its

@@ -246,10 +246,12 @@ Future<({mysql.MySQLConnection connection, String version})> _openMysql(
       final match = RegExp(r'^(\d+)\.(\d+)').firstMatch(version);
       final major = match == null ? 0 : int.parse(match[1]!);
       final minor = match == null ? 0 : int.parse(match[2]!);
-      if (maria ? major < 10 || major == 10 && minor < 6 : major < 8) {
+      if (maria
+          ? major < 10 || major == 10 && minor < 6
+          : major < 8 || major == 8 && minor < 4) {
         throw const OrmException(
           'DRIVER.VERSION',
-          'MySQL 8.0+ or MariaDB 10.6+ is required.',
+          'MySQL 8.4+ or MariaDB 10.6+ is required.',
         );
       }
       // Do not silently coerce invalid dates, truncate values, or convert

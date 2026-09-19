@@ -229,6 +229,35 @@ void main() {
     },
   );
 
+  for (final version in ['5.7.44', '8.0.15', '8.0.46', '8.3.0']) {
+    test('MySQL $version is rejected before locks, journals or DDL', () async {
+      final driver = _VersionDriver(dialect: .mysql, version: version);
+      final db = Database(driver);
+      final migration = Migration.create('0001_start', [
+        TableSchema(
+          'proof',
+          columns: [Column('id', Codecs.integer)],
+          primaryKey: ['id'],
+        ),
+      ], dialect: .mysql);
+      try {
+        for (final operation in <Future<Object?> Function()>[
+          () => Migrator(db.sql).apply([migration]),
+          () => Migrator(db.sql).plan([migration]),
+          () =>
+              Migrator(db.sql)
+                  .baseline([migration], expected: migration.snapshot!),
+        ]) {
+          driver.statements.clear();
+          await expectLater(operation(), throwsA(code('CAPABILITY.VERSION')));
+          expect(driver.statements, ['SELECT VERSION()']);
+        }
+      } finally {
+        await db.close();
+      }
+    });
+  }
+
   test(
     'registry fixes its engine at initialization and refuses retargeting',
     () async {
@@ -389,12 +418,15 @@ void main() {
   }
 }
 
-/// Unit-level server-version response. Real PostgreSQL execution is tested above.
-final class _VersionDriver implements Driver<Postgres>, SqlConnection {
+/// Unit-level version response; rejects every statement after the version probe.
+final class _VersionDriver implements Driver<Backend>, SqlConnection {
+  final SqlDialect dialect;
+  final String version;
   final statements = <String>[];
+  _VersionDriver({this.dialect = .postgres, this.version = '170000'});
   @override
   Capabilities get capabilities =>
-      const Capabilities(dialect: SqlDialect.postgres, maxParameters: 65535);
+      Capabilities(dialect: dialect, maxParameters: 65535);
   @override
   bool? get transactionActive => false;
   @override
@@ -405,14 +437,17 @@ final class _VersionDriver implements Driver<Postgres>, SqlConnection {
     ExecutionOptions options = const ExecutionOptions(),
   }) async {
     statements.add(command.sql);
-    if (command.sql != 'SHOW server_version_num') {
+    final probe = dialect == SqlDialect.postgres
+        ? 'SHOW server_version_num'
+        : 'SELECT VERSION()';
+    if (command.sql != probe) {
       throw StateError('Unexpected SQL: ${command.sql}');
     }
-    return const SqlResult(
+    return SqlResult(
       [
-        ['170000'],
+        [version],
       ],
-      columns: ['server_version_num'],
+      columns: ['version'],
     );
   }
 

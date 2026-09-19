@@ -2,7 +2,9 @@
 
 Use one fixed `mysql` or `mariadb` migration history with its matching driver.
 The migration runner checks MySQL 8.4+ or MariaDB 11.8+ before taking a lock or
-creating its journal. The normal Dart project workflow applies:
+creating its journal. The MySQL driver has the same 8.4 minimum; the MariaDB
+driver's 10.6 connection minimum does not extend migration support to that
+version. The normal Dart project workflow applies:
 
 ```sh
 dart run orm init --database mysql

@@ -1,6 +1,6 @@
 # MySQL and MariaDB
 
-The native drivers use `mysql_client_plus` and require MySQL 8.0+ or MariaDB
+The native drivers use `mysql_client_plus` and require MySQL 8.4+ or MariaDB
 10.6+. SQLite, PostgreSQL, MySQL and MariaDB remain distinct database engines.
 Opening a MySQL driver against MariaDB, or the reverse, fails before use.
 
