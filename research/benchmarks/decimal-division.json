@@ -1,0 +1,106 @@
+{
+  "recordedAt": "2026-09-15T00:38:41.193708Z",
+  "dart": "3.13.3 (stable) (Tue Sep 1 01:07:17 2026 -0700) on \"macos_arm64\"",
+  "os": "Version 26.6.2 (Build 25G83)",
+  "warmupRuns": 1,
+  "measuredRuns": 3,
+  "scope": "Single-client end-to-end query fetch and Decimal decoding; 10000 integer-valued rows; not a concurrency or percentile benchmark.",
+  "results": [
+    {
+      "backend": "sqlite",
+      "version": "3.51.0",
+      "case": "read",
+      "rows": 10000,
+      "elapsedMs": [
+        11.068,
+        10.129,
+        9.57
+      ],
+      "sqlBytes": 70
+    },
+    {
+      "backend": "sqlite",
+      "version": "3.51.0",
+      "case": "divide_half_even_scale_2",
+      "rows": 10000,
+      "elapsedMs": [
+        30.672,
+        30.095,
+        29.656
+      ],
+      "sqlBytes": 154
+    },
+    {
+      "backend": "sqlite",
+      "version": "3.51.0",
+      "case": "round_half_even_scale_minus_1",
+      "rows": 10000,
+      "elapsedMs": [
+        21.219,
+        22.125,
+        21.644
+      ],
+      "sqlBytes": 126
+    },
+    {
+      "backend": "sqlite",
+      "version": "3.51.0",
+      "case": "window_divide_half_even_scale_2",
+      "rows": 10000,
+      "elapsedMs": [
+        46.842,
+        48.727,
+        48.175
+      ],
+      "sqlBytes": 280
+    },
+    {
+      "backend": "postgres",
+      "version": "18.4 (Homebrew)",
+      "case": "read",
+      "rows": 10000,
+      "elapsedMs": [
+        21.922,
+        23.661,
+        22.724
+      ],
+      "sqlBytes": 43
+    },
+    {
+      "backend": "postgres",
+      "version": "18.4 (Homebrew)",
+      "case": "divide_half_even_scale_2",
+      "rows": 10000,
+      "elapsedMs": [
+        32.665,
+        32.626,
+        32.521
+      ],
+      "sqlBytes": 1597
+    },
+    {
+      "backend": "postgres",
+      "version": "18.4 (Homebrew)",
+      "case": "round_half_even_scale_minus_1",
+      "rows": 10000,
+      "elapsedMs": [
+        25.258,
+        25.168,
+        25.245
+      ],
+      "sqlBytes": 1149
+    },
+    {
+      "backend": "postgres",
+      "version": "18.4 (Homebrew)",
+      "case": "window_divide_half_even_scale_2",
+      "rows": 10000,
+      "elapsedMs": [
+        36.849,
+        36.591,
+        37.124
+      ],
+      "sqlBytes": 1773
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+Running build hooks...Running build hooks...00:00 +0: loading test/migration_source_test.dart
+00:00 +0: AOT migration bundle works without Dart sources or migration assets
+00:13 +1: All tests passed!
