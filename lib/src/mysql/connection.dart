@@ -54,7 +54,7 @@ final class _MysqlConnection implements SqlConnection {
             _discard();
             throw const OrmException(
               'OPERATION.TIMEOUT',
-              'MySQL statement timed out; the connection was discarded.',
+              'MySQL statement timed out; the connection was discarded and the statement outcome may be unknown.',
             );
           },
         )

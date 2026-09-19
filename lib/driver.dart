@@ -41,6 +41,10 @@ final class Capabilities {
   final bool windowFunctions;
   final bool streaming;
   final bool cancellation;
+
+  /// Honors statement deadlines, potentially by discarding the connection.
+  /// A timeout does not prove that a submitted write was rolled back.
+  final bool statementTimeout;
   final bool exactDecimal;
   final bool temporal;
   const Capabilities({
@@ -50,9 +54,10 @@ final class Capabilities {
     this.windowFunctions = true,
     this.streaming = false,
     this.cancellation = false,
+    bool? statementTimeout,
     this.exactDecimal = false,
     this.temporal = false,
-  });
+  }) : statementTimeout = statementTimeout ?? cancellation;
 }
 
 final class SqlResult {

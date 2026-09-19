@@ -122,10 +122,14 @@ leaving autocommit disabled makes later writes part of an uncommitted transactio
 that lease cleanup rolls back. Use managed transactions for application writes.
 
 Results are materialized. `streaming` and `cancellation` capabilities are
-false; requesting either reports an unsupported capability. Query timeouts
-discard the connection. A timeout or connection loss does not prove a write
-failed, so an uncertain write must not be retried automatically. Open a new
-driver after invalidation or disconnection; there is no implicit reconnect.
+false; requesting either reports an unsupported capability. `statementTimeout`
+is true: `ExecutionOptions(timeout: ...)` bounds an individual statement through
+the raw runtime and ORM, overriding the driver's `queryTimeout` default.
+Query timeouts discard the connection. A timeout or connection loss does not
+prove a write failed or rolled back, so an uncertain write must not be retried
+automatically. Open a new driver after invalidation or disconnection; there is
+no implicit reconnect. Transaction deadlines, cancellation tokens and retry
+policies still require actual cancellation and remain unsupported.
 
 The underlying client does not expose the server transaction status flags,
 so `transactionActive` is `null`. The driver does not guess state from SQL

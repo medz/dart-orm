@@ -40,7 +40,30 @@ final _table = Table<_Row, _Fields>(
   (f) => (f.id, f.name, f.data, f.amount, f.created).row,
 );
 
+TypeMatcher<OrmException> _code(String code) =>
+    isA<OrmException>().having((error) => error.code, 'code', code);
+
 void main() {
+  test('statement timeout capability defaults to cancellation support', () {
+    for (final cancellation in [false, true]) {
+      expect(
+        Capabilities(
+          dialect: SqlDialect.sqlite,
+          maxParameters: 999,
+          cancellation: cancellation,
+        ).statementTimeout,
+        cancellation,
+      );
+    }
+    const deadlinesOnly = Capabilities(
+      dialect: SqlDialect.mysql,
+      maxParameters: 65535,
+      statementTimeout: true,
+    );
+    expect(deadlinesOnly.cancellation, isFalse);
+    expect(deadlinesOnly.statementTimeout, isTrue);
+  });
+
   for (final engine in ['mysql', 'mariadb']) {
     final variable = 'ORM_TEST_${engine.toUpperCase()}';
     final address = Platform.environment[variable];
@@ -53,6 +76,26 @@ void main() {
         late Database<Backend> db;
         final events = <QueryEvent>[];
         final instant = DateTime.utc(2026, 9, 19, 1, 2, 3, 0, 1);
+        Future<Database<Backend>> open({
+          Duration queryTimeout = const Duration(seconds: 30),
+          void Function(QueryEvent)? onQuery,
+        }) async => engine == 'mysql'
+            ? await mysql(
+                MysqlOptions(
+                  url: Uri.parse(address!),
+                  tls: tls,
+                  queryTimeout: queryTimeout,
+                ),
+                onQuery: onQuery,
+              )
+            : await mariadb(
+                MariadbOptions(
+                  url: Uri.parse(address!),
+                  tls: tls,
+                  queryTimeout: queryTimeout,
+                ),
+                onQuery: onQuery,
+              );
         Future<_Row> create(String name, {SqlJson? data}) => db
             .table(_table)
             .createRow(
@@ -64,15 +107,7 @@ void main() {
               ],
             );
         setUp(() async {
-          db = engine == 'mysql'
-              ? await mysql(
-                  MysqlOptions(url: Uri.parse(address!), tls: tls),
-                  onQuery: events.add,
-                )
-              : await mariadb(
-                  MariadbOptions(url: Uri.parse(address!), tls: tls),
-                  onQuery: events.add,
-                );
+          db = await open(onQuery: events.add);
           await db.execute(SqlCommand('DROP TABLE IF EXISTS orm_typed_rows'));
           await db.execute(
             SqlCommand(
@@ -85,6 +120,189 @@ void main() {
           await db.execute(SqlCommand('DROP TABLE IF EXISTS orm_typed_rows'));
           await db.close();
         });
+        for (final typedMutation in [false, true]) {
+          test(
+            '${typedMutation ? 'ORM mutation' : 'SQL runtime'} statement timeout discards the driver without replay',
+            () async {
+              await create('timeout-target');
+              final observed = <QueryEvent>[];
+              final subject = await open(onQuery: observed.add);
+              const deadline = ExecutionOptions(
+                timeout: Duration(milliseconds: 30),
+              );
+              try {
+                await expectLater(
+                  typedMutation
+                      ? subject
+                            .table(_table)
+                            .update(
+                              (r) => [
+                                r.name.setExpression(
+                                  sql(
+                                    ["IF(SLEEP(0.5)=0, 'changed', 'changed')"],
+                                    [],
+                                    Codecs.text,
+                                  ),
+                                ),
+                              ],
+                            )
+                            .execute(options: deadline)
+                      : subject.sql.execute(
+                          SqlCommand('SELECT SLEEP(0.5)'),
+                          options: deadline,
+                        ),
+                  throwsA(
+                    _code('OPERATION.TIMEOUT').having(
+                      (error) => error.toString(),
+                      'message',
+                      contains('outcome may be unknown'),
+                    ),
+                  ),
+                );
+                expect(observed, hasLength(1));
+                expect(observed.single.error, isA<OrmException>());
+                await expectLater(
+                  subject.sql.execute(SqlCommand('SELECT 1')),
+                  throwsA(_code('DRIVER.CLOSED')),
+                );
+                final replacement = await open();
+                try {
+                  expect(
+                    (await replacement.execute(SqlCommand('SELECT 2'))).rows,
+                    [
+                      [2],
+                    ],
+                  );
+                } finally {
+                  await replacement.close();
+                }
+                // The submitted UPDATE may have completed before disconnect;
+                // a deadline is not proof that an autocommit write rolled back.
+              } finally {
+                await subject.close();
+              }
+            },
+          );
+        }
+        test(
+          'execution timeout overrides the configured queryTimeout default',
+          () async {
+            final subject = await open(
+              queryTimeout: const Duration(milliseconds: 80),
+            );
+            try {
+              expect(
+                (await subject.execute(
+                  SqlCommand('SELECT SLEEP(0.15)'),
+                  options: const ExecutionOptions(
+                    timeout: Duration(seconds: 2),
+                  ),
+                )).rows,
+                [
+                  [0],
+                ],
+              );
+              await expectLater(
+                subject.execute(SqlCommand('SELECT SLEEP(0.5)')),
+                throwsA(_code('OPERATION.TIMEOUT')),
+              );
+              await expectLater(
+                subject.execute(SqlCommand('SELECT 1')),
+                throwsA(_code('DRIVER.CLOSED')),
+              );
+            } finally {
+              await subject.close();
+            }
+          },
+        );
+        test(
+          'tokens and transaction deadlines still require real cancellation',
+          () async {
+            final token = CancellationToken();
+            var callbacks = 0;
+            for (final operation in <Future<Object?> Function()>[
+              () => db.sql.execute(
+                SqlCommand('SELECT SLEEP(0.5)'),
+                options: ExecutionOptions(cancellation: token),
+              ),
+              () => db.execute(
+                SqlCommand('SELECT SLEEP(0.5)'),
+                options: ExecutionOptions(cancellation: token),
+              ),
+              () => db.transaction(
+                (_) async => callbacks++,
+                timeout: const Duration(milliseconds: 30),
+              ),
+              () =>
+                  db.transaction((_) async => callbacks++, cancellation: token),
+              () => db.transaction(
+                (_) async => callbacks++,
+                retry: const TransactionRetry(),
+              ),
+            ]) {
+              await expectLater(operation, throwsA(_code('CAPABILITY.CANCEL')));
+            }
+            expect(callbacks, 0);
+            expect(events, isEmpty);
+            expect((await db.execute(SqlCommand('SELECT 1'))).rows, [
+              [1],
+            ]);
+          },
+        );
+        test(
+          'caught statement timeout cannot commit preceding transaction writes',
+          () async {
+            final observed = <QueryEvent>[];
+            final subject = await open(onQuery: observed.add);
+            var callbacks = 0;
+            try {
+              await expectLater(
+                subject.transaction((tx) async {
+                  callbacks++;
+                  await tx
+                      .table(_table)
+                      .insert(
+                        (r) => [
+                          r.name.set('before-timeout'),
+                          r.amount.set(Decimal.parse('1')),
+                          r.created.set(instant),
+                        ],
+                      )
+                      .execute();
+                  await expectLater(
+                    tx.sql.execute(
+                      SqlCommand('SELECT SLEEP(0.5)'),
+                      options: const ExecutionOptions(
+                        timeout: Duration(milliseconds: 30),
+                      ),
+                    ),
+                    throwsA(_code('OPERATION.TIMEOUT')),
+                  );
+                }),
+                throwsA(_code('TRANSACTION.ROLLBACK')),
+              );
+              expect(callbacks, 1);
+              expect(
+                observed.map((event) => event.sql),
+                isNot(contains('COMMIT')),
+              );
+              final replacement = await open();
+              try {
+                expect(await replacement.table(_table).count(), 0);
+                expect(
+                  (await replacement.execute(SqlCommand('SELECT 3'))).rows,
+                  [
+                    [3],
+                  ],
+                );
+              } finally {
+                await replacement.close();
+              }
+            } finally {
+              await subject.close();
+            }
+          },
+        );
         test(
           'create returns exact values on its transaction connection',
           () async {

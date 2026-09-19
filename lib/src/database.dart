@@ -114,11 +114,16 @@ class Database<B extends Backend> extends QueryContext {
     bool cascade = true,
   }) {
     options.check();
-    if ((options.cancellation != null || options.timeout != null) &&
-        !capabilities.cancellation) {
+    if (options.cancellation != null && !capabilities.cancellation) {
       throw const OrmException(
         'CAPABILITY.CANCEL',
         'This driver cannot cancel a running statement.',
+      );
+    }
+    if (options.timeout != null && !capabilities.statementTimeout) {
+      throw const OrmException(
+        'CAPABILITY.CANCEL',
+        'This driver does not support statement timeouts.',
       );
     }
     final tables = List<TableSchema>.unmodifiable(changedTables);

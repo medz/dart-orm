@@ -249,11 +249,16 @@ class SqlDatabase<B extends Backend> {
     ExecutionOptions options = const ExecutionOptions(),
   }) async {
     options.check();
-    if ((options.cancellation != null || options.timeout != null) &&
-        !capabilities.cancellation) {
+    if (options.cancellation != null && !capabilities.cancellation) {
       throw const OrmException(
         'CAPABILITY.CANCEL',
         'This driver cannot cancel a running statement.',
+      );
+    }
+    if (options.timeout != null && !capabilities.statementTimeout) {
+      throw const OrmException(
+        'CAPABILITY.CANCEL',
+        'This driver does not support statement timeouts.',
       );
     }
     if (command.parameters.length > capabilities.maxParameters) {
@@ -294,11 +299,16 @@ class SqlDatabase<B extends Backend> {
     Iterable<String> changedTables = const [],
   }) {
     options.check();
-    if ((options.cancellation != null || options.timeout != null) &&
-        !capabilities.cancellation) {
+    if (options.cancellation != null && !capabilities.cancellation) {
       throw const OrmException(
         'CAPABILITY.CANCEL',
         'This driver cannot cancel a running statement.',
+      );
+    }
+    if (options.timeout != null && !capabilities.statementTimeout) {
+      throw const OrmException(
+        'CAPABILITY.CANCEL',
+        'This driver does not support statement timeouts.',
       );
     }
     final tables = List<String>.unmodifiable(changedTables);

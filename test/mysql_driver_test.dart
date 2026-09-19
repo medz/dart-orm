@@ -94,6 +94,7 @@ void main() {
           expect(driver.capabilities.returning, isFalse);
           expect(driver.capabilities.streaming, isFalse);
           expect(driver.capabilities.cancellation, isFalse);
+          expect(driver.capabilities.statementTimeout, isTrue);
           expect(driver.capabilities.exactDecimal, isTrue);
           expect(driver.capabilities.temporal, isTrue);
           await driver.run((connection) async {

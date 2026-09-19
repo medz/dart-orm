@@ -132,27 +132,40 @@ options; use the underlying insert/update builder for explicit options.
 `timeout` applies to each SQL statement or cursor fetch. It excludes time spent
 waiting for a connection and consuming already fetched rows. It is not a total
 transaction deadline. Use `acquireTimeout` for the separate acquisition phase.
+`capabilities.statementTimeout` reports statement deadline support, while
+`capabilities.cancellation` reports token-based interruption. MySQL/MariaDB support
+the former by discarding their connection; they do not support the latter.
 Cancellation while acquiring a connection now completes promptly and prevents
 the SQL callback from ever entering, including when the driver grants a lease
 later. Cancellation of an executing statement still awaits database cleanup.
 
 A token is a sticky request, not proof that a write was rolled back. Always await
 the operation's result: a completed statement may win the cancellation race and
-return success. Confirmed interruptions report `OPERATION.CANCELLED` or
-`OPERATION.TIMEOUT`. Connection loss and uncertain commits remain errors whose
-outcome must be checked. Writes are retried only inside an explicitly opted-in
+return success. `OPERATION.TIMEOUT` reports an expired statement deadline; it is
+not proof of rollback. MySQL/MariaDB discard the socket and close the driver, so a
+write's outcome can remain unknown and further work needs a newly opened driver.
+Connection loss and uncertain commits likewise require checking the outcome.
+Writes are retried only inside an explicitly opted-in
 transaction, subject to the confirmed-rollback rules below.
 
 SQLite uses `sqlite3_interrupt` from the exact native asset backing the open
 database. `capabilities.cancellation` is false if that build does not export the
 symbol. Such builds reject cancellation/deadlines instead of merely abandoning
-a running future. Native macOS JIT and AOT execution have been verified. Reproduce
-the native acceptance check with:
+a running future. In particular, the default Linux build of `sqlite3` 3.6.0 hides
+that symbol: statement cancellation, execution deadlines and bounded transaction
+retries are unavailable there. Ordinary reads, writes, transactions and streaming
+remain available. Native macOS JIT and AOT interruption have been verified.
+The native acceptance program checks interruption when available and explicit
+capability rejection otherwise:
 
 ```sh
-dart compile exe test/support/native_execution.dart -o /tmp/orm-native-check
-/tmp/orm-native-check
+dart build cli --target=test/support/native_execution.dart --output=/tmp/orm-native-check
+/tmp/orm-native-check/bundle/bin/native_execution
 ```
+
+Distribute the complete `bundle` directory, including its native libraries.
+`dart compile exe` alone does not bundle dependency build-hook assets; see
+[Dart CLI builds](https://dart.dev/tools/dart-build).
 
 PostgreSQL opens a separate control connection only when cancellation is
 requested and calls `pg_cancel_backend` for the leased backend. It waits for
@@ -341,6 +354,6 @@ driver-injected failures exercise rollback, budgets and lost acknowledgements.
 Native SQLite retry acceptance also runs without the JIT/test runner:
 
 ```sh
-dart compile exe test/support/native_retry.dart -o /tmp/orm-native-retry
-/tmp/orm-native-retry
+dart build cli --target=test/support/native_retry.dart --output=/tmp/orm-native-retry
+/tmp/orm-native-retry/bundle/bin/native_retry
 ```

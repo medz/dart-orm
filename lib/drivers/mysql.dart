@@ -122,6 +122,7 @@ abstract class _MysqlDriver<B extends Backend> implements Driver<B> {
     returning: false,
     streaming: false,
     cancellation: false,
+    statementTimeout: true,
     exactDecimal: true,
     temporal: true,
   );

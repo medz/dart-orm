@@ -21,6 +21,9 @@ A further 176-test PostgreSQL review run passes after bounding initial backend
 PID discovery; four real TCP-proxy regressions reproduce the original hang and
 verify timeout/cancellation before any application write. Forty MySQL driver and
 migration-target checks pass after aligning the minimum MySQL version to 8.4.
+MySQL/MariaDB per-operation timeouts are separately advertised from cancellation;
+140 real driver/database/transaction checks pass. Timeout closes the driver and
+may leave a submitted write outcome unknown; transaction/retry gates stay strict.
 Static analysis is clean. Registry engine parsing, non-atomic plan reporting,
 temporary-history shadowing and session ownership were corrected during review.
 
