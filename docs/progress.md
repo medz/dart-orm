@@ -1,6 +1,6 @@
 # Implementation status
 
-## Standalone ORM redesign — in progress
+## Standalone ORM redesign
 
 Current branch: `refactor/standalone-orm`. The delivery scope is SQLite (native,
 Dart Web and Flutter Web), PostgreSQL, MySQL 8.4 and MariaDB 11.8. The user has
@@ -20,8 +20,12 @@ passes 282 tests, including 18 new borrowed-connection lifecycle regressions.
 Static analysis is clean. Registry engine parsing, non-atomic plan reporting,
 temporary-history shadowing and session ownership were corrected during review.
 
-Final full CI and fresh Web/Flutter acceptance remain pending. Earlier platform
-captures below are historical and do not establish acceptance of this revision.
+Fresh Chrome JS/WASM and Flutter Web JS/WASM (with and without isolation) each
+pass 21 scenarios. Android debug installation, AOT release upgrade and independent
+process reopen pass 4/17/11 checks. Both APKs exclude Web resources. Root and
+Flutter analysis pass. [The final local acceptance record](../research/validation/standalone-redesign.md)
+pins the runtime source and limits. Complete GitHub CI and Codex review of the
+final PR head are the merge gates; earlier captures below retain their revisions.
 
 Design: [standalone redesign](../research/standalone-orm-redesign.md).
 Research: [Prisma v8 reassessment](../research/prisma-v8-reassessment.md).

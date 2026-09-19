@@ -1,5 +1,10 @@
 # Native Flutter
 
+The standalone runtime has a fresh [Android acceptance capture](../research/validation/standalone-flutter.json)
+at `7a54553`: 4/17/11 checks pass across installation, AOT upgrade and process
+restart. See the [current validation record](../research/validation/standalone-redesign.md).
+The detailed historical capture below remains tied to its original revision.
+
 [`example/flutter`](../example/flutter/README.md) is an actual Android application
 using generated ORM APIs and `SqliteOptions.file` in the app's private files
 directory. SQLite runs in the native driver's worker isolate. The small Android

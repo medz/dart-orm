@@ -1,0 +1,57 @@
+# Standalone ORM acceptance
+
+Captured on 2026-09-19. Runtime source: `7a54553933ae1d768576a54a4234b00b6bfcf97e`.
+The following validation commit adds reports and refreshes the Flutter consumer
+lockfile/analyzer exclusions; it does not change runtime, generation or migrations.
+
+## Actual environments
+
+Dart 3.13.3 and Flutter 3.47.4 stable on macOS arm64; SQLite 3.53.4;
+PostgreSQL 18.4; MySQL 8.4.11 and MariaDB 11.8.9 in separate disposable containers.
+MySQL/MariaDB tests require TLS with their fixture certificates. Flutter and
+plain Dart browser tests use actual Chrome 153, not simulated DOM APIs.
+
+## Results and scope
+
+| Validation | Evidence |
+| --- | --- |
+| Native full regression, first invocation | 1119 passed, 5 failed in 11:50. Failures were two older CLI JSON expectations and three new temporary-metadata regressions. [Structured record](standalone-native.json). |
+| Final session/transaction regression | 282 passed. Real SQLite/PostgreSQL session ownership, escaped connections, swallowed SQL failures, pending work, cursor cleanup, transaction/retry/acquisition/watch paths; MySQL/MariaDB transaction boundaries included. |
+| Final CLI/import/migration/SQL regression | 71 passed. All four engines initialize and create Dart history; SQLite lifecycle and SQLite/PostgreSQL adoption use real consumers; MySQL/MariaDB test actual DDL/backfill recovery and metadata shadowing. |
+| Static checks | Root Dart analysis and Flutter example analysis: no issues. Formatting and diff whitespace checks pass. |
+| Plain Dart Web | JS and WASM each pass 21 scenarios. [Reports](standalone-browser.json). |
+| Flutter Web release | JS, WASM without isolation and WASM with isolation each pass 21 scenarios. Assets are bundled automatically; nested routes, reload recovery, migrations and animation progress during SQL are checked. [Reports](standalone-flutter-web.json). |
+| Flutter Android arm64 API 35 | Legacy debug installation: 4 checks; release AOT APK upgrade: 17; new-process reopen: 11. Host checks distinct process IDs, retained database path/data/history and APK version codes. [Report](standalone-flutter.json), [screenshot](standalone-flutter-android.png). |
+| Native packaging | Both Android APKs contain arm64 `libsqlite3.so` and zero SQLite Web worker/WASM assets. |
+
+The initial full run and subsequent targeted runs are separate invocations. They
+are not combined into a claimed all-green full run. The PR's GitHub CI check runs
+formatting, analysis, resource fingerprints, the complete native suite with all
+four engines enabled, and Chrome JS/WASM. Passing that check and Codex review of
+the final head are required before merge; the PR records their results.
+
+## Correctness findings resolved before platform capture
+
+Independent review corrected MySQL/MariaDB registry parsing and non-atomic plan
+reporting, temporary migration metadata shadowing, and borrowed-session ownership
+and error tracking. A caught raw PostgreSQL error cannot make an aborted
+transaction report success. Borrowed connections and cursors cannot escape their
+session/savepoint; unawaited accepted work drains before the boundary completes.
+MySQL/MariaDB migration failures and uncertain commits use durable checkpoints and
+catalog verification rather than assuming that DDL rolls back.
+
+## Explicit boundaries
+
+MySQL/MariaDB provide exact values, storage, comparison and MIN/MAX within their
+physical limits. Typed arithmetic, SUM, decimal set operations and explicit
+precision narrowing that can silently lose digits are rejected; see the
+[reproductions](../mysql-precision-boundaries.md) and [driver contract](../../docs/mysql.md).
+Their initial adapters own a single queued connection and do not support streaming
+or cancellation. Runtime leases add a cleanup ROLLBACK round trip. DDL remains
+non-atomic and uses the [engine-specific recovery workflow](../../docs/mysql-migrations.md).
+
+Chrome and an Android emulator do not certify Safari, Firefox, physical devices,
+iOS or macOS Flutter. Timer/animation progress establishes worker separation,
+not a frame-rate or throughput improvement. Historical benchmarks and validation
+files retain their original source revisions; this change makes no new performance
+claim. No package was published.

@@ -1,0 +1,52 @@
+{
+  "capturedAt": "2026-09-19T12:57:23.694966+00:00",
+  "runtimeSourceCommit": "7a54553933ae1d768576a54a4234b00b6bfcf97e",
+  "versions": {
+    "dart": "3.13.3",
+    "flutter": "3.47.4",
+    "sqlite": "3.53.4",
+    "postgres": "18.4",
+    "mysql": "8.4.11",
+    "mariadb": "11.8.9",
+    "chrome": "153"
+  },
+  "native": {
+    "initialFullSuite": {
+      "passed": 1119,
+      "failed": 5,
+      "duration": "11:50",
+      "note": "Older CLI JSON expectations and new temporary-table regressions; corrected afterwards."
+    },
+    "finalSessionRegression": {
+      "passed": 282,
+      "failed": 0
+    },
+    "finalCliAndMigrationRegression": {
+      "passed": 71,
+      "failed": 0
+    },
+    "analysis": "No issues found",
+    "flutterAnalysis": "No issues found"
+  },
+  "localLogDigests": {
+    "redesign-full.log": {
+      "sha256": "fa62e954dcd084555aa1d247add8cb4257bdc57f9697d0ea21bd2a85f040ec20"
+    },
+    "redesign-fixes-final.log": {
+      "sha256": "145c1c2142b550ddba83d1a702dad9e0ea90764016f4069a95420770cb5b658a"
+    },
+    "redesign-session-final.log": {
+      "sha256": "d8d2eb7b170bbca8ff3059ec5e7c1193aecc9fb09e2af7d25a21fc949533d5ab"
+    },
+    "redesign-analyze-final.log": {
+      "sha256": "34a0d218671a357b7042bd3be43d0134efd7f8d5b56c5d8c0ab98096c99a331e"
+    },
+    "redesign-flutter-analyze.log": {
+      "sha256": "40bbb3c2256cfd52d7e7ec89ba44c939374e2f26b6c4aa4324a9146b9ba581a0"
+    }
+  },
+  "limits": [
+    "The final focused invocations are not described as a second complete suite; GitHub CI runs the whole suite as a merge gate.",
+    "Fresh platform records independently pin the runtime source and build inputs."
+  ]
+}

@@ -2,7 +2,8 @@
 
 The current redesign adds independently usable modules, nominal model results,
 typed project configuration and MySQL/MariaDB support. Its current acceptance state
-is recorded in [progress](progress.md); engine-specific limitations are in
+is recorded in [the final local acceptance](../research/validation/standalone-redesign.md)
+and [progress](progress.md); engine-specific limitations are in
 [capabilities](capabilities.md). The table below also preserves earlier evidence
 for unchanged feature families.
 
