@@ -45,6 +45,12 @@ of adopting an existing database; import is not a universal database backup.
 See [query examples](queries.md), [relationships](relations.md),
 [execution](execution.md) and [observability](observability.md).
 
+SQLite cancellation is a build capability, not a promise for every native target.
+The default Linux asset in `sqlite3` 3.6.0 hides `sqlite3_interrupt`; it rejects
+statement cancellation, execution deadlines and bounded retries before SQL starts.
+Ordinary transactions and streaming still work. macOS and Android interruption
+have separate runtime evidence; see [execution](execution.md).
+
 ## Migration and database adoption
 
 Each history fixes one database engine, even when empty. A saved migration contains

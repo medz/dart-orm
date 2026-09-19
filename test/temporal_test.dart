@@ -19,14 +19,23 @@ void main() {
       test(
         'borrowed PostgreSQL pool local calendar capability: $enabled',
         () async {
-          final uri = Uri.parse(url);
+          final uri = Uri.parse(url), colon = uri.userInfo.indexOf(':');
           final pool = pg.Pool<void>.withEndpoints(
             [
               pg.Endpoint(
                 host: uri.host,
-                port: uri.port,
+                port: uri.hasPort ? uri.port : 5432,
                 database: uri.pathSegments.single,
-                username: uri.userInfo.split(':').first,
+                username: uri.userInfo.isEmpty
+                    ? null
+                    : Uri.decodeComponent(
+                        colon < 0
+                            ? uri.userInfo
+                            : uri.userInfo.substring(0, colon),
+                      ),
+                password: colon < 0
+                    ? null
+                    : Uri.decodeComponent(uri.userInfo.substring(colon + 1)),
               ),
             ],
             settings: pg.PoolSettings(

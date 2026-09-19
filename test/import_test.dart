@@ -139,11 +139,12 @@ Future<void> main() async {
         );
         if (backend == 'sqlite') {
           final compiled = await Process.run(Platform.resolvedExecutable, [
-            'compile',
-            'exe',
+            'build',
+            'cli',
+            '--target',
             '${directory.path}/use.dart',
-            '-o',
-            '${directory.path}/use',
+            '--output',
+            '${directory.path}/aot',
           ]);
           expect(
             compiled.exitCode,
@@ -152,7 +153,10 @@ Future<void> main() async {
           );
         }
         final run = backend == 'sqlite'
-            ? await Process.run('${directory.path}/use', const <String>[])
+            ? await Process.run(
+                '${directory.path}/aot/bundle/bin/use',
+                const <String>[],
+              )
             : await Process.run(Platform.resolvedExecutable, [
                 'run',
                 '${directory.path}/use.dart',

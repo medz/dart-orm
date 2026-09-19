@@ -146,6 +146,7 @@ void main() {
     });
     test('PostgreSQL timeout during real connection initialization releases the late lease', () async {
       final uri = Uri.parse(url),
+          colon = uri.userInfo.indexOf(':'),
           opening = Completer<void>(),
           ready = Completer<void>();
       var opens = 0, calls = 0;
@@ -153,11 +154,16 @@ void main() {
         [
           pg.Endpoint(
             host: uri.host,
-            port: uri.port,
+            port: uri.hasPort ? uri.port : 5432,
             database: uri.pathSegments.single,
             username: uri.userInfo.isEmpty
                 ? null
-                : uri.userInfo.split(':').first,
+                : Uri.decodeComponent(
+                    colon < 0 ? uri.userInfo : uri.userInfo.substring(0, colon),
+                  ),
+            password: colon < 0
+                ? null
+                : Uri.decodeComponent(uri.userInfo.substring(colon + 1)),
           ),
         ],
         settings: pg.PoolSettings(

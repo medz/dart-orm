@@ -11,7 +11,10 @@ Matcher code(String code) =>
     isA<OrmException>().having((e) => e.code, 'code', code);
 const retry = TransactionRetry(delay: Duration.zero);
 
-void main() {
+Future<void> main() async {
+  final probe = await sqlite(const SqliteOptions.memory());
+  final sqliteCancellation = probe.capabilities.cancellation;
+  await probe.close();
   runTests('sqlite', () => sqlite(const SqliteOptions.memory()));
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url != null) {
@@ -30,46 +33,52 @@ void main() {
       return db;
     });
   }
-  test('SQLite WAL snapshot conflict replays reads after rollback', () async {
-    final directory = await Directory.systemTemp.createTemp(
-      'orm-retry-snapshot-',
-    );
-    final options = SqliteOptions.file('${directory.path}/db.sqlite');
-    final base = await sqlite(options), other = await sqlite(options);
-    final errors = <SqliteFailure>[];
-    final db = Database(
-      base.driver,
-      onQuery: (event) {
-        if (event.error case final SqliteFailure failure) errors.add(failure);
-      },
-    );
-    try {
-      await createTables(db);
-      await db.table(users).createRow((u) => [u.email.set('initial')]);
-      var calls = 0;
-      final reads = <int>[];
-      await db.transaction((tx) async {
-        calls++;
-        final row = await tx.table(users).single();
-        reads.add(row.score);
-        if (calls == 1) {
-          await other.table(users).update((u) => [u.score.set(10)]).execute();
-        }
-        await tx
-            .table(users)
-            .update((u) => [u.score.set(row.score + 1)])
-            .execute();
-      }, retry: retry);
-      expect(errors.map((e) => e.extendedCode), [517]);
-      expect(reads, [0, 10]);
-      expect(calls, 2);
-      expect((await db.table(users).single()).score, 11);
-    } finally {
-      await other.close();
-      await db.close();
-      await directory.delete(recursive: true);
-    }
-  });
+  test(
+    'SQLite WAL snapshot conflict replays reads after rollback',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'orm-retry-snapshot-',
+      );
+      final options = SqliteOptions.file('${directory.path}/db.sqlite');
+      final base = await sqlite(options), other = await sqlite(options);
+      final errors = <SqliteFailure>[];
+      final db = Database(
+        base.driver,
+        onQuery: (event) {
+          if (event.error case final SqliteFailure failure) errors.add(failure);
+        },
+      );
+      try {
+        await createTables(db);
+        await db.table(users).createRow((u) => [u.email.set('initial')]);
+        var calls = 0;
+        final reads = <int>[];
+        await db.transaction((tx) async {
+          calls++;
+          final row = await tx.table(users).single();
+          reads.add(row.score);
+          if (calls == 1) {
+            await other.table(users).update((u) => [u.score.set(10)]).execute();
+          }
+          await tx
+              .table(users)
+              .update((u) => [u.score.set(row.score + 1)])
+              .execute();
+        }, retry: retry);
+        expect(errors.map((e) => e.extendedCode), [517]);
+        expect(reads, [0, 10]);
+        expect(calls, 2);
+        expect((await db.table(users).single()).score, 11);
+      } finally {
+        await other.close();
+        await db.close();
+        await directory.delete(recursive: true);
+      }
+    },
+    skip: sqliteCancellation
+        ? false
+        : 'Bounded retries require sqlite3_interrupt.',
+  );
   for (final mode in [
     'success',
     'exhausted',
@@ -77,96 +86,102 @@ void main() {
     'cancel',
     'shared-budget',
   ]) {
-    test('SQLite real busy COMMIT: $mode', () async {
-      final directory = await Directory.systemTemp.createTemp(
-        'orm-retry-commit-',
-      );
-      final options = SqliteOptions.file(
-        '${directory.path}/db.sqlite',
-        journal: .delete,
-        busyTimeout: const Duration(milliseconds: 20),
-      );
-      final base = await sqlite(options), reader = await sqlite(options);
-      final driver = _FaultDriver(base.driver);
-      final release = Completer<void>(), entered = Completer<void>();
-      final cancellation = CancellationToken();
-      var callbacks = 0, busyCommits = 0;
-      final writer = Database(
-        driver,
-        onQuery: (event) {
-          if (event.sql == 'COMMIT' && event.error is SqliteFailure) {
-            busyCommits++;
-            if (mode == 'success' && !release.isCompleted) release.complete();
-            if (mode == 'cancel') cancellation.cancel();
-          }
-        },
-      );
-      await createTables(writer);
-      await writer.table(users).createRow((u) => [u.email.set('initial')]);
-      final owner = reader.transaction((tx) async {
-        await tx.table(users).count();
-        entered.complete();
-        await release.future;
-      });
-      try {
-        await entered.future;
-        driver.commands.clear();
-        if (mode == 'shared-budget') {
-          driver.after = (command) {
-            if (command.sql.startsWith('UPDATE') && callbacks == 1) {
-              throw const _Transient();
+    test(
+      'SQLite real busy COMMIT: $mode',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'orm-retry-commit-',
+        );
+        final options = SqliteOptions.file(
+          '${directory.path}/db.sqlite',
+          journal: .delete,
+          busyTimeout: const Duration(milliseconds: 20),
+        );
+        final base = await sqlite(options), reader = await sqlite(options);
+        final driver = _FaultDriver(base.driver);
+        final release = Completer<void>(), entered = Completer<void>();
+        final cancellation = CancellationToken();
+        var callbacks = 0, busyCommits = 0;
+        final writer = Database(
+          driver,
+          onQuery: (event) {
+            if (event.sql == 'COMMIT' && event.error is SqliteFailure) {
+              busyCommits++;
+              if (mode == 'success' && !release.isCompleted) release.complete();
+              if (mode == 'cancel') cancellation.cancel();
             }
-          };
-        }
-        final future = writer.transaction(
-          (tx) async {
-            callbacks++;
-            await tx
-                .table(users)
-                .update((u) => [u.score.increment(1)])
-                .execute();
-            return 'committed';
           },
-          cancellation: cancellation,
-          retry: TransactionRetry(
-            maxAttempts: mode == 'deadline' ? 100 : 3,
-            timeout: mode == 'deadline'
-                ? const Duration(milliseconds: 80)
-                : const Duration(seconds: 3),
-            delay: const Duration(milliseconds: 20),
-          ),
         );
-        if (mode == 'success') {
-          expect(await future, 'committed');
-          expect(callbacks, 1);
-          expect(busyCommits, 1);
-          expect(driver.commands.where((s) => s == 'COMMIT').length, 2);
-          expect(driver.commands, isNot(contains('ROLLBACK')));
-        } else {
-          await expectLater(
-            future,
-            throwsA(switch (mode) {
-              'deadline' => code('TRANSACTION.TIMEOUT'),
-              'cancel' => code('TRANSACTION.CANCELLED'),
-              _ => isA<SqliteFailure>().having((e) => e.code, 'code', 5),
-            }),
-          ).timeout(const Duration(seconds: 2));
-          expect(callbacks, mode == 'shared-budget' ? 2 : 1);
-          if (mode == 'exhausted') expect(busyCommits, 3);
-          if (mode == 'shared-budget') expect(busyCommits, 2);
+        await createTables(writer);
+        await writer.table(users).createRow((u) => [u.email.set('initial')]);
+        final owner = reader.transaction((tx) async {
+          await tx.table(users).count();
+          entered.complete();
+          await release.future;
+        });
+        try {
+          await entered.future;
+          driver.commands.clear();
+          if (mode == 'shared-budget') {
+            driver.after = (command) {
+              if (command.sql.startsWith('UPDATE') && callbacks == 1) {
+                throw const _Transient();
+              }
+            };
+          }
+          final future = writer.transaction(
+            (tx) async {
+              callbacks++;
+              await tx
+                  .table(users)
+                  .update((u) => [u.score.increment(1)])
+                  .execute();
+              return 'committed';
+            },
+            cancellation: cancellation,
+            retry: TransactionRetry(
+              maxAttempts: mode == 'deadline' ? 100 : 3,
+              timeout: mode == 'deadline'
+                  ? const Duration(milliseconds: 80)
+                  : const Duration(seconds: 3),
+              delay: const Duration(milliseconds: 20),
+            ),
+          );
+          if (mode == 'success') {
+            expect(await future, 'committed');
+            expect(callbacks, 1);
+            expect(busyCommits, 1);
+            expect(driver.commands.where((s) => s == 'COMMIT').length, 2);
+            expect(driver.commands, isNot(contains('ROLLBACK')));
+          } else {
+            await expectLater(
+              future,
+              throwsA(switch (mode) {
+                'deadline' => code('TRANSACTION.TIMEOUT'),
+                'cancel' => code('TRANSACTION.CANCELLED'),
+                _ => isA<SqliteFailure>().having((e) => e.code, 'code', 5),
+              }),
+            ).timeout(const Duration(seconds: 2));
+            expect(callbacks, mode == 'shared-budget' ? 2 : 1);
+            if (mode == 'exhausted') expect(busyCommits, 3);
+            if (mode == 'shared-budget') expect(busyCommits, 2);
+          }
+          expect(
+            (await writer.table(users).single()).score,
+            mode == 'success' ? 1 : 0,
+          );
+        } finally {
+          if (!release.isCompleted) release.complete();
+          await owner;
+          await reader.close();
+          await writer.close();
+          await directory.delete(recursive: true);
         }
-        expect(
-          (await writer.table(users).single()).score,
-          mode == 'success' ? 1 : 0,
-        );
-      } finally {
-        if (!release.isCompleted) release.complete();
-        await owner;
-        await reader.close();
-        await writer.close();
-        await directory.delete(recursive: true);
-      }
-    });
+      },
+      skip: sqliteCancellation
+          ? false
+          : 'Bounded retries require sqlite3_interrupt.',
+    );
   }
 }
 
@@ -184,6 +199,16 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
       driver.commands.clear();
     });
     tearDown(() => db.close());
+    void retryTest(String description, Future<void> Function() body) {
+      test(description, () async {
+        if (!db.capabilities.cancellation) {
+          markTestSkipped('Bounded retries require sqlite3_interrupt.');
+          return;
+        }
+        await body();
+      });
+    }
+
     Future<int> score() async =>
         (await db.table(users).where((u) => u.id.eq(1)).single()).score;
     Future<void> write(Database<Backend> tx) async => tx
@@ -193,7 +218,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
         .execute()
         .then((_) {});
 
-    test(
+    retryTest(
       'opt-in retries roll back all writes and use new closed-over views',
       () async {
         var callbacks = 0;
@@ -233,7 +258,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
       },
     );
 
-    test(
+    retryTest(
       'default is one attempt; an explicit attempt limit is exact',
       () async {
         var calls = 0;
@@ -259,7 +284,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
       },
     );
 
-    test('application and constraint errors and caught statement failures do not replay', () async {
+    retryTest('application and constraint errors and caught statement failures do not replay', () async {
       var calls = 0;
       await expectLater(
         db.transaction((tx) async {
@@ -303,41 +328,44 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
       expect(await score(), 0);
     });
 
-    test('unknown commit and unconfirmed rollback prohibit replay', () async {
-      var calls = 0;
-      driver.after = (command) {
-        if (command.sql == 'COMMIT') throw StateError('Lost acknowledgement');
-      };
-      await expectLater(
-        db.transaction((tx) async {
-          calls++;
-          await write(tx);
-        }, retry: retry),
-        throwsA(code('TRANSACTION.COMMIT')),
-      );
-      expect(calls, 1);
-      expect(await score(), 1);
-      driver.after = (command) {
-        if (command.sql.startsWith('UPDATE')) throw const _Transient();
-      };
-      driver.before = (command) {
-        if (command.sql == 'ROLLBACK') {
-          throw StateError('Rollback transport failed');
-        }
-      };
-      calls = 0;
-      await expectLater(
-        db.transaction((tx) async {
-          calls++;
-          await write(tx);
-        }, retry: retry),
-        throwsA(code('TRANSACTION.ROLLBACK')),
-      );
-      expect(calls, 1);
-      expect(driver.discards, 1);
-    });
+    retryTest(
+      'unknown commit and unconfirmed rollback prohibit replay',
+      () async {
+        var calls = 0;
+        driver.after = (command) {
+          if (command.sql == 'COMMIT') throw StateError('Lost acknowledgement');
+        };
+        await expectLater(
+          db.transaction((tx) async {
+            calls++;
+            await write(tx);
+          }, retry: retry),
+          throwsA(code('TRANSACTION.COMMIT')),
+        );
+        expect(calls, 1);
+        expect(await score(), 1);
+        driver.after = (command) {
+          if (command.sql.startsWith('UPDATE')) throw const _Transient();
+        };
+        driver.before = (command) {
+          if (command.sql == 'ROLLBACK') {
+            throw StateError('Rollback transport failed');
+          }
+        };
+        calls = 0;
+        await expectLater(
+          db.transaction((tx) async {
+            calls++;
+            await write(tx);
+          }, retry: retry),
+          throwsA(code('TRANSACTION.ROLLBACK')),
+        );
+        expect(calls, 1);
+        expect(driver.discards, 1);
+      },
+    );
 
-    test('retry time budget bounds active SQL and does not retry cancellation', () async {
+    retryTest('retry time budget bounds active SQL and does not retry cancellation', () async {
       final slow = name == 'postgres'
           ? 'SELECT pg_sleep(10)'
           : 'WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<100000000) SELECT sum(x) FROM n';
@@ -354,7 +382,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
       expect(await score(), 0);
     });
 
-    test(
+    retryTest(
       'deadline and cancellation interrupt backoff without another callback',
       () async {
         var calls = 0;
@@ -409,7 +437,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
       },
     );
 
-    test(
+    retryTest(
       'time budget includes acquisition and abandons late callbacks',
       () async {
         final entered = Completer<void>(), release = Completer<void>();
@@ -453,7 +481,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
       },
     );
 
-    test('transaction timeout is shared across attempts and sessions recover after expiry', () async {
+    retryTest('transaction timeout is shared across attempts and sessions recover after expiry', () async {
       var calls = 0;
       driver.after = (command) {
         if (command.sql.startsWith('UPDATE')) throw const _Transient();
@@ -489,7 +517,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
       });
     });
 
-    test(
+    retryTest(
       'subscriptions publish only the final committed retry result',
       () async {
         var calls = 0;
@@ -528,6 +556,24 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
         }
       },
     );
+
+    test('unsupported bounded retry rejects before BEGIN or callback', () {
+      if (db.capabilities.cancellation) {
+        markTestSkipped(
+          'This driver supports bounded retry; behavior is tested above.',
+        );
+        return;
+      }
+      var entered = false;
+      expect(
+        () => db.transaction((tx) async {
+          entered = true;
+        }, retry: retry),
+        throwsA(code('CAPABILITY.CANCEL')),
+      );
+      expect(entered, isFalse);
+      expect(driver.commands, isEmpty);
+    });
 
     test('invalid policies reject before SQL', () {
       for (final policy in [

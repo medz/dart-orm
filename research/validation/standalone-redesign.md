@@ -53,6 +53,24 @@ The cached PID path retains cancellation and reuse, and uncertain errors after a
 statement starts are not reclassified as confirmed interruption. A real PostgreSQL
 TCP proxy reproduces the original hang and verifies the correction.
 
+## Linux CI portability corrections
+
+The first Linux CI run revealed test assumptions hidden by macOS: borrowed
+PostgreSQL fixtures omitted URL passwords, an import fixture used `compile exe`
+without bundling native assets, and interruption tests assumed every SQLite build
+exports `sqlite3_interrupt`. These are corrected without substituting another
+SQLite library or changing the runtime capability contract. The PostgreSQL temporal
+and acquisition regression run passes 48 checks after the fixture correction.
+Linux arm64 passes 21 focused checks and two real AOT bundles, with 23 explicit
+capability skips (8 interruption scenarios and 15 bounded retries). The same
+focused suites on macOS/PostgreSQL pass 84 checks, with four inverse unsupported-
+capability checks skipped. These platform runs use the unchanged `46265f83` runtime
+plus the portability test fixtures. [Structured record](standalone-native.json).
+
+CLI workflows kept progressing in the original run; repeated independent Dart
+starts made the full run longer than local acceptance. CI now permits 45 minutes
+without removing checks. Canceled earlier runs are not passing acceptance evidence.
+
 ## Explicit boundaries
 
 MySQL/MariaDB provide exact values, storage, comparison and MIN/MAX within their
@@ -62,6 +80,12 @@ precision narrowing that can silently lose digits are rejected; see the
 Their initial adapters own a single queued connection and do not support streaming
 or cancellation. Runtime leases add a cleanup ROLLBACK round trip. DDL remains
 non-atomic and uses the [engine-specific recovery workflow](../../docs/mysql-migrations.md).
+
+The default Linux native asset in `sqlite3` 3.6.0 hides `sqlite3_interrupt`.
+Statement cancellation, execution deadlines and bounded retries are rejected
+before SQL; ordinary database operations and streaming remain supported. Tests
+check that refusal explicitly and skip only scenarios requiring interruption.
+Native executables must use `dart build cli` and ship the whole bundle.
 
 Chrome and an Android emulator do not certify Safari, Firefox, physical devices,
 iOS or macOS Flutter. Timer/animation progress establishes worker separation,

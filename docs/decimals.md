@@ -297,8 +297,8 @@ concurrency measurements, or estimates for large coefficients/high scales.
 No other ORM test/build workload ran during measurement.
 
 ```sh
-dart compile exe tool/benchmark_decimal.dart -o /tmp/orm-decimal-benchmark
-/tmp/orm-decimal-benchmark > /tmp/decimal-division.json
+dart build cli --target=tool/benchmark_decimal.dart --output=/tmp/orm-decimal-benchmark
+/tmp/orm-decimal-benchmark/bundle/bin/benchmark_decimal > /tmp/decimal-division.json
 ```
 
 Set `ORM_TEST_POSTGRES` to an accessible disposable local PostgreSQL URL to include

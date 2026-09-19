@@ -195,6 +195,18 @@ void runTests(
         db.table(users).orderBy((u) => [u.id.asc()]).select((u) => u.id);
     Iterable<QueryEvent> getFetches() =>
         events.where((e) => e.operation == QueryOperation.cursorFetch);
+    void cancellationTest(String description, Future<void> Function() body) {
+      test(description, () async {
+        if (!db.capabilities.cancellation) {
+          markTestSkipped(
+            'This SQLite build does not export sqlite3_interrupt.',
+          );
+          return;
+        }
+        await body();
+      });
+    }
+
     final slow = name == 'postgres'
         ? 'SELECT pg_sleep(10)'
         : '''WITH RECURSIVE n(x) AS (
@@ -206,7 +218,7 @@ void runTests(
       Codecs.integer,
     );
 
-    test(
+    cancellationTest(
       'cancellation between batch chunks prevents a partial commit',
       () async {
         final token = CancellationToken();
@@ -238,30 +250,33 @@ void runTests(
       },
     );
 
-    test('cancellation interrupts an active cursor fetch', () async {
-      final token = CancellationToken();
-      final timer = Timer(const Duration(milliseconds: 50), token.cancel);
-      try {
-        await expectLater(
-          db
-              .table(users)
-              .select((_) => slowValue)
-              .take(1)
-              .stream(
-                batchSize: 1,
-                options: ExecutionOptions(cancellation: token),
-              )
-              .toList(),
-          throwsA(code('OPERATION.CANCELLED')),
-        );
-      } finally {
-        timer.cancel();
-      }
-      expect(getFetches().single.error, isNotNull);
-      expect(await db.table(users).count(), 31);
-    });
+    cancellationTest(
+      'cancellation interrupts an active cursor fetch',
+      () async {
+        final token = CancellationToken();
+        final timer = Timer(const Duration(milliseconds: 50), token.cancel);
+        try {
+          await expectLater(
+            db
+                .table(users)
+                .select((_) => slowValue)
+                .take(1)
+                .stream(
+                  batchSize: 1,
+                  options: ExecutionOptions(cancellation: token),
+                )
+                .toList(),
+            throwsA(code('OPERATION.CANCELLED')),
+          );
+        } finally {
+          timer.cancel();
+        }
+        expect(getFetches().single.error, isNotNull);
+        expect(await db.table(users).count(), 31);
+      },
+    );
 
-    test('timed-out mutations return no partial write', () async {
+    cancellationTest('timed-out mutations return no partial write', () async {
       await expectLater(
         db
             .table(users)
@@ -297,7 +312,7 @@ void runTests(
       },
     );
 
-    test(
+    cancellationTest(
       'cancellation between stream creation and listening needs no rollback',
       () async {
         final token = CancellationToken();
@@ -461,27 +476,30 @@ void runTests(
       );
     });
 
-    test('cancels executing SQL and allows the next statement', () async {
-      expect(db.capabilities.cancellation, isTrue);
-      final token = CancellationToken();
-      final timer = Timer(const Duration(milliseconds: 45), token.cancel);
-      final elapsed = Stopwatch()..start();
-      try {
-        await expectLater(
-          db.execute(
-            SqlCommand(slow),
-            options: ExecutionOptions(cancellation: token),
-          ),
-          throwsA(code('OPERATION.CANCELLED')),
-        );
-      } finally {
-        timer.cancel();
-      }
-      expect(elapsed.elapsed, lessThan(const Duration(seconds: 3)));
-      expect(await db.table(users).count(), 31);
-    });
+    cancellationTest(
+      'cancels executing SQL and allows the next statement',
+      () async {
+        expect(db.capabilities.cancellation, isTrue);
+        final token = CancellationToken();
+        final timer = Timer(const Duration(milliseconds: 45), token.cancel);
+        final elapsed = Stopwatch()..start();
+        try {
+          await expectLater(
+            db.execute(
+              SqlCommand(slow),
+              options: ExecutionOptions(cancellation: token),
+            ),
+            throwsA(code('OPERATION.CANCELLED')),
+          );
+        } finally {
+          timer.cancel();
+        }
+        expect(elapsed.elapsed, lessThan(const Duration(seconds: 3)));
+        expect(await db.table(users).count(), 31);
+      },
+    );
 
-    test(
+    cancellationTest(
       'statement timeout stops SQL and leaves a usable connection',
       () async {
         await expectLater(
@@ -497,37 +515,40 @@ void runTests(
       },
     );
 
-    test('cancelled statement poisons a transaction even if caught', () async {
-      await expectLater(
-        db.transaction((tx) async {
-          await tx
-              .table(users)
-              .where((u) => u.id.eq(1))
-              .update((u) => [u.score.set(90)])
-              .execute();
-          final token = CancellationToken();
-          final timer = Timer(const Duration(milliseconds: 40), token.cancel);
-          try {
-            await expectLater(
-              tx.execute(
-                SqlCommand(slow),
-                options: ExecutionOptions(cancellation: token),
-              ),
-              throwsA(code('OPERATION.CANCELLED')),
-            );
-          } finally {
-            timer.cancel();
-          }
-        }),
-        throwsA(code('TRANSACTION.FAILED')),
-      );
-      expect(
-        (await db.table(users).where((u) => u.id.eq(1)).single()).score,
-        1,
-      );
-    });
+    cancellationTest(
+      'cancelled statement poisons a transaction even if caught',
+      () async {
+        await expectLater(
+          db.transaction((tx) async {
+            await tx
+                .table(users)
+                .where((u) => u.id.eq(1))
+                .update((u) => [u.score.set(90)])
+                .execute();
+            final token = CancellationToken();
+            final timer = Timer(const Duration(milliseconds: 40), token.cancel);
+            try {
+              await expectLater(
+                tx.execute(
+                  SqlCommand(slow),
+                  options: ExecutionOptions(cancellation: token),
+                ),
+                throwsA(code('OPERATION.CANCELLED')),
+              );
+            } finally {
+              timer.cancel();
+            }
+          }),
+          throwsA(code('TRANSACTION.FAILED')),
+        );
+        expect(
+          (await db.table(users).where((u) => u.id.eq(1)).single()).score,
+          1,
+        );
+      },
+    );
 
-    test(
+    cancellationTest(
       'cancelling a paused stream releases its connection before resume',
       () async {
         final token = CancellationToken();
@@ -557,6 +578,36 @@ void runTests(
       },
     );
 
+    test('unsupported interruption rejects options before SQL or cursor acquisition', () async {
+      if (db.capabilities.cancellation) {
+        markTestSkipped(
+          'This build supports interruption; behavior is tested above.',
+        );
+        return;
+      }
+      for (final options in [
+        const ExecutionOptions(timeout: Duration(milliseconds: 40)),
+        ExecutionOptions(cancellation: CancellationToken()),
+      ]) {
+        expect(
+          () => db.execute(
+            SqlCommand('UPDATE users SET score=0'),
+            options: options,
+          ),
+          throwsA(code('CAPABILITY.CANCEL')),
+        );
+        expect(
+          () => ids(db).stream(options: options),
+          throwsA(code('CAPABILITY.CANCEL')),
+        );
+      }
+      expect(events, isEmpty);
+      expect(
+        (await db.table(users).where((u) => u.id.eq(1)).single()).score,
+        1,
+      );
+    });
+
     test('cancellation before starting performs no SQL', () async {
       final token = CancellationToken()..cancel();
       expect(
@@ -568,7 +619,13 @@ void runTests(
       );
       expect(
         () => ids(db).stream(options: ExecutionOptions(cancellation: token)),
-        throwsA(code('OPERATION.CANCELLED')),
+        throwsA(
+          code(
+            db.capabilities.cancellation
+                ? 'OPERATION.CANCELLED'
+                : 'CAPABILITY.CANCEL',
+          ),
+        ),
       );
       expect(events, isEmpty);
     });

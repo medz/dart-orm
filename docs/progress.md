@@ -2,7 +2,7 @@
 
 ## Standalone ORM redesign
 
-Current branch: `refactor/standalone-orm`. The delivery scope is SQLite (native,
+Implementation branch: `refactor/standalone-orm`. The delivery scope is SQLite (native,
 Dart Web and Flutter Web), PostgreSQL, MySQL 8.4 and MariaDB 11.8. The user has
 authorized commits, push, a Codex-reviewed PR and merge after verification.
 
@@ -30,6 +30,15 @@ process reopen pass 4/17/11 checks. Both APKs exclude Web resources. Root and
 Flutter analysis pass. [The final local acceptance record](../research/validation/standalone-redesign.md)
 pins the runtime source and limits. Complete GitHub CI and Codex review of the
 final PR head are the merge gates; earlier captures below retain their revisions.
+
+Linux CI exposed native-asset packaging and capability assumptions in tests.
+The import AOT fixture now uses a complete `dart build cli` bundle; borrowed
+PostgreSQL tests include URL passwords (48 related checks pass). SQLite
+interruption-dependent cases honor the actual build capability; default Linux
+`sqlite3` 3.6.0 rejects cancellation/deadlines and bounded retries before SQL.
+This limitation is documented rather than replaced with a second SQLite library.
+Complete Linux CI and final-head Codex review are required before merge;
+[PR #485](https://github.com/medz/dart-orm/pull/485) records their final outcome.
 
 Design: [standalone redesign](../research/standalone-orm-redesign.md).
 Research: [Prisma v8 reassessment](../research/prisma-v8-reassessment.md).

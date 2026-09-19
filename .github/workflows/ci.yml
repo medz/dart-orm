@@ -17,7 +17,7 @@ jobs:
   test:
     name: Dart, databases and browser
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:18

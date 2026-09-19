@@ -8,7 +8,6 @@ import '../../example/schema.orm.dart';
 Future<void> main() async {
   final db = await sqlite(const SqliteOptions.memory());
   try {
-    if (!db.capabilities.cancellation) throw StateError('No native interrupt');
     final initial = Migration.create(
       '0001_initial',
       appSchema,
@@ -104,16 +103,26 @@ Future<void> main() async {
     }
     if (await db.users.count() != 5) throw StateError('Abandoned SQL executed');
     final resume = Completer<void>();
+    var deadlineCallback = false;
     try {
       await db.transaction((tx) async {
+        deadlineCallback = true;
         await tx.users.create(email: 'deadline@example.com');
         await resume.future;
       }, timeout: const Duration(milliseconds: 60));
       throw StateError('Transaction deadline failed');
     } on OrmException catch (error) {
-      if (error.code != 'TRANSACTION.TIMEOUT') rethrow;
+      if (error.code !=
+          (db.capabilities.cancellation
+              ? 'TRANSACTION.TIMEOUT'
+              : 'CAPABILITY.CANCEL')) {
+        rethrow;
+      }
     } finally {
       resume.complete();
+    }
+    if (!db.capabilities.cancellation && deadlineCallback) {
+      throw StateError('Unsupported transaction deadline entered the callback');
     }
     if (await db.users.count() != 5) {
       throw StateError('Timed-out transaction persisted');
@@ -153,7 +162,12 @@ Future<void> main() async {
       );
       throw StateError('Cancellation failed');
     } on OrmException catch (error) {
-      if (error.code != 'OPERATION.CANCELLED') rethrow;
+      if (error.code !=
+          (db.capabilities.cancellation
+              ? 'OPERATION.CANCELLED'
+              : 'CAPABILITY.CANCEL')) {
+        rethrow;
+      }
     } finally {
       timer.cancel();
     }
@@ -174,7 +188,8 @@ Future<void> main() async {
     }
     await changes.cancel();
     print(
-      'Native AOT: schema version compatibility, joined projections, typed UNION records, acquisition/transaction deadlines, automatic rollback, cursor demand, native cancellation, recovery and committed query watches passed.',
+      'Native AOT: schema version compatibility, joined projections, typed UNION records, acquisition deadlines, automatic rollback, cursor demand, recovery and committed query watches passed. '
+      'Statement/transaction interruption: ${db.capabilities.cancellation ? 'passed' : 'unavailable; capability rejection verified'}.',
     );
   } finally {
     await db.close();

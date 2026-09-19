@@ -7,6 +7,26 @@ import 'tables.dart';
 
 /// Real competing workers, compiled without the test runner for native AOT.
 Future<void> main() async {
+  final probe = await sqlite(const SqliteOptions.memory());
+  try {
+    if (!probe.capabilities.cancellation) {
+      var entered = false;
+      try {
+        await probe.transaction((tx) async {
+          entered = true;
+        }, retry: const TransactionRetry());
+        throw StateError('Unsupported bounded retry was accepted');
+      } on OrmException catch (error) {
+        if (error.code != 'CAPABILITY.CANCEL' || entered) rethrow;
+      }
+      print(
+        'Native AOT: bounded retry unavailable; capability rejection verified.',
+      );
+      return;
+    }
+  } finally {
+    await probe.close();
+  }
   final directory = await Directory.systemTemp.createTemp('orm-native-retry-');
   try {
     for (final journal in [SqliteJournal.wal, SqliteJournal.delete]) {
