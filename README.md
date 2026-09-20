@@ -7,16 +7,16 @@ schema and migrations in Dart. SQLite, PostgreSQL, MySQL and MariaDB share a typ
 query API, with explicit database capabilities and transaction boundaries.
 
 [Get started](#get-started) · [Guides](https://github.com/medz/dart-orm/blob/main/doc/README.md) ·
-[Published beta.1 API](https://pub.dev/documentation/orm/6.0.0-beta.1/) ·
-[Examples](https://github.com/medz/dart-orm/tree/main/example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.1)
+[API reference](https://pub.dev/documentation/orm/6.0.0-beta.2/) ·
+[Examples](https://github.com/medz/dart-orm/tree/main/example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.2)
 
 > **6.0 beta:** a new implementation requiring Dart 3.13+. This is a breaking
 > replacement for the Prisma-based 5.x client. Read the [release notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md)
 > before upgrading an existing application.
 
-The guides on `main` also describe [unreleased API changes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#unreleased).
-The quickstart below installs the published beta.1; generate the current source's
-API reference with `dart doc --validate-links` in a checkout.
+Upgrading from beta.1: `first()` now requires a row. Use `firstOrNull()` when an
+empty result is expected. See the [beta.2 changes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#600-beta2)
+for export changes and the new `singleOrNull()` API.
 
 ## Get started
 
@@ -25,7 +25,7 @@ Create a Dart application and initialize SQLite:
 ```sh
 dart create -t console my_app
 cd my_app
-dart pub add orm:^6.0.0-beta.1
+dart pub add orm:^6.0.0-beta.2
 dart run orm init --database sqlite
 ```
 

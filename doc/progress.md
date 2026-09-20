@@ -72,6 +72,7 @@ browsers were not rerun for this refactor. Earlier Android release evidence
 belongs to the published baseline. Local logs and browser reports live under
 ignored `.dart_tool/` directories; they are not published package contents.
 
-This refactor is a local, unreleased change. The beta.1 archive above is unchanged.
+The refactor is prepared for `6.0.0-beta.2`. Publication follows Codex review and
+CI approval of the release PR. The beta.1 archive above is unchanged.
 
 See [validation](https://github.com/medz/dart-orm/blob/main/doc/acceptance.md) and [contributing](https://github.com/medz/dart-orm/blob/main/doc/contributing.md) for commands.

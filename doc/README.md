@@ -3,9 +3,9 @@
 Start with the [quickstart](https://github.com/medz/dart-orm/blob/main/README.md#get-started), then choose the guide for
 the part of your application you are building.
 
-The [published beta.1 API reference](https://pub.dev/documentation/orm/6.0.0-beta.1/)
-describes the released package. These guides on `main` also include
-[unreleased API changes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#unreleased).
+The [API reference](https://pub.dev/documentation/orm/6.0.0-beta.2/) documents the
+beta.2 package. See the [release notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#600-beta2)
+when upgrading from beta.1.
 Run `dart doc --validate-links` in a checkout to generate the reference from the
 current public library and member comments into `doc/api/`.
 

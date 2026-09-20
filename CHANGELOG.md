@@ -1,4 +1,4 @@
-## Unreleased
+## 6.0.0-beta.2
 
 - Replace shared `part` libraries with independent modules and explicit public
   exports. Internal compiler and execution details stay outside the documented API.
@@ -34,7 +34,7 @@ model/API migration; updating the dependency alone is not sufficient.
 - Add typed selections, explicit relation loading, transactions, query
   subscriptions, SQL inspection and capability-checked execution controls.
 
-See [database and platform boundaries](doc/capabilities.md) before adopting the
+See [database and platform boundaries](https://github.com/medz/dart-orm/blob/main/doc/capabilities.md) before adopting the
 beta. MySQL/MariaDB DDL is non-atomic. Cancellation and streaming depend on the
 selected driver; the default Linux SQLite asset does not expose interruption.
 
