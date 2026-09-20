@@ -1,11 +1,24 @@
-/// Database value types and explicit Dart/storage codecs. No database connection required.
+/// Exact numeric values, calendar values, and explicit storage codecs.
+///
+/// Use [Codecs] for built-in conversions, or [Codec.map] to store an application
+/// value through an existing codec. No database connection is required.
+///
+/// {@category Values}
+/// {@canonicalFor codec.SqlJson}
+/// {@canonicalFor codec.SqlReal}
+/// {@canonicalFor codec.Codec}
+/// {@canonicalFor codec.Codecs}
+/// {@canonicalFor codec.OrmException}
+/// {@canonicalFor decimal.Decimal}
+/// {@canonicalFor decimal.DecimalRounding}
+/// {@canonicalFor temporal.LocalDate}
+/// {@canonicalFor temporal.LocalTime}
+/// {@canonicalFor temporal.LocalDateTime}
+/// {@canonicalFor temporal.InstantPrecision}
 library;
 
-import 'dart:convert';
-import 'dart:math' as math;
-import 'dart:typed_data';
-
-part 'src/codec.dart';
-part 'src/decimal.dart';
-part 'src/instant.dart';
-part 'src/temporal.dart';
+export 'src/values/codec.dart'
+    show SqlJson, SqlReal, Codec, Codecs, OrmException;
+export 'src/values/decimal.dart' show Decimal, DecimalRounding;
+export 'src/values/temporal.dart'
+    show LocalDate, LocalTime, LocalDateTime, InstantPrecision;

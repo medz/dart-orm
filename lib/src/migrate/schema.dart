@@ -1,13 +1,37 @@
-part of '../../migrate.dart';
+// Physical schema validation and engine-specific DDL.
+
+import 'dart:convert' show utf8;
+
+import '../../driver.dart' show SqlCommand, SqlDialect;
+import '../../schema_model.dart'
+    show
+        CheckSchema,
+        Column,
+        ComputedStorage,
+        ForeignKey,
+        IndexSchema,
+        TableSchema;
+import '../../values.dart' show OrmException;
+import 'columns.dart' show sqliteCollation;
+import 'mysql_schema.dart'
+    show
+        isMysqlFamily,
+        mysqlColumn,
+        mysqlColumnType,
+        mysqlCreateSchema,
+        mysqlStorageType,
+        validateMysqlSchema;
+import 'sql_utils.dart' show quoteIdentifier;
+import 'sqlite_checks.dart' show sqliteName;
 
 /// Creates a new schema. Applications should execute the resulting SQL through
 /// reviewed migrations; this does not inspect or mutate an existing database.
 List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
-  if (_isMysql(dialect)) return _mysqlCreateSchema(tables, dialect);
+  if (isMysqlFamily(dialect)) return mysqlCreateSchema(tables, dialect);
   final commands = <SqlCommand>[];
-  _validateSchema(tables, dialect);
+  validateSchema(tables, dialect);
   for (final table in tables) {
-    commands.add(SqlCommand(_createTable(table, dialect)));
+    commands.add(SqlCommand(createTable(table, dialect)));
   }
   if (dialect == SqlDialect.postgres) {
     // Creating constraints after all tables also supports cycles and self links.
@@ -15,7 +39,7 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
       for (final key in table.foreignKeys) {
         commands.add(
           SqlCommand(
-            'ALTER TABLE ${_quote(table.name)} ADD ${_foreignKey(key)}',
+            'ALTER TABLE ${quoteIdentifier(table.name)} ADD ${foreignKey(key)}',
           ),
         );
       }
@@ -25,8 +49,8 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
     for (final index in table.indexes) {
       commands.add(
         SqlCommand(
-          'CREATE ${index.unique ? 'UNIQUE ' : ''}INDEX ${_quote(index.name)} '
-          'ON ${_quote(table.name)} (${index.columns.map(_quote).join(', ')})',
+          'CREATE ${index.unique ? 'UNIQUE ' : ''}INDEX ${quoteIdentifier(index.name)} '
+          'ON ${quoteIdentifier(table.name)} (${index.columns.map(quoteIdentifier).join(', ')})',
         ),
       );
     }
@@ -34,9 +58,9 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
   return List.unmodifiable(commands);
 }
 
-void _validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
-  if (dialect != null && _isMysql(dialect)) {
-    _validateMysqlSchema(tables, dialect);
+void validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
+  if (dialect != null && isMysqlFamily(dialect)) {
+    validateMysqlSchema(tables, dialect);
   }
   String identifier(String name) {
     if (name.isEmpty ||
@@ -47,7 +71,7 @@ void _validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
         'Identifiers must be non-empty, contain no NUL, and fit PostgreSQL\'s 63-byte limit.',
       );
     }
-    return dialect == SqlDialect.sqlite ? _sqliteName(name) : name;
+    return dialect == SqlDialect.sqlite ? sqliteName(name) : name;
   }
 
   final names = <String>{};
@@ -178,7 +202,7 @@ void _validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
       }
     }
     for (final key in table.foreignKeys) {
-      _foreignKey(key);
+      foreignKey(key);
       identifier(key.target);
       if (key.columns.toSet().length != key.columns.length ||
           key.targetColumns.toSet().length != key.targetColumns.length ||
@@ -211,38 +235,42 @@ void _validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
   }
 }
 
-String _createTable(TableSchema table, SqlDialect dialect, {String? name}) {
+String createTable(TableSchema table, SqlDialect dialect, {String? name}) {
   final definitions = <String>[];
   for (final c in table.columns) {
-    definitions.add(_columnDefinition(c, dialect));
+    definitions.add(columnDefinition(c, dialect));
   }
   if (table.primaryKey.isNotEmpty &&
       !(dialect == SqlDialect.sqlite &&
           table.columns.any((c) => c.generated))) {
-    definitions.add('PRIMARY KEY (${table.primaryKey.map(_quote).join(', ')})');
+    definitions.add(
+      'PRIMARY KEY (${table.primaryKey.map(quoteIdentifier).join(', ')})',
+    );
   }
   for (final key in table.uniqueKeys) {
-    definitions.add('UNIQUE (${key.map(_quote).join(', ')})');
+    definitions.add('UNIQUE (${key.map(quoteIdentifier).join(', ')})');
   }
-  definitions.addAll(table.checks.map((c) => _checkDefinition(c, dialect)));
+  definitions.addAll(table.checks.map((c) => checkDefinition(c, dialect)));
   if (dialect == SqlDialect.sqlite) {
     for (final key in table.foreignKeys) {
-      definitions.add(_foreignKey(key));
+      definitions.add(foreignKey(key));
     }
   }
 
-  return 'CREATE TABLE ${_quote(name ?? table.name)} (${definitions.join(', ')})';
+  return 'CREATE TABLE ${quoteIdentifier(name ?? table.name)} (${definitions.join(', ')})';
 }
 
-String _checkDefinition(CheckSchema check, SqlDialect dialect) =>
-    '${check.name == null ? '' : 'CONSTRAINT ${_quote(check.name!)} '}CHECK (${check.expression(dialect)}\n)';
+String checkDefinition(CheckSchema check, SqlDialect dialect) =>
+    '${check.name == null ? '' : 'CONSTRAINT ${quoteIdentifier(check.name!)} '}CHECK (${check.expression(dialect)}\n)';
 
-String _columnDefinition(Column<Object?> c, SqlDialect dialect) {
-  if (_isMysql(dialect)) return _mysqlColumn(c, dialect);
-  final b = StringBuffer('${_quote(c.name)} ${_columnStorageType(c, dialect)}');
+String columnDefinition(Column<Object?> c, SqlDialect dialect) {
+  if (isMysqlFamily(dialect)) return mysqlColumn(c, dialect);
+  final b = StringBuffer(
+    '${quoteIdentifier(c.name)} ${columnStorageType(c, dialect)}',
+  );
   if (dialect == SqlDialect.sqlite &&
-      _sqliteCollation(c.codec.sqlType) != 'binary') {
-    b.write(' COLLATE "${_sqliteCollation(c.codec.sqlType)}"');
+      sqliteCollation(c.codec.sqlType) != 'binary') {
+    b.write(' COLLATE "${sqliteCollation(c.codec.sqlType)}"');
   }
   if (c.generated) {
     b.write(
@@ -254,37 +282,37 @@ String _columnDefinition(Column<Object?> c, SqlDialect dialect) {
   if (!c.nullable) b.write(' NOT NULL');
   if (c.computed case final computed?) {
     b.write(
-      ' GENERATED ALWAYS AS (${_coerceColumn(computed.expression(dialect), c, dialect)}\n) ${computed.storage.name.toUpperCase()}',
+      ' GENERATED ALWAYS AS (${coerceColumn(computed.expression(dialect), c, dialect)}\n) ${computed.storage.name.toUpperCase()}',
     );
   }
   if (c.defaultSql case final value?) {
-    b.write(' DEFAULT (${_coerceColumn(value, c, dialect)})');
+    b.write(' DEFAULT (${coerceColumn(value, c, dialect)})');
   }
   if (dialect == SqlDialect.sqlite &&
       c.temporalPrecision != null &&
       c.temporalPrecision != 6) {
     b.write(
-      ' CHECK (${_temporalCheck(c.name, c.codec.sqlType, c.temporalPrecision!)})',
+      ' CHECK (${temporalCheck(c.name, c.codec.sqlType, c.temporalPrecision!)})',
     );
   }
   if (dialect == SqlDialect.sqlite && c.decimalPrecision != null) {
     b.write(
-      ' CHECK (${_decimalCheck(c.name, c.decimalPrecision!, c.decimalScale ?? 0)})',
+      ' CHECK (${decimalCheck(c.name, c.decimalPrecision!, c.decimalScale ?? 0)})',
     );
   }
   if (dialect == SqlDialect.sqlite &&
       c.integerBits != null &&
       c.integerBits != 64) {
-    b.write(' CHECK (${_integerCheck(c.name, c.integerBits!)})');
+    b.write(' CHECK (${integerCheck(c.name, c.integerBits!)})');
   }
   return b.toString();
 }
 
-String _createIndex(String table, IndexSchema index) =>
-    'CREATE ${index.unique ? 'UNIQUE ' : ''}INDEX ${_quote(index.name)} '
-    'ON ${_quote(table)} (${index.columns.map(_quote).join(', ')})';
+String createIndexSql(String table, IndexSchema index) =>
+    'CREATE ${index.unique ? 'UNIQUE ' : ''}INDEX ${quoteIdentifier(index.name)} '
+    'ON ${quoteIdentifier(table)} (${index.columns.map(quoteIdentifier).join(', ')})';
 
-String _foreignKey(ForeignKey key) {
+String foreignKey(ForeignKey key) {
   if (key.columns.isEmpty ||
       key.columns.length != key.targetColumns.length ||
       !{
@@ -299,12 +327,12 @@ String _foreignKey(ForeignKey key) {
       'Invalid foreign key declaration.',
     );
   }
-  return 'FOREIGN KEY (${key.columns.map(_quote).join(', ')}) REFERENCES ${_quote(key.target)} '
-      '(${key.targetColumns.map(_quote).join(', ')}) ON DELETE ${key.onDelete}';
+  return 'FOREIGN KEY (${key.columns.map(quoteIdentifier).join(', ')}) REFERENCES ${quoteIdentifier(key.target)} '
+      '(${key.targetColumns.map(quoteIdentifier).join(', ')}) ON DELETE ${key.onDelete}';
 }
 
-String _storageType(String type, SqlDialect dialect) => _isMysql(dialect)
-    ? _mysqlStorageType(type)
+String _storageType(String type, SqlDialect dialect) => isMysqlFamily(dialect)
+    ? mysqlStorageType(type)
     : switch ((dialect, type)) {
         (SqlDialect.sqlite, 'integer') => 'INTEGER',
         (
@@ -341,9 +369,9 @@ String _storageType(String type, SqlDialect dialect) => _isMysql(dialect)
         ),
       };
 
-String _columnStorageType(Column<Object?> column, SqlDialect dialect) =>
-    _isMysql(dialect)
-    ? _mysqlColumnType(column)
+String columnStorageType(Column<Object?> column, SqlDialect dialect) =>
+    isMysqlFamily(dialect)
+    ? mysqlColumnType(column)
     : dialect == SqlDialect.postgres &&
           column.codec.sqlType == 'decimal' &&
           column.decimalPrecision != null
@@ -369,14 +397,14 @@ String _columnStorageType(Column<Object?> column, SqlDialect dialect) =>
       }
     : _storageType(column.codec.sqlType, dialect);
 
-bool _sameStorage(Column<Object?> a, Column<Object?> b) =>
+bool sameStorage(Column<Object?> a, Column<Object?> b) =>
     a.codec.sqlType == b.codec.sqlType &&
     (a.temporalPrecision ?? 6) == (b.temporalPrecision ?? 6) &&
     (a.integerBits ?? 64) == (b.integerBits ?? 64) &&
     a.decimalPrecision == b.decimalPrecision &&
     (a.decimalScale ?? 0) == (b.decimalScale ?? 0);
 
-String _coerceColumn(
+String coerceColumn(
   String expression,
   Column<Object?> column,
   SqlDialect dialect,
@@ -388,278 +416,13 @@ String _coerceColumn(
     ? "orm_temporal_cast_v1($expression, '${column.codec.sqlType}', ${column.temporalPrecision})"
     : expression;
 
-String _temporalCheck(String name, String kind, int digits) =>
-    "${_quote(name)} IS NULL OR orm_temporal_fits_v1(${_quote(name)}, '$kind', $digits)";
+String temporalCheck(String name, String kind, int digits) =>
+    "${quoteIdentifier(name)} IS NULL OR orm_temporal_fits_v1(${quoteIdentifier(name)}, '$kind', $digits)";
 
-String _decimalCheck(String name, int precision, int scale) =>
-    '${_quote(name)} IS NULL OR orm_decimal_fits_v1(${_quote(name)}, $precision, $scale)';
+String decimalCheck(String name, int precision, int scale) =>
+    '${quoteIdentifier(name)} IS NULL OR orm_decimal_fits_v1(${quoteIdentifier(name)}, $precision, $scale)';
 
-String _integerCheck(String name, int bits) {
-  final column = _quote(name), max = bits == 16 ? 32767 : 2147483647;
+String integerCheck(String name, int bits) {
+  final column = quoteIdentifier(name), max = bits == 16 ? 32767 : 2147483647;
   return "$column IS NULL OR (typeof($column) = 'integer' AND $column BETWEEN ${-max - 1} AND $max)";
-}
-
-/// Actual catalog columns, rather than a claimed migration version.
-final class ColumnInfo {
-  final String name;
-  final String storageType;
-  final bool nullable;
-  final String? defaultSql;
-  final bool generated;
-  final ComputedColumn? computed;
-  final int? integerBits;
-  final String? collation;
-  final int? decimalPrecision;
-  final int? decimalScale;
-  final int? temporalPrecision;
-  const ColumnInfo({
-    required this.name,
-    required this.storageType,
-    required this.nullable,
-    this.defaultSql,
-    this.generated = false,
-    this.computed,
-    this.integerBits,
-    this.collation,
-    this.decimalPrecision,
-    this.decimalScale,
-    this.temporalPrecision,
-  });
-
-  /// Removes the managed SQLite default coercion when drafting a declaration.
-  String? get declarationDefaultSql =>
-      defaultSql != null && storageType == 'TEXT' && decimalPrecision != null
-      ? _uncoerceDecimalDefault(
-              _normalizeDefault(defaultSql)!,
-              decimalPrecision!,
-              decimalScale ?? 0,
-            ) ??
-            defaultSql
-      : defaultSql != null && storageType == 'TEXT' && temporalPrecision != null
-      ? _uncoerceTemporal(
-              _normalizeDefault(defaultSql)!,
-              _temporalCollationKind(collation)!,
-              temporalPrecision!,
-            ) ??
-            defaultSql
-      : defaultSql;
-
-  /// SQL suitable for a declaration, without ORM storage coercion wrappers.
-  ComputedColumn? get declarationComputed => _declarationComputed(this);
-}
-
-Future<List<ColumnInfo>> inspectColumns(
-  SqlDatabase<Backend> db,
-  String table,
-) async {
-  if (_isMysql(db.dialect)) return _mysqlColumns(db, table);
-  if (db.dialect == SqlDialect.sqlite) {
-    final rows = await db.execute(
-      SqlCommand('PRAGMA table_xinfo(${_quote(table)})'),
-    );
-    final indexes = await db.execute(
-      SqlCommand('PRAGMA index_list(${_quote(table)})'),
-    );
-    final rowidPrimaryKey = !indexes.rows.any((r) => r[3] == 'pk');
-    final ddl = await db.execute(
-      SqlCommand(
-        "SELECT sql FROM main.sqlite_schema WHERE type = 'table' AND name = ?1",
-        [table],
-      ),
-    );
-    final sql = ddl.rows.firstOrNull?.first as String? ?? '';
-    final checks = _sqliteChecks(sql);
-    final computed = _sqliteComputedColumns(sql);
-    final collations = {
-      for (final c in _sqliteColumnCollations(sql))
-        _sqliteName(c.column): c.collation,
-    };
-    final columns = <ColumnInfo>[];
-    for (final row in rows.rows) {
-      final name = row[1] as String;
-      final type = (row[2] as String).toUpperCase();
-      final collation = collations[_sqliteName(name)] ?? 'BINARY';
-      final digits =
-          type == 'TEXT' && collation.toLowerCase() == 'orm_decimal_v1'
-          ? _sqliteDecimalDigits(name, checks)
-          : null;
-      columns.add(
-        ColumnInfo(
-          name: name,
-          storageType: type,
-          collation: collation,
-          decimalPrecision: digits?.$1,
-          decimalScale: digits?.$2,
-          temporalPrecision:
-              type == 'TEXT' && _temporalCollationKind(collation) != null
-              ? _sqliteTemporalPrecision(
-                  name,
-                  _temporalCollationKind(collation)!,
-                  checks,
-                )
-              : null,
-          nullable: row[3] == 0 && !(row[5] != 0 && rowidPrimaryKey),
-          defaultSql: row[4] as String?,
-          generated: (row[6] as int) > 0,
-          computed: computed[_sqliteName(name)],
-          integerBits: type == 'INTEGER'
-              ? _sqliteIntegerBits(name, checks)
-              : null,
-        ),
-      );
-    }
-    return columns;
-  }
-
-  final result = await db.execute(
-    SqlCommand(
-      '''
-SELECT a.attname, pg_catalog.format_type(a.atttypid, a.atttypmod),
-       NOT a.attnotnull, pg_get_expr(d.adbin, d.adrelid),
-       a.attidentity <> '' OR a.attgenerated <> '', a.attgenerated::text
-FROM pg_catalog.pg_attribute a
-JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
-JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-WHERE c.relname = \$1 AND n.nspname = current_schema() AND a.attnum > 0 AND NOT a.attisdropped
-ORDER BY a.attnum''',
-      [table],
-    ),
-  );
-  return [
-    for (final row in result.rows)
-      ColumnInfo(
-        name: row[0] as String,
-        storageType: _postgresStorageName(row[1] as String),
-        temporalPrecision: _postgresTemporalPrecision(row[1] as String),
-        nullable: row[2] as bool,
-        defaultSql: row[5] == '' ? row[3] as String? : null,
-        generated: row[4] as bool,
-        computed: row[5] == ''
-            ? null
-            : ComputedColumn(
-                row[3] as String,
-                storage: row[5] == 's'
-                    ? ComputedStorage.stored
-                    : ComputedStorage.virtual,
-              ),
-        decimalPrecision: _postgresDecimalDigits(row[1] as String)?.$1,
-        decimalScale: _postgresDecimalDigits(row[1] as String)?.$2,
-        integerBits: switch ((row[1] as String).toUpperCase()) {
-          'SMALLINT' => 16,
-          'INTEGER' => 32,
-          'BIGINT' => 64,
-          _ => null,
-        },
-      ),
-  ];
-}
-
-/// Column drift check. Constraints, indexes and unmanaged objects are separate
-/// catalog checks; this method does not pretend that columns prove full equality.
-Future<List<String>> verifyColumns(
-  SqlDatabase<Backend> db,
-  List<TableSchema> tables,
-) async {
-  final differences = <String>[];
-  for (final table in tables) {
-    final inspected = await inspectColumns(db, table.name);
-    final actual = {for (final c in inspected) c.name: c};
-    var contextMatches = true;
-    for (final expected in table.columns) {
-      final column = actual.remove(expected.name);
-      final path = '${table.name}.${expected.name}';
-      if (column == null) {
-        contextMatches = false;
-        differences.add('$path is missing');
-        continue;
-      }
-      if (column.storageType != _columnStorageType(expected, db.dialect)) {
-        contextMatches = false;
-        differences.add('$path type is ${column.storageType}');
-      }
-      if (column.nullable != expected.nullable) {
-        differences.add('$path nullability differs');
-      }
-      if ((column.temporalPrecision ?? 6) !=
-          (expected.temporalPrecision ?? 6)) {
-        differences.add('$path temporal precision differs');
-      }
-      if (!_matchesDecimalDigits(expected, column)) {
-        differences.add('$path decimal precision/scale differs');
-      }
-      if (db.dialect == SqlDialect.sqlite &&
-          !_matchesCollation(expected, column)) {
-        differences.add('$path collation differs');
-      }
-      if (expected.codec.sqlType == 'integer' &&
-          (column.integerBits ?? 64) != (expected.integerBits ?? 64)) {
-        differences.add('$path integer width differs');
-      }
-    }
-    for (final extra in actual.keys) {
-      differences.add('${table.name}.$extra is unmanaged');
-    }
-    differences.addAll(
-      await _verifyComputed(
-        db,
-        table,
-        inspected,
-        contextMatches: contextMatches,
-      ),
-    );
-  }
-  return differences;
-}
-
-bool _matchesCollation(Column<Object?> expected, ColumnInfo actual) =>
-    (actual.collation ?? 'BINARY').toLowerCase() ==
-    _sqliteCollation(expected.codec.sqlType);
-
-String _sqliteCollation(String type) => switch (type) {
-  'decimal' ||
-  'date' ||
-  'time' ||
-  'local_datetime' ||
-  'instant' => 'orm_${type}_v1',
-  _ => 'binary',
-};
-
-bool _matchesDecimalDigits(Column<Object?> expected, ColumnInfo actual) =>
-    expected.decimalPrecision == actual.decimalPrecision &&
-    (expected.decimalScale ?? 0) == (actual.decimalScale ?? 0);
-
-(int, int)? _postgresDecimalDigits(String type) {
-  final match = RegExp(
-    r'^numeric\((\d+),(-?\d+)\)$',
-    caseSensitive: false,
-  ).firstMatch(type.replaceAll(' ', ''));
-  return match == null ? null : (int.parse(match[1]!), int.parse(match[2]!));
-}
-
-String? _temporalCollationKind(String? collation) =>
-    switch (collation?.toLowerCase()) {
-      'orm_time_v1' => 'time',
-      'orm_local_datetime_v1' => 'local_datetime',
-      'orm_instant_v1' => 'instant',
-      _ => null,
-    };
-
-int? _postgresTemporalPrecision(String type) {
-  final match = RegExp(
-    r'^(?:time|timestamp)\(([0-6])\) (?:with|without) time zone$',
-    caseSensitive: false,
-  ).firstMatch(type);
-  return match == null ? null : int.parse(match[1]!);
-}
-
-String _postgresStorageName(String type) {
-  var name = type.toUpperCase().replaceFirstMapped(
-    RegExp(r'^TIMESTAMP(\([0-6]\))? WITH TIME ZONE$'),
-    (m) => 'TIMESTAMPTZ${m[1] ?? ''}',
-  );
-  if (_postgresTemporalPrecision(type) == 6) {
-    name = name.replaceFirst('(6)', '');
-  }
-  return name;
 }

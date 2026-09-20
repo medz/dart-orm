@@ -1,4 +1,20 @@
-part of '../../migrate.dart';
+import 'dart:convert' show jsonEncode, utf8;
+
+import '../../driver.dart' show Backend, SqlCommand, SqlDialect, SqlResult;
+import '../../runtime.dart' show SqlDatabase;
+import '../../schema_model.dart'
+    show Column, ComputedColumn, ForeignKey, IndexSchema;
+import '../../values.dart' show Codecs, Decimal;
+import 'catalog.dart'
+    show CatalogObject, SchemaVerification, TableInfo, normalizeDefault;
+import 'checks.dart' show CheckInfo;
+import 'columns.dart' show ColumnInfo;
+import 'mysql_schema.dart'
+    show mysqlColumnType, mysqlForeignName, mysqlPhysicalTable, mysqlUniqueName;
+import 'snapshot.dart' show SchemaSnapshot, foreignKeyJson, indexJson;
+import 'sql_utils.dart'
+    show canonicalMigrationValue, migrationHash, quoteIdentifier;
+import 'sqlite_checks.dart' show sqliteTokens;
 
 // information_schema reports some textual metadata with a BLOB wire type.
 // Decode only these known catalog-query result cells, never application BLOBs.
@@ -9,9 +25,9 @@ List<List<Object?>> _mysqlCatalogRows(SqlResult result) => [
 
 String _mysqlExpression(String? expression) {
   if (expression == null) return '';
-  final normalized = _normalizeDefault(expression)!;
+  final normalized = normalizeDefault(expression)!;
   if (normalized.toUpperCase() == 'NULL') return '';
-  final tokens = _sqliteTokens(normalized);
+  final tokens = sqliteTokens(normalized);
   final normalizedTokens = <String>[
     for (var i = 0; i < tokens.length; i++)
       if (!(tokens[i].text == '_UTF8MB4' &&
@@ -123,7 +139,7 @@ Object? _mysqlExpressionTree(List<String> input) {
 
 String _mysqlDefaultExpression(String? expression, Column<Object?> column) {
   if (expression == null) return '';
-  final sql = _normalizeDefault(expression)!;
+  final sql = normalizeDefault(expression)!;
   if (sql.toUpperCase() == 'NULL') return '';
   final clock = RegExp(
     r'^(?:CURRENT_TIMESTAMP|NOW)(?:\(([0-6]?)\))?$',
@@ -132,7 +148,7 @@ String _mysqlDefaultExpression(String? expression, Column<Object?> column) {
   if (clock != null) {
     return 'current_timestamp:${clock[1]?.isNotEmpty == true ? clock[1] : '0'}';
   }
-  final tokens = _sqliteTokens(sql);
+  final tokens = sqliteTokens(sql);
   if (tokens.length == 1 &&
       {'TRUE', 'FALSE'}.contains(tokens.single.text) &&
       {
@@ -188,7 +204,7 @@ String _mysqlCatalogDefault(String expression, SqlDialect dialect) {
   // of NO_BACKSLASH_ESCAPES. Return valid SQL for our fixed session mode.
   final result = StringBuffer();
   var offset = 0;
-  for (final token in _sqliteTokens(expression)) {
+  for (final token in sqliteTokens(expression)) {
     if (!token.text.startsWith('s:')) continue;
     final value = token.text
         .substring(2)
@@ -237,7 +253,7 @@ FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND
   ];
 }
 
-Future<List<ColumnInfo>> _mysqlColumns(
+Future<List<ColumnInfo>> mysqlColumns(
   SqlDatabase<Backend> db,
   String table,
 ) async {
@@ -277,7 +293,7 @@ ColumnInfo _mysqlColumnInfo(
         (c) =>
             c.name == name &&
             _mysqlExpression(c.expression) ==
-                _mysqlExpression('json_valid(${_quote(name)})'),
+                _mysqlExpression('json_valid(${quoteIdentifier(name)})'),
       );
   final storage = declared.contains('unsigned') || declared.contains('zerofill')
       ? declared.toUpperCase()
@@ -341,8 +357,8 @@ ColumnInfo _mysqlColumnInfo(
   );
 }
 
-Future<TableInfo> _mysqlTable(SqlDatabase<Backend> db, String table) async {
-  final columns = await _mysqlColumns(db, table);
+Future<TableInfo> mysqlTable(SqlDatabase<Backend> db, String table) async {
+  final columns = await mysqlColumns(db, table);
   final primary = <String>[],
       unique = <List<String>>[],
       indexes = <IndexSchema>[];
@@ -363,7 +379,7 @@ FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?'''
       unmanaged.add(CatalogObject('table options', table, row.toString()));
     }
     final shown = await db.execute(
-      SqlCommand('SHOW CREATE TABLE ${_quote(table)}'),
+      SqlCommand('SHOW CREATE TABLE ${quoteIdentifier(table)}'),
     );
     if (shown.rows.isNotEmpty &&
         RegExp(
@@ -439,7 +455,7 @@ FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=
     if (entry.key == 'PRIMARY') {
       primary.addAll(keys);
     } else if (rows.first[1] == 0 &&
-        entry.key == _mysqlUniqueName(table, keys)) {
+        entry.key == mysqlUniqueName(table, keys)) {
       unique.add(keys);
     } else {
       indexes.add(IndexSchema(entry.key, keys, unique: rows.first[1] == 0));
@@ -473,7 +489,7 @@ ORDER BY k.CONSTRAINT_NAME, k.ORDINAL_POSITION''',
       onDelete: row[4] as String,
     );
     foreign.add(key);
-    if (entry.key != _mysqlForeignName(table, key)) {
+    if (entry.key != mysqlForeignName(table, key)) {
       unmanaged.add(
         CatalogObject('constraint name', entry.key, rows.toString()),
       );
@@ -487,7 +503,9 @@ ORDER BY k.CONSTRAINT_NAME, k.ORDINAL_POSITION''',
               column.storageType == 'JSON' &&
               check.name == column.name &&
               _mysqlExpression(check.expression) ==
-                  _mysqlExpression('json_valid(${_quote(column.name)})'),
+                  _mysqlExpression(
+                    'json_valid(${quoteIdentifier(column.name)})',
+                  ),
         ),
       )
       .toList();
@@ -519,14 +537,14 @@ FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND EVENT_OBJEC
   );
 }
 
-Future<SchemaVerification> _mysqlVerifySchema(
+Future<SchemaVerification> mysqlVerifySchema(
   SqlDatabase<Backend> db,
   SchemaSnapshot expected,
 ) async {
   final differences = <String>[], unmanaged = <CatalogObject>[];
   for (final source in expected.tables) {
-    final table = _mysqlPhysicalTable(source),
-        actual = await _mysqlTable(db, source.name);
+    final table = mysqlPhysicalTable(source),
+        actual = await mysqlTable(db, source.name);
     unmanaged.addAll(actual.unmanaged);
     final columns = {for (final column in actual.columns) column.name: column};
     for (final column in table.columns) {
@@ -536,7 +554,7 @@ Future<SchemaVerification> _mysqlVerifySchema(
         differences.add('$name is missing');
         continue;
       }
-      if (found.storageType != _mysqlColumnType(column)) {
+      if (found.storageType != mysqlColumnType(column)) {
         differences.add('$name type differs');
       }
       if (found.nullable != column.nullable) {
@@ -559,23 +577,24 @@ Future<SchemaVerification> _mysqlVerifySchema(
       differences.add('${table.name}.$name is unmanaged');
     }
     List<String> set(Iterable<Object?> items) =>
-        items.map((item) => jsonEncode(_canonical(item))).toList()..sort();
+        items.map((item) => jsonEncode(canonicalMigrationValue(item))).toList()
+          ..sort();
     void compare(String name, Object expected, Object found) {
-      if (_hash(expected) != _hash(found)) {
+      if (migrationHash(expected) != migrationHash(found)) {
         differences.add('${table.name} $name differs');
       }
     }
 
     Map<String, Object?> fk(ForeignKey key) => {
-      ..._foreignKeyJson(key),
+      ...foreignKeyJson(key),
       'onDelete': key.onDelete == 'NO ACTION' ? 'RESTRICT' : key.onDelete,
     };
     compare('primary key', table.primaryKey, actual.primaryKey);
     compare('unique keys', set(table.uniqueKeys), set(actual.uniqueKeys));
     compare(
       'indexes',
-      set(table.indexes.map(_indexJson)),
-      set(actual.indexes.map(_indexJson)),
+      set(table.indexes.map(indexJson)),
+      set(actual.indexes.map(indexJson)),
     );
     compare(
       'foreign keys',

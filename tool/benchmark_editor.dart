@@ -373,8 +373,8 @@ Future<void> main(List<String> args) async {
   };
   final output = File(
     smoke
-        ? '.dart_tool/editor${sameSession ? '-recovery' : ''}-smoke.json'
-        : 'research/benchmarks/editor${sameSession ? '-recovery' : ''}.json',
+        ? '.dart_tool/benchmarks/editor${sameSession ? '-recovery' : ''}-smoke.json'
+        : '.dart_tool/benchmarks/editor${sameSession ? '-recovery' : ''}.json',
   );
   await output.parent.create(recursive: true);
   await output.writeAsString(

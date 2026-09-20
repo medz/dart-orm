@@ -1,14 +1,45 @@
-part of '../../migrate.dart';
+import '../../driver.dart' show SqlDialect;
+import '../../schema_model.dart'
+    show Column, ComputedStorage, ForeignKey, IndexSchema, TableSchema;
+import '../../values.dart' show OrmException;
+import 'checks.dart' show checkDelta, withChecks;
+import 'computed.dart' show materializedColumns;
+import 'migration.dart' show Migration;
+import 'mysql_diff.dart' show mysqlDiff;
+import 'mysql_schema.dart' show isMysqlFamily;
+import 'schema.dart'
+    show
+        checkDefinition,
+        coerceColumn,
+        columnDefinition,
+        columnStorageType,
+        createIndexSql,
+        createTable,
+        foreignKey,
+        sameStorage;
+import 'snapshot.dart'
+    show SchemaSnapshot, columnJson, foreignKeyJson, indexJson;
+import 'sql_utils.dart' show migrationHash, quoteIdentifier;
+import 'step.dart'
+    show DropConstraint, DropTable, ExecuteSql, MigrationStep, RebuildTable;
 
 /// Explicit physical renames. Column maps are keyed by the final table name.
 /// Swaps and chains need separate migrations to make intermediate names explicit.
 final class SchemaRenames {
+  /// Existing physical table names mapped to their intended new names.
   final Map<String, String> tables;
+
+  /// Old-to-new column names, grouped by the table's final physical name.
   final Map<String, Map<String, String>> columns;
+
+  /// Declares intentional renames without inferring them from schema similarity.
+  ///
+  /// Maps are retained as provided. Diff generation validates targets and rejects
+  /// swaps or chains that need explicit intermediate migration steps.
   const SchemaRenames({this.tables = const {}, this.columns = const {}});
 }
 
-Migration _diff(
+Migration diffSchema(
   String id, {
   required SqlDialect dialect,
   required SchemaSnapshot from,
@@ -18,8 +49,8 @@ Migration _diff(
   required bool allowDestructive,
   required Map<String, Map<String, String>> using,
 }) {
-  if (_isMysql(dialect)) {
-    return _mysqlDiff(
+  if (isMysqlFamily(dialect)) {
+    return mysqlDiff(
       id,
       dialect: dialect,
       from: from,
@@ -56,7 +87,7 @@ Migration _diff(
   for (final entry in renames.tables.entries) {
     renameSql.add(
       ExecuteSql(
-        'ALTER TABLE ${_quote(entry.key)} RENAME TO ${_quote(entry.value)}',
+        'ALTER TABLE ${quoteIdentifier(entry.key)} RENAME TO ${quoteIdentifier(entry.value)}',
       ),
     );
   }
@@ -80,7 +111,7 @@ Migration _diff(
     for (final rename in entry.value.entries) {
       renameSql.add(
         ExecuteSql(
-          'ALTER TABLE ${_quote(entry.key)} RENAME COLUMN ${_quote(rename.key)} TO ${_quote(rename.value)}',
+          'ALTER TABLE ${quoteIdentifier(entry.key)} RENAME COLUMN ${quoteIdentifier(rename.key)} TO ${quoteIdentifier(rename.value)}',
         ),
       );
     }
@@ -212,7 +243,7 @@ Migration _diff(
           '$name.${c.name} needs a reviewed PostgreSQL replacement/materialization migration for this computed-mode change.',
         );
       }
-      if (prior != null && c.computed == null && !_sameStorage(prior, c)) {
+      if (prior != null && c.computed == null && !sameStorage(prior, c)) {
         if (using[name]?[c.name] == null) {
           throw OrmException(
             'MIGRATION.CAST',
@@ -233,7 +264,7 @@ Migration _diff(
       if (old == null ||
           next == null ||
           next.computed != null ||
-          _sameStorage(old, next) ||
+          sameStorage(old, next) ||
           entry.value.trim().isEmpty) {
         throw OrmException(
           'MIGRATION.CAST',
@@ -248,15 +279,17 @@ Migration _diff(
     if (dialect == SqlDialect.sqlite) ...computedRenames,
   }) {
     if (dialect == SqlDialect.sqlite) {
-      var target = _withChecks(table, const []);
+      var target = withChecks(table, const []);
       if (computedRenames.contains(table)) {
-        target = _materializedColumns(target);
+        target = materializedColumns(target);
       }
       steps.add(
         RebuildTable(
           table,
           target,
-          copy: {for (final c in table.columns) c.name: _quote(c.name)},
+          copy: {
+            for (final c in table.columns) c.name: quoteIdentifier(c.name),
+          },
         ),
       );
     } else {
@@ -278,15 +311,15 @@ Migration _diff(
       final a = before[name], b = after[name];
       return a == null ||
           b == null ||
-          _hash([
+          migrationHash([
                 a.primaryKey,
                 a.uniqueKeys,
-                a.indexes.where((i) => i.unique).map(_indexJson).toList(),
+                a.indexes.where((i) => i.unique).map(indexJson).toList(),
               ]) !=
-              _hash([
+              migrationHash([
                 b.primaryKey,
                 b.uniqueKeys,
-                b.indexes.where((i) => i.unique).map(_indexJson).toList(),
+                b.indexes.where((i) => i.unique).map(indexJson).toList(),
               ]);
     }
 
@@ -295,8 +328,7 @@ Migration _diff(
       return a == null ||
           b == null ||
           a.columns.any(
-            (c) =>
-                b.columns.any((n) => c.name == n.name && !_sameStorage(c, n)),
+            (c) => b.columns.any((n) => c.name == n.name && !sameStorage(c, n)),
           );
     }
 
@@ -310,7 +342,7 @@ Migration _diff(
             typesChanged(key.target) ||
             typesChanged(old.name)) {
           steps.add(
-            DropConstraint(old.name, {'kind': 'f', ..._foreignKeyJson(key)}),
+            DropConstraint(old.name, {'kind': 'f', ...foreignKeyJson(key)}),
           );
           if (retained) addedForeignKeys.add((old.name, key));
         }
@@ -329,9 +361,9 @@ Migration _diff(
   }
   for (final name in addedTables) {
     final table = after[name]!;
-    steps.add(ExecuteSql(_createTable(table, dialect)));
+    steps.add(ExecuteSql(createTable(table, dialect)));
     for (final index in table.indexes) {
-      steps.add(ExecuteSql(_createIndex(name, index)));
+      steps.add(ExecuteSql(createIndexSql(name, index)));
     }
     if (dialect == SqlDialect.postgres) {
       addedForeignKeys.addAll(table.foreignKeys.map((k) => (name, k)));
@@ -341,7 +373,7 @@ Migration _diff(
     var old = before[name]!;
     if (dialect == SqlDialect.sqlite &&
         computedRenames.any((t) => tableName(t.name) == name)) {
-      old = _materializedColumns(old);
+      old = materializedColumns(old);
     }
     final next = after[name]!;
     final oldColumns = {for (final c in old.columns) c.name: c};
@@ -353,22 +385,22 @@ Migration _diff(
         .intersection(newColumns.keys.toSet())
         .where(
           (c) =>
-              _hash(_columnJson(oldColumns[c]!)) !=
-              _hash(_columnJson(newColumns[c]!)),
+              migrationHash(columnJson(oldColumns[c]!)) !=
+              migrationHash(columnJson(newColumns[c]!)),
         )
         .toList();
     final keysChanged =
-        _hash([
+        migrationHash([
           old.primaryKey,
           old.uniqueKeys,
-          old.foreignKeys.map(_foreignKeyJson).toList(),
+          old.foreignKeys.map(foreignKeyJson).toList(),
         ]) !=
-        _hash([
+        migrationHash([
           next.primaryKey,
           next.uniqueKeys,
-          next.foreignKeys.map(_foreignKeyJson).toList(),
+          next.foreignKeys.map(foreignKeyJson).toList(),
         ]);
-    final checks = _checkDelta(old.checks, next.checks, dialect);
+    final checks = checkDelta(old.checks, next.checks, dialect);
     if (dialect == SqlDialect.sqlite &&
         (removed.isNotEmpty ||
             changed.isNotEmpty ||
@@ -385,7 +417,7 @@ Migration _diff(
               (c) =>
                   oldColumns.containsKey(c) && newColumns[c]!.computed == null,
             ))
-              column: using[name]?[column] ?? _quote(column),
+              column: using[name]?[column] ?? quoteIdentifier(column),
           },
         ),
       );
@@ -401,42 +433,46 @@ Migration _diff(
           }),
         );
       }
-      if (_hash(old.primaryKey) != _hash(next.primaryKey) &&
+      if (migrationHash(old.primaryKey) != migrationHash(next.primaryKey) &&
           old.primaryKey.isNotEmpty) {
         steps.add(
           DropConstraint(name, {'kind': 'p', 'columns': old.primaryKey}),
         );
       }
       for (final key in old.uniqueKeys) {
-        if (!next.uniqueKeys.any((k) => _hash(k) == _hash(key))) {
+        if (!next.uniqueKeys.any(
+          (k) => migrationHash(k) == migrationHash(key),
+        )) {
           steps.add(DropConstraint(name, {'kind': 'u', 'columns': key}));
         }
       }
     }
     for (final index in old.indexes) {
       if (!next.indexes.any(
-        (i) => _hash(_indexJson(i)) == _hash(_indexJson(index)),
+        (i) => migrationHash(indexJson(i)) == migrationHash(indexJson(index)),
       )) {
-        steps.add(ExecuteSql('DROP INDEX ${_quote(index.name)}'));
+        steps.add(ExecuteSql('DROP INDEX ${quoteIdentifier(index.name)}'));
       }
     }
     for (final column in removed) {
       steps.add(
-        ExecuteSql('ALTER TABLE ${_quote(name)} DROP COLUMN ${_quote(column)}'),
+        ExecuteSql(
+          'ALTER TABLE ${quoteIdentifier(name)} DROP COLUMN ${quoteIdentifier(column)}',
+        ),
       );
     }
     for (final column in added) {
       steps.add(
         ExecuteSql(
-          'ALTER TABLE ${_quote(name)} ADD COLUMN ${_columnDefinition(newColumns[column]!, dialect)}',
+          'ALTER TABLE ${quoteIdentifier(name)} ADD COLUMN ${columnDefinition(newColumns[column]!, dialect)}',
         ),
       );
     }
     for (final column in changed) {
       final a = oldColumns[column]!, b = newColumns[column]!;
       final prefix =
-          'ALTER TABLE ${_quote(name)} ALTER COLUMN ${_quote(column)}';
-      final typeChanged = !_sameStorage(a, b);
+          'ALTER TABLE ${quoteIdentifier(name)} ALTER COLUMN ${quoteIdentifier(column)}';
+      final typeChanged = !sameStorage(a, b);
       if (a.computed != null && b.computed == null) {
         steps.add(ExecuteSql('$prefix DROP EXPRESSION'));
       }
@@ -446,7 +482,7 @@ Migration _diff(
       if (typeChanged) {
         steps.add(
           ExecuteSql(
-            '$prefix TYPE ${_columnStorageType(b, dialect)}'
+            '$prefix TYPE ${columnStorageType(b, dialect)}'
             '${b.computed != null ? '' : ' USING (${using[name]![column]})'}',
           ),
         );
@@ -456,7 +492,7 @@ Migration _diff(
               typeChanged)) {
         steps.add(
           ExecuteSql(
-            '$prefix SET EXPRESSION AS (${_coerceColumn(b.computed!.expression(dialect), b, dialect)}\n)',
+            '$prefix SET EXPRESSION AS (${coerceColumn(b.computed!.expression(dialect), b, dialect)}\n)',
           ),
         );
       }
@@ -478,24 +514,26 @@ Migration _diff(
       if (checks.added.isNotEmpty) {
         steps.add(
           ExecuteSql(
-            'ALTER TABLE ${_quote(name)} '
-            '${checks.added.map((c) => 'ADD ${_checkDefinition(c, dialect)}').join(', ')}',
+            'ALTER TABLE ${quoteIdentifier(name)} '
+            '${checks.added.map((c) => 'ADD ${checkDefinition(c, dialect)}').join(', ')}',
           ),
         );
       }
-      if (_hash(old.primaryKey) != _hash(next.primaryKey) &&
+      if (migrationHash(old.primaryKey) != migrationHash(next.primaryKey) &&
           next.primaryKey.isNotEmpty) {
         steps.add(
           ExecuteSql(
-            'ALTER TABLE ${_quote(name)} ADD PRIMARY KEY (${next.primaryKey.map(_quote).join(', ')})',
+            'ALTER TABLE ${quoteIdentifier(name)} ADD PRIMARY KEY (${next.primaryKey.map(quoteIdentifier).join(', ')})',
           ),
         );
       }
       for (final key in next.uniqueKeys) {
-        if (!old.uniqueKeys.any((k) => _hash(k) == _hash(key))) {
+        if (!old.uniqueKeys.any(
+          (k) => migrationHash(k) == migrationHash(key),
+        )) {
           steps.add(
             ExecuteSql(
-              'ALTER TABLE ${_quote(name)} ADD UNIQUE (${key.map(_quote).join(', ')})',
+              'ALTER TABLE ${quoteIdentifier(name)} ADD UNIQUE (${key.map(quoteIdentifier).join(', ')})',
             ),
           );
         }
@@ -503,15 +541,15 @@ Migration _diff(
     }
     for (final index in next.indexes) {
       if (!old.indexes.any(
-        (i) => _hash(_indexJson(i)) == _hash(_indexJson(index)),
+        (i) => migrationHash(indexJson(i)) == migrationHash(indexJson(index)),
       )) {
-        steps.add(ExecuteSql(_createIndex(name, index)));
+        steps.add(ExecuteSql(createIndexSql(name, index)));
       }
     }
   }
   for (final (name, key) in addedForeignKeys) {
     steps.add(
-      ExecuteSql('ALTER TABLE ${_quote(name)} ADD ${_foreignKey(key)}'),
+      ExecuteSql('ALTER TABLE ${quoteIdentifier(name)} ADD ${foreignKey(key)}'),
     );
   }
   return Migration.steps(
@@ -524,7 +562,7 @@ Migration _diff(
 }
 
 bool _sameForeignKey(ForeignKey a, ForeignKey b) =>
-    _hash(_foreignKeyJson(a)) == _hash(_foreignKeyJson(b));
+    migrationHash(foreignKeyJson(a)) == migrationHash(foreignKeyJson(b));
 bool _canAddSqlite(Column<Object?> column) => column.computed != null
     ? column.computed!.storage == ComputedStorage.virtual
     : column.defaultSql == null ||

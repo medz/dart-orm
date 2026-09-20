@@ -1,16 +1,21 @@
-part of '../../drivers/mysql.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:mysql_client_plus/mysql_protocol.dart' as protocol;
+
+import '../../values.dart';
 
 final _mysqlMinInt = BigInt.from(-9223372036854775808);
 final _mysqlMaxInt = BigInt.from(9223372036854775807);
 
-int _checkedMysqlInt(BigInt value) {
+int checkedMysqlInt(BigInt value) {
   if (value < _mysqlMinInt || value > _mysqlMaxInt) {
     throw const FormatException('MySQL integer exceeds Dart signed int64.');
   }
   return value.toInt();
 }
 
-Object? _mysqlParameter(Object? value) => switch (value) {
+Object? mysqlParameter(Object? value) => switch (value) {
   null || String() || int() || bool() || Uint8List() => value,
   double() => _finiteMysqlReal(value),
   SqlReal() => _finiteMysqlReal(value.value),
@@ -61,7 +66,7 @@ String _mysqlDateTime(DateTime value) {
   return '$date $time';
 }
 
-Object? _mysqlValue(Object? value, int type, {required bool binary}) {
+Object? mysqlValue(Object? value, int type, {required bool binary}) {
   if (value == null) return null;
   switch (type) {
     case protocol.mysqlColumnTypeString:
@@ -77,7 +82,7 @@ Object? _mysqlValue(Object? value, int type, {required bool binary}) {
     case protocol.mysqlColumnTypeLongLong:
     case protocol.mysqlColumnTypeInt24:
     case protocol.mysqlColumnTypeYear:
-      return _checkedMysqlInt(BigInt.parse(value as String));
+      return checkedMysqlInt(BigInt.parse(value as String));
     case protocol.mysqlColumnTypeFloat:
     case protocol.mysqlColumnTypeDouble:
       return double.parse(value as String);

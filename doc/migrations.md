@@ -18,7 +18,7 @@ dart run orm migrate inspect tasks
 `init` also accepts `postgres`, `mysql` and `mariadb`. It generates a nominal model,
 client, physical snapshot, empty static registry and `orm.config.dart`. Existing
 files are never replaced, and initialization does not connect or execute DDL.
-See the [project CLI](cli.md) for the generated typed configuration and all options.
+See the [project CLI](https://github.com/medz/dart-orm/blob/main/doc/cli.md) for the generated typed configuration and all options.
 
 The config is an explicit Dart entrypoint with `runOrmCli(args, config: OrmConfig(...))`.
 It statically imports its current snapshot and migration history. Connection
@@ -136,7 +136,7 @@ ordinary SQLite column values with a computed expression. Computed-to-ordinary
 SQLite changes materialize the existing result instead. Neither offline
 checking nor generation applies them.
 
-Start with [catalog import](importing.md) for an existing database, then run
+Start with [catalog import](https://github.com/medz/dart-orm/blob/main/doc/importing.md) for an existing database, then run
 `baseline` to verify and register its final historical schema without replaying
 creation SQL. Add `--json` for machine reports (not migration artifacts). The lower-level `runMigrationCli` defaults to JSON reports. Exit code 2
 indicates catalog drift, 64 invalid CLI arguments, and 1 an execution failure.
@@ -170,7 +170,7 @@ lock acquisition uses short `pg_try_advisory_lock` queries outside a transaction
 with `Migrator(db, lockTimeout: ...)` defaulting to 30 seconds. Waiting does not
 hold an old SQL snapshot that could deadlock concurrent index creation.
 MySQL/MariaDB DDL commits independently and uses exact catalog preconditions,
-postconditions and durable checkpoints; see [MySQL/MariaDB migrations](mysql-migrations.md).
+postconditions and durable checkpoints; see [MySQL/MariaDB migrations](https://github.com/medz/dart-orm/blob/main/doc/mysql-migrations.md).
 
 Migration planning checks applied history and checksums. Catalog verification is
 an explicit separate operation; SQL history alone does not prove schema equality.
@@ -252,12 +252,12 @@ rejected downgrade does not delete or rebuild tables.
 - Type changes require SQL conversion expressions for the selected dialect. Expressions
   are trusted migration code and use column names after declared renames.
 
-[Computed target columns](computed.md) use their own expressions to populate old
+[Computed target columns](https://github.com/medz/dart-orm/blob/main/doc/computed.md) use their own expressions to populate old
 rows and derive values on type changes. They are excluded from rebuild copy maps;
 their addition does not require a default or application backfill. Mode conversions
 and native expression dependencies have separate documented migration limits.
 
-For long data transformations, use a reviewed [resumable backfill](backfills.md).
+For long data transformations, use a reviewed [resumable backfill](https://github.com/medz/dart-orm/blob/main/doc/backfills.md).
 It carries a historical table definition, commits bounded batches with their
 primary-key cursors, supports bounded runs, and verifies completion. Both SQLite
 and PostgreSQL support it; general `CheckedSql` autocommit operations still require
@@ -290,7 +290,7 @@ they are never silently discarded. Removing columns from a table with triggers
 also requires explicit manual handling. A new managed index cannot silently
 replace an unmanaged index of the same name.
 
-[Declared CHECK constraints](checks.md) participate in schema diffs, inspection
+[Declared CHECK constraints](https://github.com/medz/dart-orm/blob/main/doc/checks.md) participate in schema diffs, inspection
 and import. SQLite adds/changes/removes them through a rebuild; PostgreSQL uses
 constraint DDL. Checked renames explicitly remove and re-add the declared SQL,
 which can require two SQLite copies. Existing rows are validated before commit.

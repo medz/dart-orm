@@ -1,3 +1,16 @@
+## 6.0.0-beta.2
+
+- Replace shared `part` libraries with independent modules and explicit public
+  exports. Internal compiler and execution details stay outside the documented API.
+- Make `first()` require a row; use `firstOrNull()` for the previous optional
+  behavior. Add `singleOrNull()` to queries and returning mutations.
+- Keep physical schema metadata in `schema_model.dart`; `schema.dart` exposes
+  model declarations, value types and declaration options.
+- Give MySQL and MariaDB their own driver/configuration exports; import the
+  corresponding engine entrypoint instead of obtaining both from `mysql.dart`.
+- Rebuild the guides and public Dartdoc, including API categories, resource
+  ownership and execution boundaries. Remove archived exploration artifacts.
+
 ## 6.0.0-beta.1
 
 First beta of the new Dart-native ORM. Requires Dart 3.13 or newer.
@@ -21,7 +34,7 @@ model/API migration; updating the dependency alone is not sufficient.
 - Add typed selections, explicit relation loading, transactions, query
   subscriptions, SQL inspection and capability-checked execution controls.
 
-See [database and platform boundaries](doc/capabilities.md) before adopting the
+See [database and platform boundaries](https://github.com/medz/dart-orm/blob/main/doc/capabilities.md) before adopting the
 beta. MySQL/MariaDB DDL is non-atomic. Cancellation and streaming depend on the
 selected driver; the default Linux SQLite asset does not expose interruption.
 

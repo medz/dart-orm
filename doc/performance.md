@@ -9,11 +9,10 @@ ORM_TEST_POSTGRES='postgresql://localhost/orm_bench' dart run tool/benchmark_run
 The PostgreSQL account needs permission to create/drop its own temporary schema.
 The tool removes that schema and its temporary SQLite WAL file when finished.
 It does not alter the application's tables. `--smoke` uses five timing samples
-and writes `.dart_tool/runtime-smoke.json`; it validates the harness and is not
-a performance result. The normal run records
-[`research/benchmarks/runtime.json`](../research/benchmarks/runtime.json).
-Use `--output <path>` to retain a subsequent measurement separately from that
-baseline, for example `--output research/benchmarks/runtime-selection.json`.
+and writes `.dart_tool/benchmarks/runtime-smoke.json`; it validates the harness and is not
+a performance result. The normal run writes `.dart_tool/benchmarks/runtime.json`.
+Use `--output <path>` to retain separate runs, for example
+`--output .dart_tool/benchmarks/runtime-after.json`.
 
 ## Comparison contract
 
@@ -31,11 +30,11 @@ count; this baseline is handwritten for that workload, not a general replacement
 for the ORM query planner. Raw SQL, parameter values, statement count and complete
 business results are checked against the corresponding generated ORM query.
 Independent assertions check root count, per-parent ordering/limits and grouped
-counts. All data belongs to the generated [example schema](../example/schema.dart).
+counts. All data belongs to the generated [example schema](https://github.com/medz/dart-orm/blob/main/example/schema.dart).
 
 | Case | Result | Expected SQL result volume |
 | --- | --- | --- |
-| `full_rows` | 100 complete User Records; nullable, long Unicode nicknames | 100 rows, one statement |
+| `full_rows` | 100 complete user results; nullable, long Unicode nicknames | 100 rows, one statement |
 | `two_columns` | 100 `(id, email)` Records | 100 rows, one statement |
 | `three_posts` | 100 users with their latest three `(id, title)` posts | 100 parent + 300 child rows, two statements |
 | `aggregate` | Counts for ten score groups | 10 rows, one statement |
@@ -116,131 +115,30 @@ not an exact census of every allocation or a measurement of total allocated byte
 Tracing can deoptimize code and changes execution cost; no traced durations are
 used as normal throughput results.
 
-## Interpretation
+## Interpret a comparison
 
-Captured on 2026-09-15 with an Apple M3 Max, Dart 3.13.3, SQLite 3.53.4 and
-PostgreSQL 18.4. Runtime source is `94d24fe`. Durations below are milliseconds;
-throughput is operations/second for the separate eight-client run.
-
-| Environment | Case | Raw p50 | ORM p50 | ORM p95 | ORM concurrent ops/s |
-| --- | --- | ---: | ---: | ---: | ---: |
-| SQLite WAL | full rows | 0.111 | 0.160 | 0.242 | 6,919 |
-| SQLite WAL | two columns | 0.055 | 0.075 | 0.127 | 14,159 |
-| SQLite WAL | three posts | 0.728 | 0.817 | 0.915 | 1,238 |
-| SQLite WAL | aggregate | 0.036 | 0.040 | 0.049 | 24,564 |
-| PostgreSQL loopback | full rows | 0.931 | 0.994 | 1.126 | 1,838 |
-| PostgreSQL loopback | two columns | 0.530 | 0.555 | 0.849 | 2,817 |
-| PostgreSQL loopback | three posts | 1.778 | 1.960 | 2.383 | 725 |
-| PostgreSQL loopback | aggregate | 0.352 | 0.365 | 0.406 | 5,956 |
-| PostgreSQL delayed relay | full rows | 82.706 | 83.526 | 86.316 | 46 |
-| PostgreSQL delayed relay | two columns | 82.083 | 81.652 | 85.104 | 47 |
-| PostgreSQL delayed relay | three posts | 166.178 | 168.265 | 173.045 | 23 |
-| PostgreSQL delayed relay | aggregate | 80.660 | 80.563 | 83.713 | 49 |
-
-The delayed relay's actual echo RTT p50 was **26.410 ms**, despite the nominal
-20 ms delay; timers and scheduling add overhead. Full-driver `SELECT 1` p50 was
-82.678 ms. Loopback echo p50 was 0.188 ms. Small reversals where ORM appears faster
-under the delayed relay are not evidence of an ORM speedup.
-
-For PostgreSQL, selecting two columns instead of complete users reduced received
-protocol bytes from **27,784 to 4,693** in the probe. Batched relationships returned
-100 parent and 300 child rows in two SQL statements. The ORM's separate eight-client
-relation probe measured acquisition p50 of 5.530 ms for SQLite, 5.212 ms for local
-PostgreSQL and 180.287 ms with the delayed relay. Pool saturation and network costs
-matter more than a single idle-connection probe suggests.
-
-Across three SQLite relationship reads, selected traces recorded **996 raw versus
-8,244 ORM List/backing-List allocations** (`_List` plus `_GrowableList`). These are
-main-isolate traces with tracing enabled, not all-process allocated bytes. They
-identify intermediate collection construction for follow-up review. The measured
-local ORM p50 overhead in that case was 0.089 ms. A future optimization should
-re-run this harness and preserve exact SQL, results, transaction behavior and
-observer semantics before claiming improvement.
-
-The captured report identifies runtime source commit, SDK/OS/CPU, database versions,
-fixture, sample counts and harness hashes. It is one machine/run, without confidence
-intervals or a cross-library comparison. It does not establish AOT, browser or Flutter
-performance. Correctness checks for those platforms have separate evidence.
+Compare exact SQL, bound parameters, statement counts and complete business
+results before comparing durations. A faster run with fewer returned rows or a
+different transaction boundary is a different workload.
 
 Use absolute overhead, selected bytes, actual statement counts and measured lease
-waits together. A small local query can have a large percentage overhead while
-remaining short in absolute time. On a delayed connection, protocol round trips
-can dominate; fewer selected columns do not eliminate those round trips. Allocation
-traces identify work worth investigating but do not by themselves justify a cache
-or a new abstraction.
+waits together. A short local query can have a large percentage overhead while
+remaining short in absolute time. With network delay, protocol round trips can
+dominate; selecting fewer columns does not eliminate those round trips. Allocation
+traces can locate intermediate collections, but do not establish retained memory
+or application throughput.
 
-## Direct selection decoding
+Retain the report's runtime revision, SDK, OS/CPU, database versions, fixture,
+sample counts and harness hashes. Repeat runs to assess load, scheduling and JIT
+variation. If raw-driver timings or calibrated relay latency also change, do not
+attribute the entire difference to the ORM. A native JIT result says nothing about
+AOT, browser or Flutter performance without a corresponding workload there.
 
-The separate [selection report](../research/benchmarks/runtime-selection.json)
-captures runtime `d0a8c9a` on the same machine, SDK and database versions. Field
-readers now pass values directly to typed mappers or the requested dynamic Map,
-avoiding a temporary values List for each row. Relationship expansion allocates
-one fixed-length buffer and copies the original row into it. This preserves
-driver-row ownership and adds no cache or dependency.
+Typed selection decodes values into the requested scalar, Record, DTO or dynamic
+Map. Relationship expansion preserves driver-row ownership. Any optimization must
+retain mapping order, decoder failures, transaction boundaries, cursor cleanup
+and observation events. Statement reuse must also preserve protocol disposal and
+connection ownership; omitting cleanup is not a valid cache.
 
-The workload, relay and VM-profiling helper hashes match the baseline. The main
-harness only adds output-path selection, allowing both reports to be retained.
-Each of the twelve scenario/case combinations has 200 latency and concurrent
-samples per lane and 64 separate acquisition samples. Independent report readback
-confirms identical SQL, parameters, statement/row counts and logical/protocol
-bytes between raw/ORM and before/after. Temporary PostgreSQL schemas were removed.
-
-The selected main-isolate List traces over **three reads** are:
-
-| Backend | Case | Raw before → after | ORM before → after | ORM reduction |
-| --- | --- | ---: | ---: | ---: |
-| SQLite WAL | full rows | 39 → 40 | 1,239 → 333 | 73.1% |
-| SQLite WAL | two columns | 37 → 37 | 885 → 282 | 68.1% |
-| SQLite WAL | three posts | 996 → 996 | 8,244 → 5,220 | 36.7% |
-| SQLite WAL | aggregate | 29 → 29 | 371 → 308 | 17.0% |
-| PostgreSQL loopback | full rows | 3,386 → 3,382 | 4,598 → 3,695 | 19.6% |
-| PostgreSQL loopback | two columns | 2,359 → 2,359 | 3,215 → 2,611 | 18.8% |
-| PostgreSQL loopback | three posts | 10,235 → 10,248 | 17,564 → 14,541 | 17.2% |
-| PostgreSQL loopback | aggregate | 451 → 451 | 803 → 740 | 7.8% |
-
-Counts sum `_List` and `_GrowableList`, including backing arrays. All captured
-traces report zero truncated stacks; the selected-class and isolate limitations
-above still apply. These percentages describe observed List creations, not total
-allocated bytes, retained heap, RSS or throughput.
-
-Normal untraced local latency did **not** establish a speed improvement. Several
-raw-driver timings increased too. All local cases are shown in milliseconds:
-
-| Backend | Case | Raw p50 before → after | ORM p50 before → after | New ORM p95 |
-| --- | --- | ---: | ---: | ---: |
-| SQLite WAL | full rows | 0.111 → 0.127 | 0.160 → 0.170 | 0.267 |
-| SQLite WAL | two columns | 0.055 → 0.057 | 0.075 → 0.075 | 0.164 |
-| SQLite WAL | three posts | 0.728 → 0.806 | 0.817 → 0.907 | 1.099 |
-| SQLite WAL | aggregate | 0.036 → 0.036 | 0.040 → 0.041 | 0.053 |
-| PostgreSQL loopback | full rows | 0.931 → 0.907 | 0.994 → 0.979 | 1.189 |
-| PostgreSQL loopback | two columns | 0.530 → 0.553 | 0.555 → 0.593 | 0.827 |
-| PostgreSQL loopback | three posts | 1.778 → 1.909 | 1.960 → 2.154 | 2.498 |
-| PostgreSQL loopback | aggregate | 0.352 → 0.353 | 0.365 → 0.375 | 0.510 |
-
-Local ORM eight-client throughput was also lower in this capture; all durations
-and throughput samples are retained in the report. Two separate captures cannot
-distinguish small runtime regressions from load, scheduling and JIT variability.
-The supported conclusion is fewer intermediate List allocations, with unchanged
-SQL/result volume and verified correctness, not a latency or throughput gain.
-
-The delayed relay's echo p50 changed from 26.410 to 24.725 ms and full-driver
-`SELECT 1` from 82.678 to 75.129 ms. Relationship raw/ORM p50 changed from
-166.178/168.265 to 162.096/162.396 ms. Transport calibration itself changed, so
-those lower durations cannot be attributed to selection decoding.
-
-The [PostgreSQL adapter](../lib/postgres.dart) still prepares each statement,
-consumes its bound ResultStream and awaits disposal. Inspection of the locked
-`postgres` 3.5.12 implementation shows separate awaited parse and close messages;
-`_PreparedStatement` also queues transaction portals for cleanup in `run()` or
-`dispose()`. Retaining statements while continuing to use `bind()` would retain
-that pending cleanup until disposal. Simply removing disposal is therefore not
-a valid optimization. The adapter currently owns cancellation and awaits control
-cleanup before allowing reuse. A future connection-scoped statement cache or
-protocol change must preserve these lifecycle guarantees and be evaluated with
-the delayed-relay harness. No implicit statement cache is introduced here.
-
-Correctness after this change: 813 native tests with PostgreSQL enabled, clean
-static analysis, and 18 real Chrome scenarios for each of JS and Dart WASM. The
-browser membership scenario additionally covers six mixed field types and
-deferred, ordered mapping. These remain separate from performance evidence and
-do not establish native Flutter behavior.
+See [observability](https://github.com/medz/dart-orm/blob/main/doc/observability.md) for the event timing scopes and
+[acceptance](https://github.com/medz/dart-orm/blob/main/doc/acceptance.md) for correctness checks that accompany performance work.

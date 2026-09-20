@@ -8,7 +8,7 @@ retained; `toString()` produces ordinary canonical decimal text.
 The SQL arithmetic examples below apply to SQLite and PostgreSQL. MySQL/MariaDB
 support exact values, storage, comparisons and MIN/MAX within 65-digit/30-scale
 limits, require declared column precision, and reject typed operations that can
-silently lose precision. See [engine-specific boundaries](mysql.md). Pure Dart
+silently lose precision. See [engine-specific boundaries](https://github.com/medz/dart-orm/blob/main/doc/mysql.md). Pure Dart
 `Decimal` value arithmetic is independent of the selected database.
 
 ```dart
@@ -253,56 +253,32 @@ text keys `2` and `2.00` become duplicate numeric keys, so the migration fails a
 rolls back data, structure and history together. Repair the data before retrying.
 Historical backfills retain exact decimal keys in their resumable checkpoints.
 
-See the [generated fixture](../test/support/decimals/schema.dart),
-[database checks](../test/decimal_test.dart),
-[division/window checks](../test/decimal_division_test.dart),
-[average checks](../test/decimal_average_test.dart) and the
-[native acceptance executable](../test/support/decimals/native.dart).
-These establish correctness on the tested native databases. The real
-[JS/WASM capture](sqlite-web.md) additionally checks exact Decimal transport.
-It does not rerun this complete arithmetic/precision suite, and the Android
-Flutter acceptance does not include Decimal-specific scenarios.
+## Verify precision and measure cost
 
-## Native cost probe
+Use the repository's decimal, division/window and average suites to verify
+storage, arithmetic, rounding, catalog drift and rollback with real SQLite and
+PostgreSQL connections. The Chrome checks cover exact Decimal transport; they do
+not rerun the complete native precision suite. Android acceptance currently has
+no Decimal-specific scenario. MySQL/MariaDB arithmetic limits are described in
+[the engine guide](https://github.com/medz/dart-orm/blob/main/doc/mysql.md).
 
-The [benchmark script](../tool/benchmark_decimal.dart) fetches and decodes 10000
-integer-valued Decimal rows. Each case has one warmup and three measured runs.
-The checked-in [raw report](../research/benchmarks/decimal-division.json) was
-recorded with a native macOS ARM64 AOT executable, Dart 3.13.3, in-memory SQLite
-3.51.0 and local PostgreSQL 18.4. Median elapsed milliseconds:
-
-| Operation | SQLite | PostgreSQL |
-| --- | ---: | ---: |
-| Read Decimal values | 10.13 | 22.72 |
-| Divide by 3, scale 2, half-even | 30.09 | 32.63 |
-| Round to tens, half-even | 21.64 | 25.25 |
-| Running sum then divide by 3 | 48.17 | 36.85 |
-
-The expanded [average report](../research/benchmarks/decimal-average.json) uses
-the same native AOT method and database versions. All cases consume 10000 rows;
-the ordinary average returns one row, while the running average returns 10000:
-
-| Operation | Returned rows | SQLite ms | PostgreSQL ms |
-| --- | ---: | ---: | ---: |
-| Average, scale 2, half-even | 1 | 8.78 | 2.74 |
-| Running average, scale 2, half-even | 10000 | 29.12 | 47.25 |
-
-Both reports retain individual samples; the expanded script also reruns the
-read/divide/round controls. The earlier division table above refers to its original
-report, rather than mixing results from separate runs.
-
-These are single-client end-to-end samples, including query compilation, database
-work, row transport and Decimal decoding. They are not latency percentiles,
-concurrency measurements, or estimates for large coefficients/high scales.
-No other ORM test/build workload ran during measurement.
+The repository benchmark fetches and decodes 10000 integer-valued Decimal rows,
+with one warmup and three measured runs per case. It includes ordinary reads,
+division, rounding, average and running aggregates. Build before measuring:
 
 ```sh
 dart build cli --target=tool/benchmark_decimal.dart --output=/tmp/orm-decimal-benchmark
-/tmp/orm-decimal-benchmark/bundle/bin/benchmark_decimal > /tmp/decimal-division.json
+mkdir -p .dart_tool/benchmarks
+/tmp/orm-decimal-benchmark/bundle/bin/benchmark_decimal > .dart_tool/benchmarks/decimal.json
 ```
 
-Set `ORM_TEST_POSTGRES` to an accessible disposable local PostgreSQL URL to include
-PostgreSQL. The script disables TLS for that local connection, creates a uniquely
-named schema and drops its schema afterward; the account needs schema-creation
-permission. Without the variable it measures SQLite only. Run separately from
-tests and builds. Compilation happens before timing.
+Set `ORM_TEST_POSTGRES` to a disposable local PostgreSQL URL to include that
+backend. The script disables TLS for this local benchmark, creates a uniquely
+named schema and removes it afterward; the account needs schema-creation
+permission. Without the variable it measures SQLite only.
+
+These are single-client end-to-end samples, including compilation of each query,
+database work, transport and decoding. They are not latency percentiles,
+concurrency measurements or estimates for large coefficients and high scales.
+Run separately from tests and builds. Retain database/SDK versions and each sample
+from the JSON report when comparing revisions.

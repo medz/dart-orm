@@ -1,13 +1,41 @@
-part of '../generate.dart';
+import 'dart:io';
+
+import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
+import 'package:analyzer/dart/analysis/results.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/element/element.dart';
+import 'package:dart_style/dart_style.dart';
+import 'package:path/path.dart' as p;
+
+import '../../runtime.dart';
+import '../../sql.dart';
+import 'emitter.dart' show recordSelection;
+import 'exception.dart';
+import 'model.dart';
+import 'reader.dart';
+import 'source.dart';
+import 'types.dart';
 
 /// Offline generated code and its fixed SQL/codec contracts. Native checks are
 /// explicit: generation does not claim that a database has accepted the SQL.
 final class GeneratedQueries {
+  /// Formatted Dart source for the typed query bindings.
   final String dart;
+
+  /// Resolved SQL and codec metadata used by database validation.
+  ///
+  /// This is an in-memory report, not a persisted schema or migration format.
   final Map<String, Object?> manifest;
+
+  /// Combines generated [dart] source with its validation [manifest].
   const GeneratedQueries(this.dart, this.manifest);
 }
 
+/// Analyzes named SQL declarations and reads their SQL files without writing.
+///
+/// [outputPath] determines relative Dart imports and defaults to the source
+/// basename with a `.queries.dart` extension. Generation validates declarations;
+/// use [checkSqlQueries] to ask a selected database to validate the SQL itself.
 Future<GeneratedQueries> generateQueries(
   String sourcePath, {
   String? outputPath,
@@ -36,7 +64,7 @@ Future<GeneratedQueries> generateQueries(
     if (errors.isNotEmpty) {
       throw GenerationException(errors.map((e) => e.toString()).join('\n'));
     }
-    return await _generateQueries(
+    return await generateResolvedQueries(
       resolved.unit,
       resolved.libraryElement,
       p.relative(source, from: p.dirname(output)).replaceAll(r'\', '/'),
@@ -52,6 +80,9 @@ Future<GeneratedQueries> generateQueries(
   }
 }
 
+/// Replaces the generated query bindings only after source validation succeeds.
+///
+/// [output] defaults to [source] with a `.queries.dart` extension.
 Future<void> writeGeneratedQueries(String source, {String? output}) async {
   output ??= p.setExtension(source, '.queries.dart');
   final result = await generateQueries(source, outputPath: output);
@@ -60,7 +91,10 @@ Future<void> writeGeneratedQueries(String source, {String? output}) async {
   await file.writeAsString(result.dart);
 }
 
-/// Re-analysis prevents checking stale SQL, parameter codecs or generated code.
+/// Regenerates [source] in memory and rejects a stale generated [output] file.
+///
+/// Returns the current SQL and codec metadata for [checkSqlQueries]. Throws
+/// [GenerationException] when the saved bindings differ from current sources.
 Future<GeneratedQueries> checkGeneratedQueries(
   String source, {
   String? output,
@@ -76,20 +110,20 @@ Future<GeneratedQueries> checkGeneratedQueries(
 }
 
 final class _NamedQuery(
-  final _Entity result,
-  final List<_Field> parameters,
+  final ModelEntity result,
+  final List<ModelField> parameters,
   final Map<SqlDialect, String> sql,
 );
 
-Future<GeneratedQueries> _generateQueries(
+Future<GeneratedQueries> generateResolvedQueries(
   CompilationUnit unit,
   LibraryElement library,
   String sourceImport,
   String Function(Uri) importUri,
   Future<String> Function(String) readSql,
 ) async {
-  final names = _DartNames(library.uri, importUri);
-  final reader = _SchemaReader(unit, library.typeSystem, names);
+  final names = DartNames(library.uri, importUri);
+  final reader = SchemaReader(unit, library.typeSystem, names);
   final aliases = {
     for (final alias in unit.declarations.whereType<GenericTypeAlias>())
       alias.name.lexeme: alias,
@@ -108,7 +142,10 @@ Future<GeneratedQueries> _generateQueries(
     return alias.type as RecordTypeAnnotation;
   }
 
-  List<_Field> fields(RecordTypeAnnotation record, {required bool parameters}) {
+  List<ModelField> fields(
+    RecordTypeAnnotation record, {
+    required bool parameters,
+  }) {
     if (record.positionalFields.isNotEmpty) {
       throw const GenerationException(
         'Named SQL records require named fields.',
@@ -117,7 +154,7 @@ Future<GeneratedQueries> _generateQueries(
     final fields = [
       for (final f
           in record.namedFields?.fields ?? <RecordTypeAnnotationNamedField>[])
-        reader._readField(f, f.name.lexeme, f.type.type, f.metadata),
+        reader.readField(f, f.name.lexeme, f.type.type, f.metadata),
     ];
     for (final f in fields) {
       if (f.id ||
@@ -133,7 +170,7 @@ Future<GeneratedQueries> _generateQueries(
           'Query fields accept codec and column-name annotations only.',
         );
       }
-      if (parameters && f.column != _snake(f.name)) {
+      if (parameters && f.column != snakeCase(f.name)) {
         throw const GenerationException(
           'SQL parameters use Dart field names, without ColumnName.',
         );
@@ -156,7 +193,7 @@ Future<GeneratedQueries> _generateQueries(
       if (call is! MethodInvocation ||
           call.methodName.name != 'sqlQuery' ||
           call.methodName.element?.library?.uri.toString() !=
-              'package:orm/schema.dart') {
+              schemaDeclarationUri) {
         continue;
       }
       final types = call.typeArguments?.arguments;
@@ -171,7 +208,7 @@ Future<GeneratedQueries> _generateQueries(
       if (name.startsWith('_')) {
         throw const GenerationException('Named queries must be public.');
       }
-      if (_databaseMembers.contains(name)) {
+      if (databaseMembers.contains(name)) {
         throw GenerationException('$name conflicts with a Database member.');
       }
       if (types.first.toSource().startsWith('_')) {
@@ -183,7 +220,7 @@ Future<GeneratedQueries> _generateQueries(
       final parameterFields = fields(record(types.last), parameters: true);
       final sql = <SqlDialect, String>{};
       for (final dialect in SqlDialect.values) {
-        final path = reader._namedString(call, dialect.name);
+        final path = reader.namedString(call, dialect.name);
         if (path == null) continue;
         if (path.isEmpty ||
             p.url.isAbsolute(path) ||
@@ -208,14 +245,14 @@ Future<GeneratedQueries> _generateQueries(
       if (sql.isEmpty) {
         throw GenerationException('$name needs at least one SQL file.');
       }
-      if (queries.any((q) => _snake(q.result.name) == _snake(name))) {
+      if (queries.any((q) => snakeCase(q.result.name) == snakeCase(name))) {
         throw GenerationException('Conflicting query name $name.');
       }
       queries.add(
         _NamedQuery(
-          _Entity(
+          ModelEntity(
             name,
-            '_orm_sql_${_snake(name)}',
+            '_orm_sql_${snakeCase(name)}',
             types.first.toSource(),
             resultFields,
           ),
@@ -261,17 +298,17 @@ Future<GeneratedQueries> _generateQueries(
 String _emitQueries(
   List<_NamedQuery> queries,
   String sourceImport,
-  _DartNames names,
+  DartNames names,
 ) {
   final b = StringBuffer('// GENERATED CODE - DO NOT MODIFY BY HAND.\n\n')
     ..writeln("import 'package:orm/sql.dart';")
-    ..writeln('import ${_literal(sourceImport)} as models;')
+    ..writeln('import ${dartLiteral(sourceImport)} as models;')
     ..writeln(
-      'export ${_literal(sourceImport)} show ${queries.map((q) => q.result.row).toSet().join(', ')};',
+      'export ${dartLiteral(sourceImport)} show ${queries.map((q) => q.result.row).toSet().join(', ')};',
     );
   if (names.typedData) b.writeln("import 'dart:typed_data';");
   for (final (uri, prefix) in names.imports) {
-    b.writeln('import ${_literal(uri)} as $prefix;');
+    b.writeln('import ${dartLiteral(uri)} as $prefix;');
   }
   if (queries.any((q) => q.parameters.isNotEmpty)) {
     b.writeln(
@@ -282,7 +319,7 @@ String _emitQueries(
     final entity = query.result;
     for (final f in entity.fields) {
       b.writeln(
-        'final ${_queryColumn(entity, f)} = Column<${f.type}>(${_literal(f.column)}, ${f.codec}, nullable: ${f.nullable});',
+        'final ${_queryColumn(entity, f)} = Column<${f.type}>(${dartLiteral(f.column)}, ${f.codec}, nullable: ${f.nullable});',
       );
     }
     b.writeln(
@@ -294,9 +331,9 @@ String _emitQueries(
     b.writeln('}');
     b.writeln(
       'final _sqlDefinition${entity.symbol} = SqlQueryDefinition<${entity.rowType}, ${entity.fieldsType}>('
-      'Table(TableSchema(${_literal(entity.table)}, columns: [${entity.fields.map((f) => _queryColumn(entity, f)).join(', ')}]), '
-      '${entity.fieldsType}.new, (row) => ${_recordSelection(entity.fields, 'row')}), {'
-      '${query.sql.entries.map((entry) => 'SqlDialect.${entry.key.name}: SqlTemplate(${_literal(entry.value)}, dialect: SqlDialect.${entry.key.name})').join(', ')}'
+      'Table(TableSchema(${dartLiteral(entity.table)}, columns: [${entity.fields.map((f) => _queryColumn(entity, f)).join(', ')}]), '
+      '${entity.fieldsType}.new, (row) => ${recordSelection(entity.fields, 'row')}), {'
+      '${query.sql.entries.map((entry) => 'SqlDialect.${entry.key.name}: SqlTemplate(${dartLiteral(entry.value)}, dialect: SqlDialect.${entry.key.name})').join(', ')}'
       '});',
     );
     b.writeln(
@@ -304,14 +341,14 @@ String _emitQueries(
       'Query<${entity.rowType}, ${entity.fieldsType}> ${entity.name}('
       '${query.parameters.isEmpty ? '' : '{${query.parameters.map((f) => '${f.nullable ? '' : 'required '}${f.type} ${f.name}').join(', ')}}'}'
       ') => _sqlDefinition${entity.symbol}.bind(this, {'
-      '${query.parameters.map((f) => '${_literal(f.name)}: _bindSqlParameter(${f.name}, ${f.codec})').join(', ')}'
+      '${query.parameters.map((f) => '${dartLiteral(f.name)}: _bindSqlParameter(${f.name}, ${f.codec})').join(', ')}'
       '}); }',
     );
   }
   return b.toString();
 }
 
-String _queryColumn(_Entity entity, _Field field) =>
+String _queryColumn(ModelEntity entity, ModelField field) =>
     '_sqlColumn${entity.symbol}_${entity.fields.indexOf(field)}';
 
 var _queryCheckSerial = 0;
@@ -343,7 +380,7 @@ Future<List<Map<String, Object?>>> checkSqlQueries(
           ),
       },
     );
-    String quote(String name) => _mysqlDialect(db.dialect)
+    String quote(String name) => isMysqlDialect(db.dialect)
         ? '`${name.replaceAll('`', '``')}`'
         : '"${name.replaceAll('"', '""')}"';
     final alias = quote('_orm_check');
@@ -352,7 +389,7 @@ Future<List<Map<String, Object?>>> checkSqlQueries(
         'FROM (\n${command.sql}\n) AS $alias';
     List<String>? nativeTypes;
     try {
-      if (_mysqlDialect(db.dialect)) {
+      if (isMysqlDialect(db.dialect)) {
         final name =
             '_orm_check_${DateTime.now().microsecondsSinceEpoch}_${_queryCheckSerial++}';
         var prepared = false;

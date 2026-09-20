@@ -237,8 +237,8 @@ Future<void> main(List<String> args) async {
   final output = File(
     outputPath ??
         (smoke
-            ? '.dart_tool/runtime-smoke.json'
-            : 'research/benchmarks/runtime.json'),
+            ? '.dart_tool/benchmarks/runtime-smoke.json'
+            : '.dart_tool/benchmarks/runtime.json'),
   );
   await output.parent.create(recursive: true);
   await output.writeAsString(

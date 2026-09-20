@@ -1,6 +1,14 @@
-part of 'native.dart';
+import 'dart:isolate';
 
-void _sqliteMain((SendPort, SqliteOptions) init) async {
+import 'package:sqlite3/sqlite3.dart' as native;
+
+import '../../driver.dart';
+import 'execution.dart';
+import 'failure.dart';
+import 'native_protocol.dart';
+import 'options.dart';
+
+void runSqliteWorker((SendPort, SqliteOptions) init) async {
   final (response, options) = init;
   native.Database? db;
   final commands = ReceivePort();
@@ -41,13 +49,13 @@ void _sqliteMain((SendPort, SqliteOptions) init) async {
         switch (command) {
           case SqlCommand():
             result = executor!.execute(command);
-          case _OpenCursor():
+          case OpenSqliteCursor():
             result = SqlResult([
               [executor!.openCursor(command.command)],
             ]);
-          case _FetchCursor():
+          case FetchSqliteCursor():
             result = executor!.fetch(command.cursor, command.count);
-          case _CloseCursor():
+          case CloseSqliteCursor():
             executor!.release(command.cursor);
             result = const SqlResult([]);
           default:

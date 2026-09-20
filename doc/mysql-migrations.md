@@ -18,7 +18,7 @@ dart run orm migrate verify
 `init --database mariadb` selects MariaDB instead. Models, physical snapshots,
 reviewed migration operations and the static registry are all Dart source. A saved
 migration contains SQL for its selected engine only; current application models
-are not imported by historical migration files. See [migrations](migrations.md)
+are not imported by historical migration files. See [migrations](https://github.com/medz/dart-orm/blob/main/doc/migrations.md)
 for configuration, fingerprints, deployment bundles, baseline and version checks.
 
 ## DDL and recovery

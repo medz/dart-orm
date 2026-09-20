@@ -1,13 +1,26 @@
-part of '../../migrate.dart';
+import 'dart:convert' show jsonEncode;
+
+import '../../driver.dart' show Backend, SqlCommand, SqlDialect;
+import '../../runtime.dart' show SqlDatabase;
+import '../../schema_model.dart' show CheckSchema, TableSchema;
+import '../../values.dart' show Codecs, OrmException;
+import 'catalog.dart' show inspectTable;
+import 'sql_utils.dart' show quoteIdentifier;
+import 'sqlite_checks.dart' show sqliteName, sqliteTokens;
 
 /// An enforced, validated row CHECK read from this database's catalog.
 final class CheckInfo {
+  /// Database constraint name, or null for an unnamed constraint.
   final String? name;
+
+  /// Catalog SQL expression evaluated by the row CHECK constraint.
   final String expression;
+
+  /// Records one catalog CHECK without evaluating its expression.
   const CheckInfo(this.name, this.expression);
 }
 
-TableSchema _withChecks(TableSchema table, List<CheckSchema> checks) =>
+TableSchema withChecks(TableSchema table, List<CheckSchema> checks) =>
     TableSchema(
       table.name,
       columns: table.columns,
@@ -18,7 +31,7 @@ TableSchema _withChecks(TableSchema table, List<CheckSchema> checks) =>
       checks: checks,
     );
 
-({List<CheckSchema> removed, List<CheckSchema> added}) _checkDelta(
+({List<CheckSchema> removed, List<CheckSchema> added}) checkDelta(
   List<CheckSchema> before,
   List<CheckSchema> after,
   SqlDialect dialect,
@@ -40,7 +53,7 @@ TableSchema _withChecks(TableSchema table, List<CheckSchema> checks) =>
 }
 
 String _checkSignature(String expression) {
-  var tokens = _sqliteTokens(expression);
+  var tokens = sqliteTokens(expression);
   // Strip enclosing parentheses, not parentheses that determine precedence.
   while (tokens.length >= 2 &&
       tokens.first.text == '(' &&
@@ -61,10 +74,10 @@ String _checkSignature(String expression) {
     tokens
         .map(
           (t) => t.text.startsWith('i:')
-              ? _sqliteName(t.text.substring(2))
+              ? sqliteName(t.text.substring(2))
               : t.text.startsWith('s:')
               ? t.text
-              : _sqliteName(t.text),
+              : sqliteName(t.text),
         )
         .toList(),
   );
@@ -74,7 +87,7 @@ String _checkSignature(String expression) {
 // planner to render both projections in the same typed context; never compare
 // expressions by deleting casts or precedence-bearing syntax. EXPLAIN does not
 // run the SELECT, though PostgreSQL can evaluate immutable constants in planning.
-Future<List<String>> _checkExpressions(
+Future<List<String>> checkExpressions(
   SqlDatabase<Backend> db,
   String table,
   List<String> expressions,
@@ -86,7 +99,7 @@ Future<List<String>> _checkExpressions(
   final result = await db.execute(
     SqlCommand(
       'EXPLAIN (VERBOSE, FORMAT JSON, COSTS OFF) SELECT '
-      '${expressions.map((e) => '($e\n)').join(', ')} FROM ONLY ${_quote(table)}',
+      '${expressions.map((e) => '($e\n)').join(', ')} FROM ONLY ${quoteIdentifier(table)}',
     ),
   );
   final json = Codecs.json.decode(result.rows.single.single) as List<Object?>;
@@ -100,14 +113,14 @@ Future<List<String>> _checkExpressions(
 }
 
 /// One actual constraint is consumed per declaration, including unnamed copies.
-Future<List<int?>> _matchChecks(
+Future<List<int?>> matchChecks(
   SqlDatabase<Backend> db,
   String table,
   List<CheckSchema> expected,
   List<CheckInfo> actual,
 ) async {
   if (expected.isEmpty) return const [];
-  final signatures = await _checkExpressions(db, table, [
+  final signatures = await checkExpressions(db, table, [
     ...expected.map((c) => c.expression(db.dialect)),
     ...actual.map((c) => c.expression),
   ]);
@@ -120,7 +133,7 @@ Future<List<int?>> _matchChecks(
           name == null ||
           (db.dialect == SqlDialect.sqlite
               ? actual[j].name != null &&
-                    _sqliteName(name) == _sqliteName(actual[j].name!)
+                    sqliteName(name) == sqliteName(actual[j].name!)
               : name == actual[j].name);
       if (!used.contains(j) &&
           sameName &&
@@ -135,13 +148,13 @@ Future<List<int?>> _matchChecks(
   return matches;
 }
 
-Future<void> _dropCheck(
+Future<void> dropCheck(
   SqlDatabase<Backend> db,
   String table,
   CheckSchema check,
 ) async {
   final actual = (await inspectTable(db, table)).checks;
-  final match = (await _matchChecks(db, table, [check], actual)).single;
+  final match = (await matchChecks(db, table, [check], actual)).single;
   if (match == null || actual[match].name == null) {
     throw OrmException(
       'MIGRATION.DRIFT',
@@ -150,7 +163,7 @@ Future<void> _dropCheck(
   }
   await db.execute(
     SqlCommand(
-      'ALTER TABLE ${_quote(table)} DROP CONSTRAINT ${_quote(actual[match].name!)}',
+      'ALTER TABLE ${quoteIdentifier(table)} DROP CONSTRAINT ${quoteIdentifier(actual[match].name!)}',
     ),
   );
 }

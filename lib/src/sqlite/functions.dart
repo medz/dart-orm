@@ -2,12 +2,12 @@ import 'package:sqlite3/common.dart' as native;
 
 import '../../driver.dart';
 
-part 'decimal.dart';
-part 'temporal.dart';
+import 'decimal.dart';
+import 'temporal.dart';
 
 void registerSqliteFunctions(native.CommonDatabase db) {
-  _registerDecimals(db);
-  _registerTemporals(db);
+  registerDecimalFunctions(db);
+  registerTemporalFunctions(db);
 }
 
 List<Object?> sqliteParameters(List<Object?> parameters) => [

@@ -1,13 +1,22 @@
-part of '../generate.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/element/element.dart';
+import 'package:analyzer/dart/element/type.dart';
+import 'package:analyzer/dart/element/type_system.dart';
 
-final class _SchemaReader(
+import '../../schema_model.dart';
+import 'exception.dart';
+import 'model.dart';
+import 'source.dart';
+import 'types.dart';
+
+final class SchemaReader(
   final CompilationUnit unit,
   final TypeSystem typeSystem,
-  final _DartNames names,
+  final DartNames names,
 ) {
-  final Map<String, _Entity> entities = {};
+  final Map<String, ModelEntity> entities = {};
 
-  List<_Entity> read() {
+  List<ModelEntity> read() {
     final aliases = {
       for (final d in unit.declarations.whereType<GenericTypeAlias>())
         d.name.lexeme: d,
@@ -27,7 +36,7 @@ final class _SchemaReader(
         continue;
       }
       if (call.methodName.element?.library?.uri.toString() !=
-          'package:orm/schema.dart') {
+          schemaDeclarationUri) {
         continue;
       }
       final types = call.typeArguments?.arguments;
@@ -37,7 +46,7 @@ final class _SchemaReader(
       final row = types.single.toSource();
       final alias = aliases[row];
       final declaration = classes[row];
-      final List<_Field> fields;
+      final List<ModelField> fields;
       final AstNode model;
       Set<String>? constructorNamedFields;
       if (declaration != null) {
@@ -55,7 +64,7 @@ final class _SchemaReader(
         }
         fields = [
           for (final f in record.namedFields!.fields)
-            _readField(f, f.name.lexeme, f.type.type, f.metadata),
+            readField(f, f.name.lexeme, f.type.type, f.metadata),
         ];
       } else {
         _fail(
@@ -65,20 +74,20 @@ final class _SchemaReader(
       }
       if (fields.isEmpty) _fail(model, 'A model needs fields.');
       final name = variable.name.lexeme;
-      if (name.startsWith('_') || _databaseMembers.contains(name)) {
+      if (name.startsWith('_') || databaseMembers.contains(name)) {
         _fail(
           variable,
           'Entity $name must be public and cannot shadow a Database member. Rename the Dart declaration and keep table: for its physical name.',
         );
       }
-      final table = _namedString(call, 'table') ?? _snake(name);
+      final table = namedString(call, 'table') ?? snakeCase(name);
       if (entities.values.any((e) => e.table == table)) {
         _fail(call, 'Duplicate physical table $table.');
       }
       if (fields.map((f) => f.column).toSet().length != fields.length) {
         _fail(model, 'Duplicate physical column name.');
       }
-      final entity = _Entity(
+      final entity = ModelEntity(
         name,
         table,
         row,
@@ -107,13 +116,13 @@ final class _SchemaReader(
         }
         final name = _named(call, 'name') is NullLiteral
             ? null
-            : _namedString(call, 'name') ?? _snake(variable.name.lexeme);
+            : namedString(call, 'name') ?? snakeCase(variable.name.lexeme);
         final check = CheckSchema.forDialects(
           name,
-          sqlite: _namedString(call, 'sqlite') ?? expression.value,
-          postgres: _namedString(call, 'postgres') ?? expression.value,
-          mysql: _namedString(call, 'mysql') ?? expression.value,
-          mariadb: _namedString(call, 'mariadb') ?? expression.value,
+          sqlite: namedString(call, 'sqlite') ?? expression.value,
+          postgres: namedString(call, 'postgres') ?? expression.value,
+          mysql: namedString(call, 'mysql') ?? expression.value,
+          mariadb: namedString(call, 'mariadb') ?? expression.value,
         );
         if (SqlDialect.values.every(
               (d) => check.expression(d).trim().isEmpty,
@@ -143,8 +152,8 @@ final class _SchemaReader(
           entity.uniqueKeys.add(keys);
         case 'index':
           entity.indexes.add(
-            _Index(
-              _namedString(call, 'name') ?? _snake(variable.name.lexeme),
+            ModelIndex(
+              namedString(call, 'name') ?? snakeCase(variable.name.lexeme),
               keys,
               _named(call, 'unique')?.toSource() == 'true',
             ),
@@ -156,7 +165,7 @@ final class _SchemaReader(
       if (call is! MethodInvocation ||
           !{'references', 'relatesTo'}.contains(call.methodName.name) ||
           call.methodName.element?.library?.uri.toString() !=
-              'package:orm/schema.dart') {
+              schemaDeclarationUri) {
         continue;
       }
       final foreignKey = call.methodName.name == 'references';
@@ -177,7 +186,7 @@ final class _SchemaReader(
         for (final i in target.indexes)
           if (i.unique) i.keys,
       ];
-      if (foreignKey && !targets.any((key) => _same(key, remote))) {
+      if (foreignKey && !targets.any((key) => sameStrings(key, remote))) {
         _fail(
           call,
           'Foreign key target must be a primary or unique key in the same column order.',
@@ -208,14 +217,21 @@ final class _SchemaReader(
       }
       _addEdge(
         source,
-        _Edge(variable.name.lexeme, target, local, remote, onDelete),
+        ModelRelation(variable.name.lexeme, target, local, remote, onDelete),
         call,
       );
-      final inverse = _namedString(call, 'inverse');
+      final inverse = namedString(call, 'inverse');
       if (inverse != null) {
         _addEdge(
           target,
-          _Edge(inverse, source, remote, local, onDelete, inverse: true),
+          ModelRelation(
+            inverse,
+            source,
+            remote,
+            local,
+            onDelete,
+            inverse: true,
+          ),
           call,
         );
       }
@@ -229,7 +245,7 @@ final class _SchemaReader(
         '${entity.symbol}Updates',
         '${entity.name}Schema',
         '${entity.name}Table',
-        for (final field in entity.fields) _columnSymbol(entity, field),
+        for (final field in entity.fields) columnSymbol(entity, field),
       ]) {
         if (!symbols.add(symbol)) {
           throw GenerationException(
@@ -250,7 +266,8 @@ final class _SchemaReader(
         }
       }
       for (final f in entity.fields.where((f) => f.generated)) {
-        if (f.storage != 'integer' || !_same(entity.primaryKey, [f.name])) {
+        if (f.storage != 'integer' ||
+            !sameStrings(entity.primaryKey, [f.name])) {
           throw GenerationException(
             'Generated identity requires a single integer primary key: ${entity.name}.${f.name}.',
           );
@@ -265,7 +282,7 @@ final class _SchemaReader(
     return entities.values.toList();
   }
 
-  (List<_Field>, Set<String>) _readClass(ClassDeclaration declaration) {
+  (List<ModelField>, Set<String>) _readClass(ClassDeclaration declaration) {
     final primary = declaration.namePart;
     if (primary is! PrimaryConstructorDeclaration ||
         primary.typeName.lexeme.startsWith('_') ||
@@ -282,7 +299,7 @@ final class _SchemaReader(
         'Use a public final class with an unnamed primary constructor, declaring fields only, and no inheritance or type parameters. Put behavior in extensions.',
       );
     }
-    final fields = <_Field>[];
+    final fields = <ModelField>[];
     final named = <String>{};
     for (final parameter in primary.formalParameters.parameters) {
       if (!parameter.isFinal ||
@@ -299,14 +316,14 @@ final class _SchemaReader(
       }
       final name = parameter.name!.lexeme;
       fields.add(
-        _readField(parameter, name, parameter.type!.type, parameter.metadata),
+        readField(parameter, name, parameter.type!.type, parameter.metadata),
       );
       if (parameter.isNamed) named.add(name);
     }
     return (fields, named);
   }
 
-  _Field _readField(
+  ModelField readField(
     AstNode field,
     String name,
     DartType? type,
@@ -331,7 +348,7 @@ final class _SchemaReader(
       final annotationType = value?.type;
       if (annotationType is! InterfaceType ||
           annotationType.element.library.uri.toString() !=
-              'package:orm/schema.dart') {
+              schemaDeclarationUri) {
         continue;
       }
       switch (annotationType.element.name) {
@@ -434,8 +451,7 @@ final class _SchemaReader(
       final codecType = reference.staticType;
       if (codecType is! InterfaceType ||
           codecType.element.name != 'Codec' ||
-          codecType.element.library.uri.toString() !=
-              'package:orm/values.dart') {
+          codecType.element.library.uri.toString() != codecLibraryUri) {
         _fail(custom, 'Use a const Codec<T>.');
       }
       final domain = codecType.typeArguments.single;
@@ -473,7 +489,7 @@ final class _SchemaReader(
           !{
             'dart:core',
             'dart:typed_data',
-            'package:orm/values.dart',
+            ...valueLibraryUris,
           }.contains(type.element.library.uri.toString())) {
         _fail(field, 'This type needs an explicit @UseCodec.');
       }
@@ -523,9 +539,9 @@ final class _SchemaReader(
         'IntegerBits requires integer storage and a width of 16, 32 or 64.',
       );
     }
-    return _Field(
+    return ModelField(
       name: name,
-      column: column ?? _snake(name),
+      column: column ?? snakeCase(name),
       type: names.type(type),
       codec: codec,
       storage: storage,
@@ -543,7 +559,7 @@ final class _SchemaReader(
     );
   }
 
-  (_Entity, List<String>) _key(Expression expression) {
+  (ModelEntity, List<String>) _key(Expression expression) {
     if (expression is! MethodInvocation ||
         expression.methodName.name != 'key' ||
         expression.target is! SimpleIdentifier) {
@@ -558,7 +574,7 @@ final class _SchemaReader(
     );
   }
 
-  List<String> _selector(Expression expression, _Entity entity) {
+  List<String> _selector(Expression expression, ModelEntity entity) {
     if (expression is! FunctionExpression ||
         expression.parameters?.parameters.length != 1 ||
         expression.body is! ExpressionFunctionBody) {
@@ -602,7 +618,7 @@ final class _SchemaReader(
     return keys;
   }
 
-  void _addEdge(_Entity source, _Edge edge, AstNode node) {
+  void _addEdge(ModelEntity source, ModelRelation edge, AstNode node) {
     if (!RegExp(r'^[a-zA-Z][a-zA-Z0-9_]*$').hasMatch(edge.name) ||
         source.fields.any((f) => f.name == edge.name) ||
         source.edges.any((e) => e.name == edge.name) ||
@@ -620,7 +636,7 @@ final class _SchemaReader(
     return null;
   }
 
-  String? _namedString(MethodInvocation call, String name) {
+  String? namedString(MethodInvocation call, String name) {
     final expression = _named(call, name);
     if (expression == null) return null;
     if (expression is! SimpleStringLiteral) {

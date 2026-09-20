@@ -1,16 +1,13 @@
-import 'dart:async';
 import 'dart:js_interop';
 
 import 'package:web/web.dart' as web;
 
 import '../../driver.dart';
-import 'failure.dart';
 import 'opened.dart';
 import 'options.dart';
 import 'web_build.dart';
-import 'web_wire.dart';
 
-part 'web_client.dart';
+import 'web_client.dart';
 
 Future<OpenedSqlite> connectSqlite(SqliteOptions options) async {
   final config = options.web;
@@ -59,7 +56,7 @@ Future<OpenedSqlite> connectSqlite(SqliteOptions options) async {
       'SQLite worker must be same-origin HTTP(S); WASM must have an HTTP(S) URL.',
     );
   }
-  final connection = _WebConnection(web.Worker(workerUri.toString().toJS));
+  final connection = WebConnection(web.Worker(workerUri.toString().toJS));
   try {
     Future<JSArray<JSAny?>> initialize() async {
       final hello = await connection.request('hello');

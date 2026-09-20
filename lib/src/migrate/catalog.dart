@@ -1,21 +1,76 @@
-part of '../../migrate.dart';
+import 'dart:convert' show jsonEncode;
 
+import '../../driver.dart' show Backend, SqlCommand, SqlDialect;
+import '../../runtime.dart' show SqlDatabase;
+import '../../schema_model.dart' show Column, ForeignKey, IndexSchema;
+import '../../values.dart'
+    show Codecs, Decimal, InstantPrecision, LocalDate, LocalDateTime, LocalTime;
+import 'checks.dart' show CheckInfo, matchChecks;
+import 'columns.dart'
+    show ColumnInfo, inspectColumns, matchesCollation, matchesDecimalDigits;
+import 'computed.dart' show verifyComputed, withoutComputed;
+import 'mysql_catalog.dart' show mysqlTable, mysqlVerifySchema;
+import 'mysql_schema.dart' show isMysqlFamily;
+import 'schema.dart' show coerceColumn, columnStorageType;
+import 'snapshot.dart' show SchemaSnapshot, foreignKeyJson, indexJson;
+import 'sql_utils.dart'
+    show canonicalMigrationValue, migrationHash, quoteIdentifier;
+import 'sqlite_checks.dart'
+    show
+        sqliteChecks,
+        uncoerceDecimalDefault,
+        uncoerceTemporal,
+        withoutIntegerChecks,
+        withoutStorageCollations;
+import 'validation.dart' show sqlWords;
+
+/// A live database object outside the schema features modeled by the ORM.
 final class CatalogObject {
+  /// Catalog object category, such as `index`, `trigger`, or `view`.
   final String kind;
+
+  /// Physical object name, as reported by the catalog reader.
   final String name;
+
+  /// Catalog SQL or descriptive metadata preserved for manual review.
   final String definition;
+
+  /// Records an object that the ORM cannot safely recreate from modeled fields.
   const CatalogObject(this.kind, this.name, this.definition);
 }
 
+/// Physical table facts read from the selected database's catalog.
+///
+/// [unmanaged] preserves descriptions of objects a migration must not silently
+/// replace, such as custom triggers or unsupported index definitions.
 final class TableInfo {
+  /// Physical table name used for this inspection.
   final String name;
+
+  /// Column storage metadata in catalog order.
   final List<ColumnInfo> columns;
+
+  /// Primary-key column names in key order; empty when no key exists.
   final List<String> primaryKey;
+
+  /// Modeled unique constraints, each retaining its own column order.
   final List<List<String>> uniqueKeys;
+
+  /// Modeled foreign-key columns, target tables, and deletion actions.
   final List<ForeignKey> foreignKeys;
+
+  /// Index definitions expressible by the ORM's physical schema model.
   final List<IndexSchema> indexes;
+
+  /// Objects requiring separate review before a table rebuild or schema change.
   final List<CatalogObject> unmanaged;
+
+  /// Enforced row CHECK constraints recognized by the catalog reader.
   final List<CheckInfo> checks;
+
+  /// Groups catalog facts without querying or changing the database.
+  ///
+  /// Supplied lists are retained; use [inspectTable] to obtain live metadata.
   const TableInfo({
     required this.name,
     required this.columns,
@@ -28,17 +83,24 @@ final class TableInfo {
   });
 }
 
+/// Differences between a declared snapshot and the live database catalog.
 final class SchemaVerification {
+  /// Human-readable mismatches in modeled schema facts.
   final List<String> differences;
+
+  /// Live objects that require separate review, even when [matches] is true.
   final List<CatalogObject> unmanaged;
+
+  /// Records modeled differences and separately reviewable catalog objects.
   const SchemaVerification(this.differences, this.unmanaged);
 
   /// Equality of the declared schema facts; inspect unmanaged objects separately.
   bool get matches => differences.isEmpty;
 }
 
+/// Reads one physical [table] without changing its schema or data.
 Future<TableInfo> inspectTable(SqlDatabase<Backend> db, String table) async {
-  if (_isMysql(db.dialect)) return _mysqlTable(db, table);
+  if (isMysqlFamily(db.dialect)) return mysqlTable(db, table);
   final columns = await inspectColumns(db, table);
   final primary = <String>[],
       unique = <List<String>>[],
@@ -47,18 +109,18 @@ Future<TableInfo> inspectTable(SqlDatabase<Backend> db, String table) async {
   final checks = <CheckInfo>[];
   if (db.dialect == SqlDialect.sqlite) {
     final info = await db.execute(
-      SqlCommand('PRAGMA table_xinfo(${_quote(table)})'),
+      SqlCommand('PRAGMA table_xinfo(${quoteIdentifier(table)})'),
     );
     final primaryRows = info.rows.where((r) => (r[5] as int) > 0).toList()
       ..sort((a, b) => (a[5] as int).compareTo(b[5] as int));
     primary.addAll(primaryRows.map((r) => r[1] as String));
     final list = await db.execute(
-      SqlCommand('PRAGMA index_list(${_quote(table)})'),
+      SqlCommand('PRAGMA index_list(${quoteIdentifier(table)})'),
     );
     for (final row in list.rows) {
       final name = row[1] as String;
       final parts = await db.execute(
-        SqlCommand('PRAGMA index_xinfo(${_quote(name)})'),
+        SqlCommand('PRAGMA index_xinfo(${quoteIdentifier(name)})'),
       );
       final keys = parts.rows.where((r) => r[5] == 1).toList();
       final sql = await db.execute(
@@ -89,7 +151,7 @@ Future<TableInfo> inspectTable(SqlDatabase<Backend> db, String table) async {
       }
     }
     final keys = await db.execute(
-      SqlCommand('PRAGMA foreign_key_list(${_quote(table)})'),
+      SqlCommand('PRAGMA foreign_key_list(${quoteIdentifier(table)})'),
     );
     final grouped = <int, List<List<Object?>>>{};
     for (final row in keys.rows) {
@@ -139,8 +201,8 @@ Future<TableInfo> inspectTable(SqlDatabase<Backend> db, String table) async {
     var withoutChecks = sql ?? '';
     if (sql != null) {
       // Storage checks retain their existing column-width/precision meaning.
-      final remaining = _withoutIntegerChecks(sql, columns);
-      final parsed = _sqliteChecks(remaining);
+      final remaining = withoutIntegerChecks(sql, columns);
+      final parsed = sqliteChecks(remaining);
       checks.addAll(parsed.map((c) => CheckInfo(c.name, c.expression)));
       final text = StringBuffer();
       var start = 0;
@@ -151,8 +213,8 @@ Future<TableInfo> inspectTable(SqlDatabase<Backend> db, String table) async {
       withoutChecks = (text..write(remaining.substring(start))).toString();
     }
     if (sql != null &&
-        _sqlWords(
-          _withoutStorageCollations(_withoutComputed(withoutChecks), columns),
+        sqlWords(
+          withoutStorageCollations(withoutComputed(withoutChecks), columns),
         ).any(
           {
             'CHECK',
@@ -318,11 +380,15 @@ AND (c.relrowsecurity OR c.relforcerowsecurity
   );
 }
 
+/// Compares modeled tables, columns, keys, indexes, and checks with the catalog.
+///
+/// This does not infer or apply a migration. Inspect the returned unmanaged
+/// objects as well as the modeled differences before changing an existing table.
 Future<SchemaVerification> verifySchema(
   SqlDatabase<Backend> db,
   SchemaSnapshot expected,
 ) async {
-  if (_isMysql(db.dialect)) return _mysqlVerifySchema(db, expected);
+  if (isMysqlFamily(db.dialect)) return mysqlVerifySchema(db, expected);
   final differences = <String>[], unmanaged = <CatalogObject>[];
   for (final table in expected.tables) {
     final actual = await inspectTable(db, table.name);
@@ -337,7 +403,7 @@ Future<SchemaVerification> verifySchema(
         differences.add('$path is missing');
         continue;
       }
-      if (found.storageType != _columnStorageType(column, db.dialect)) {
+      if (found.storageType != columnStorageType(column, db.dialect)) {
         checkContextMatches = false;
         differences.add('$path type differs');
       }
@@ -347,11 +413,10 @@ Future<SchemaVerification> verifySchema(
       if ((found.temporalPrecision ?? 6) != (column.temporalPrecision ?? 6)) {
         differences.add('$path temporal precision differs');
       }
-      if (!_matchesDecimalDigits(column, found)) {
+      if (!matchesDecimalDigits(column, found)) {
         differences.add('$path decimal precision/scale differs');
       }
-      if (db.dialect == SqlDialect.sqlite &&
-          !_matchesCollation(column, found)) {
+      if (db.dialect == SqlDialect.sqlite && !matchesCollation(column, found)) {
         differences.add('$path collation differs');
       }
       if (column.codec.sqlType == 'integer' &&
@@ -362,7 +427,7 @@ Future<SchemaVerification> verifySchema(
           _columnDefault(
             column.defaultSql == null
                 ? null
-                : _coerceColumn(column.defaultSql!, column, db.dialect),
+                : coerceColumn(column.defaultSql!, column, db.dialect),
             column,
           )) {
         differences.add('$path default differs');
@@ -383,7 +448,7 @@ Future<SchemaVerification> verifySchema(
       differences.add('${table.name}.$name is unmanaged');
     }
     differences.addAll(
-      await _verifyComputed(
+      await verifyComputed(
         db,
         table,
         actual.columns,
@@ -391,19 +456,20 @@ Future<SchemaVerification> verifySchema(
       ),
     );
     void compare(String kind, Object? desired, Object? found) {
-      if (_hash(desired) != _hash(found)) {
+      if (migrationHash(desired) != migrationHash(found)) {
         differences.add('${table.name} $kind differs');
       }
     }
 
     List<String> set(Iterable<Object?> values) =>
-        values.map((v) => jsonEncode(_canonical(v))).toList()..sort();
+        values.map((v) => jsonEncode(canonicalMigrationValue(v))).toList()
+          ..sort();
     compare('primary key', table.primaryKey, actual.primaryKey);
     compare('unique keys', set(table.uniqueKeys), set(actual.uniqueKeys));
     // Expected SQL may no longer resolve when a referenced column/type drifted.
     // Report that schema drift instead of attempting an invalid EXPLAIN.
     final checkMatches = checkContextMatches
-        ? await _matchChecks(db, table.name, table.checks, actual.checks)
+        ? await matchChecks(db, table.name, table.checks, actual.checks)
         : List<int?>.filled(table.checks.length, null);
     if (checkMatches.any((i) => i == null) ||
         checkMatches.length != actual.checks.length) {
@@ -419,13 +485,13 @@ Future<SchemaVerification> verifySchema(
     }
     compare(
       'foreign keys',
-      set(table.foreignKeys.map(_foreignKeyJson)),
-      set(actual.foreignKeys.map(_foreignKeyJson)),
+      set(table.foreignKeys.map(foreignKeyJson)),
+      set(actual.foreignKeys.map(foreignKeyJson)),
     );
     compare(
       'indexes',
-      set(table.indexes.map(_indexJson)),
-      set(actual.indexes.map(_indexJson)),
+      set(table.indexes.map(indexJson)),
+      set(actual.indexes.map(indexJson)),
     );
   }
   return SchemaVerification(
@@ -435,21 +501,21 @@ Future<SchemaVerification> verifySchema(
 }
 
 String? _columnDefault(String? value, Column<Object?> column) {
-  var normalized = _normalizeDefault(value);
+  var normalized = normalizeDefault(value);
   var temporalPrefix = '';
   if (normalized != null &&
       column.temporalPrecision != null &&
       column.temporalPrecision != 6) {
-    final inner = _uncoerceTemporal(
+    final inner = uncoerceTemporal(
       normalized,
       column.codec.sqlType,
       column.temporalPrecision!,
     );
     if (inner != null) {
-      normalized = _normalizeDefault(inner);
+      normalized = normalizeDefault(inner);
       temporalPrefix = 'temporal cast:';
     }
-    final type = _columnStorageType(
+    final type = columnStorageType(
       column,
       SqlDialect.postgres,
     ).toLowerCase().replaceFirst('timestamptz', 'timestamp');
@@ -457,7 +523,7 @@ String? _columnDefault(String? value, Column<Object?> column) {
         ? '$type with time zone'
         : type;
     if (normalized != null && normalized.endsWith('::$native')) {
-      normalized = _normalizeDefault(
+      normalized = normalizeDefault(
         normalized.substring(0, normalized.length - native.length - 2),
       );
     }
@@ -489,13 +555,13 @@ String? _columnDefault(String? value, Column<Object?> column) {
   }
   final unwrapped = column.decimalPrecision == null
       ? null
-      : _uncoerceDecimalDefault(
+      : uncoerceDecimalDefault(
           normalized,
           column.decimalPrecision!,
           column.decimalScale ?? 0,
         );
   final prefix = unwrapped == null ? '' : 'decimal cast:';
-  normalized = unwrapped == null ? normalized : _normalizeDefault(unwrapped)!;
+  normalized = unwrapped == null ? normalized : normalizeDefault(unwrapped)!;
   // PostgreSQL removes the quotes from a NUMERIC literal. Compare finite
   // literals by value, leaving arbitrary SQL expressions unchanged.
   final literal = normalized.startsWith("'") && normalized.endsWith("'")
@@ -504,7 +570,7 @@ String? _columnDefault(String? value, Column<Object?> column) {
   return '$prefix${Decimal.tryParse(literal)?.toString() ?? normalized}';
 }
 
-String? _normalizeDefault(String? value) {
+String? normalizeDefault(String? value) {
   if (value == null) return null;
   var normalized = value.trim();
   while (normalized.startsWith('(') && normalized.endsWith(')')) {

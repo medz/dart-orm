@@ -1,4 +1,12 @@
-part of '../generate.dart';
+import 'dart:io';
+
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:path/path.dart' as p;
+
+import '../../migrate.dart';
+import 'exception.dart';
+import 'source.dart';
 
 /// Regenerates only static imports. Fingerprints stay in the migration files.
 Future<String> writeMigrationRegistry(
@@ -12,7 +20,7 @@ Future<String> writeMigrationRegistry(
   final path = p.join(directory, 'migrations.g.dart');
   await _replaceSource(
     path,
-    _formatMigration(migrationHistorySource(ids, dialect: dialect)),
+    formatMigration(migrationHistorySource(ids, dialect: dialect)),
   );
   return path;
 }
@@ -30,8 +38,8 @@ Future<String> writeMigration(
   final root = Directory(directory);
   await root.create(recursive: true);
   await _checkMigrationFiles(root, previous);
-  final source = _formatMigration(migrationSource(migration));
-  final registry = _formatMigration(
+  final source = formatMigration(migrationSource(migration));
+  final registry = formatMigration(
     migrationHistorySource(all.map((m) => m.id), dialect: history.dialect),
   );
   final file = File(p.join(directory, 'm${migration.id}.dart'));
@@ -94,7 +102,7 @@ Future<String> recordMigration(
     content.replaceRange(
       literal.offset,
       literal.end,
-      _literal(migrations.last.checksum),
+      dartLiteral(migrations.last.checksum),
     ),
   );
   return migrations.last.checksum;
@@ -122,16 +130,12 @@ Future<void> _checkMigrationFiles(
 ) async {
   final actual = await _migrationIds(directory);
   final expected = migrations.map((m) => m.id).toList();
-  if (!_same(actual, expected)) {
+  if (!sameStrings(actual, expected)) {
     throw const GenerationException(
       'Migration registry is stale. Regenerate static imports, then run the command again.',
     );
   }
 }
-
-String _formatMigration(String source) =>
-    DartFormatter(languageVersion: DartFormatter.latestLanguageVersion)
-        .format(source);
 
 Future<void> _replaceSource(String path, String source) async {
   final kind = await FileSystemEntity.type(path, followLinks: false);

@@ -1,14 +1,23 @@
-part of '../../drivers/mysql.dart';
+import 'dart:async';
+import 'dart:io';
 
-final class _MysqlConnection implements SqlConnection {
+import 'package:mysql_client_plus/exception.dart' as mysql;
+import 'package:mysql_client_plus/mysql_client_plus.dart' as mysql;
+
+import '../../driver.dart';
+import 'failure.dart';
+import 'values.dart';
+
+final class MysqlConnection implements SqlConnection {
   final mysql.MySQLConnection _connection;
   final Duration _queryTimeout;
   bool _active = true;
   bool _invalid = false;
+  bool get isInvalid => _invalid;
   Future<SqlResult>? _pending;
   Future<void>? _releasing;
 
-  _MysqlConnection(this._connection, this._queryTimeout);
+  MysqlConnection(this._connection, this._queryTimeout);
 
   // The upstream client discards OK/EOF status flags. Do not infer server
   // transaction state from the last SQL string or from a client-side bool.
@@ -45,7 +54,7 @@ final class _MysqlConnection implements SqlConnection {
         ),
       );
     }
-    final parameters = command.parameters.map(_mysqlParameter).toList();
+    final parameters = command.parameters.map(mysqlParameter).toList();
     late final Future<SqlResult> operation;
     operation = _execute(command.sql, parameters)
         .timeout(
@@ -94,7 +103,7 @@ final class _MysqlConnection implements SqlConnection {
           for (final row in result.rows)
             [
               for (var i = 0; i < columns.length; i++)
-                _mysqlValue(
+                mysqlValue(
                   row.colAt(i),
                   columns[i].type.intVal,
                   binary: parameters.isNotEmpty,
@@ -102,8 +111,8 @@ final class _MysqlConnection implements SqlConnection {
             ],
         ],
         columns: [for (final column in columns) column.name],
-        affectedRows: _checkedMysqlInt(result.affectedRows),
-        lastInsertId: lastId == BigInt.zero ? null : _checkedMysqlInt(lastId),
+        affectedRows: checkedMysqlInt(result.affectedRows),
+        lastInsertId: lastId == BigInt.zero ? null : checkedMysqlInt(lastId),
       );
     } on mysql.MySQLServerException catch (error) {
       throw MysqlFailure(error);
@@ -155,7 +164,7 @@ final class _MysqlConnection implements SqlConnection {
     if (_active || _invalid) _discard();
   }
 
-  Future<void> _release() => _releasing ??= (() async {
+  Future<void> release() => _releasing ??= (() async {
     _active = false;
     try {
       await _pending;

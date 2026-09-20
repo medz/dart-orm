@@ -11,7 +11,7 @@ and an immutable `appSchema`; entity
 declaration values remain in the source library. Import the generated client and
 the chosen driver in application code. Programmatic generation is in
 `generate.dart`; build_runner factories are exported only by `builder.dart`.
-See [API boundaries](api.md).
+See [API boundaries](https://github.com/medz/dart-orm/blob/main/doc/api.md).
 
 Generation validates declaration structure and generated symbol names. Database
 member collisions such as an entity called `close` fail here; keep the physical
@@ -29,7 +29,7 @@ dart run orm generate lib/schema.dart
 
 Initialization creates typed `orm.config.dart`, a model and static migration
 history without connecting. The path-free command uses `OrmConfig.schema` (or
-`lib/schema.dart` when no config exists). See [project CLI](cli.md).
+`lib/schema.dart` when no config exists). See [project CLI](https://github.com/medz/dart-orm/blob/main/doc/cli.md).
 
 This writes `lib/schema.orm.dart` and `lib/schema.snapshot.dart`. The latter is the
 physical schema snapshot used by migration tools. It is a standalone Dart library
@@ -118,125 +118,55 @@ evaluation erases an extension type's representation.
 
 Generated source stays reviewable and can be committed with the application.
 Schema snapshot changes are migration inputs, not permission to apply DDL
-automatically. Follow the [migration workflow](migrations.md) to review and apply
+automatically. Follow the [migration workflow](https://github.com/medz/dart-orm/blob/main/doc/migrations.md) to review and apply
 database changes.
 
-## Measurements and verification
+## Verify generated code
 
-Run the reproducible consumer-project benchmark from the ORM repository:
+Run `dart analyze` after generation so changes to a model, selector or result type
+are checked in application code. A renamed Dart field can retain its physical
+column with `@ColumnName('old_name')`; changing a database name requires an explicit
+[reviewed migration](https://github.com/medz/dart-orm/blob/main/doc/migrations.md).
+
+The generator reports ORM-specific errors such as a computed expression in a key
+selector. These can be valid Dart expressions, so editor diagnostics alone do not
+replace a generation run. Keep `build_runner watch` active while editing schemas.
+Treat generated files as outputs: make edits in the declaration, regenerate, then
+repair affected application references with the type checker.
+
+## Measure generation and editor cost
+
+From an ORM repository checkout:
 
 ```sh
 dart run tool/benchmark_generation.dart
+dart run tool/benchmark_editor.dart --smoke
+dart run tool/benchmark_editor.dart
 ```
 
-It creates disposable projects containing 10, 100 and 1000 four-field record
-models. For each, it measures the first build, an unchanged build, watcher startup,
-a field edit, an imported metadata edit and static analysis. It also verifies
-that an unrelated edit leaves the watcher idle and output timestamps unchanged.
-Its [JSON report](../research/benchmarks/generation.json) records SDK/package
-versions, hardware, source/output sizes and measurement conditions.
+The generation benchmark creates disposable projects with 10, 100 and 1000
+four-field Record models. It measures first and unchanged builds, watcher startup,
+field and imported-metadata edits, and analysis. It also checks that an unrelated
+edit leaves output timestamps unchanged. The report is written to
+`.dart_tool/benchmarks/generation.json`; a positional argument chooses another
+report path.
 
-These are one-sample development-machine observations. Dependency download is
-excluded, shared SDK/pub/native caches are warm, and process/watch startup costs
-are included where applicable. They are not p50/p95 results or IDE completion
-measurements. The first build includes build_runner's builder compilation. Run
-the benchmark independently of test suites or other builds, with the generator
-source fixed for the entire run.
+The editor benchmark drives the installed Dart Analysis Server over stdio LSP.
+It checks completion labels, deliberate type errors with exact diagnostic ranges,
+source edits and a final consumer analysis. Full results go to
+`.dart_tool/benchmarks/editor.json`. `--smoke` uses ten models and two warm samples,
+writing `.dart_tool/benchmarks/editor-smoke.json`; it checks the harness rather
+than establishing performance. `--same-session` retains the server across error
+recovery and rename probes; its separate report includes `-recovery` in the name.
 
-Historical measurements before the Dart snapshot workflow, recorded on Apple M3 Max with Dart 3.13.3 and build_runner 2.16.1 (seconds):
+Generation timing includes process startup where applicable, excludes dependency
+downloads, and uses warm shared SDK/pub caches. Editor measurements include protocol
+transport and JSON processing, but exclude GUI rendering and editor extensions.
+Keep startup, analysis readiness, first completion and warm completion separate.
+A successful rename probe does not guarantee every IDE workflow; Record field
+renaming depends on the Dart SDK. Always regenerate and analyze after refactoring.
 
-| Models | First build | Unchanged build | Watch field edit | Watch import edit | Analyze |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 10 | 16.20 | 0.57 | 0.52 | 0.40 | 0.48 |
-| 100 | 16.26 | 0.57 | 0.65 | 0.66 | 0.50 |
-| 1000 | 17.96 | 0.58 | 2.17 | 2.22 | 3.48 |
-
-All three unchanged builds wrote zero outputs. Unrelated edits stayed idle during
-the one-second observation window. The 1000-model client contains 2,343,598 bytes
-after the edit; its result shape is a single schema library with four fields per
-model and one added field on the first model.
-
-Tests compare builder and CLI output, validate in-memory assets and prior-builder
-outputs, and run real build/watch processes for dependency changes, failure
-recovery and output cleanup. Static analysis of the generated consumer project
-is part of that process test.
-
-## Editor completion, diagnostics and rename
-
-Run `dart run tool/benchmark_editor.dart` to exercise the installed Dart Analysis
-Server over stdio LSP in disposable consumer projects. `--smoke` checks ten models
-with two warm samples and writes only under `.dart_tool/`. The full run writes
-[`editor.json`](../research/benchmarks/editor.json), including the runtime commit,
-harness hashes, raw samples, diagnostic ranges, rename edits and resulting source.
-The protocol is documented by the [Dart 3.13.3 SDK](https://github.com/dart-lang/sdk/blob/3.13.3/pkg/analysis_server/tool/lsp_spec/README.md).
-
-On Apple M3 Max / Dart 3.13.3, warm completion p50 / p95 in **milliseconds**:
-
-| Models | Table entries | Schema Record fields | Query fields | Create arguments | Projected Record fields |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 10 | 0.809 / 1.117 | 0.439 / 0.511 | 0.484 / 1.126 | 0.238 / 0.293 | 0.518 / 0.590 |
-| 100 | 1.497 / 2.812 | 0.428 / 0.492 | 0.484 / 0.559 | 0.250 / 0.315 | 0.568 / 0.600 |
-| 1000 | 11.572 / 17.094 | 0.705 / 0.788 | 0.780 / 0.850 | 0.226 / 0.307 | 1.330 / 2.863 |
-
-Each cell uses twenty unchanged-document requests after two unrecorded warmups;
-quantiles use nearest rank. These numbers include client transport/JSON handling
-but exclude editor UI/plugin rendering. Dependency installation is offline and
-outside timing; shared SDK/pub/OS caches are not cleared. They are local protocol
-measurements, not a ranking against another ORM or declaration frontend.
-
-Warm completion excludes opening/editing and analysis readiness. Initial server
-startup plus project analysis took 0.311 / 0.487 / 3.405 seconds respectively. At
-1000 models, the query-field probe waited 128.488 ms for a diagnostic after opening
-the incomplete expression, then its first completion took 4.109 ms. The schema
-field probe waited 165.844 ms. The report separates these observations from warm
-samples; they must not be described as sub-millisecond edit-to-suggestion latency.
-
-All fifteen probe shapes returned their required labels. A two-field named Record
-projection offered `id` and `title` but did not offer the unselected `score` or
-`status`. Each scale also checked four deliberate type errors: create input,
-predicate value, scalar result assignment and access to an unselected field. Each
-diagnostic must match both its code and the current token's exact source range.
-Changes are serialized because this SDK omits diagnostic document versions. A
-fresh diagnostic clears the repaired client error. A separate CLI analysis checks
-the final edited consumer, rather than treating an absent notification as success.
-
-The language-symbol rename results are the same at all three scales:
-
-| Declaration | Observed result |
-| --- | --- |
-| Named Record field | Both prepare and rename return `null`; unavailable |
-| Primary-constructor class field | Declaration and typed member reference updated |
-| Class-based table field | Dart field and typed reference updated; SQL column string retained |
-| Record typedef name | Declaration and both type references updated; separate Record alias retained |
-
-These are language-symbol probes. They do not compare three ORM authoring
-frontends generating identical APIs. Renames use a fresh server after the error
-probes. A subsequent [recovery capture](../research/validation/editor-recovery.json)
-reproduces the same-session failure using `dart run tool/benchmark_editor.dart
---same-session`: at ten models, five completion probes, four exact-code/range
-diagnostics and their repair finish, then `textDocument/rename` for the primary
-constructor field times out after 60 seconds. The process exits nonzero before
-attempting the larger scales; the [original log](../research/validation/editor-recovery.log)
-is retained. `--smoke` on the same harness restarts the server before rename and
-completes the class/table/alias edits plus final analysis. Server PIDs and source
-hashes are recorded. The underlying SDK/harness interaction is not diagnosed;
-this is a reproducible limitation with a checked restart path, not general IDE
-reliability or a claim that the SDK alone caused it.
-
-Record field edits therefore require reviewing declaration/selector references,
-regenerating, and repairing application references with the type checker. Do not
-edit generated files to perform a schema rename. To change only a Dart field name,
-keep its physical column explicit, for example
-`@ColumnName('name') String displayName`. A physical database rename still needs
-the reviewed [migration workflow](migrations.md).
-
-ORM selector rules are a separate diagnostic boundary: the valid Dart expression
-`rows0.index((r) => r.id + 1)` passes CLI analysis but fails generation with a
-direct-field-selector error and source offset. Stock LSP does not supply that ORM
-diagnostic. Keep generation/watch running for schema rule validation.
-
-The separate [declaration-form experiment](authoring.md) now compares Record,
-primary-constructor and table-class inputs for the same four related models.
-It checks identical generated APIs/snapshots across field edits and renames,
-stale-client type errors, schema refactor propagation and original error locations.
-Its class/table adapters are experimental tools, not supported package entrypoints.
+Run these tools independently of other builds with source and SDK versions fixed.
+Read sample counts, conditions and errors in the produced report before comparing
+results. The build/watch regression suites also exercise imported metadata,
+prior-builder output, error recovery and generated-file cleanup.

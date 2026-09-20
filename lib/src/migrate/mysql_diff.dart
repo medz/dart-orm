@@ -1,6 +1,25 @@
-part of '../../migrate.dart';
+import '../../driver.dart' show SqlDialect;
+import '../../schema_model.dart' show Column, IndexSchema, TableSchema;
+import '../../values.dart' show OrmException;
+import 'checks.dart' show checkDelta;
+import 'diff.dart' show SchemaRenames;
+import 'migration.dart' show Migration;
+import 'mysql_schema.dart'
+    show
+        mysqlAddForeign,
+        mysqlColumn,
+        mysqlCopy,
+        mysqlCreateTable,
+        mysqlForeignName,
+        mysqlPhysicalTable,
+        mysqlUniqueName;
+import 'schema.dart' show checkDefinition, sameStorage;
+import 'snapshot.dart'
+    show SchemaSnapshot, columnJson, foreignKeyJson, indexJson;
+import 'sql_utils.dart' show migrationHash, quoteIdentifier;
+import 'step.dart' show CheckedTableSql, MigrationStep;
 
-Migration _mysqlDiff(
+Migration mysqlDiff(
   String id, {
   required SqlDialect dialect,
   required SchemaSnapshot from,
@@ -17,10 +36,10 @@ Migration _mysqlDiff(
     );
   }
   final state = {
-    for (final table in from.tables) table.name: _mysqlPhysicalTable(table),
+    for (final table in from.tables) table.name: mysqlPhysicalTable(table),
   };
   final target = {
-    for (final table in to.tables) table.name: _mysqlPhysicalTable(table),
+    for (final table in to.tables) table.name: mysqlPhysicalTable(table),
   };
   final steps = <MigrationStep>[];
   void validateNames(
@@ -69,7 +88,7 @@ Migration _mysqlDiff(
     if (after != null) state[after.name] = after;
   }
 
-  bool same(Object? a, Object? b) => _hash(a) == _hash(b);
+  bool same(Object? a, Object? b) => migrationHash(a) == migrationHash(b);
   bool columnChanges(String table, List<String> columns) {
     final old = state[table], next = target[tableName(table)];
     if (old == null || next == null || tableName(table) != table) return true;
@@ -81,7 +100,7 @@ Migration _mysqlDiff(
       return prior == null ||
           after == null ||
           name != after.name ||
-          !_sameStorage(prior, after);
+          !sameStorage(prior, after);
     });
   }
 
@@ -97,7 +116,7 @@ Migration _mysqlDiff(
               columnChanges(key.target, key.targetColumns) ||
               !next.foreignKeys.any(
                 (candidate) =>
-                    same(_foreignKeyJson(key), _foreignKeyJson(candidate)),
+                    same(foreignKeyJson(key), foreignKeyJson(candidate)),
               ) ||
               !same(
                 state[key.target]?.primaryKey,
@@ -111,9 +130,9 @@ Migration _mysqlDiff(
         .toList();
     if (drop.isNotEmpty) {
       append(
-        'ALTER TABLE ${_quote(before.name)} ${drop.map((key) => 'DROP FOREIGN KEY ${_quote(_mysqlForeignName(before.name, key))}').join(', ')}',
+        'ALTER TABLE ${quoteIdentifier(before.name)} ${drop.map((key) => 'DROP FOREIGN KEY ${quoteIdentifier(mysqlForeignName(before.name, key))}').join(', ')}',
         before,
-        _mysqlCopy(
+        mysqlCopy(
           before,
           foreignKeys: before.foreignKeys
               .where((key) => !drop.contains(key))
@@ -130,32 +149,32 @@ Migration _mysqlDiff(
         'Dropping ${before.name} requires allowDestructive.',
       );
     }
-    append('DROP TABLE ${_quote(before.name)}', before, null);
+    append('DROP TABLE ${quoteIdentifier(before.name)}', before, null);
   }
   for (final entry in renames.tables.entries) {
     final before = state[entry.key]!;
     final changes = [
       for (final key in before.uniqueKeys)
-        'RENAME INDEX ${_quote(_mysqlUniqueName(entry.key, key))} TO ${_quote(_mysqlUniqueName(entry.value, key))}',
-      'RENAME TO ${_quote(entry.value)}',
+        'RENAME INDEX ${quoteIdentifier(mysqlUniqueName(entry.key, key))} TO ${quoteIdentifier(mysqlUniqueName(entry.value, key))}',
+      'RENAME TO ${quoteIdentifier(entry.value)}',
     ];
     append(
-      'ALTER TABLE ${_quote(before.name)} ${changes.join(', ')}',
+      'ALTER TABLE ${quoteIdentifier(before.name)} ${changes.join(', ')}',
       before,
-      _mysqlCopy(before, name: entry.value),
+      mysqlCopy(before, name: entry.value),
     );
   }
   for (final after in target.values) {
     final before = state[after.name];
     if (before == null) {
-      final created = _mysqlCopy(after, foreignKeys: []);
-      append(_mysqlCreateTable(created, dialect), null, created);
+      final created = mysqlCopy(after, foreignKeys: []);
+      append(mysqlCreateTable(created, dialect), null, created);
       continue;
     }
     final names = renames.columns[after.name] ?? const <String, String>{};
     String renamed(String name) => names[name] ?? name;
     final operations = <String>[];
-    final desired = _mysqlCopy(after, foreignKeys: before.foreignKeys);
+    final desired = mysqlCopy(after, foreignKeys: before.foreignKeys);
     final removed = before.columns
         .where(
           (column) => !after.columns.any((c) => c.name == renamed(column.name)),
@@ -172,7 +191,7 @@ Migration _mysqlDiff(
           .where((c) => c.name == renamed(column.name))
           .firstOrNull;
       if (next == null) {
-        operations.add('DROP COLUMN ${_quote(column.name)}');
+        operations.add('DROP COLUMN ${quoteIdentifier(column.name)}');
         continue;
       }
       if (column.generated != next.generated) {
@@ -181,7 +200,7 @@ Migration _mysqlDiff(
           'Identity changes require a reviewed manual migration.',
         );
       }
-      if (!_sameStorage(column, next) && !_mysqlSafeWiden(column, next)) {
+      if (!sameStorage(column, next) && !_mysqlSafeWiden(column, next)) {
         throw OrmException(
           'MIGRATION.CAST',
           '${after.name}.${next.name} requires a reviewed replacement-column/backfill migration.',
@@ -196,10 +215,10 @@ Migration _mysqlDiff(
       }
       if (column.name != next.name) {
         operations.add(
-          'CHANGE COLUMN ${_quote(column.name)} ${_mysqlColumn(next, dialect)}',
+          'CHANGE COLUMN ${quoteIdentifier(column.name)} ${mysqlColumn(next, dialect)}',
         );
-      } else if (!same(_columnJson(column), _columnJson(next))) {
-        operations.add('MODIFY COLUMN ${_mysqlColumn(next, dialect)}');
+      } else if (!same(columnJson(column), columnJson(next))) {
+        operations.add('MODIFY COLUMN ${mysqlColumn(next, dialect)}');
       }
     }
     for (final column in after.columns) {
@@ -213,13 +232,13 @@ Migration _mysqlDiff(
           '${after.name}.${column.name} needs a nullable/defaulted stage and explicit backfill.',
         );
       }
-      operations.add('ADD COLUMN ${_mysqlColumn(column, dialect)}');
+      operations.add('ADD COLUMN ${mysqlColumn(column, dialect)}');
     }
     if (!same(before.primaryKey.map(renamed).toList(), after.primaryKey)) {
       if (before.primaryKey.isNotEmpty) operations.add('DROP PRIMARY KEY');
       if (after.primaryKey.isNotEmpty) {
         operations.add(
-          'ADD PRIMARY KEY (${after.primaryKey.map(_quote).join(', ')})',
+          'ADD PRIMARY KEY (${after.primaryKey.map(quoteIdentifier).join(', ')})',
         );
       }
     }
@@ -227,14 +246,14 @@ Migration _mysqlDiff(
     for (final key in before.uniqueKeys) {
       final mapped = key.map(renamed).toList();
       final i = pendingUnique.indexWhere((k) => same(k, mapped));
-      final oldName = _mysqlUniqueName(after.name, key);
+      final oldName = mysqlUniqueName(after.name, key);
       if (i < 0) {
-        operations.add('DROP INDEX ${_quote(oldName)}');
+        operations.add('DROP INDEX ${quoteIdentifier(oldName)}');
       } else {
-        final nextName = _mysqlUniqueName(after.name, mapped);
+        final nextName = mysqlUniqueName(after.name, mapped);
         if (oldName != nextName) {
           operations.add(
-            'RENAME INDEX ${_quote(oldName)} TO ${_quote(nextName)}',
+            'RENAME INDEX ${quoteIdentifier(oldName)} TO ${quoteIdentifier(nextName)}',
           );
         }
         pendingUnique.removeAt(i);
@@ -242,7 +261,7 @@ Migration _mysqlDiff(
     }
     for (final key in pendingUnique) {
       operations.add(
-        'ADD CONSTRAINT ${_quote(_mysqlUniqueName(after.name, key))} UNIQUE (${key.map(_quote).join(', ')})',
+        'ADD CONSTRAINT ${quoteIdentifier(mysqlUniqueName(after.name, key))} UNIQUE (${key.map(quoteIdentifier).join(', ')})',
       );
     }
     final pendingIndexes = after.indexes.toList();
@@ -253,20 +272,20 @@ Migration _mysqlDiff(
         unique: index.unique,
       );
       final i = pendingIndexes.indexWhere(
-        (candidate) => same(_indexJson(mapped), _indexJson(candidate)),
+        (candidate) => same(indexJson(mapped), indexJson(candidate)),
       );
       if (i < 0) {
-        operations.add('DROP INDEX ${_quote(index.name)}');
+        operations.add('DROP INDEX ${quoteIdentifier(index.name)}');
       } else {
         pendingIndexes.removeAt(i);
       }
     }
     for (final index in pendingIndexes) {
       operations.add(
-        'ADD ${index.unique ? 'UNIQUE ' : ''}INDEX ${_quote(index.name)} (${index.columns.map(_quote).join(', ')})',
+        'ADD ${index.unique ? 'UNIQUE ' : ''}INDEX ${quoteIdentifier(index.name)} (${index.columns.map(quoteIdentifier).join(', ')})',
       );
     }
-    final checks = _checkDelta(before.checks, after.checks, dialect);
+    final checks = checkDelta(before.checks, after.checks, dialect);
     for (final check in checks.removed) {
       if (check.name == null) {
         throw const OrmException(
@@ -275,15 +294,15 @@ Migration _mysqlDiff(
         );
       }
       operations.add(
-        'DROP ${dialect == SqlDialect.mysql ? 'CHECK' : 'CONSTRAINT'} ${_quote(check.name!)}',
+        'DROP ${dialect == SqlDialect.mysql ? 'CHECK' : 'CONSTRAINT'} ${quoteIdentifier(check.name!)}',
       );
     }
     for (final check in checks.added) {
-      operations.add('ADD ${_checkDefinition(check, dialect)}');
+      operations.add('ADD ${checkDefinition(check, dialect)}');
     }
     if (operations.isNotEmpty) {
       append(
-        'ALTER TABLE ${_quote(after.name)} ${operations.join(', ')}',
+        'ALTER TABLE ${quoteIdentifier(after.name)} ${operations.join(', ')}',
         before,
         desired,
       );
@@ -294,13 +313,13 @@ Migration _mysqlDiff(
     final add = after.foreignKeys
         .where(
           (key) => !before.foreignKeys.any(
-            (old) => same(_foreignKeyJson(old), _foreignKeyJson(key)),
+            (old) => same(foreignKeyJson(old), foreignKeyJson(key)),
           ),
         )
         .toList();
     if (add.isNotEmpty) {
       append(
-        'ALTER TABLE ${_quote(after.name)} ${add.map((key) => _mysqlAddForeign(after.name, key)).join(', ')}',
+        'ALTER TABLE ${quoteIdentifier(after.name)} ${add.map((key) => mysqlAddForeign(after.name, key)).join(', ')}',
         before,
         after,
       );

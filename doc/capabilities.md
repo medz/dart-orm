@@ -1,114 +1,101 @@
-# Capability review
+# Capabilities and limits
 
-The acceptance scope comes from the [original design](../research/new-dart-orm-design.md).
-Its common relational lifecycle is implemented in one package. Optional backend
-extensions and untested deployment targets are not implied by a generic driver
-or a successful test on another platform.
+Choose an engine and platform explicitly. The shared query API does not make
+backend behavior identical: connections expose their actual capabilities and
+reject unsupported operations before execution where possible. Refer to
+[progress](https://github.com/medz/dart-orm/blob/main/doc/progress.md) for the revision and platforms most recently verified.
 
 ## Values and physical storage
 
-| Design §5 requirement | Implementation and evidence | Explicit boundary |
+| Value | Supported representation | Boundary |
 | --- | --- | --- |
-| Integer widths and web-safe exact values | `IntegerBits`, integer/BigInt codecs, integer/native/browser checks, catalog metadata and reviewed migrations | Native `int` is signed 64-bit; JS-safe `int` is narrower. BigInt uses exact digits, but SQLite BigInt text does not promise numeric ordering/arithmetic. |
-| Exact decimal | Exact storage, comparisons, keys and generated/imported metadata on all four engines; arithmetic, aggregates/windows and rounding on SQLite/PostgreSQL | MySQL/MariaDB reject operations that can silently lose precision, including arithmetic, SUM, explicit narrowing and decimal set operations. See [engine limits](mysql.md) and [reproductions](../research/mysql-precision-boundaries.md). |
-| Distinct instant/date/time/local timestamp | UTC DateTime, LocalDate/LocalTime/LocalDateTime, explicit temporal precision, native binary decoding, SQLite collations, catalog/import/migration tests and browser transport | An IANA zone name is a separate application value, not an instant or local clock value. Calendar SQL arithmetic and timezone-rule conversion have no typed API. |
-| JSON versus arbitrary objects | SqlJson distinguishes JSON null from SQL NULL; explicit domain codecs validate custom objects, including generated create/result/relationship types | A Dart Map is not an automatic entity mapping. Backend-specific JSON path APIs are extensions. |
-| Stable enum text | EnumValue labels and checked enum codecs; generated/native/negative tests | Native PostgreSQL enums require separate metadata and migration support. |
-| Binary and custom IDs | Uint8List and public const UseCodec declarations, checked domain codecs, generated type failures, native/browser reads/writes/relations | A codec's semantic change is not automatically a DDL change. Custom equality/order must match the declared storage. |
+| Integers | Explicit integer widths and exact BigInt codecs | Native `int` is signed 64-bit; JS-safe `int` is narrower. SQLite stores BigInt as text, which does not provide numeric ordering or arithmetic. |
+| Decimal | Exact storage, comparison, keys and schema metadata on all four engines | SQLite/PostgreSQL support exact arithmetic, aggregates, windows and rounding. MySQL/MariaDB reject operations that can silently lose precision; see [engine limits](https://github.com/medz/dart-orm/blob/main/doc/mysql.md). |
+| Time | UTC `DateTime`, `LocalDate`, `LocalTime`, `LocalDateTime` and explicit temporal precision | An IANA zone name is a separate application value. Calendar SQL arithmetic and timezone-rule conversion have no typed API. |
+| JSON | `SqlJson` distinguishes JSON null from SQL NULL | A Dart Map is not an entity mapping. Backend-specific JSON path operations require explicit SQL. |
+| Enum | Checked enum codecs and stable `EnumValue` text labels | Native PostgreSQL enums need separate metadata and migration support. |
+| Binary and custom IDs | `Uint8List` and public const `UseCodec` declarations | Codec changes do not automatically produce DDL. Domain equality and ordering must match the chosen storage. |
 
-The authoritative contracts and tests are indexed in [types](types.md),
-[decimals](decimals.md) and the [acceptance map](acceptance.md). The design's time
-contract specifies storage distinctions and precise codecs; it does not define a
-timezone database or a calendar SQL function family. Earlier progress notes
-listed those possible extensions as open-ended follow-up work. They remain
-explicitly unimplemented rather than being counted as delivered functionality.
+See [types and codecs](https://github.com/medz/dart-orm/blob/main/doc/types.md) and [decimals](https://github.com/medz/dart-orm/blob/main/doc/decimals.md) for exact conversion,
+precision and nullability rules. Catalog import reads physical metadata without
+sampling rows to guess domain semantics. Ordinary SQLite INTEGER/TEXT cannot
+prove a boolean, enum, timestamp, BigInt or JSON domain. Unsupported column and
+table forms produce review issues. Import does not recreate an entire database.
 
-Catalog import recognizes supported physical representations without sampling
-data to guess semantics. Ordinary SQLite INTEGER/TEXT cannot prove a boolean,
-enum, timestamp, BigInt or JSON domain. Unsupported VARCHAR/arrays/domains and
-unsupported identity/table forms produce explicit issues instead of silently
-changing their meaning. Reviewed annotations/codecs and migrations remain part
-of adopting an existing database; import is not a universal database backup.
+## Queries and execution
 
-## Query and execution contract
-
-| Required family | Evidence and available behavior | Boundary |
+| Operation | Behavior | Boundary |
 | --- | --- | --- |
-| Scalars, Records, DTOs and dynamic selection | `selection_test`, generated/native tests; mappers run only after rows arrive | Dynamic field sets return a dynamic map, not invented static fields. |
-| Conditions, ordering and pagination | Database/type/cursor suites, stable unique tie breakers, explicit NULL order | Offset pages do not provide a snapshot; cursor order needs declared keys. |
-| Joins, grouping/HAVING, subqueries, CTEs, windows, UNION | `test/support/advanced.dart`, set and numeric suites on both backends; SQL scope and aggregate validation | INTERSECT/EXCEPT and arbitrary database functions do not have dedicated typed methods. Parameterized raw/named SQL is the formal extension path. |
-| Relations and relation ordering | Joined or batched to-one; batched collections, composite/self/multiple edges, many-to-many payloads, per-parent limits, any/none/every/count | Order root rows through a typed alias or correlated count. Loaded Record fields are not SQL expressions. No cross-database relation or invisible lazy I/O. |
-| Writes and transactions | Generated create/patch, explicit NULL/default, computed/client defaults, batch/upsert/RETURNING, savepoints, rollback, escaped-session rejection | No graph tracking, implicit flush or distributed transaction. |
-| Failure handling and streaming | Real interruption, unknown commit, bounded acquisition/retries, real cursors and awaited cleanup | An external side effect is not rolled back by SQL or safe to repeat automatically. Web interruption and MySQL/MariaDB streaming/cancellation are unsupported and rejected. |
-| Plans and observations | SQL/column/key/join/batch descriptions and actual acquisition/query/decode events | No general optimizer, result cache or hidden EXPLAIN ANALYZE. Timing scopes are documented, not total CPU attribution. |
+| Selection | Scalar, positional/named Record, DTO and runtime field selection | Mappers execute after rows arrive. Runtime field sets return a dynamic map. |
+| Pagination | Offset/limit and typed keyset cursors with unique tie breakers | Offset pages are not snapshots; nullable cursor fields need explicit NULL ordering. |
+| SQL composition | Joins, grouping/HAVING, subqueries, CTEs, windows and UNION | Scope and aggregate rules are validated. INTERSECT/EXCEPT and arbitrary functions require raw or named SQL. |
+| Relationships | Joined or batched to-one values, batched collections, composite/self keys and per-parent limits | No cross-database navigation or lazy property reads that issue hidden SQL. |
+| Writes | Generated create/patch, omitted versus NULL/default values, expression writes, batches, upsert and RETURNING where supported | No tracked object graph or implicit flush. Computed fields are read-only. |
+| Transactions | Explicit session ownership, savepoints, rollback and bounded opt-in retries | External side effects are not rolled back or made safe to repeat. Distributed transactions are not supported. |
+| Observation | Query descriptions and acquisition/query/decode events | No general optimizer or result cache. Timings have explicit scopes, not total CPU attribution. |
 
-See [query examples](queries.md), [relationships](relations.md),
-[execution](execution.md) and [observability](observability.md).
+Choose `first()`/`single()` when absence is an error and `firstOrNull()`/
+`singleOrNull()` when it is expected. Both single-result variants reject multiple
+rows. See [queries](https://github.com/medz/dart-orm/blob/main/doc/queries.md), [relationships](https://github.com/medz/dart-orm/blob/main/doc/relations.md),
+[execution](https://github.com/medz/dart-orm/blob/main/doc/execution.md) and [observability](https://github.com/medz/dart-orm/blob/main/doc/observability.md).
 
-SQLite cancellation is a build capability, not a promise for every native target.
-The default Linux asset in `sqlite3` 3.6.0 hides `sqlite3_interrupt`; it rejects
-statement cancellation, execution deadlines and bounded retries before SQL starts.
-Ordinary transactions and streaming still work. macOS and Android interruption
-have separate runtime evidence; see [execution](execution.md).
+SQLite interruption depends on its compiled library. The default Linux asset in
+`sqlite3` 3.6.0 does not expose `sqlite3_interrupt`; statement cancellation,
+execution deadlines and bounded retries are rejected before SQL starts. Ordinary
+transactions and cursor streaming still work. Browser SQLite has no synchronous
+statement interruption either.
 
-## Migration and database adoption
+MySQL/MariaDB do not support cursor streaming or cancellation tokens. Their
+statement timeout discards the connection, and a submitted write can have an
+unknown outcome. Do not infer rollback from a timeout or connection loss. See
+[MySQL and MariaDB](https://github.com/medz/dart-orm/blob/main/doc/mysql.md) for transaction and numeric restrictions.
 
-Each history fixes one database engine, even when empty. A saved migration contains
-one step list and only that engine's frozen physical expressions. Mixed histories
-and mismatched connections fail before migration SQL. PostgreSQL migration
-execution requires 18+, and SQLite opening requires 3.35+; arbitrary reviewed SQL
-can require additional capabilities.
+## Migrations and database adoption
 
-MySQL 8.4+ and MariaDB 10.6+ use separate driver identities. Migration execution
-requires MySQL 8.4+ or MariaDB 11.8+. Their DDL can commit implicitly: checked
-before/after table metadata and durable checkpoints support recovery, while
-backfill writes and completion checkpoints
-share a transaction. See [MySQL/MariaDB migrations](mysql-migrations.md). Current
-live acceptance uses MySQL 8.4 and MariaDB 11.8; the MariaDB driver's lower
-connection minimum has not received that full acceptance suite.
+Each history fixes one engine, including an empty history. A saved migration has
+one step list, its reviewed fingerprint and only that engine's frozen expressions.
+Mixed histories and mismatched connections fail before migration SQL. Changing a
+connection URL does not translate a history.
 
-Saved migrations contain immutable snapshots, operations, predecessor checksums
-and explicit renames/conversions. Tests exercise fresh replay, older-version
-upgrades, safe SQLite rebuilds, PostgreSQL constraint/catalog behavior, baseline,
-drift, version compatibility, durable backfills and nontransactional recovery.
-The migration CLI and real build_runner process workflows test application-facing
-commands, including failure repair and stale-output cleanup.
+SQLite opening requires 3.35+ and PostgreSQL migration execution requires 18+.
+MySQL connections and migrations require 8.4+; MariaDB connections require 10.6+
+and migrations require 11.8+. The MariaDB driver's lower connection minimum has
+not received the full 11.8 validation matrix. Reviewed SQL can require additional
+server features beyond these minimum gates.
 
-Unmanaged views, triggers, specialized indexes, policies and table options require
-review. PostgreSQL policy reports now retain roles, command, mode and expressions,
-plus enabled/forced row-security flags. Actual triggers are created and exercised
-after read-only import/verification on both backends. Baseline verifies declared
-schema facts and returns unmanaged metadata; it does not recreate or certify
-grants, every extension, authorization behavior or the whole database environment.
+MySQL/MariaDB DDL can commit implicitly. Checked before/after metadata and durable
+checkpoints support recovery; backfill writes and their completion checkpoints
+share a transaction. See [migration recovery](https://github.com/medz/dart-orm/blob/main/doc/mysql-migrations.md). SQLite rebuilds
+and PostgreSQL DDL use their respective transactional behavior.
 
-## Platform and tooling scope
+Renames and conversions require explicit decisions. Catalog verification checks
+declared schema facts and reports unmanaged objects such as views, triggers,
+specialized indexes, policies and table options. PostgreSQL reports include policy
+roles, command, mode and expressions plus enabled/forced row-security flags.
+Baseline does not certify grants, every extension, authorization behavior or the
+entire database environment. See [migrations](https://github.com/medz/dart-orm/blob/main/doc/migrations.md) and [importing](https://github.com/medz/dart-orm/blob/main/doc/importing.md).
 
-Native SQLite and PostgreSQL are checked against SQLite 3.53.4/PostgreSQL 18.4.
-MySQL 8.4 and MariaDB 11.8 have separate live driver, typed query, import,
-transaction and migration-recovery suites.
-Browser reports cover real Chrome JS and Dart WASM, worker memory/OPFS storage,
-reopen, interruption recovery, upgrade and watch. Android Flutter checks cover
-actual debug-to-AOT APK replacement and independent-process restart. These do
-not certify every database version, browser, physical device, iOS or macOS Flutter.
-Current source/validation revisions are recorded in [progress](progress.md).
-Each platform capture is tied to its recorded source revision; consult the latest
-acceptance record before relying on a historical platform result.
+## Connections, platforms and tools
 
-Driver configuration is typed and explicit. PostgreSQL reuses its driver's pool,
-offers borrowed-pool ownership and certificate-verifying TLS by default; SQLite
-owns one background connection behind a unified native/browser entrypoint.
-Memory and named persistent settings are shared; native paths remain explicit.
-Flutter Web bundles default assets, with optional browser resource overrides. URL options are
-not silently merged with typed settings. MySQL/MariaDB own one queued physical
-connection each, with certificate-verifying TLS by default and explicit capability
-limits. Unsupported transports, serverless sessions, replica routing and additional
-connection-pool variants need their own adapters and verification.
+PostgreSQL uses its driver's pool and supports borrowed-pool ownership. SQLite
+owns one background connection, with native and browser implementations behind a
+single public entrypoint. MySQL/MariaDB own one queued physical connection each.
+Server drivers verify TLS certificates by default; typed settings and URL options
+are not silently combined.
 
-Generation and completion measurements cover 10/100/1000 models. The declaration
-experiment normalized three input forms to identical generated APIs. The current
-package supports ordinary immutable model classes with nominal results, alongside
-Record declarations; see [authoring](authoring.md). Named Record field rename is unavailable
-in the checked SDK. The captured same-session class rename timeout has a checked
-server-restart path; it is not described as a working general IDE workflow.
-Runtime cost reports compare identical SQL/driver/result workloads, including a
-controlled TCP delay, with their sampling and allocation limits stated explicitly.
+SQLite memory and persistent options share one API. Native applications choose
+an application-owned path; browsers choose a named OPFS database. Flutter Web
+bundles matching worker/WASM resources. [SQLite Web](https://github.com/medz/dart-orm/blob/main/doc/sqlite-web.md) documents
+resource overrides, secure-context requirements and exclusive ownership.
+
+The release baseline covers native SQLite/PostgreSQL, real MySQL 8.4/MariaDB 11.8,
+Chrome JS/WASM, Flutter Web release builds and an Android emulator's debug-to-AOT
+upgrade and process restart. This does not certify every server version, browser,
+physical device, iOS or macOS Flutter. Remote/serverless transports, replica
+routing and alternative pools need their own adapters and validation.
+
+Immutable model classes and Record declarations share the generator; classes
+retain nominal result types. Editor symbol refactoring depends on the Dart SDK.
+Regenerate and analyze after schema edits. [Generation](https://github.com/medz/dart-orm/blob/main/doc/generation.md) describes
+build/watch behavior and editor probes; [performance](https://github.com/medz/dart-orm/blob/main/doc/performance.md) describes
+reproducible cost measurements without implying universal latency guarantees.

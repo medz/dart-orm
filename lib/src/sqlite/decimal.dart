@@ -1,6 +1,8 @@
-part of 'functions.dart';
+import 'package:sqlite3/common.dart' as native;
 
-void _registerDecimals(native.CommonDatabase db) {
+import '../../values.dart';
+
+void registerDecimalFunctions(native.CommonDatabase db) {
   db.createAggregateFunction(
     functionName: 'orm_decimal_avg_v1',
     argumentCount: const native.AllowedArgumentCount(3),

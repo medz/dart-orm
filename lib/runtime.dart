@@ -1,48 +1,36 @@
-/// Raw SQL sessions, transactions and cursor lifetimes without a query builder.
+/// Connection leases, transactions and streaming for parameterized SQL.
+///
+/// Construct [SqlDatabase] with a driver when an application needs raw SQL
+/// without typed queries. The database owns the driver; session and transaction
+/// callbacks borrow connections and must not escape their callback lifetimes.
+///
+/// {@category Execution}
+/// {@canonicalFor database.SqlDatabase}
+/// {@canonicalFor database.SqlDatabaseStreaming}
+/// {@canonicalFor events.QueryOperation}
+/// {@canonicalFor events.QueryEvent}
+/// {@canonicalFor events.AcquisitionEvent}
+/// {@canonicalFor options.TransactionOptions}
+/// {@canonicalFor options.Isolation}
+/// {@canonicalFor options.PostgresTransaction}
+/// {@canonicalFor options.SqliteTransactionMode}
+/// {@canonicalFor options.SqliteTransaction}
+/// {@canonicalFor options.MysqlTransaction}
+/// {@canonicalFor options.MariadbTransaction}
+/// {@canonicalFor transaction.TransactionRetry}
 library;
 
-import 'dart:async';
-import 'dart:math' as math;
-
-import 'driver.dart';
 export 'driver.dart';
-
-part 'src/runtime/database.dart';
-part 'src/runtime/session_connection.dart';
-part 'src/runtime/mysql_transaction.dart';
-part 'src/runtime/options.dart';
-part 'src/runtime/stream.dart';
-part 'src/execution.dart';
-part 'src/transaction.dart';
-
-enum QueryOperation { execute, cursorOpen, cursorFetch, cursorClose }
-
-final class QueryEvent {
-  final QueryOperation operation;
-  final String sql;
-  final int parameterCount;
-  final Duration elapsed;
-  final int? rowCount;
-  final Object? error;
-  const QueryEvent({
-    this.operation = QueryOperation.execute,
-    required this.sql,
-    required this.parameterCount,
-    required this.elapsed,
-    this.rowCount,
-    this.error,
-  });
-}
-
-/// Time until a driver lease is granted or acquisition fails. Includes native
-/// pool wait/connection setup; it does not separate those driver internals.
-final class AcquisitionEvent {
-  final Duration elapsed;
-  final bool reusedConnection;
-  final Object? error;
-  const AcquisitionEvent({
-    required this.elapsed,
-    required this.reusedConnection,
-    this.error,
-  });
-}
+export 'src/runtime/database.dart' show SqlDatabase, SqlDatabaseStreaming;
+export 'src/runtime/events.dart'
+    show QueryOperation, QueryEvent, AcquisitionEvent;
+export 'src/runtime/options.dart'
+    show
+        TransactionOptions,
+        Isolation,
+        PostgresTransaction,
+        SqliteTransactionMode,
+        SqliteTransaction,
+        MysqlTransaction,
+        MariadbTransaction;
+export 'src/runtime/transaction.dart' show TransactionRetry;

@@ -36,7 +36,7 @@ can use the same row class, and a self-join still has separate table occurrences
 Row identity does not determine SQL scope.
 
 Generate with `dart run orm generate lib/schema.dart`, then import the generated
-client and the chosen driver. [Generation](generation.md) describes standalone
+client and the chosen driver. [Generation](https://github.com/medz/dart-orm/blob/main/doc/generation.md) describes standalone
 and build_runner workflows. New projects can start with `dart run orm init
 --database sqlite`; after initialization, `dart run orm generate` reads the typed
 project configuration.
@@ -158,16 +158,3 @@ Class fields support Dart's normal symbol navigation and rename tools.
 Regenerate after edits and repair affected generated-API references; a model
 rename does not promise that an IDE will edit the regenerated client or all its
 consumers automatically.
-
-## Earlier authoring experiment
-
-`dart run tool/compare_authoring.dart` retains the controlled comparison of Record,
-primary-constructor and typed-table-field declarations. Its adapter deliberately
-normalizes all three forms to Records so their output can be compared. It is an
-experiment, not the production class reader.
-
-The historical [report](../research/benchmarks/authoring.json) records sources,
-LSP edits, byte-identical physical snapshots and stale-consumer errors on Dart
-3.13.3. Its measurements establish neither universal brevity nor a generation
-speed ranking. The production generator now reads class parameters directly and
-constructs the declared model type.

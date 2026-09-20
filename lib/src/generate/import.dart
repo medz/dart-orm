@@ -1,19 +1,38 @@
-part of '../generate.dart';
+import 'dart:convert';
+
+import 'package:analyzer/dart/ast/token.dart' show Keyword;
+import 'package:dart_style/dart_style.dart';
+
+import '../../migrate.dart';
+import '../../runtime.dart';
+import 'model.dart';
+import 'source.dart';
 
 /// A catalog fact that needs manual handling. Blocking issues prevent a faithful
 /// declaration of the affected table or relationship; other issues retain objects
 /// which must stay in reviewed, database-specific migrations.
 final class SchemaImportIssue {
+  /// Stable issue category for programmatic handling.
   final String code;
+
+  /// Physical database object affected by this issue.
   final String object;
+
+  /// Database fact that needs review or cannot be represented faithfully.
   final String detail;
+
+  /// Whether the affected declaration or relationship must be omitted.
   final bool blocking;
+
+  /// Describes an import limitation for one physical [object].
   const SchemaImportIssue(
     this.code,
     this.object,
     this.detail, {
     this.blocking = true,
   });
+
+  /// Machine-readable report fields; not an executable schema definition.
   Map<String, Object?> toJson() => {
     'code': code,
     'object': object,
@@ -25,11 +44,22 @@ final class SchemaImportIssue {
 /// Editable declarations, physical-to-Dart names, and a separate review report.
 /// This is not a migration or permission to replace the existing schema.
 final class ImportedSchema {
+  /// Engine whose physical catalog was inspected.
   final SqlDialect dialect;
+
+  /// Physical database schema or namespace containing the imported objects.
   final String schema;
+
+  /// Editable Dart model declarations for supported catalog objects.
   final String dart;
+
+  /// Physical table names mapped to their generated Dart entity names.
   final Map<String, String> entities;
+
+  /// Physical table and column names mapped to Dart field names.
   final Map<String, Map<String, String>> fields;
+
+  /// Catalog features that need review or prevented faithful import.
   final List<SchemaImportIssue> issues;
   ImportedSchema._(
     this.dialect,
@@ -43,7 +73,11 @@ final class ImportedSchema {
         fields.map((k, v) => MapEntry(k, Map<String, String>.unmodifiable(v))),
       ),
       issues = List.unmodifiable(issues);
+
+  /// Whether any unsupported object prevented a faithful declaration.
   bool get hasBlockingIssues => issues.any((i) => i.blocking);
+
+  /// Machine-readable names and review issues, excluding generated Dart source.
   Map<String, Object?> toJson() => {
     'format': 1,
     'dialect': dialect.name,
@@ -102,7 +136,7 @@ Future<ImportedSchema> _importCatalog(
       ? 'main'
       : (await db.execute(
               SqlCommand(
-                _mysqlDialect(db.dialect)
+                isMysqlDialect(db.dialect)
                     ? 'SELECT DATABASE()'
                     : 'SELECT current_schema()',
               ),
@@ -131,7 +165,7 @@ Future<ImportedSchema> _importCatalog(
     SqlCommand(
       db.dialect == SqlDialect.sqlite
           ? "SELECT name, type, sql FROM main.sqlite_schema WHERE type IN ('table', 'view') AND substr(name, 1, 7) <> 'sqlite_' ORDER BY name"
-          : _mysqlDialect(db.dialect)
+          : isMysqlDialect(db.dialect)
           ? "SELECT TABLE_NAME, TABLE_TYPE, '' FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME"
           : '''SELECT c.relname, c.relkind::text,
         CASE WHEN c.relkind IN ('v', 'm') THEN pg_get_viewdef(c.oid) ELSE '' END
@@ -139,7 +173,7 @@ Future<ImportedSchema> _importCatalog(
         WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p', 'v', 'm', 'f') ORDER BY c.relname''',
     ),
   );
-  final inventoryRows = _mysqlDialect(db.dialect)
+  final inventoryRows = isMysqlDialect(db.dialect)
       ? [
           for (final row in inventory.rows)
             [
@@ -244,7 +278,7 @@ Future<ImportedSchema> _importCatalog(
           object,
           extra.definition,
           blocking:
-              _mysqlDialect(db.dialect) &&
+              isMysqlDialect(db.dialect) &&
               {'column', 'table options'}.contains(extra.kind),
         ),
       );
@@ -282,7 +316,7 @@ Future<ImportedSchema> _importCatalog(
           ),
         );
       }
-      if (_mysqlDialect(db.dialect) &&
+      if (isMysqlDialect(db.dialect) &&
           column.storageType.startsWith('DATETIME')) {
         issues.add(
           SchemaImportIssue(
@@ -293,7 +327,7 @@ Future<ImportedSchema> _importCatalog(
           ),
         );
       }
-      if (_mysqlDialect(db.dialect) && column.storageType == 'TINYINT(1)') {
+      if (isMysqlDialect(db.dialect) && column.storageType == 'TINYINT(1)') {
         issues.add(
           SchemaImportIssue(
             'IMPORT.BOOLEAN_SEMANTICS',
@@ -313,17 +347,17 @@ Future<ImportedSchema> _importCatalog(
         );
       }
       if (column.generated && column.computed == null) {
-        if (_mysqlDialect(db.dialect) &&
+        if (isMysqlDialect(db.dialect) &&
             {'SMALLINT', 'INT', 'BIGINT'}.contains(column.storageType) &&
             !column.nullable &&
-            _same(info.primaryKey, [column.name])) {
+            sameStrings(info.primaryKey, [column.name])) {
           identities.add(column.name);
         } else if (db.dialect == SqlDialect.postgres &&
             modes[column.name]![1] == 'd' &&
             modes[column.name]![2] == '' &&
             {'SMALLINT', 'INTEGER', 'BIGINT'}.contains(column.storageType) &&
             !column.nullable &&
-            _same(info.primaryKey, [column.name])) {
+            sameStrings(info.primaryKey, [column.name])) {
           identities.add(column.name);
         } else {
           issues.add(
@@ -371,7 +405,7 @@ Future<ImportedSchema> _importCatalog(
 // Match physical types exactly. In particular, NUMERIC does not prove BigInt,
 // and SQLite TEXT does not prove an application DateTime, enum, or JSON codec.
 (String, String?)? _importType(ColumnInfo column, SqlDialect dialect) {
-  if (_mysqlDialect(dialect)) return _importMysqlType(column);
+  if (isMysqlDialect(dialect)) return _importMysqlType(column);
   return switch ((
     dialect,
     column.temporalPrecision == null
@@ -450,7 +484,7 @@ String _importCap(String name) => name[0].toUpperCase() + name.substring(1);
 final class _ImportNames {
   final used = <String>{
     ...Keyword.keywords.keys,
-    ..._databaseMembers,
+    ...databaseMembers,
     'column',
     'readColumn',
     'appSchema',
@@ -561,7 +595,7 @@ ImportedSchema _importDeclarations(
     b.writeln('\nfinal class ${_importCap(entity)}Row({');
     for (final c in info.columns) {
       final type = _importType(c, dialect)!;
-      b.writeln('@ColumnName(${_literal(c.name)})');
+      b.writeln('@ColumnName(${dartLiteral(c.name)})');
       if (c.integerBits != null && c.integerBits != 64) {
         b.writeln('@IntegerBits(${c.integerBits})');
       }
@@ -575,12 +609,12 @@ ImportedSchema _importDeclarations(
       }
       if (generated[info.name]!.contains(c.name)) b.writeln('@Id.generated()');
       if (c.declarationDefaultSql != null) {
-        b.writeln('@Default.sql(${_literal(c.declarationDefaultSql!)})');
+        b.writeln('@Default.sql(${dartLiteral(c.declarationDefaultSql!)})');
       }
       if (c.computed != null) {
         final computed = c.declarationComputed!;
         b.writeln(
-          '@Computed.sql(${_literal(computed.expression(dialect))}, storage: ComputedStorage.${computed.storage.name})',
+          '@Computed.sql(${dartLiteral(computed.expression(dialect))}, storage: ComputedStorage.${computed.storage.name})',
         );
         issues.add(
           SchemaImportIssue(
@@ -597,7 +631,7 @@ ImportedSchema _importDeclarations(
       );
     }
     b.writeln(
-      '});\nfinal $entity = entity<${_importCap(entity)}Row>(table: ${_literal(info.name)});',
+      '});\nfinal $entity = entity<${_importCap(entity)}Row>(table: ${dartLiteral(info.name)});',
     );
   }
   String selector(String table, List<String> columns) {
@@ -628,7 +662,7 @@ ImportedSchema _importDeclarations(
       constraint(
         'index',
         index.columns,
-        extra: ', name: ${_literal(index.name)}, unique: ${index.unique}',
+        extra: ', name: ${dartLiteral(index.name)}, unique: ${index.unique}',
       );
     }
     final checks = info.checks.toList()
@@ -640,8 +674,8 @@ ImportedSchema _importDeclarations(
     for (final check in checks) {
       final symbol = names.take(check.name ?? '${entity}Check');
       b.writeln(
-        'final $symbol = $entity.check(${_literal(check.expression)}, '
-        'name: ${check.name == null ? 'null' : _literal(check.name!)});',
+        'final $symbol = $entity.check(${dartLiteral(check.expression)}, '
+        'name: ${check.name == null ? 'null' : dartLiteral(check.name!)});',
       );
     }
     if (checks.isNotEmpty) {
@@ -669,7 +703,7 @@ ImportedSchema _importDeclarations(
             ...target.uniqueKeys,
             for (final i in target.indexes)
               if (i.unique) i.columns,
-          ].any((k) => _same(k, key.targetColumns)) ||
+          ].any((k) => sameStrings(k, key.targetColumns)) ||
           key.columns.asMap().entries.any(
             (entry) =>
                 _importType(
@@ -710,7 +744,7 @@ ImportedSchema _importDeclarations(
       fieldNames[info.name]!.used.add(relation);
       final inverse = fieldNames[key.target]!.take('${entity}Rows');
       b.writeln(
-        'final $relation = $entity.key(${selector(info.name, key.columns)}).references(${entities[key.target]}.key(${selector(key.target, key.targetColumns)}), inverse: ${_literal(inverse)}, onDelete: .$action);',
+        'final $relation = $entity.key(${selector(info.name, key.columns)}).references(${entities[key.target]}.key(${selector(key.target, key.targetColumns)}), inverse: ${dartLiteral(inverse)}, onDelete: .$action);',
       );
     }
   }
