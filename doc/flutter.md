@@ -1,59 +1,90 @@
-# Native Flutter
+# Flutter integration
 
-The standalone runtime has a fresh [Android acceptance capture](../research/validation/standalone-flutter.json)
-at `7a54553`: 4/17/11 checks pass across installation, AOT upgrade and process
-restart. See the [current validation record](../research/validation/standalone-redesign.md).
-The detailed historical capture below remains tied to its original revision.
+Use `package:orm/sqlite.dart` for both native Flutter and Flutter Web. SQLite runs
+in a background isolate on native platforms and a worker in the browser. Generated
+models, queries, transactions and saved Dart migrations use the same public API.
 
-[`example/flutter`](../example/flutter/README.md) is an actual Android application
-using generated ORM APIs and `SqliteOptions.file` in the app's private files
-directory. SQLite runs in the native driver's worker isolate. The small Android
-method channel supplies the directory, launch phase, API level and process ID;
-all database operations and migration checks run in Dart through the public ORM.
+## Open and own a database
 
-The current example statically imports fixed Dart migrations and their recorded
-fingerprints. Migration JSON assets and runtime asset loading have been removed.
-The current APK capture verifies this workflow at source `85c4e42`.
+Choose the storage location at the application boundary, then pass the database
+or transaction session to the code that needs it:
 
-The [captured report](../research/validation/flutter.json) records Flutter 3.47.4
-stable, Dart 3.13.3 and SQLite 3.53.4 on an Android API 35 arm64 emulator. It includes
-the exact framework/engine revisions, APK hashes, source hashes and device build.
+```dart
+import 'package:orm/sqlite.dart';
 
-| Installed application | Checks | Verified behavior |
-| --- | --- | --- |
-| Version code 1, debug APK | 4 | Empty database, initial migration, generated transactional inserts, close and read-only reopen |
-| Version code 2, release AOT APK, `adb install -r` | 17 | Existing file/history, only the pending migration, live catalog, original values/microseconds, new default, generated relations, committed watch refresh, rollback without persistence/notification, typed patch, worker progress, native cancellation and reuse, application version and read-only reopen |
-| Same version 2 APK after force-stop/relaunch | 11 | New process, retained database/rows/relations/history, no migration replay, initial watch, compatibility and read-only reopen |
+Future<Database<Sqlite>> openDatabase({String? nativePath}) => sqlite(
+  SqliteOptions.persistent('notes', nativePath: nativePath),
+);
+```
 
-These are 32 assertions across three phases, not 32 independent platform scenarios.
-The host independently checks installed APK version codes, distinct live process
-IDs, an unchanged database path and identical final rows/history after restart.
-The old physical `body` column remains in place when Dart exposes it as `text`.
-The upgrade adds a defaulted `done` column and a comments table without dropping
-or rebuilding the existing notes table.
+Supply an application-owned file path on native platforms. The ORM does not choose
+a documents directory or require a Flutter path plugin. The
+[Android example](https://github.com/medz/dart-orm/blob/main/example/flutter/README.md) obtains its private files directory
+through a small platform channel; applications can use their existing directory
+provider. The browser uses the persistent name for origin-private file storage
+(OPFS) and does not use the native path.
 
-During the final captured release run, summing a recursive sequence of two million
-integers took 335,844 microseconds. The main isolate's 16 ms timer advanced 20
-times and its Flutter animation listener advanced 12 times during that awaited SQL
-operation. The report's `flutterFrames` field counts those animation frame
-callbacks; it is not a raster timing or delivered-FPS measurement. This establishes
-that database work does not occupy the UI isolate for the entire query. It does
-not establish a frame-rate target or physical-device performance.
+Use `SqliteOptions.memory()` for temporary databases. A database handle owns its
+connection and worker; keep it at the appropriate application or feature lifetime,
+then await `close()` when that owner shuts down. Do not open a new handle for each
+widget rebuild or retain a transaction session after its callback returns.
 
-![Restarted release application](../research/validation/flutter-android.png)
+## Bundle migrations
 
-Build and run commands are in the [example instructions](../example/flutter/README.md).
-`tool/test_flutter.dart` requires a dedicated emulator and refuses an already
-installed acceptance application. Both APKs use the example's debug signing key
-to permit a real upgrade with retained data. Reports travel through bounded log
-chunks; Android's Flutter log sink truncated larger chunks during development,
-so the application uses 700-character payloads. The host rejects incomplete or
-conflicting chunks and waits for the activity transition before its screenshot.
+Statically import the saved migration registry and apply its checked history
+before issuing application queries:
 
-This verifies Android arm64 on the recorded emulator. Physical devices, iOS and
-macOS Flutter need their own acceptance runs. Process force-stop/relaunch does not
-simulate sudden power loss. Watch refreshes cover writes made through the same
-database instance; external writes still need [explicit invalidation](watch.md).
-The [native Dart migration regression](../research/validation/dart-migrations.json)
-and 19 scenarios in each Chrome JS/WASM run are separate evidence. The compiled
-APK histories have fixed fingerprints and need no schema or migration JSON assets.
+```dart
+import 'package:orm/migrate.dart';
+import 'migrations/migrations.g.dart';
+
+await Migrator(db.sql).apply(migrationHistory.checked);
+```
+
+Migration definitions and recorded fingerprints compile into the application.
+They do not load JSON assets or import current model classes. Keep previously
+shipped migration files immutable and add a reviewed migration for each physical
+schema change. See [migrations](https://github.com/medz/dart-orm/blob/main/doc/migrations.md) for version compatibility, catalog
+verification and recovery rules.
+
+## Build for the web
+
+Flutter Web bundles the package's matching worker and WASM resources automatically.
+There is no separate ORM plugin or application asset declaration to maintain.
+Normal Flutter commands work:
+
+```sh
+flutter run -d chrome
+flutter build web
+flutter build web --wasm
+```
+
+Serve the result from a secure browser context. Persistent storage requires OPFS
+and an exclusive owner; unsupported storage fails explicitly. Deployment base
+paths, content security policy, advanced resource overrides and browser limits are
+covered in [SQLite Web](https://github.com/medz/dart-orm/blob/main/doc/sqlite-web.md).
+
+Hot reload retains application state. Release tests do not establish that Flutter
+Web hot restart always releases abandoned JS resources. Close a live OPFS session
+or refresh the page when restarting. Query subscriptions cover known committed
+writes; another tab or independent connection needs [explicit invalidation](https://github.com/medz/dart-orm/blob/main/doc/watch.md).
+
+## Verify upgrades and lifecycle
+
+The repository [Flutter example](https://github.com/medz/dart-orm/blob/main/example/flutter/README.md) includes native and
+browser runners. Its Android workflow installs a legacy debug APK, upgrades it to
+a release AOT APK with retained application data, then force-stops and reopens it
+in another process. Assertions cover fixed migration history, preserved rows,
+new defaults and relationships, generated writes, rollback, subscriptions,
+read-only reopening, worker progress and supported cancellation.
+
+Run `tool/test_flutter.dart` with a dedicated emulator and the two built APKs as
+shown in the example instructions. It refuses an existing acceptance installation
+and writes reports, logs and a screenshot under `.dart_tool/flutter/`. The
+Web runner is `dart run tool/test_flutter_web.dart /absolute/path/to/flutter`.
+
+Animation and timer progress while SQL is running checks worker separation. It
+is not a frame-rate measurement. Emulator process restart does not simulate
+power loss, and Android checks do not certify iOS, macOS Flutter or physical
+devices. [Progress](https://github.com/medz/dart-orm/blob/main/doc/progress.md) records the tested revision and current validation
+status; [capabilities](https://github.com/medz/dart-orm/blob/main/doc/capabilities.md) describes driver-specific limits.

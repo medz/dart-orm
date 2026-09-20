@@ -8,7 +8,7 @@ after reading the selected columns. `(u.id, u.email).row` returns a positional
 `query.map(...)` maps the already selected Dart result. It does not create SQL
 columns, and its properties are not usable in SQL filters or ordering.
 
-Run the [cookbook](../example/queries.dart) with `dart run example/queries.dart`.
+Run the [cookbook](https://github.com/medz/dart-orm/blob/main/example/queries.dart) with `dart run example/queries.dart`.
 It checks nine combined query/schema scenarios on an in-memory SQLite database.
 Set `ORM_EXAMPLE_POSTGRES` to a disposable local PostgreSQL URL to run the same
 checks there. That example explicitly disables TLS for local development, creates
@@ -34,11 +34,22 @@ An empty `isIn([])` is false. Other NULL-containing membership expressions retai
 SQL's three-valued logic, not Dart collection semantics. Values are bound as
 parameters. `like` treats `%` and `_` as SQL wildcards.
 
-`get()` returns a list, `first()` returns the first value or null, and `single()`
-requires exactly one result. `count()` and `exists()` issue dedicated SQL. Add
-explicit ordering when the first row or page must be deterministic. Use
-[keyset cursors](#keyset-pagination) for changing large datasets;
-`skip`/`take` provide offset/limit pagination.
+Choose the terminal operation that expresses the expected result count:
+
+| Operation | Empty result | Multiple results |
+| --- | --- | --- |
+| `get()` | Empty list | All selected rows |
+| `first()` | Throws | First selected value |
+| `firstOrNull()` | `null` | First selected value |
+| `single()` | Throws | Throws |
+| `singleOrNull()` | `null` | Throws |
+
+A nullable scalar selection can itself contain `null`; a nullable terminal does
+not distinguish that value from an absent row. Select a Record containing a
+non-null key when the distinction matters. `count()` and `exists()` issue
+dedicated SQL. Add explicit ordering when the first row or page must be
+deterministic. Use [keyset cursors](#keyset-pagination) for changing large
+datasets; `skip`/`take` provide offset/limit pagination.
 
 ## Keyset pagination
 
@@ -70,7 +81,7 @@ ordering do not have the required table-key proof and are rejected.
 ## Join and order by related fields
 
 Use a typed alias when a related field participates in root ordering or a flat
-projection. This example uses the [generated example schema](../example/schema.dart):
+projection. This example uses the [generated example schema](https://github.com/medz/dart-orm/blob/main/example/schema.dart):
 
 ```dart
 final author = usersTable.alias();
@@ -90,7 +101,7 @@ be reused across unrelated query scopes or referenced before their join.
 To order by a collection count, use
 `db.users.orderBy((u) => [u.posts.count().desc(), u.id.asc()])`. This compiles a
 correlated count without loading posts. Normal nested results still use
-[relationship selections](relations.md) and their explicit loading strategies.
+[relationship selections](https://github.com/medz/dart-orm/blob/main/doc/relations.md) and their explicit loading strategies.
 
 ## Grouping, subqueries, CTEs and windows
 
@@ -122,7 +133,7 @@ to the outer query's fields through an explicitly captured expression. Queries
 from different database/transaction objects cannot be combined.
 
 For SQL beyond these typed operations, use parameterized raw expressions or
-[checked named SQL](named-sql.md). Raw fragments are trusted SQL supplied by the
+[checked named SQL](https://github.com/medz/dart-orm/blob/main/doc/named-sql.md). Raw fragments are trusted SQL supplied by the
 application; do not interpolate user input into them.
 
 ## UNION and UNION ALL
@@ -225,4 +236,4 @@ parsed exactly, with overflow or fractional values rejected rather than rounded
 through a double. On `int`/`double` expressions, `average()` returns an approximate
 `double?`. On `Decimal` expressions, `average(scale: ..., rounding: ...)` returns
 an exact `Decimal?` rounded once to the requested scale, including when the total
-would overflow. See [decimal arithmetic and averages](decimals.md).
+would overflow. See [decimal arithmetic and averages](https://github.com/medz/dart-orm/blob/main/doc/decimals.md).

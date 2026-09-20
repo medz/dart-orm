@@ -5,7 +5,7 @@ import 'src/build_fixture.dart';
 
 Future<void> main(List<String> args) async {
   final output = args.isEmpty
-      ? 'research/benchmarks/generation.json'
+      ? '.dart_tool/benchmarks/generation.json'
       : args.single;
   final versions = await packageVersions();
   final results = <Map<String, Object?>>[];

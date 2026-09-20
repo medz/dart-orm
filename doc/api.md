@@ -1,15 +1,35 @@
-# API and mental model
+# Choose an entrypoint
 
 Start with an immutable Dart class, generate its client, choose a database entrypoint,
 and use the generated table getters. Each query belongs to that database view.
 Migrations have a separate, fixed history for the chosen engine.
+
+For an application, import its generated client and one database entrypoint:
+
+```dart
+import 'package:my_app/schema.orm.dart';
+import 'package:orm/sqlite.dart';
+
+final db = await sqlite(const SqliteOptions.file('app.sqlite'));
+try {
+  final tasks = await db.tasks.where((t) => t.done.eq(false)).get();
+  print(tasks);
+} finally {
+  await db.close();
+}
+```
+
+The database owns its resources until `close()` completes. PostgreSQL's
+`postgres(options)` creates a lazy pool synchronously; it first connects when
+an operation acquires a connection. The other connection helpers return futures
+that complete after opening and validating their connection.
 
 ## Imports
 
 SQLite uses `sqlite.dart` on native platforms and the web. `SqliteOptions.memory()`
 is portable. `persistent(name, nativePath: ...)` uses the native path or the named
 browser database. Flutter bundles its browser resources automatically; see
-[SQLite Web setup](sqlite-web.md). Platform transports are internal.
+[SQLite Web setup](https://github.com/medz/dart-orm/blob/main/doc/sqlite-web.md). Platform transports are internal.
 
 | Module or use | Import | Purpose |
 | --- | --- | --- |
@@ -39,6 +59,8 @@ query builder. `migrate.dart` uses raw sessions and physical metadata without
 model declarations or generated query code. None of these runtime/schema imports
 pull in the analyzer, build system or a concrete database adapter. `sqlite.dart`
 selects its platform implementation; each server engine has its own options.
+MySQL and MariaDB entrypoints each expose their own driver and connection options.
+Import public library paths; files under `lib/src/` are implementation details.
 The single package still declares tooling dependencies for its CLI and builders;
 `pub get` resolves them. This import boundary avoids runtime initialization and
 compilation dependencies, not the dependency-download cost of one package.
@@ -92,15 +114,27 @@ named Record or DTO. A Dart mapper does not become a SQL expression. Runtime
 `alias.optional(selection)` checks that alias's presence. It does not prove another
 left-joined alias exists. Give each optional alias its own guard, or use nullable
 expressions. Relationships follow the same rule: `one()` can be absent, `required()`
-checks presence, and `many()` loads a collection. [Relationship execution](relations.md)
+checks presence, and `many()` loads a collection. [Relationship execution](https://github.com/medz/dart-orm/blob/main/doc/relations.md)
 documents joins, batched queries and consistency boundaries.
 
 ## Preparing and executing
 
 `where`, `select`, `orderBy`, `take`, `skip` and `map` return new descriptions.
 Repeated `where` adds predicates; `orderBy`, `take` and `skip` replace their own
-settings. `compile()`/`inspect()` perform no I/O. `get()`/`first()`/`single()` execute
-reads; a stream acquires a cursor when listened to.
+settings. `compile()`/`inspect()` perform no I/O. A stream acquires a cursor when
+listened to. Choose the read operation by the expected result:
+
+| Operation | Empty result | One row | Multiple rows |
+| --- | --- | --- | --- |
+| `get()` | Empty list | List of one | List of all |
+| `first()` | Cardinality error | The row | First row |
+| `firstOrNull()` | null | The row | First row |
+| `single()` | Cardinality error | The row | Cardinality error |
+| `singleOrNull()` | null | The row | Cardinality error |
+
+A selected SQL NULL still counts as a row. Strict reads return that null when
+their result type allows it. Use a Record projection if an optional scalar read
+must distinguish an absent row from a row containing null.
 
 Generated `create(...)` and `patch(...)` execute immediately. `insert(...)`,
 `insertMany(...)`, `update(...)` and `delete()` prepare mutations; call `execute()`
@@ -111,7 +145,7 @@ constructed. Re-executing the prepared insert reuses those values.
 field, and `.defaultValue()` requests the database default. An empty update is an
 error. `RETURNING` returns scalar SQL projections; query relationships afterward.
 For statement deadlines or cancellation, use the prepared mutation's execution
-options. [Defaults](defaults.md) and [execution](execution.md) specify the limits.
+options. [Defaults](https://github.com/medz/dart-orm/blob/main/doc/defaults.md) and [execution](https://github.com/medz/dart-orm/blob/main/doc/execution.md) specify the limits.
 
 ## Connection and transaction ownership
 

@@ -45,8 +45,8 @@ Imported types, extension types, public record aliases and nested generic types
 retain qualified names in generated code. Two different libraries may both
 declare `Email`. Output can be generated into a different directory.
 
-See the complete [domain fixture](../test/support/codecs/schema.dart) and its
-[types](../test/support/codecs/types.dart). `Codec.map` remains available when
+See the complete [domain fixture](https://github.com/medz/dart-orm/blob/main/test/support/codecs/schema.dart) and its
+[types](https://github.com/medz/dart-orm/blob/main/test/support/codecs/types.dart). `Codec.map` remains available when
 constructing table definitions directly at runtime.
 
 ## Enums
@@ -158,7 +158,7 @@ normal reviewed migration diff/conversion workflow.
 Storage semantics still belong to each database. In particular, SQLite `bigint`
 text retains exact digits but does not provide numeric text ordering/arithmetic.
 Native enum types remain a backend extension. Browser numeric limits and tested
-transport are described in [SQLite web](sqlite-web.md). Use `Decimal` for exact
+transport are described in [SQLite web](https://github.com/medz/dart-orm/blob/main/doc/sqlite-web.md). Use `Decimal` for exact
 decimal data.
 
 ## UTC instants
@@ -193,8 +193,7 @@ on native Dart, not JavaScript or browser storage.
 Native drivers advertise `Capabilities.temporal`, covering the local types below
 and UTC instants. Borrowed PostgreSQL pools must use `postgresTypeRegistry()` and
 `PostgresDriver.borrow(pool, temporal: true)`. Without that capability, typed
-temporal queries fail before execution. This replaces the earlier preview's
-`localTemporal` flag; no compatibility alias is provided.
+temporal queries fail before execution.
 
 ### Upgrading historical timestamp storage
 
@@ -229,10 +228,10 @@ instants, so the shown conversion preserves values; existing infinities or value
 beyond DateTime's range still require separate data review. Old cursor tokens
 carry the old storage tag and cannot be reused under the new ordering contract.
 
-The [captured legacy migration](../test/support/instants/m0001_legacy.dart) is tested
-against its checksum from commit `00853b4`, including upgrade and rollback on real
-databases. Plain unmanaged SQLite TEXT still imports as String; the managed
-instant collation lets the importer infer DateTime without sampling data.
+The [migration fixture](https://github.com/medz/dart-orm/blob/main/test/support/instants/m0001_legacy.dart)
+illustrates a fixed timestamp history for upgrade and rollback checks. Plain
+unmanaged SQLite TEXT imports as String; the managed instant collation lets the
+importer infer DateTime without sampling data.
 
 ## Local calendar values
 
@@ -312,7 +311,7 @@ reviewed migration; newly equivalent unique keys can make conversion fail and
 roll back. Historical backfills persist canonical text keys for resumable paging.
 
 SQL calendar arithmetic and timezone-rule conversion have no typed API in this
-version; they are separate [extension boundaries](capabilities.md#values-and-physical-storage).
+version; they are separate [extension boundaries](https://github.com/medz/dart-orm/blob/main/doc/capabilities.md#values-and-physical-storage).
 Use local types when the domain value actually has no timezone; use DateTime for
 resolved instants.
 
@@ -441,7 +440,7 @@ verifying the historical schema.
 
 Native JIT and AOT checks include integer values beyond JavaScript's exact-number
 range. Browser int values use the safe-number range; verified wider transport
-uses BigInt. See [SQLite web](sqlite-web.md) for the boundaries and browser checks.
+uses BigInt. See [SQLite web](https://github.com/medz/dart-orm/blob/main/doc/sqlite-web.md) for the boundaries and browser checks.
 
 ## Verification
 
@@ -456,7 +455,7 @@ program. These checks do not establish browser support.
 ## Exact decimals
 
 Use `Decimal` for finite base-ten values, including money. Generated fields use
-`Codecs.decimal` without an annotation. See [exact decimals](decimals.md) for
+`Codecs.decimal` without an annotation. See [exact decimals](https://github.com/medz/dart-orm/blob/main/doc/decimals.md) for
 construction, arithmetic, numeric keys, SQLite storage requirements and current
 limits. `BigInt` storage does not provide these fractional or SQLite numeric
 ordering semantics.

@@ -1,0 +1,45 @@
+dartdoc:
+  categories:
+    Databases:
+      markdown: doc/api.md
+      displayName: Open a database
+    Declarations:
+      markdown: doc/authoring.md
+      displayName: Declare models
+    Queries:
+      markdown: doc/queries.md
+      displayName: Query and select
+    Execution:
+      markdown: doc/execution.md
+      displayName: Sessions and transactions
+    Migrations:
+      markdown: doc/migrations.md
+      displayName: Evolve a schema
+    Values:
+      markdown: doc/types.md
+      displayName: Values and codecs
+    Observability:
+      markdown: doc/observability.md
+      displayName: Observe and inspect
+    Schema:
+      displayName: Physical schema metadata
+    Drivers:
+      displayName: Independent SQL drivers
+    Tooling:
+      markdown: doc/cli.md
+      displayName: Generate and automate
+  categoryOrder:
+    - Databases
+    - Declarations
+    - Queries
+    - Execution
+    - Migrations
+    - Values
+    - Observability
+    - Schema
+    - Drivers
+    - Tooling
+  errors:
+    - unresolved-doc-reference
+    - broken-link
+    - ambiguous-reexport

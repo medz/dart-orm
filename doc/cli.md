@@ -94,7 +94,7 @@ The first `apply` can create that file. `create <id> --allow-destructive` permit
 writing reviewed drop operations, not executing them. `apply
 --max-backfill-batches <count>` bounds a resumable backfill invocation.
 
-See [migrations](migrations.md) for immutable history, engine boundaries, reviewed
+See [migrations](https://github.com/medz/dart-orm/blob/main/doc/migrations.md) for immutable history, engine boundaries, reviewed
 renames/conversions, baseline and recovery behavior.
 
 ## Explicit tools

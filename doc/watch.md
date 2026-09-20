@@ -146,6 +146,6 @@ Controlled completed-read and commit-acknowledgement faults exercise race handli
 against real database state. Negative compilation checks verify subscription
 result types. The native execution example also verifies subscriptions in macOS
 AOT. Real Chrome JavaScript and Dart WASM runs verify worker subscriptions;
-the [native Flutter application](flutter.md) also verifies initial delivery,
+the [native Flutter application](https://github.com/medz/dart-orm/blob/main/doc/flutter.md) also verifies initial delivery,
 committed relation writes, rollback without notification and typed patch refresh
 inside an Android AOT release application.

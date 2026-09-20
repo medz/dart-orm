@@ -1,9 +1,12 @@
 # Dart ORM
 
-This branch is a new implementation. The design reference is
-`research/new-dart-orm-design.md`; old code and upstream architecture are retired.
+The current implementation is documented in `doc/README.md` and public Dartdoc.
+Old code and upstream architecture are retired.
 
 - Keep one product package. Add abstractions only to support real use cases.
+- Use independent Dart libraries; never use `part` or `part of`.
+- Keep implementation in `lib/src/` and public entrypoints as explicit exports.
+- Document public behavior, ownership and failure boundaries with Dartdoc.
 - Use Dart 3.13 stable syntax, static generation, explicit sessions and typed selections.
 - Table identity is independent of Dart record identity.
 - Parameterize values, quote identifiers, and validate SQL scope before execution.

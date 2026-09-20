@@ -6,12 +6,17 @@ Declare immutable Dart models, query exactly the fields you need, and keep your
 schema and migrations in Dart. SQLite, PostgreSQL, MySQL and MariaDB share a typed
 query API, with explicit database capabilities and transaction boundaries.
 
-[Get started](#get-started) · [Documentation](doc/README.md) ·
-[Examples](example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.1)
+[Get started](#get-started) · [Guides](https://github.com/medz/dart-orm/blob/main/doc/README.md) ·
+[Published beta.1 API](https://pub.dev/documentation/orm/6.0.0-beta.1/) ·
+[Examples](https://github.com/medz/dart-orm/tree/main/example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.1)
 
 > **6.0 beta:** a new implementation requiring Dart 3.13+. This is a breaking
-> replacement for the Prisma-based 5.x client. Read the [release notes](CHANGELOG.md)
+> replacement for the Prisma-based 5.x client. Read the [release notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md)
 > before upgrading an existing application.
+
+The guides on `main` also describe [unreleased API changes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#unreleased).
+The quickstart below installs the published beta.1; generate the current source's
+API reference with `dart doc --validate-links` in a checkout.
 
 ## Get started
 
@@ -84,10 +89,14 @@ Full-row queries return your model class. A scalar selection returns its value;
 own DTO. Create and patch inputs distinguish omission, a value, SQL NULL and a
 database default.
 
+Use `get()` for a list, `first()` for a required first row, and `single()` when
+exactly one row must exist. `firstOrNull()` and `singleOrNull()` explicitly allow
+an empty result. Selecting a nullable column keeps its nullable Dart type.
+
 Relationships use declared keys. Select nested results explicitly: to-one
 relationships can join, and collections use parameter-aware batches. There are
-no lazy property reads that quietly issue SQL. See [relationships](doc/relations.md)
-and the [query cookbook](example/queries.dart).
+no lazy property reads that quietly issue SQL. See [relationships](https://github.com/medz/dart-orm/blob/main/doc/relations.md)
+and the [query cookbook](https://github.com/medz/dart-orm/blob/main/example/queries.dart).
 
 Transactions use the provided `tx` session. Query subscriptions emit snapshots
 after relevant committed writes. Inspect SQL without connecting, or use raw and
@@ -108,11 +117,11 @@ default. `init --database` accepts `sqlite`, `postgres`, `mysql` and `mariadb`.
 
 Each migration history belongs to one engine and stores only that engine's
 reviewed steps and frozen schema. MySQL/MariaDB DDL uses recovery checkpoints
-because it can commit implicitly. See [migrations](doc/migrations.md).
+because it can commit implicitly. See [migrations](https://github.com/medz/dart-orm/blob/main/doc/migrations.md).
 
 Capabilities are explicit. MySQL/MariaDB do not support cursor streaming or token
 cancellation; their statement timeout discards the connection. Default Linux
-SQLite lacks interruption. See [capabilities](doc/capabilities.md) for exact numeric
+SQLite lacks interruption. See [capabilities](https://github.com/medz/dart-orm/blob/main/doc/capabilities.md) for exact numeric
 limits, database versions and platforms that have not been verified.
 
 ## Dart and Flutter, native and web
@@ -123,8 +132,8 @@ apps provide their own filesystem path, while browsers use named OPFS storage.
 
 Flutter Web bundles the SQLite worker and WASM assets automatically. Plain Dart
 Web exports the same resources with `dart run orm web-assets`. No separate
-`orm_flutter` package is needed. Start with the [Flutter example](example/flutter)
-or the [SQLite Web guide](doc/sqlite-web.md).
+`orm_flutter` package is needed. Start with the [Flutter example](https://github.com/medz/dart-orm/tree/main/example/flutter)
+or the [SQLite Web guide](https://github.com/medz/dart-orm/blob/main/doc/sqlite-web.md).
 
 ## One package, independent libraries
 
@@ -139,15 +148,15 @@ Use the layer your application needs:
 | `schema.dart`, `generate.dart`, `migrate.dart`, `cli.dart` | Declarations, generation, migration and project tooling |
 
 Compile typed SQL offline, use a driver without model generation, or run saved
-migrations without importing today's application models. See [API boundaries](doc/api.md).
+migrations without importing today's application models. See [API boundaries](https://github.com/medz/dart-orm/blob/main/doc/api.md).
 
 ## Go further
 
-- [Model declarations and codecs](doc/authoring.md) · [Types](doc/types.md)
-- [Queries and pagination](doc/queries.md) · [Relations](doc/relations.md)
-- [Transactions and execution](doc/execution.md) · [Subscriptions](doc/watch.md)
-- [CLI](doc/cli.md) · [build_runner](doc/generation.md) · [Existing databases](doc/importing.md)
-- [SQL inspection](doc/observability.md) · [Named SQL](doc/named-sql.md)
-- [Contributing and validation](doc/contributing.md)
+- [Model declarations and codecs](https://github.com/medz/dart-orm/blob/main/doc/authoring.md) · [Types](https://github.com/medz/dart-orm/blob/main/doc/types.md)
+- [Queries and pagination](https://github.com/medz/dart-orm/blob/main/doc/queries.md) · [Relations](https://github.com/medz/dart-orm/blob/main/doc/relations.md)
+- [Transactions and execution](https://github.com/medz/dart-orm/blob/main/doc/execution.md) · [Subscriptions](https://github.com/medz/dart-orm/blob/main/doc/watch.md)
+- [CLI](https://github.com/medz/dart-orm/blob/main/doc/cli.md) · [build_runner](https://github.com/medz/dart-orm/blob/main/doc/generation.md) · [Existing databases](https://github.com/medz/dart-orm/blob/main/doc/importing.md)
+- [SQL inspection](https://github.com/medz/dart-orm/blob/main/doc/observability.md) · [Named SQL](https://github.com/medz/dart-orm/blob/main/doc/named-sql.md)
+- [Contributing and validation](https://github.com/medz/dart-orm/blob/main/doc/contributing.md)
 
-Licensed under the [BSD 3-Clause License](LICENSE).
+Licensed under the [BSD 3-Clause License](https://github.com/medz/dart-orm/blob/main/LICENSE).

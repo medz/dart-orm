@@ -22,7 +22,7 @@ dart run bin/migrate.dart verify
 ```
 
 Use `--dialect postgres`, `mysql` or `mariadb` for the matching server's registry.
-Configure the same database in the [Dart migration entrypoint](migrations.md). Existing database-specific defaults and objects need reviewed migrations;
+Configure the same database in the [Dart migration entrypoint](https://github.com/medz/dart-orm/blob/main/doc/migrations.md). Existing database-specific defaults and objects need reviewed migrations;
 an imported declaration is not automatically a portable creation script for the
 other dialect. Baseline verifies the declared schema before recording history and
 does not execute the initial creation SQL.
@@ -63,9 +63,9 @@ indexes and representable foreign keys become declarations. Relationships get na
 and inverse selections; rename these before generation if a domain name is clearer.
 Foreign-key actions include SET DEFAULT on supporting engines; MySQL/MariaDB
 reject it. Unsupported unsigned and binary storage must be reviewed explicitly;
-see [MySQL/MariaDB limits](mysql.md).
+see [MySQL/MariaDB limits](https://github.com/medz/dart-orm/blob/main/doc/mysql.md).
 
-Ordinary enforced [CHECK constraints](checks.md) become `.check(...)` declarations
+Ordinary enforced [CHECK constraints](https://github.com/medz/dart-orm/blob/main/doc/checks.md) become `.check(...)` declarations
 with their native names and SQL. A nonblocking `IMPORT.CHECK_SQL` note requests
 review of backend-specific expressions before deployment on another dialect.
 PostgreSQL unvalidated, unenforced and inheritance-specific checks remain unmanaged.
@@ -111,10 +111,10 @@ existing NaN or Infinity values will fail typed decoding. SQLite requires the
 recognized column collation to establish decimal storage and recognizes only the
 emitted precision CHECK. Varchar, arrays, domains and other native types still
 need explicit support. See
-[decimal boundaries](decimals.md) before reviewing a draft.
+[decimal boundaries](https://github.com/medz/dart-orm/blob/main/doc/decimals.md) before reviewing a draft.
 
 SQLite rowid integer primary keys and PostgreSQL BY DEFAULT integer primary-key
-identities get `@Id.generated()`. [Computed expressions](computed.md) become
+identities get `@Id.generated()`. [Computed expressions](https://github.com/medz/dart-orm/blob/main/doc/computed.md) become
 `@Computed.sql` with their stored/virtual mode and an `IMPORT.COMPUTED_SQL`
 portability review note. ALWAYS identities,
 non-primary identities and nullable primary keys require explicit write semantics
@@ -129,7 +129,7 @@ receive a distinct Dart name while retaining the physical SQL name.
 
 PostgreSQL SMALLINT/INTEGER columns and SQLite INTEGER columns with recognized
 ORM range checks retain their `@IntegerBits(16)` or `@IntegerBits(32)` declaration.
-See [integer widths](types.md#signed-integer-column-widths) for range enforcement,
+See [integer widths](https://github.com/medz/dart-orm/blob/main/doc/types.md#signed-integer-column-widths) for range enforcement,
 aggregation and migration behavior.
 
 SQLite import requires 3.37 or later to distinguish ordinary, virtual and shadow

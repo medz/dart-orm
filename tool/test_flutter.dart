@@ -160,8 +160,7 @@ Future<void> main(List<String> args) async {
     '-p',
   ], stdoutEncoding: null);
   if (screenshot.exitCode != 0) throw StateError('${screenshot.stderr}');
-  await Directory('research/validation').create(recursive: true);
-  final screenshotFile = File('research/validation/flutter-android.png');
+  final screenshotFile = File('.dart_tool/flutter/flutter-android.png');
   await screenshotFile.writeAsBytes(screenshot.stdout as List<int>);
   final sources = <String, String>{};
   for (final directory in [
@@ -234,10 +233,9 @@ Future<void> main(List<String> args) async {
       'Force-stop/relaunch is process persistence evidence, not power-loss testing.',
     ],
   };
-  await Directory('research/validation').create(recursive: true);
-  await File('research/validation/flutter.json')
+  await File('.dart_tool/flutter/flutter.json')
       .writeAsString('${const JsonEncoder.withIndent('  ').convert(result)}\n');
   stdout.writeln(
-    'Report: research/validation/flutter.json; screenshot: ${screenshotFile.path}',
+    'Report: .dart_tool/flutter/flutter.json; screenshot: ${screenshotFile.path}',
   );
 }

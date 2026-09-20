@@ -1,5 +1,0 @@
-CLI registry initialization, regeneration and rejected retarget: passed
-{"command": "check", "valid": true, "dialect": "sqlite", "migrations": ["0001_initial"]}
-{"command": "apply", "applied": ["0001_initial"]}
-{"command": "verify", "matches": true, "differences": [], "unmanaged": []}
-{"command": "apply", "applied": []}

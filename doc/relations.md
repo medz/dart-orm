@@ -58,7 +58,7 @@ cross-database queries or arbitrary relationship predicate declarations.
 ## Many-to-many with business fields
 
 An explicit association table gives each membership its own role and joining time.
-The [teams example](../example/teams/schema.dart) uses two foreign keys and a
+The [teams example](https://github.com/medz/dart-orm/blob/main/example/teams/schema.dart) uses two foreign keys and a
 composite primary key, with no artificial membership ID:
 
 ```dart
@@ -238,9 +238,9 @@ should be excluded.
 `compile()` exposes the root SQL, including selected to-one JOINs. It does not
 pretend to contain the later collection statements. `inspect()` also describes
 conditional child SQL templates, output/key slots, joins and batch capacity;
-see [plans and observations](observability.md). `onQuery` reports every
+see [plans and observations](https://github.com/medz/dart-orm/blob/main/doc/observability.md). `onQuery` reports every
 executed statement and fetched row count. Streaming uses these same strategies
-per root batch; see [execution](execution.md).
+per root batch; see [execution](https://github.com/medz/dart-orm/blob/main/doc/execution.md).
 
 Multiple statements can observe different snapshots under PostgreSQL Read
 Committed. Use an explicit Repeatable Read transaction when root and collection

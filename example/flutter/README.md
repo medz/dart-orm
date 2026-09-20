@@ -18,7 +18,7 @@ they do not implement database drivers.
 
 The automated release runner is `dart run tool/test_flutter_web.dart /path/to/flutter`
 from the repository root. For native directory choices and current platform limits,
-see [SQLite setup](../../doc/sqlite-web.md).
+see [Flutter integration](../../doc/flutter.md) and [SQLite Web](../../doc/sqlite-web.md).
 
 ## Android acceptance
 
@@ -59,9 +59,9 @@ The example uses Flutter's debug signing key for both APKs so `adb install -r`
 can preserve the database. These APKs are test artifacts, not store releases.
 The runner force-stops between phases, verifies distinct process IDs and matching
 database paths, compares rows and migration checksums after restart, and saves a
-machine-readable report at `research/validation/flutter.json`. Logs, individual
+machine-readable report at `.dart_tool/flutter/flutter.json`. Logs, individual
 reports and APK copies stay in `.dart_tool/flutter/`; the final screenshot is
-saved as `research/validation/flutter-android.png`.
+saved as `.dart_tool/flutter/flutter-android.png`.
 
 The application prints chunked base64 JSON so the host can capture release reports
 without `run-as`. SQL work runs while a Flutter animation and Dart timer advance;

@@ -304,10 +304,13 @@ Future<void> main(List<String> args) async {
     'results': results,
   };
   final path = smoke
-      ? '.dart_tool/authoring-smoke.json'
-      : 'research/benchmarks/authoring.json';
-  await File(path)
-      .writeAsString('${const JsonEncoder.withIndent('  ').convert(report)}\n');
+      ? '.dart_tool/benchmarks/authoring-smoke.json'
+      : '.dart_tool/benchmarks/authoring.json';
+  final output = File(path);
+  await output.parent.create(recursive: true);
+  await output.writeAsString(
+    '${const JsonEncoder.withIndent('  ').convert(report)}\n',
+  );
   stdout.writeln('Saved $path');
 }
 

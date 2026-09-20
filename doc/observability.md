@@ -115,4 +115,4 @@ fail after an autocommitted write; observation does not move transaction boundar
 
 Real backend and browser coverage checks event scopes, query/row counts,
 acquisition waiting/cancellation and observer failures. Runtime throughput and
-allocation comparisons remain a separate [acceptance gate](acceptance.md).
+allocation comparisons remain a separate [acceptance gate](https://github.com/medz/dart-orm/blob/main/doc/acceptance.md).

@@ -195,7 +195,7 @@ Fetch events include actual batch row counts; they carry the original query SQL
 for attribution. Parameters are counted but their values are not recorded.
 
 Optional `onAcquire` and `onDecode` callbacks separately report lease acquisition
-and synchronous ORM result processing. See [plans and observations](observability.md)
+and synchronous ORM result processing. See [plans and observations](https://github.com/medz/dart-orm/blob/main/doc/observability.md)
 for their scopes, inheritance and limits, and non-executing `query.inspect()`.
 
 

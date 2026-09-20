@@ -6,7 +6,7 @@ the migration as applied. Import `package:orm/migrate.dart` alongside your datab
 entry point.
 The examples use a raw `SqlDatabase` named `db`; for an ORM `Database`, pass
 `db.sql` to `Migrator`. MySQL/MariaDB recovery details are documented in
-[their migration guide](mysql-migrations.md).
+[their migration guide](https://github.com/medz/dart-orm/blob/main/doc/mysql-migrations.md).
 
 ```dart
 // Use the snapshot committed with the expand migration, not current app models.
@@ -59,7 +59,7 @@ dart run bin/migrate.dart apply --max-backfill-batches 10
 dart run bin/migrate.dart status
 ```
 
-Configure PostgreSQL in the Dart entrypoint as described in [migrations](migrations.md).
+Configure PostgreSQL in the Dart entrypoint as described in [migrations](https://github.com/medz/dart-orm/blob/main/doc/migrations.md).
 Plans report `atomic: false` when pending work includes a backfill. Bounded CLI
 runs additionally return `complete: false` until the entire migration list is
 applied. Status includes `backfill.rows`, `batches`, `last` and `upper`. Keys are

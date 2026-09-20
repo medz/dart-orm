@@ -42,7 +42,7 @@ URL configuration. `flutter run -d chrome`, `flutter build web` and
 is compiled once by the package maintainer. Both application compilation modes
 use that JavaScript worker with the same SQLite WASM engine.
 
-See the runnable [Flutter example](../example/flutter/README.md). This packaging
+See the runnable [Flutter example](https://github.com/medz/dart-orm/blob/main/example/flutter/README.md). This packaging
 uses Flutter's platform asset filters, available since Flutter 3.41. The ORM stays
 a pure Dart package without an SDK Flutter dependency.
 
@@ -182,14 +182,9 @@ checks generated fixture freshness, compiles the client, starts a local asset
 server, and launches Chrome
 with a disposable profile. Set `CHROME_EXECUTABLE` to override its path. It writes
 `report.js.json` or `report.wasm.json` under `.dart_tool/browser/` and fails if the
-browser reports any failed check. Reports contain the actual browser, Dart SDK,
-compilation mode and engine checksum. The captured results are in
-`research/validation/browser.json`.
-
-The subsequent [API audit capture](../research/validation/api-audit.md) passes
-20 checks in each compilation mode, adding mixed-session query rejection,
-independent optional-join guards and rejected-write state checks. Its logs are
-separate from the original browser capture.
+browser reports any failed check. Reports contain the actual browser, Dart SDK, compilation mode and engine
+checksum. Consult [progress](https://github.com/medz/dart-orm/blob/main/doc/progress.md) for the revision and configurations
+most recently verified.
 
 Run these separately from the native full suite: concurrent Dart CLI invocations
 can race while rewriting/codesigning the shared macOS native-asset cache. The
@@ -206,8 +201,7 @@ throughput or establishes Safari, Firefox, IndexedDB or multi-tab service suppor
 The unified-entry acceptance adds actual Flutter release builds in JS and WASM,
 with and without cross-origin isolation headers. The app consumes the package's
 unchanged asset declarations and default URI resolution from a nested route.
-It also checks stale worker rejection and WASM integrity failure. See
-[the refactor validation](../research/validation/sqlite-refactor.md).
+It also checks stale worker rejection and WASM integrity failure.
 
 Hot reload retains application state. Flutter Web hot restart, which can abandon
 live JS resources without closing them, is not certified by these release tests;

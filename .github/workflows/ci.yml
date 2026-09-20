@@ -87,6 +87,8 @@ jobs:
           done
       - name: Check committed SQLite web assets
         run: dart run tool/build_sqlite_web.dart --check
+      - name: Generate and validate API documentation
+        run: dart doc --validate-links
       - name: Test SQLite, PostgreSQL, MySQL and MariaDB
         run: dart test --concurrency=1
 

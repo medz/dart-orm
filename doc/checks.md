@@ -68,7 +68,7 @@ immutable constant expressions, so this is not a promise of zero function
 evaluation. No `ANALYZE` option is used. See [EXPLAIN](https://www.postgresql.org/docs/18/sql-explain.html).
 SQL/functions must be available in the selected database schema during verification.
 
-[Import](importing.md) retains native check SQL and names, including explicit null
+[Import](https://github.com/medz/dart-orm/blob/main/doc/importing.md) retains native check SQL and names, including explicit null
 names on SQLite, and emits a nonblocking `IMPORT.CHECK_SQL` review note. Check
 other-dialect overrides before deploying an imported declaration elsewhere.
 
