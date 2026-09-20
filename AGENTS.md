@@ -14,7 +14,7 @@ This branch is a new implementation. The design reference is
 - Each migration history fixes one database engine. Save only that engine's SQL,
   steps and frozen schema; reject mixed histories and mismatched connections.
 - Prefer small Conventional Commits. Do not push without explicit authorization.
-- Keep `docs/progress.md` accurate, including unfinished work and validation limits.
+- Keep `doc/progress.md` accurate, including unfinished work and validation limits.
 - Schema snapshots and saved migrations are Dart source. Retire the old JSON file
   workflow directly; do not add compatibility readers or parallel output modes.
 - Keep historical migration definitions independent of current application models.

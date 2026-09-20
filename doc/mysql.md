@@ -202,7 +202,7 @@ The suite covers actual prepared statements, values, commit/rollback,
 savepoints, abandoned transaction cleanup, error recovery, engine mismatch,
 lease serialization, close draining, invalidation, and timeout handling.
 Without a database URL that engine's integration group is explicitly skipped.
-See `docs/progress.md` for which server versions have actually been validated.
+See `doc/progress.md` for which server versions have actually been validated.
 `test/mysql_database_test.dart` exercises typed queries, JSON and decimal
 boundaries, generated-row reads, relations, and transaction behavior.
 `test/sql_mysql_review_test.dart` adds compiler and fault-injection regressions;

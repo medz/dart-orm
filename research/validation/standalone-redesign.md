@@ -105,10 +105,10 @@ The final workflow must pass both jobs before merge.
 MySQL/MariaDB provide exact values, storage, comparison and MIN/MAX within their
 physical limits. Typed arithmetic, SUM, decimal set operations and explicit
 precision narrowing that can silently lose digits are rejected; see the
-[reproductions](../mysql-precision-boundaries.md) and [driver contract](../../docs/mysql.md).
+[reproductions](../mysql-precision-boundaries.md) and [driver contract](../../doc/mysql.md).
 Their initial adapters own a single queued connection and do not support streaming
 or cancellation. Runtime leases add a cleanup ROLLBACK round trip. DDL remains
-non-atomic and uses the [engine-specific recovery workflow](../../docs/mysql-migrations.md).
+non-atomic and uses the [engine-specific recovery workflow](../../doc/mysql-migrations.md).
 
 The default Linux native asset in `sqlite3` 3.6.0 hides `sqlite3_interrupt`.
 Statement cancellation, execution deadlines and bounded retries are rejected

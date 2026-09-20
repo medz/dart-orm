@@ -1,8 +1,21 @@
 # Implementation status
 
+## Beta 1 release preparation
+
+Version `6.0.0-beta.1` introduces the new implementation after the published 5.3.4
+line. README onboarding, the `doc/` directory, package metadata, changelog and
+archive exclusions are prepared for publication. The build_runner registration
+now advertises its actual Dart outputs rather than the retired JSON names.
+The independent consumer quickstart passes initialization, Dart migration creation,
+check/apply/verify, analysis, query projection and a transaction. The real
+build_runner build/watch regression and package analysis pass. Publication
+preflight validates the archive; pub.dev and the GitHub prerelease provide the
+final publication state.
+
 ## Standalone ORM redesign
 
-Implementation branch: `refactor/standalone-orm`. The delivery scope is SQLite (native,
+Merged implementation: [PR #485](https://github.com/medz/dart-orm/pull/485),
+`a3fef800` on `main`. The delivery scope is SQLite (native,
 Dart Web and Flutter Web), PostgreSQL, MySQL 8.4 and MariaDB 11.8. The user has
 authorized commits, push, a Codex-reviewed PR and merge after verification.
 
@@ -31,8 +44,8 @@ Fresh Chrome JS/WASM and Flutter Web JS/WASM (with and without isolation) each
 pass 21 scenarios. Android debug installation, AOT release upgrade and independent
 process reopen pass 4/17/11 checks. Both APKs exclude Web resources. Root and
 Flutter analysis pass. [The final local acceptance record](../research/validation/standalone-redesign.md)
-pins the runtime source and limits. Complete GitHub CI and Codex review of the
-final PR head are the merge gates; earlier captures below retain their revisions.
+pins the runtime source and limits. Final GitHub CI and Codex review passed for the merged head;
+earlier captures below retain their revisions.
 
 Linux CI exposed native-asset packaging and capability assumptions in tests.
 The complete run subsequently found 17 remaining interruption assumptions in
@@ -46,8 +59,10 @@ This limitation is documented rather than replaced with a second SQLite library.
 The complete Linux native stage now passes 1136 tests with 41 capability skips.
 Chrome JS passes 21 scenarios; an exiting-process profile cleanup race in the
 runner is corrected with bounded retries. Browser checks run in an independent CI
-job. Both jobs and final-head Codex review are required before merge;
-[PR #485](https://github.com/medz/dart-orm/pull/485) records their final outcome.
+job. The final [CI run](https://github.com/medz/dart-orm/actions/runs/35457956149)
+passes 1141 native tests with 41 capability skips and 21 scenarios each for Chrome
+JS/WASM. Codex reviewed the exact final head without further findings, and PR #485
+was merged with an identical source tree.
 
 Design: [standalone redesign](../research/standalone-orm-redesign.md).
 Research: [Prisma v8 reassessment](../research/prisma-v8-reassessment.md).
@@ -409,7 +424,7 @@ CLI workflows independently import, generate, baseline and verify real databases
 reject existing output files, preserve missing SQLite files and retain blocking
 issues in review reports. The generator no longer emits invalid empty patch
 parameters for models containing only generated fields. Physical import currently
-uses the exact supported storage mappings documented in `docs/importing.md`;
+uses the exact supported storage mappings documented in `doc/importing.md`;
 Unconstrained NUMERIC now imports as finite Decimal; it is never guessed to contain
 only integers. Broader native types remain part of the active goal.
 
@@ -475,7 +490,7 @@ window operands; native arithmetic throughput is not implied.
 The reproducible decimal benchmark separately records native AOT 10000-row
 read/divide/round/window queries on SQLite 3.51.0 and PostgreSQL 18.4. Its raw
 report is `research/benchmarks/decimal-division.json`; methodology and medians
-are in `docs/decimals.md`. This is a small single-client end-to-end cost probe,
+are in `doc/decimals.md`. This is a small single-client end-to-end cost probe,
 not the complete runtime performance acceptance or a high-precision stress benchmark.
 
 Twenty-three average checks cover exact integer fractions, empty/all-null/constant
@@ -556,7 +571,7 @@ The real build_runner build/watch process also tracks named SQL assets and impor
 enum changes, recovers from SQL parameter errors, and removes both query outputs
 when their source is deleted. The native named-query fixture compiles and runs as
 a macOS AOT executable with SQLite. See
-`docs/named-sql.md` for the API and validation limits.
+`doc/named-sql.md` for the API and validation limits.
 
 Sixteen browser acceptance scenarios pass in Chrome 153 with a JavaScript client,
 and the same sixteen pass with a Dart WASM client. Both use a separately compiled
@@ -579,7 +594,7 @@ native database checks verify SqlReal floating storage on SQLite and PostgreSQL.
 The native UTC instant AOT fixture is revalidated after sharing SQLite functions
 with the web worker. Captured browser results are in
 `research/validation/browser.json`; setup and limitations are in
-`docs/sqlite-web.md`. These correctness checks do not measure throughput or certify
+`doc/sqlite-web.md`. These correctness checks do not measure throughput or certify
 Safari, Firefox, Flutter embedding, IndexedDB or a shared multi-tab service.
 Statement interruption remains explicitly unsupported by this web driver.
 After the floating-cursor correction, all 54 native query/floating-parameter
@@ -606,7 +621,7 @@ fixtures remain byte-for-byte deterministic. Browser JS and Dart WASM acceptance
 also covers generated query-only relations with single and composite REAL keys.
 This reproduced a missing floating binding tag in relationship batches; grouping
 now retains comparable storage values and binding restores SQL floating intent.
-See `docs/relations.md` for declaration and integrity semantics.
+See `doc/relations.md` for declaration and integrity semantics.
 The complete native suite passes all 703 checks in one invocation after these
 changes, with PostgreSQL enabled. Both complete browser runs and static analysis
 also pass. The design acceptance map records the remaining product gates.
@@ -625,7 +640,7 @@ duplicate names. CLI inspection exposes names and expressions. Older snapshots
 without checks preserve their JSON/checksum representation. CHECK SQL is trusted,
 uses physical names and may have backend overrides; PostgreSQL comparison has
 planning cost, and checked SQLite renames may copy a table twice. These boundaries
-are documented in `docs/checks.md`.
+are documented in `doc/checks.md`.
 
 The complete native suite passes 721 checks in one invocation, with PostgreSQL
 enabled, after updating an old integer-test assertion for the newly recognized
@@ -649,7 +664,7 @@ types, required arguments, private/nonconstant references and repeated annotatio
 Four invalid generated create calls fail static analysis. Snapshots and imports
 contain no client factories; physical defaults and migration checksums remain
 separate. Tables without client factories take a direct insertion path, while
-other tables cache their default-bearing columns. See `docs/defaults.md`.
+other tables cache their default-bearing columns. See `doc/defaults.md`.
 
 The complete native suite passes 740 checks in one invocation with PostgreSQL
 enabled, and static analysis reports no issues. Both real Chrome compilation
@@ -671,7 +686,7 @@ The implementation uses `ReadField<T>` for computed results and excludes those
 fields from generated creation/patch inputs. Native PostgreSQL mode/dependency
 limits remain explicit; automatic diff requires reviewed replacement plans for
 mode conversions it cannot emit natively. Renamed computed SQLite tables may
-require two copies. See `docs/computed.md` for these costs and migration limits.
+require two copies. See `doc/computed.md` for these costs and migration limits.
 The complete native suite passes 761 checks in one invocation with PostgreSQL
 enabled, and static analysis reports no issues. Real Chrome JS and Dart WASM each
 pass 17 scenarios, including computed updates and migration recomputation alongside
@@ -715,7 +730,7 @@ batches and returning writes. Observer exceptions preserve commits and original
 errors. Hooks omitted means no observation events or measurement Stopwatches;
 inspection is only constructed when requested. These phase measurements exclude
 some client work and do not isolate server CPU or provide trace correlation IDs.
-See `docs/observability.md` for the exact scope and runnable example.
+See `doc/observability.md` for the exact scope and runnable example.
 
 Static analysis passes. The updated teams example executes two SQL statements,
 returns one root/two child rows and reports one acquisition/two decode batches.
@@ -744,7 +759,7 @@ JS/WASM correctness runs above remain the runtime baseline.
 The results identify intermediate List construction and PostgreSQL protocol
 round trips as concrete optimization candidates. There is no new performance
 percentage guarantee or claim of superiority over another ORM; detailed numbers,
-scope and reproduction commands are in `docs/performance.md`.
+scope and reproduction commands are in `doc/performance.md`.
 
 Selection decoding now binds field readers once and passes their results directly
 to each typed mapper. Dynamic field maps also avoid an intermediate value list.
@@ -772,7 +787,7 @@ work and pending portal cleanup in the pinned driver's Statement implementation.
 Caching statements while retaining the current bind path cannot just omit
 disposal; cancellation, portal release and connection reuse must stay valid.
 The current adapter deliberately retains its verified cleanup behavior. The
-measured round-trip cost and scope are documented in `docs/performance.md`.
+measured round-trip cost and scope are documented in `doc/performance.md`.
 
 Temporal precision now spans declarations, generated/manual columns, immutable
 snapshots, SQL assignments and value/expression operations. Default and explicit

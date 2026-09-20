@@ -1,6 +1,6 @@
 # Flutter Web integration research
 
-The recommendation below has since been implemented; see [current setup](../docs/sqlite-web.md)
+The recommendation below has since been implemented; see [current setup](../doc/sqlite-web.md)
 and [refactor validation](validation/sqlite-refactor.md). The measurements in this
 research note describe the earlier probe.
 
