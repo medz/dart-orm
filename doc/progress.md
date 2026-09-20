@@ -10,7 +10,9 @@ The independent consumer quickstart passes initialization, Dart migration creati
 check/apply/verify, analysis, query projection and a transaction. The real
 build_runner build/watch regression and package analysis pass. Publication
 preflight validates the archive; pub.dev and the GitHub prerelease provide the
-final publication state.
+final publication state. The SQLite Web build includes package metadata in its
+fingerprint; the beta version therefore regenerates the worker and manifest
+without changing database execution logic.
 
 ## Standalone ORM redesign
 
