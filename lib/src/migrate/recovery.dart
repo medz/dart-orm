@@ -1,98 +1,38 @@
-part of '../../migrate.dart';
+// Migration locking, checkpoints, and PostgreSQL/SQLite recovery.
 
-/// PostgreSQL autocommit SQL with explicit recovery conditions. Both checks must
-/// return exactly one boolean. They describe durable state, not an object name alone.
-final class CheckedSql extends MigrationStep {
-  final String sql;
-  final String readyWhen;
-  final String doneWhen;
-  const CheckedSql(this.sql, {required this.readyWhen, required this.doneWhen});
+import 'dart:convert' show jsonDecode, jsonEncode, utf8;
 
-  /// A concurrent, ascending B-tree index with default collation/opclasses.
-  /// The completion check compares its definition as well as ready/valid state.
-  factory CheckedSql.createIndex(String table, IndexSchema index) {
-    if (index.columns.isEmpty) throw ArgumentError('An index needs columns.');
-    final source = _literal(table), name = _literal(index.name);
-    final columns = 'ARRAY[${index.columns.map(_literal).join(', ')}]::text[]';
-    return CheckedSql(
-      _createIndex(table, index).replaceFirst('INDEX ', 'INDEX CONCURRENTLY '),
-      readyWhen: '''SELECT NOT EXISTS (
-SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = current_schema() AND c.relname = $name)''',
-      doneWhen:
-          '''SELECT EXISTS (
-SELECT 1 FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
-JOIN pg_namespace n ON n.oid = c.relnamespace JOIN pg_class t ON t.oid = i.indrelid
-JOIN pg_am am ON am.oid = c.relam
-WHERE n.nspname = current_schema() AND c.relname = $name AND t.relname = $source
-AND t.relnamespace = n.oid AND i.indisvalid AND i.indisready AND i.indislive
-AND i.indisunique = ${index.unique} AND NOT i.indisprimary AND NOT i.indisexclusion
-AND i.indexprs IS NULL AND i.indpred IS NULL AND i.indnatts = i.indnkeyatts
-AND am.amname = 'btree' AND c.reloptions IS NULL
-AND NOT EXISTS (SELECT 1 FROM pg_constraint constraint_row WHERE constraint_row.conindid = i.indexrelid AND constraint_row.contype IN ('p', 'u', 'x'))
-AND NOT coalesce((to_jsonb(i)->>'indnullsnotdistinct')::boolean, false)
-AND NOT EXISTS (SELECT 1 FROM unnest(i.indoption) v WHERE v <> 0)
-AND NOT EXISTS (SELECT 1 FROM unnest(i.indclass) v JOIN pg_opclass o ON o.oid = v WHERE NOT o.opcdefault)
-AND NOT EXISTS (SELECT 1 FROM unnest(i.indkey, i.indcollation) k(num, collation_oid)
-  JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.num WHERE k.collation_oid <> a.attcollation)
-AND ARRAY(SELECT a.attname::text FROM unnest(i.indkey) WITH ORDINALITY k(num, ord)
-  JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.num ORDER BY k.ord) = $columns)''',
-    );
-  }
-  @override
-  Map<String, Object?> toJson() => {
-    'kind': 'checkedSql',
-    'sql': sql,
-    'readyWhen': readyWhen,
-    'doneWhen': doneWhen,
-  };
-}
-
-String _literal(String value) {
-  var tag = r'$orm$';
-  while (value.contains(tag)) {
-    tag = '${tag.substring(0, tag.length - 1)}_\$';
-  }
-  return '$tag$value$tag';
-}
-
-enum MigrationStepState { running, complete, failed }
-
-final class MigrationProgress {
-  final String id;
-  final String checksum;
-  final int step;
-  final MigrationStepState state;
-  final String phase;
-  final String? failure;
-  final BackfillProgress? backfill;
-  const MigrationProgress(
-    this.id,
-    this.checksum,
-    this.step,
-    this.state,
-    this.phase,
-    this.failure, {
-    this.backfill,
-  });
-  Map<String, Object?> toJson() => {
-    'id': id,
-    'checksum': checksum,
-    'step': step,
-    'state': state.name,
-    'phase': phase,
-    if (failure != null) 'failure': failure,
-    if (backfill != null) 'backfill': backfill!.toJson(),
-  };
-}
+import '../../driver.dart' show Backend, SqlCommand, SqlDialect;
+import '../../runtime.dart'
+    show PostgresTransaction, SqlDatabase, SqliteTransaction;
+import '../../values.dart' show OrmException;
+import 'backfill.dart'
+    show
+        BackfillBudget,
+        BackfillPaused,
+        BackfillProgress,
+        backfillChunk,
+        parameterMarker,
+        readBackfillProgress,
+        verifyBackfill;
+import 'execute.dart' show executeStep;
+import 'history.dart' show MigrationStatus, Migrator, recordMigration;
+import 'migration.dart' show Migration;
+import 'mysql_recovery.dart' show mysqlMigrationLock;
+import 'mysql_schema.dart' show isMysqlFamily;
+import 'progress.dart' show MigrationProgress, MigrationStepState;
+import 'sql_utils.dart' show quoteIdentifier;
+import 'step.dart' show Backfill, CheckedSql, DropTable, RebuildTable;
 
 // The history schema owns these TEXT cells. MySQL can expose a binary-collated
 // TEXT field as bytes; this does not change decoding of application BLOB values.
 String? _migrationText(Object? value) =>
     value is List<int> ? utf8.decode(value) : value as String?;
 
-Future<List<MigrationProgress>> _progress(SqlDatabase<Backend> db) async {
-  if (!await _hasMigrationTable(db, '_orm_migration_steps')) {
+Future<List<MigrationProgress>> loadMigrationProgress(
+  SqlDatabase<Backend> db,
+) async {
+  if (!await hasMigrationTable(db, '_orm_migration_steps')) {
     return [];
   }
   final result = await db.execute(
@@ -129,12 +69,12 @@ Future<List<MigrationProgress>> _progress(SqlDatabase<Backend> db) async {
         _migrationText(row[fields[5]]),
         backfill: data < 0 || row[data] == null
             ? null
-            : BackfillProgress._read(jsonDecode(_migrationText(row[data])!)),
+            : readBackfillProgress(jsonDecode(_migrationText(row[data])!)),
       ),
   ];
 }
 
-void _validateProgress(
+void validateProgress(
   List<Migration> migrations,
   List<MigrationStatus> applied,
   List<MigrationProgress> progress,
@@ -206,7 +146,7 @@ void _validateProgress(
   }
 }
 
-Future<R> _migrationSession<R>(
+Future<R> migrationSession<R>(
   SqlDatabase<Backend> database,
   Duration lockTimeout,
   Future<R> Function(SqlDatabase<Backend>) action,
@@ -215,9 +155,9 @@ Future<R> _migrationSession<R>(
     throw ArgumentError.value(lockTimeout, 'lockTimeout');
   }
   Future<R> run(SqlDatabase<Backend> session) async {
-    await _checkMigrationVersion(session);
-    return _isMysql(session.dialect)
-        ? _mysqlMigrationLock(session, lockTimeout, () => action(session))
+    await checkMigrationVersion(session);
+    return isMysqlFamily(session.dialect)
+        ? mysqlMigrationLock(session, lockTimeout, () => action(session))
         : session.dialect == SqlDialect.postgres
         ? _withMigrationLock(session, lockTimeout, () => action(session))
         : action(session);
@@ -228,8 +168,8 @@ Future<R> _migrationSession<R>(
 
 // Generated PostgreSQL DDL/catalog behavior is supported on 18+. Check the
 // actual server before locks, journal creation or recoverable partial commits.
-Future<void> _checkMigrationVersion(SqlDatabase<Backend> db) async {
-  if (_isMysql(db.dialect)) {
+Future<void> checkMigrationVersion(SqlDatabase<Backend> db) async {
+  if (isMysqlFamily(db.dialect)) {
     final raw =
         '${(await db.execute(SqlCommand('SELECT VERSION()'))).rows.single.single}';
     final maria = raw.toLowerCase().contains('mariadb');
@@ -330,16 +270,16 @@ Future<R> _withMigrationLock<R>(
   }
 }
 
-Future<List<String>> _applyRecoverable(
+Future<List<String>> applyRecoverable(
   SqlDatabase<Backend> session,
   List<Migration> migrations,
-  _BackfillBudget budget,
+  BackfillBudget budget,
 ) async {
   final pending = await Migrator(session).plan(migrations);
   if (pending.isEmpty) return [];
   await session.transaction(_recoveryTables);
   final progress = {
-    for (final p in await _progress(session)) (p.id, p.step): p,
+    for (final p in await loadMigrationProgress(session)) (p.id, p.step): p,
   };
   final atomic = <Migration>[];
   final completed = <String>[];
@@ -348,9 +288,9 @@ Future<List<String>> _applyRecoverable(
     await session.transaction((tx) async {
       for (final migration in atomic) {
         for (final step in migration.steps) {
-          await _executeStep(tx, step);
+          await executeStep(tx, step);
         }
-        await _recordMigration(tx, migration);
+        await recordMigration(tx, migration);
       }
     });
     completed.addAll(atomic.map((m) => m.id));
@@ -371,34 +311,34 @@ Future<List<String>> _applyRecoverable(
           ? 'inspect'
           : 'execute';
       try {
-        await _checkpoint(session, migration, i, .running, phase);
+        await checkpoint(session, migration, i, .running, phase);
         if (step is Backfill) {
-          await _verifyBackfill(session, step);
+          await verifyBackfill(session, step);
           while (!await session.transaction(
-            (tx) async => _backfillChunk(
+            (tx) async => backfillChunk(
               tx,
               migration,
               i,
               step,
-              await _savedBackfill(tx, migration.id, i),
+              await savedBackfill(tx, migration.id, i),
               budget,
               (value) => phase = value,
             ),
           )) {}
         } else if (step is CheckedSql) {
-          if (!await _probe(session, step.doneWhen)) {
-            if (!await _probe(session, step.readyWhen)) {
+          if (!await probe(session, step.doneWhen)) {
+            if (!await probe(session, step.readyWhen)) {
               throw const OrmException(
                 'MIGRATION.RECOVERY',
                 'Neither completion nor safe-to-run condition holds. Inspect and repair the database before retrying this unchanged migration.',
               );
             }
             phase = 'execute';
-            await _checkpoint(session, migration, i, .running, phase);
+            await checkpoint(session, migration, i, .running, phase);
             await session.execute(SqlCommand(step.sql));
             phase = 'verify';
-            await _checkpoint(session, migration, i, .running, phase);
-            if (!await _probe(session, step.doneWhen)) {
+            await checkpoint(session, migration, i, .running, phase);
+            if (!await probe(session, step.doneWhen)) {
               throw const OrmException(
                 'MIGRATION.POSTCONDITION',
                 'Nontransactional SQL did not establish its declared completion condition.',
@@ -406,18 +346,18 @@ Future<List<String>> _applyRecoverable(
             }
           }
           phase = 'record';
-          await _checkpoint(session, migration, i, .complete, 'complete');
+          await checkpoint(session, migration, i, .complete, 'complete');
         } else {
           await session.transaction((tx) async {
-            await _executeStep(tx, step);
-            await _checkpoint(tx, migration, i, .complete, 'complete');
+            await executeStep(tx, step);
+            await checkpoint(tx, migration, i, .complete, 'complete');
           });
         }
       } catch (error, stack) {
-        if (error is _BackfillPaused) return completed;
+        if (error is BackfillPaused) return completed;
         try {
           // Never overwrite a completion record after an uncertain commit.
-          await _checkpoint(
+          await checkpoint(
             session,
             migration,
             i,
@@ -440,20 +380,20 @@ Future<List<String>> _applyRecoverable(
         );
       }
     }
-    await session.transaction((tx) => _recordMigration(tx, migration));
+    await session.transaction((tx) => recordMigration(tx, migration));
     completed.add(migration.id);
   }
   await flush();
   return completed;
 }
 
-bool _needsRebuild(List<Migration> migrations, SqlDialect dialect) =>
+bool needsRebuild(List<Migration> migrations, SqlDialect dialect) =>
     dialect == SqlDialect.sqlite &&
     migrations.any(
       (m) => m.steps.any((s) => s is RebuildTable || s is DropTable),
     );
 
-Future<R> _migrationTransaction<R>(
+Future<R> migrationTransaction<R>(
   SqlDatabase<Backend> session,
   Future<R> Function(SqlDatabase<Backend>) action, {
   bool rebuild = false,
@@ -525,19 +465,19 @@ Future<R> _migrationTransaction<R>(
 
 /// SQLite serializes each chunk using BEGIN IMMEDIATE. Re-read durable history
 /// inside that lock, so other workers may contribute chunks without replaying any.
-Future<List<String>> _applyRecoverableSqlite(
+Future<List<String>> applyRecoverableSqlite(
   SqlDatabase<Backend> session,
   List<Migration> migrations,
-  _BackfillBudget budget,
+  BackfillBudget budget,
 ) async {
-  await _migrationTransaction(session, (tx) async {
+  await migrationTransaction(session, (tx) async {
     await Migrator(tx).plan(migrations);
     await _recoveryTables(tx);
   });
   final atomic = <Migration>[], completed = <String>[];
   Future<void> flush() async {
     if (atomic.isEmpty) return;
-    final applied = await _migrationTransaction(session, (tx) async {
+    final applied = await migrationTransaction(session, (tx) async {
       final pending = (await Migrator(tx).plan(migrations))
           .map((m) => m.id)
           .toSet();
@@ -545,13 +485,13 @@ Future<List<String>> _applyRecoverableSqlite(
       for (final migration in atomic) {
         if (!pending.contains(migration.id)) continue;
         for (final step in migration.steps) {
-          await _executeStep(tx, step);
+          await executeStep(tx, step);
         }
-        await _recordMigration(tx, migration);
+        await recordMigration(tx, migration);
         applied.add(migration.id);
       }
       return applied;
-    }, rebuild: _needsRebuild(atomic, SqlDialect.sqlite));
+    }, rebuild: needsRebuild(atomic, SqlDialect.sqlite));
     completed.addAll(applied);
     atomic.clear();
   }
@@ -567,24 +507,24 @@ Future<List<String>> _applyRecoverableSqlite(
       final step = steps[i];
       var verified = false, phase = 'inspect';
       try {
-        while (!await _migrationTransaction(session, (tx) async {
+        while (!await migrationTransaction(session, (tx) async {
           final pending = await Migrator(tx).plan(migrations);
           if (!pending.any((m) => m.id == migration.id)) return true;
-          final current = (await _progress(tx))
+          final current = (await loadMigrationProgress(tx))
               .where((p) => p.id == migration.id && p.step == i)
               .firstOrNull;
           if (current?.state == .complete) return true;
           if (current == null) {
-            await _checkpoint(tx, migration, i, .running, 'inspect');
+            await checkpoint(tx, migration, i, .running, 'inspect');
             return false;
           }
           if (step is Backfill) {
             if (!verified) {
               phase = 'inspect';
-              await _verifyBackfill(tx, step);
+              await verifyBackfill(tx, step);
               verified = true;
             }
-            return _backfillChunk(
+            return backfillChunk(
               tx,
               migration,
               i,
@@ -595,17 +535,17 @@ Future<List<String>> _applyRecoverableSqlite(
             );
           }
           phase = 'execute';
-          await _executeStep(tx, step);
+          await executeStep(tx, step);
           phase = 'record';
-          await _checkpoint(tx, migration, i, .complete, 'complete');
+          await checkpoint(tx, migration, i, .complete, 'complete');
           return true;
         }, rebuild: step is RebuildTable || step is DropTable)) {}
       } catch (error, stack) {
-        if (error is _BackfillPaused) return completed;
+        if (error is BackfillPaused) return completed;
         try {
-          await _migrationTransaction(
+          await migrationTransaction(
             session,
-            (tx) => _checkpoint(
+            (tx) => checkpoint(
               tx,
               migration,
               i,
@@ -629,12 +569,12 @@ Future<List<String>> _applyRecoverableSqlite(
         );
       }
     }
-    final recorded = await _migrationTransaction(session, (tx) async {
+    final recorded = await migrationTransaction(session, (tx) async {
       if (!(await Migrator(tx).plan(migrations))
           .any((m) => m.id == migration.id)) {
         return false;
       }
-      await _recordMigration(tx, migration);
+      await recordMigration(tx, migration);
       return true;
     });
     if (recorded) completed.add(migration.id);
@@ -643,7 +583,7 @@ Future<List<String>> _applyRecoverableSqlite(
   return completed;
 }
 
-Future<bool> _probe(SqlDatabase<Backend> db, String sql) async {
+Future<bool> probe(SqlDatabase<Backend> db, String sql) async {
   final result = await db.execute(SqlCommand(sql));
   if (result.rows.length != 1 ||
       result.rows.single.length != 1 ||
@@ -659,7 +599,7 @@ Future<bool> _probe(SqlDatabase<Backend> db, String sql) async {
   return result.rows.single.single == true || result.rows.single.single == 1;
 }
 
-Future<void> _checkpoint(
+Future<void> checkpoint(
   SqlDatabase<Backend> db,
   Migration migration,
   int step,
@@ -672,8 +612,8 @@ Future<void> _checkpoint(
     SqlCommand(
       '''
 INSERT INTO "_orm_migration_steps" (migration_id, checksum, step, state, phase, failure, backfill)
-VALUES (${[for (var i = 1; i <= 7; i++) _mark(db.dialect, i)].join(', ')})
-${_isMysql(db.dialect) ? "ON DUPLICATE KEY UPDATE phase = IF(state = 'complete', phase, VALUES(phase)), failure = IF(state = 'complete', failure, VALUES(failure)), backfill = IF(state = 'complete', backfill, COALESCE(VALUES(backfill), backfill)), state = IF(state = 'complete', state, VALUES(state))" : "ON CONFLICT (migration_id, step) DO UPDATE SET state = EXCLUDED.state, phase = EXCLUDED.phase, failure = EXCLUDED.failure, backfill = coalesce(EXCLUDED.backfill, \"_orm_migration_steps\".backfill) WHERE \"_orm_migration_steps\".state <> 'complete'"} ''',
+VALUES (${[for (var i = 1; i <= 7; i++) parameterMarker(db.dialect, i)].join(', ')})
+${isMysqlFamily(db.dialect) ? "ON DUPLICATE KEY UPDATE phase = IF(state = 'complete', phase, VALUES(phase)), failure = IF(state = 'complete', failure, VALUES(failure)), backfill = IF(state = 'complete', backfill, COALESCE(VALUES(backfill), backfill)), state = IF(state = 'complete', state, VALUES(state))" : "ON CONFLICT (migration_id, step) DO UPDATE SET state = EXCLUDED.state, phase = EXCLUDED.phase, failure = EXCLUDED.failure, backfill = coalesce(EXCLUDED.backfill, \"_orm_migration_steps\".backfill) WHERE \"_orm_migration_steps\".state <> 'complete'"} ''',
       [
         migration.id,
         migration.checksum,
@@ -688,7 +628,7 @@ ${_isMysql(db.dialect) ? "ON DUPLICATE KEY UPDATE phase = IF(state = 'complete',
 }
 
 Future<void> _recoveryTables(SqlDatabase<Backend> tx) async {
-  await tx.execute(SqlCommand(_historyDdl));
+  await tx.execute(SqlCommand(historyDdl));
   await tx.execute(
     SqlCommand('''CREATE TABLE IF NOT EXISTS "_orm_migration_steps" (
  migration_id TEXT NOT NULL, checksum TEXT NOT NULL, step INTEGER NOT NULL,
@@ -705,27 +645,27 @@ Future<void> _recoveryTables(SqlDatabase<Backend> tx) async {
   }
 }
 
-Future<BackfillProgress?> _savedBackfill(
+Future<BackfillProgress?> savedBackfill(
   SqlDatabase<Backend> tx,
   String id,
   int step,
 ) async {
   final row = await tx.execute(
     SqlCommand(
-      'SELECT backfill FROM "_orm_migration_steps" WHERE migration_id = ${_mark(tx.dialect, 1)} AND step = ${_mark(tx.dialect, 2)}',
+      'SELECT backfill FROM "_orm_migration_steps" WHERE migration_id = ${parameterMarker(tx.dialect, 1)} AND step = ${parameterMarker(tx.dialect, 2)}',
       [id, step],
     ),
   );
   final data = row.rows.single.single;
   return data == null
       ? null
-      : BackfillProgress._read(jsonDecode(_migrationText(data)!));
+      : readBackfillProgress(jsonDecode(_migrationText(data)!));
 }
 
-const _historyDdl =
+const historyDdl =
     'CREATE TABLE IF NOT EXISTS "_orm_migrations" (id TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)';
-Future<bool> _hasMigrationTable(SqlDatabase<Backend> db, String table) async {
-  if (_isMysql(db.dialect)) {
+Future<bool> hasMigrationTable(SqlDatabase<Backend> db, String table) async {
+  if (isMysqlFamily(db.dialect)) {
     final rows = await db.execute(
       SqlCommand(
         'SELECT TABLE_TYPE, ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
@@ -740,7 +680,7 @@ Future<bool> _hasMigrationTable(SqlDatabase<Backend> db, String table) async {
     }
     if (rows.rows.isNotEmpty) {
       final definition = await db.execute(
-        SqlCommand('SHOW CREATE TABLE ${_quote(table)}'),
+        SqlCommand('SHOW CREATE TABLE ${quoteIdentifier(table)}'),
       );
       if ((definition.rows.single[1] as String).toUpperCase().startsWith(
         'CREATE TEMPORARY TABLE',

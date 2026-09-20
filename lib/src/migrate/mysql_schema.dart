@@ -1,21 +1,30 @@
-part of '../../migrate.dart';
+import '../../driver.dart' show SqlCommand, SqlDialect;
+import '../../schema_model.dart'
+    show CheckSchema, Column, ForeignKey, IndexSchema, TableSchema;
+import '../../values.dart' show OrmException;
+import 'catalog.dart' show normalizeDefault;
+import 'schema.dart' show checkDefinition, foreignKey, validateSchema;
+import 'snapshot.dart' show foreignKeyJson;
+import 'sql_utils.dart' show migrationHash, quoteIdentifier;
+import 'sqlite_checks.dart' show sqliteTokens;
+import 'step.dart' show CheckedTableSql, MigrationStep;
 
-bool _isMysql(SqlDialect dialect) =>
+bool isMysqlFamily(SqlDialect dialect) =>
     dialect == SqlDialect.mysql || dialect == SqlDialect.mariadb;
 
 String _mysqlName(String kind, Object signature) =>
-    '_orm_${kind}_${_hash(signature).substring(0, 24)}';
-String _mysqlForeignName(String table, ForeignKey key) => _mysqlName('fk', [
+    '_orm_${kind}_${migrationHash(signature).substring(0, 24)}';
+String mysqlForeignName(String table, ForeignKey key) => _mysqlName('fk', [
   table,
   {
-    ..._foreignKeyJson(key),
+    ...foreignKeyJson(key),
     'onDelete': key.onDelete == 'NO ACTION' ? 'RESTRICT' : key.onDelete,
   },
 ]);
-String _mysqlUniqueName(String table, List<String> columns) =>
+String mysqlUniqueName(String table, List<String> columns) =>
     _mysqlName('uk', [table, columns]);
 
-TableSchema _mysqlCopy(
+TableSchema mysqlCopy(
   TableSchema table, {
   String? name,
   List<Column<Object?>>? columns,
@@ -34,7 +43,7 @@ TableSchema _mysqlCopy(
   checks: checks ?? table.checks,
 );
 
-TableSchema _mysqlPhysicalTable(TableSchema table) {
+TableSchema mysqlPhysicalTable(TableSchema table) {
   final indexes = table.indexes.toList();
   for (final key in table.foreignKeys) {
     final candidates = [
@@ -56,10 +65,10 @@ TableSchema _mysqlPhysicalTable(TableSchema table) {
       );
     }
   }
-  return _mysqlCopy(table, indexes: indexes);
+  return mysqlCopy(table, indexes: indexes);
 }
 
-void _validateMysqlSchema(List<TableSchema> tables, SqlDialect dialect) {
+void validateMysqlSchema(List<TableSchema> tables, SqlDialect dialect) {
   void distinct(Iterable<String> names) {
     final seen = <String>{};
     for (final name in names) {
@@ -141,7 +150,7 @@ void _validateMysqlSchema(List<TableSchema> tables, SqlDialect dialect) {
   }
 }
 
-String _mysqlStorageType(String type) => switch (type) {
+String mysqlStorageType(String type) => switch (type) {
   'integer' => 'BIGINT',
   'bigint' => 'DECIMAL(65,0)',
   'decimal' => 'DECIMAL',
@@ -158,7 +167,7 @@ String _mysqlStorageType(String type) => switch (type) {
     'No MySQL/MariaDB storage mapping for $type.',
   ),
 };
-String _mysqlColumnType(Column<Object?> column) =>
+String mysqlColumnType(Column<Object?> column) =>
     switch (column.codec.sqlType) {
       'integer' => switch (column.integerBits ?? 64) {
         16 => 'SMALLINT',
@@ -171,12 +180,12 @@ String _mysqlColumnType(Column<Object?> column) =>
       'instant' ||
       'timestamp' ||
       'local_datetime' => 'DATETIME(${column.temporalPrecision ?? 6})',
-      _ => _mysqlStorageType(column.codec.sqlType),
+      _ => mysqlStorageType(column.codec.sqlType),
     };
 
-String _mysqlColumn(Column<Object?> column, SqlDialect dialect) {
+String mysqlColumn(Column<Object?> column, SqlDialect dialect) {
   final result = StringBuffer(
-    '${_quote(column.name)} ${_mysqlColumnType(column)}',
+    '${quoteIdentifier(column.name)} ${mysqlColumnType(column)}',
   );
   if (column.codec.sqlType == 'text') {
     result.write(' CHARACTER SET utf8mb4 COLLATE utf8mb4_bin');
@@ -188,11 +197,11 @@ String _mysqlColumn(Column<Object?> column, SqlDialect dialect) {
   } else {
     result.write(column.nullable ? ' NULL' : ' NOT NULL');
     if (column.defaultSql case final value?) {
-      final sql = _normalizeDefault(value)!;
+      final sql = normalizeDefault(value)!;
       // MySQL reparses parenthesized string defaults. With
       // NO_BACKSLASH_ESCAPES that can change stored backslashes; ordinary
       // literal defaults also avoid unnecessary expression-default metadata.
-      final tokens = _sqliteTokens(sql);
+      final tokens = sqliteTokens(sql);
       final literal =
           tokens.length == 1 &&
               (tokens.single.text.startsWith('s:') ||
@@ -211,55 +220,55 @@ String _mysqlColumn(Column<Object?> column, SqlDialect dialect) {
   return result.toString();
 }
 
-String _mysqlCreateTable(TableSchema table, SqlDialect dialect) {
+String mysqlCreateTable(TableSchema table, SqlDialect dialect) {
   final definitions = [
-    for (final column in table.columns) _mysqlColumn(column, dialect),
+    for (final column in table.columns) mysqlColumn(column, dialect),
     if (table.primaryKey.isNotEmpty)
-      'PRIMARY KEY (${table.primaryKey.map(_quote).join(', ')})',
+      'PRIMARY KEY (${table.primaryKey.map(quoteIdentifier).join(', ')})',
     for (final key in table.uniqueKeys)
-      'CONSTRAINT ${_quote(_mysqlUniqueName(table.name, key))} UNIQUE (${key.map(_quote).join(', ')})',
+      'CONSTRAINT ${quoteIdentifier(mysqlUniqueName(table.name, key))} UNIQUE (${key.map(quoteIdentifier).join(', ')})',
     for (final index in table.indexes)
-      '${index.unique ? 'UNIQUE ' : ''}INDEX ${_quote(index.name)} (${index.columns.map(_quote).join(', ')})',
-    for (final check in table.checks) _checkDefinition(check, dialect),
+      '${index.unique ? 'UNIQUE ' : ''}INDEX ${quoteIdentifier(index.name)} (${index.columns.map(quoteIdentifier).join(', ')})',
+    for (final check in table.checks) checkDefinition(check, dialect),
   ];
-  return 'CREATE TABLE ${_quote(table.name)} (${definitions.join(', ')}) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin';
+  return 'CREATE TABLE ${quoteIdentifier(table.name)} (${definitions.join(', ')}) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin';
 }
 
-String _mysqlAddForeign(String table, ForeignKey key) =>
-    'ADD CONSTRAINT ${_quote(_mysqlForeignName(table, key))} ${_foreignKey(key)}';
+String mysqlAddForeign(String table, ForeignKey key) =>
+    'ADD CONSTRAINT ${quoteIdentifier(mysqlForeignName(table, key))} ${foreignKey(key)}';
 
-List<SqlCommand> _mysqlCreateSchema(
+List<SqlCommand> mysqlCreateSchema(
   List<TableSchema> tables,
   SqlDialect dialect,
 ) {
-  _validateSchema(tables, dialect);
-  final physical = tables.map(_mysqlPhysicalTable).toList();
+  validateSchema(tables, dialect);
+  final physical = tables.map(mysqlPhysicalTable).toList();
   return List.unmodifiable([
-    for (final table in physical) SqlCommand(_mysqlCreateTable(table, dialect)),
+    for (final table in physical) SqlCommand(mysqlCreateTable(table, dialect)),
     for (final table in physical)
       if (table.foreignKeys.isNotEmpty)
         SqlCommand(
-          'ALTER TABLE ${_quote(table.name)} ${table.foreignKeys.map((key) => _mysqlAddForeign(table.name, key)).join(', ')}',
+          'ALTER TABLE ${quoteIdentifier(table.name)} ${table.foreignKeys.map((key) => mysqlAddForeign(table.name, key)).join(', ')}',
         ),
   ]);
 }
 
-List<MigrationStep> _mysqlCreateSteps(
+List<MigrationStep> mysqlCreateSteps(
   List<TableSchema> tables,
   SqlDialect dialect,
 ) {
-  final physical = tables.map(_mysqlPhysicalTable).toList();
+  final physical = tables.map(mysqlPhysicalTable).toList();
   return [
     for (final table in physical)
       CheckedTableSql(
-        _mysqlCreateTable(table, dialect),
-        after: _mysqlCopy(table, foreignKeys: []),
+        mysqlCreateTable(table, dialect),
+        after: mysqlCopy(table, foreignKeys: []),
       ),
     for (final table in physical)
       if (table.foreignKeys.isNotEmpty)
         CheckedTableSql(
-          'ALTER TABLE ${_quote(table.name)} ${table.foreignKeys.map((key) => _mysqlAddForeign(table.name, key)).join(', ')}',
-          before: _mysqlCopy(table, foreignKeys: []),
+          'ALTER TABLE ${quoteIdentifier(table.name)} ${table.foreignKeys.map((key) => mysqlAddForeign(table.name, key)).join(', ')}',
+          before: mysqlCopy(table, foreignKeys: []),
           after: table,
         ),
   ];

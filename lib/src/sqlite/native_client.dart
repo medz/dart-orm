@@ -1,4 +1,12 @@
-part of 'native.dart';
+import 'dart:async';
+import 'dart:ffi' as ffi;
+import 'dart:isolate';
+
+import '../../driver.dart';
+import 'failure.dart';
+import 'native_protocol.dart';
+import 'native_server.dart';
+import 'options.dart';
 
 // Resolve against the exact native asset used by package:sqlite3. Never call
 // an unrelated system SQLite library with this library's database pointer.
@@ -8,13 +16,7 @@ part of 'native.dart';
 )
 external void _sqliteInterrupt(ffi.Pointer<ffi.Void> db);
 
-final class _OpenCursor(final SqlCommand command) {}
-
-final class _FetchCursor(final int cursor, final int count) {}
-
-final class _CloseCursor(final int cursor) {}
-
-final class _SqliteWorker implements SqlConnection {
+final class SqliteWorker implements SqlConnection {
   final ReceivePort _responses = ReceivePort();
   final Completer<(SendPort, int, int)> _ready = Completer();
   final Map<int, Completer<SqlResult>> _pending = {};
@@ -87,7 +89,7 @@ final class _SqliteWorker implements SqlConnection {
     });
     try {
       _isolate = await Isolate.spawn(
-        _sqliteMain,
+        runSqliteWorker,
         (_responses.sendPort, options),
         onError: _responses.sendPort,
         onExit: _responses.sendPort,
@@ -180,7 +182,7 @@ final class _SqliteWorker implements SqlConnection {
     SqlCommand command, {
     ExecutionOptions options = const ExecutionOptions(),
   }) async {
-    final result = await _operate(_OpenCursor(command), options);
+    final result = await _operate(OpenSqliteCursor(command), options);
     return _SqliteCursor(this, result.rows.single.single as int);
   }
 
@@ -200,7 +202,7 @@ final class _SqliteWorker implements SqlConnection {
   Future<void> invalidate() => stop();
 }
 
-final class _SqliteCursor(final _SqliteWorker worker, final int id)
+final class _SqliteCursor(final SqliteWorker worker, final int id)
     implements SqlCursor {
   bool _closed = false;
   @override
@@ -210,13 +212,13 @@ final class _SqliteCursor(final _SqliteWorker worker, final int id)
   }) {
     if (_closed) throw const OrmException('CURSOR.CLOSED', 'Cursor has ended.');
     if (count < 1) throw ArgumentError.value(count, 'count');
-    return worker._operate(_FetchCursor(id, count), options);
+    return worker._operate(FetchSqliteCursor(id, count), options);
   }
 
   @override
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
-    await worker._operate(_CloseCursor(id), const ExecutionOptions());
+    await worker._operate(CloseSqliteCursor(id), const ExecutionOptions());
   }
 }

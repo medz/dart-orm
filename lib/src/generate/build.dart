@@ -1,4 +1,13 @@
-part of '../generate.dart';
+import 'package:analyzer/dart/analysis/results.dart';
+import 'package:analyzer/dart/analysis/session.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/element/element.dart';
+import 'package:build/build.dart' as builder;
+import 'package:path/path.dart' as p;
+
+import 'exception.dart';
+import 'queries.dart';
+import 'schema.dart';
 
 /// Factory used by build_runner's build.yaml registration.
 builder.Builder ormBuilder(builder.BuilderOptions options) {
@@ -34,7 +43,7 @@ final class _OrmQueryBuilder implements builder.Builder {
     }
     final output = input.changeExtension('.queries.dart');
     final (unit, library) = await const _OrmBuilder()._resolveSchema(step);
-    final result = await _generateQueries(
+    final result = await generateResolvedQueries(
       unit,
       library,
       p.url.relative(input.path, from: p.url.dirname(output.path)),
@@ -71,7 +80,7 @@ final class _OrmBuilder implements builder.Builder {
     }
     final output = input.changeExtension('.orm.dart');
     final (unit, library) = await _resolveSchema(step);
-    final result = _generate(
+    final result = generateResolvedSchema(
       unit,
       library,
       p.url.relative(input.path, from: p.url.dirname(output.path)),

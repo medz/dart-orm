@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:test/test.dart';
 
@@ -57,8 +59,35 @@ void main() {
             ),
           ),
         );
-        expect(exports(schema), isNot(contains('Database')));
+        expect(
+          exports(schema).intersection({
+            'Database',
+            'TableSchema',
+            'Column',
+            'ForeignKey',
+            'IndexSchema',
+            'CheckSchema',
+          }),
+          isEmpty,
+          reason: 'Declarations do not expose physical schema construction.',
+        );
+        expect(
+          exports(schema),
+          containsAll(['entity', 'Id', 'Codec', 'Decimal', 'ComputedStorage']),
+        );
         expect(exports(runtime), isNot(contains('Migration')));
+        for (final path in ['lib/mysql.dart', 'lib/drivers/mysql.dart']) {
+          final names = exports(await library(path));
+          expect(names, containsAll(['MysqlDriver', 'MysqlOptions']));
+          expect(names, isNot(contains('MariadbDriver')));
+          expect(names, isNot(contains('MariadbOptions')));
+        }
+        for (final path in ['lib/mariadb.dart', 'lib/drivers/mariadb.dart']) {
+          final names = exports(await library(path));
+          expect(names, containsAll(['MariadbDriver', 'MariadbOptions']));
+          expect(names, isNot(contains('MysqlDriver')));
+          expect(names, isNot(contains('MysqlOptions')));
+        }
         expect(
           exports(migrate),
           containsAll(['Migration', 'SqlDialect', 'TableSchema', 'Codecs']),
@@ -66,6 +95,72 @@ void main() {
         expect(exports(migrate), isNot(contains('generateSchema')));
         expect(exports(generate), isNot(contains('ormBuilder')));
         expect(exports(builder), {'ormBuilder', 'ormQueryBuilder'});
+
+        // Resolve every public library, including newly added entrypoints.
+        // A show list is required whenever a facade reaches into src directly.
+        final entrypoints = [
+          ...Directory('lib').listSync().whereType<File>(),
+          ...Directory('lib/drivers').listSync().whereType<File>(),
+        ].where((file) => file.path.endsWith('.dart'));
+        const implementationNames = {
+          'SqlNode',
+          'SqlWriter',
+          'ColumnNode',
+          'ParameterNode',
+          'QueryState',
+          'SelectionPlan',
+          'RowDecoder',
+          'Join',
+          'CteDefinition',
+          'UnionSource',
+          'ReadTables',
+          'MutationKind',
+          'RelationBinding',
+          'TypedRelationBinding',
+          'ConnectionWait',
+          'TransactionControl',
+          'BackfillBudget',
+          'BackfillPaused',
+          'quoteIdentifier',
+          'migrationHash',
+          'readBackfillProgress',
+          'diffSchema',
+          'SqliteExecutor',
+          'OpenedSqlite',
+          'sqliteWorkerBuild',
+          'databaseMembers',
+          'isMysqlDialect',
+        };
+        for (final file in entrypoints) {
+          final entry = await library(file.path);
+          final namespace = entry.exportNamespace.definedNames2;
+          expect(
+            namespace.keys.toSet().intersection(implementationNames),
+            isEmpty,
+            reason: '${file.path} exports an implementation detail',
+          );
+          expect(
+            namespace.entries
+                .where((entry) => entry.value.metadata.hasInternal)
+                .map((entry) => entry.key),
+            isEmpty,
+            reason: '${file.path} exports an @internal declaration',
+          );
+          final unit = parseString(
+            content: file.readAsStringSync(),
+            path: file.path,
+          ).unit;
+          for (final directive
+              in unit.directives.whereType<ExportDirective>()) {
+            if (directive.uri.stringValue!.split('/').contains('src')) {
+              expect(
+                directive.combinators.whereType<ShowCombinator>(),
+                isNotEmpty,
+                reason: '${file.path} broadly exports ${directive.uri}',
+              );
+            }
+          }
+        }
         final client = exports(await library('example/schema.orm.dart'));
         expect(
           client,

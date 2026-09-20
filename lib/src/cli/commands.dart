@@ -1,10 +1,21 @@
-part of '../../cli.dart';
+import 'dart:convert';
+import 'dart:io';
 
-Future<void> _runExplicitCli(
-  List<String> arguments, {
-  bool json = false,
-}) async {
-  void report(Map<String, Object?> value) => _CliOutput(json).report(value);
+import 'package:path/path.dart' as p;
+
+import '../../drivers/mysql.dart';
+import '../../drivers/mariadb.dart';
+import '../../drivers/postgres.dart';
+import '../../drivers/sqlite.dart';
+import '../../generate.dart';
+import '../../migrate.dart';
+import '../../runtime.dart';
+import '../sqlite/assets_io.dart';
+import 'arguments.dart';
+import 'output.dart';
+
+Future<void> runExplicitCli(List<String> arguments, {bool json = false}) async {
+  void report(Map<String, Object?> value) => CliOutput(json).report(value);
   try {
     if (arguments.first == 'web-assets') {
       if (arguments.length > 2 ||
@@ -17,7 +28,7 @@ Future<void> _runExplicitCli(
         arguments.length == 2 ? arguments[1] : 'web/orm',
       );
       await copySqliteWebAssets(directory);
-      _CliOutput(json).report({'copied': directory.path});
+      CliOutput(json).report({'copied': directory.path});
       return;
     }
     if (arguments.first == 'generate') {
@@ -32,7 +43,7 @@ Future<void> _runExplicitCli(
         arguments[1],
         output: arguments.length == 3 ? arguments[2] : null,
       );
-      _CliOutput(json).report({
+      CliOutput(json).report({
         'generated': arguments.length == 3
             ? arguments[2]
             : p.setExtension(arguments[1], '.orm.dart'),
@@ -79,7 +90,7 @@ Future<void> _runExplicitCli(
         arguments[2],
         output: arguments.length == 4 ? arguments[3] : null,
       );
-      _CliOutput(json).report({
+      CliOutput(json).report({
         'generated': arguments.length == 4
             ? arguments[3]
             : p.setExtension(arguments[2], '.queries.dart'),
@@ -100,19 +111,24 @@ Future<void> _runExplicitCli(
       'queries check' => {...common, 'source', 'output'},
       _ => throw FormatException('Unknown command: $command'),
     };
-    final (positionals, options) = _parse(arguments.skip(2).toList(), flags);
+    final (positionals, options) = parseOptions(
+      arguments.skip(2).toList(),
+      flags,
+    );
     if (positionals.isNotEmpty) {
       throw const FormatException('Unexpected positional arguments.');
     }
     final queries = command == 'queries check'
         ? await checkGeneratedQueries(
-            _required(options, 'source'),
+            requiredOption(options, 'source'),
             output: options['output'],
           )
         : null;
-    final table = command == 'db inspect' ? _required(options, 'table') : null;
+    final table = command == 'db inspect'
+        ? requiredOption(options, 'table')
+        : null;
     final importOutput = command == 'db import'
-        ? _required(options, 'output')
+        ? requiredOption(options, 'output')
         : '';
     final importTables = options['table'] == null ? null : [options['table']!];
     if (command == 'db import') {
@@ -220,40 +236,15 @@ Future<void> _runExplicitCli(
       await db.close();
     }
   } on FormatException catch (error) {
-    _CliOutput(json).error(error.message, 64);
+    CliOutput(json).error(error.message, 64);
   } on ArgumentError catch (_) {
-    _CliOutput(json)
+    CliOutput(json)
         .error('Invalid command option or configuration. Use --help.', 64);
   } catch (error) {
-    _CliOutput(json).error(error.toString(), 1);
+    CliOutput(json).error(error.toString(), 1);
   }
 }
 
-(List<String>, Map<String, String>) _parse(
-  List<String> args,
-  Set<String> allowed,
-) {
-  final positionals = <String>[], options = <String, String>{};
-  for (var i = 0; i < args.length; i++) {
-    final argument = args[i];
-    if (!argument.startsWith('--')) {
-      positionals.add(argument);
-      continue;
-    }
-    final key = argument.substring(2);
-    if (!allowed.contains(key) || options.containsKey(key)) {
-      throw FormatException('Unknown or repeated option --$key.');
-    }
-    if (++i == args.length || args[i].startsWith('--')) {
-      throw FormatException('Missing value for --$key.');
-    }
-    options[key] = args[i];
-  }
-  return (positionals, options);
-}
-
-String _required(Map<String, String> options, String key) =>
-    options[key] ?? (throw FormatException('Missing --$key.'));
 SqlDialect _databaseDialect(Map<String, String> options) {
   final selected = [
     'sqlite',
@@ -295,14 +286,14 @@ Future<SqlDatabase<Backend>> _open(
 }) async {
   final dialect = _databaseDialect(options);
   if (dialect == SqlDialect.sqlite) {
-    final file = _required(options, 'sqlite');
+    final file = requiredOption(options, 'sqlite');
     return SqlDatabase(
       await SqliteDriver.open(
         readOnly ? SqliteOptions.readOnly(file) : SqliteOptions.file(file),
       ),
     );
   }
-  final name = _required(options, '${dialect.name}-env');
+  final name = requiredOption(options, '${dialect.name}-env');
   final value = Platform.environment[name];
   if (value == null || value.isEmpty) {
     throw FormatException('Environment variable $name is empty or missing.');

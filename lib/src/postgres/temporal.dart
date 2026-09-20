@@ -1,4 +1,8 @@
-part of '../../drivers/postgres.dart';
+import 'dart:typed_data';
+
+import 'package:postgres/postgres.dart' as pg;
+
+import '../../values.dart';
 
 /// Native calendar values and UTC instants, without integer overflow.
 /// Local calendar types cover PostgreSQL's full finite range; UTC instants

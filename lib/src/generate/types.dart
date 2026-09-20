@@ -1,7 +1,23 @@
-part of '../generate.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/element/element.dart';
+import 'package:analyzer/dart/element/nullability_suffix.dart';
+import 'package:analyzer/dart/element/type.dart';
+
+import 'exception.dart';
+import 'source.dart';
+
+// Match defining libraries, not consumer import text. Reexports preserve these
+// identities, so user-defined lookalike annotations and codecs are rejected.
+const schemaDeclarationUri = 'package:orm/src/schema/declaration.dart';
+const codecLibraryUri = 'package:orm/src/values/codec.dart';
+const valueLibraryUris = {
+  codecLibraryUri,
+  'package:orm/src/values/decimal.dart',
+  'package:orm/src/values/temporal.dart',
+};
 
 /// Resolve symbols by defining library rather than copying source import text.
-final class _DartNames(final Uri source, final String Function(Uri) importUri) {
+final class DartNames(final Uri source, final String Function(Uri) importUri) {
   final Map<Uri, String> _prefixes = {};
   bool typedData = false;
   Iterable<(String, String)> get imports sync* {
@@ -22,9 +38,8 @@ final class _DartNames(final Uri source, final String Function(Uri) importUri) {
     if ({
       'dart:core',
       'dart:typed_data',
-      'package:orm/orm.dart',
-      'package:orm/values.dart',
-      'package:orm/schema_model.dart',
+      ...valueLibraryUris,
+      'package:orm/src/schema/model.dart',
     }.contains(uri.toString())) {
       return element.name!;
     }
@@ -87,7 +102,7 @@ final class _DartNames(final Uri source, final String Function(Uri) importUri) {
         final type = value?.type;
         if (type is InterfaceType &&
             type.element.name == 'EnumValue' &&
-            type.element.library.uri.toString() == 'package:orm/schema.dart') {
+            type.element.library.uri.toString() == schemaDeclarationUri) {
           if (label != null) {
             throw GenerationException(
               'EnumValue appears twice on ${field.name}.',
@@ -106,7 +121,7 @@ final class _DartNames(final Uri source, final String Function(Uri) importUri) {
       throw GenerationException('An empty enum cannot be stored.');
     }
     final symbol = name(element);
-    return 'Codecs.enumeration<$symbol>({${values.entries.map((e) => '$symbol.${e.key}: ${_literal(e.value)}').join(', ')}})';
+    return 'Codecs.enumeration<$symbol>({${values.entries.map((e) => '$symbol.${e.key}: ${dartLiteral(e.value)}').join(', ')}})';
   }
 
   String factoryReference(

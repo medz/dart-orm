@@ -1,41 +1,44 @@
-part of '../generate.dart';
+import '../../schema_model.dart';
+import 'model.dart';
+import 'source.dart';
+import 'types.dart';
 
-String _emit(List<_Entity> schema, String import, _DartNames names) {
+String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
   final b = StringBuffer('// GENERATED CODE - DO NOT MODIFY BY HAND.\n\n')
     ..writeln("import 'package:orm/sql.dart';")
-    ..writeln("import ${_literal(import)} as models;")
+    ..writeln("import ${dartLiteral(import)} as models;")
     ..writeln(
-      "export ${_literal(import)} show ${schema.map((e) => e.row).toSet().join(', ')};",
+      "export ${dartLiteral(import)} show ${schema.map((e) => e.row).toSet().join(', ')};",
     );
   if (names.typedData) {
     b.writeln("import 'dart:typed_data';");
   }
   for (final (uri, prefix) in names.imports) {
-    b.writeln('import ${_literal(uri)} as $prefix;');
+    b.writeln('import ${dartLiteral(uri)} as $prefix;');
   }
   b.writeln('');
   for (final entity in schema) {
     for (final f in entity.fields) {
       b.writeln(
-        'final ${_columnSymbol(entity, f)} = Column<${f.type}>(${_literal(f.column)}, ${f.codec}, '
-        'nullable: ${f.nullable}, generated: ${f.generated}${f.defaultSql == null ? '' : ', defaultSql: ${_literal(f.defaultSql!)}'}${f.clientDefault == null ? '' : ', clientDefault: ${f.clientDefault}'}${f.computed == null ? '' : ', computed: ${_computedLiteral(f.computed!)}'}${f.integerBits == null || f.integerBits == 64 ? '' : ', integerBits: ${f.integerBits}'}${f.temporalPrecision == null || f.temporalPrecision == 6 ? '' : ', temporalPrecision: ${f.temporalPrecision}'}${f.decimalPrecision == null ? '' : ', decimalPrecision: ${f.decimalPrecision}'}${f.decimalScale == null || f.decimalScale == 0 ? '' : ', decimalScale: ${f.decimalScale}'});',
+        'final ${columnSymbol(entity, f)} = Column<${f.type}>(${dartLiteral(f.column)}, ${f.codec}, '
+        'nullable: ${f.nullable}, generated: ${f.generated}${f.defaultSql == null ? '' : ', defaultSql: ${dartLiteral(f.defaultSql!)}'}${f.clientDefault == null ? '' : ', clientDefault: ${f.clientDefault}'}${f.computed == null ? '' : ', computed: ${_computedLiteral(f.computed!)}'}${f.integerBits == null || f.integerBits == 64 ? '' : ', integerBits: ${f.integerBits}'}${f.temporalPrecision == null || f.temporalPrecision == 6 ? '' : ', temporalPrecision: ${f.temporalPrecision}'}${f.decimalPrecision == null ? '' : ', decimalPrecision: ${f.decimalPrecision}'}${f.decimalScale == null || f.decimalScale == 0 ? '' : ', decimalScale: ${f.decimalScale}'});',
       );
     }
     b.writeln(
-      'final ${entity.name}Schema = TableSchema(${_literal(entity.table)}, '
-      'columns: [${entity.fields.map((f) => _columnSymbol(entity, f)).join(', ')}], '
-      'primaryKey: ${_strings(entity.columns(entity.primaryKey))}, '
-      'uniqueKeys: [${entity.uniqueKeys.map((k) => _strings(entity.columns(k))).join(', ')}], '
-      'indexes: [${entity.indexes.map((i) => 'IndexSchema(${_literal(i.name)}, ${_strings(entity.columns(i.keys))}, unique: ${i.unique})').join(', ')}], '
-      '${entity.checks.isEmpty ? '' : 'checks: [${entity.checks.map((c) => 'CheckSchema.forDialects(${c.name == null ? 'null' : _literal(c.name!)}, sqlite: ${_literal(c.sqlite)}, postgres: ${_literal(c.postgres)}, mysql: ${c.mysql == null ? 'null' : _literal(c.mysql!)}, mariadb: ${c.mariadb == null ? 'null' : _literal(c.mariadb!)})').join(', ')}], '}'
-      'foreignKeys: [${entity.edges.where((e) => e.isForeignKey).map((e) => 'ForeignKey(${_strings(entity.columns(e.parentKeys))}, ${_literal(e.target.table)}, ${_strings(e.target.columns(e.childKeys))}, onDelete: ${_literal(e.onDelete!)})').join(', ')}]);',
+      'final ${entity.name}Schema = TableSchema(${dartLiteral(entity.table)}, '
+      'columns: [${entity.fields.map((f) => columnSymbol(entity, f)).join(', ')}], '
+      'primaryKey: ${dartStringList(entity.columns(entity.primaryKey))}, '
+      'uniqueKeys: [${entity.uniqueKeys.map((k) => dartStringList(entity.columns(k))).join(', ')}], '
+      'indexes: [${entity.indexes.map((i) => 'IndexSchema(${dartLiteral(i.name)}, ${dartStringList(entity.columns(i.keys))}, unique: ${i.unique})').join(', ')}], '
+      '${entity.checks.isEmpty ? '' : 'checks: [${entity.checks.map((c) => 'CheckSchema.forDialects(${c.name == null ? 'null' : dartLiteral(c.name!)}, sqlite: ${dartLiteral(c.sqlite)}, postgres: ${dartLiteral(c.postgres)}, mysql: ${c.mysql == null ? 'null' : dartLiteral(c.mysql!)}, mariadb: ${c.mariadb == null ? 'null' : dartLiteral(c.mariadb!)})').join(', ')}], '}'
+      'foreignKeys: [${entity.edges.where((e) => e.isForeignKey).map((e) => 'ForeignKey(${dartStringList(entity.columns(e.parentKeys))}, ${dartLiteral(e.target.table)}, ${dartStringList(e.target.columns(e.childKeys))}, onDelete: ${dartLiteral(e.onDelete!)})').join(', ')}]);',
     );
     b.writeln(
       'final class ${entity.fieldsType} extends Fields {\n ${entity.fieldsType}(super.table);',
     );
     for (final f in entity.fields) {
       b.writeln(
-        'late final ${f.name} = ${f.computed == null ? 'column' : 'readColumn'}(${_columnSymbol(entity, f)});',
+        'late final ${f.name} = ${f.computed == null ? 'column' : 'readColumn'}(${columnSymbol(entity, f)});',
       );
     }
     for (final edge in entity.edges) {
@@ -110,10 +113,10 @@ String _emit(List<_Entity> schema, String import, _DartNames names) {
   return b.toString();
 }
 
-String _modelSelection(_Entity entity, String row) {
+String _modelSelection(ModelEntity entity, String row) {
   final named = entity.constructorNamedFields;
-  if (named == null) return _recordSelection(entity.fields, row);
-  String construct(String Function(_Field) value) =>
+  if (named == null) return recordSelection(entity.fields, row);
+  String construct(String Function(ModelField) value) =>
       '${entity.rowType}(${entity.fields.map((f) => '${named.contains(f.name) ? '${f.name}: ' : ''}${value(f)}').join(', ')})';
   final fields = entity.fields;
   if (fields.length == 1) {
@@ -126,12 +129,12 @@ String _modelSelection(_Entity entity, String row) {
   }
   final left = fields.take(5).toList(), right = fields.skip(5).toList();
   final leftNames = left.map((f) => f.name).toSet();
-  return '(${_recordSelection(left, row)}, ${_recordSelection(right, row)})'
+  return '(${recordSelection(left, row)}, ${recordSelection(right, row)})'
       '.map((left, right) => '
       '${construct((f) => '${leftNames.contains(f.name) ? 'left' : 'right'}.${f.name}')})';
 }
 
-String _recordSelection(List<_Field> fields, String row) {
+String recordSelection(List<ModelField> fields, String row) {
   if (fields.length == 1) {
     final f = fields.single;
     return '$row.${f.name}.map((v) => (${f.name}: v,))';
@@ -143,9 +146,9 @@ String _recordSelection(List<_Field> fields, String row) {
   }
   // Nested typed composition avoids a combinatorial number of arity helpers.
   final left = fields.take(5).toList(), right = fields.skip(5).toList();
-  return '(${_recordSelection(left, row)}, ${_recordSelection(right, row)})'
+  return '(${recordSelection(left, row)}, ${recordSelection(right, row)})'
       '.map((left, right) => (${[...left.map((f) => '${f.name}: left.${f.name}'), ...right.map((f) => '${f.name}: right.${f.name}')].join(', ')}))';
 }
 
 String _computedLiteral(ComputedColumn value) =>
-    'ComputedColumn.forDialects(sqlite: ${_literal(value.sqlite)}, postgres: ${_literal(value.postgres)}, mysql: ${value.mysql == null ? 'null' : _literal(value.mysql!)}, mariadb: ${value.mariadb == null ? 'null' : _literal(value.mariadb!)}, storage: ComputedStorage.${value.storage.name})';
+    'ComputedColumn.forDialects(sqlite: ${dartLiteral(value.sqlite)}, postgres: ${dartLiteral(value.postgres)}, mysql: ${value.mysql == null ? 'null' : dartLiteral(value.mysql!)}, mariadb: ${value.mariadb == null ? 'null' : dartLiteral(value.mariadb!)}, storage: ComputedStorage.${value.storage.name})';

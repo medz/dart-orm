@@ -1,10 +1,11 @@
-part of '../generate.dart';
+import '../../schema_model.dart';
+import 'exception.dart';
 
-bool _mysqlDialect(SqlDialect dialect) =>
+bool isMysqlDialect(SqlDialect dialect) =>
     dialect == SqlDialect.mysql || dialect == SqlDialect.mariadb;
 
 // A Database instance member takes precedence over a generated extension getter.
-const _databaseMembers = {
+const databaseMembers = {
   'sql',
   'driver',
   'onQuery',
@@ -37,7 +38,7 @@ const _databaseMembers = {
   'toString',
 };
 
-final class _Field {
+final class ModelField {
   final String name;
   final String column;
   final String type;
@@ -54,7 +55,7 @@ final class _Field {
   final int? decimalPrecision;
   final int? decimalScale;
   final int? temporalPrecision;
-  const _Field({
+  const ModelField({
     required this.name,
     required this.column,
     required this.type,
@@ -103,21 +104,21 @@ final class _Field {
   }
 }
 
-final class _Entity {
+final class ModelEntity {
   final String name;
   final String table;
   final String row;
-  final List<_Field> fields;
+  final List<ModelField> fields;
 
   /// Null for structural Record rows; otherwise the primary constructor's
   /// named parameters. Positional parameters retain declaration order.
   final Set<String>? constructorNamedFields;
   List<String> primaryKey;
   final List<List<String>> uniqueKeys;
-  final List<_Index> indexes = [];
-  final List<_Edge> edges = [];
+  final List<ModelIndex> indexes = [];
+  final List<ModelRelation> edges = [];
   final List<CheckSchema> checks = [];
-  _Entity(
+  ModelEntity(
     this.name,
     this.table,
     this.row,
@@ -135,7 +136,7 @@ final class _Entity {
   String get fieldsType => '${symbol}Fields';
   String get setType => '${symbol}TableSet';
   String get rowType => 'models.$row';
-  _Field field(String name) => fields.firstWhere(
+  ModelField field(String name) => fields.firstWhere(
     (f) => f.name == name,
     orElse: () => throw GenerationException('$this has no field $name.'),
   );
@@ -167,15 +168,15 @@ final class _Entity {
   String toString() => name;
 }
 
-final class _Index(
+final class ModelIndex(
   final String name,
   final List<String> keys,
   final bool unique,
 );
 
-final class _Edge(
+final class ModelRelation(
   final String name,
-  final _Entity target,
+  final ModelEntity target,
   final List<String> parentKeys,
   final List<String> childKeys,
   final String? onDelete, {
@@ -184,13 +185,5 @@ final class _Edge(
   bool get isForeignKey => !inverse && onDelete != null;
 }
 
-String _snake(String value) => value
-    .replaceAllMapped(RegExp(r'([a-z0-9])([A-Z])'), (m) => '${m[1]}_${m[2]}')
-    .toLowerCase();
-String _literal(String value) => jsonEncode(value).replaceAll(r'$', r'\$');
-String _strings(List<String> values) => '[${values.map(_literal).join(', ')}]';
-String _columnSymbol(_Entity entity, _Field field) =>
+String columnSymbol(ModelEntity entity, ModelField field) =>
     '_${entity.name}${field.name[0].toUpperCase()}${field.name.substring(1)}';
-bool _same(List<String> a, List<String> b) =>
-    a.length == b.length &&
-    [for (var i = 0; i < a.length; i++) a[i] == b[i]].every((v) => v);

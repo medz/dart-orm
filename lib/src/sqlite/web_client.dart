@@ -1,12 +1,19 @@
-part of 'web.dart';
+import 'dart:async';
+import 'dart:js_interop';
 
-final class _WebConnection implements SqlConnection {
+import 'package:web/web.dart' as web;
+
+import '../../driver.dart';
+import 'failure.dart';
+import 'web_wire.dart';
+
+final class WebConnection implements SqlConnection {
   final web.Worker worker;
   final Map<int, Completer<JSAny?>> _pending = {};
   int _serial = 0;
   bool _closed = false, _busy = false;
   bool? _active = false;
-  _WebConnection(this.worker) {
+  WebConnection(this.worker) {
     worker.onmessage = ((web.MessageEvent event) {
       try {
         final message = event.data! as JSArray<JSAny?>;
@@ -140,7 +147,7 @@ final class _WebConnection implements SqlConnection {
   );
 }
 
-final class _WebCursor(final _WebConnection connection, final int id)
+final class _WebCursor(final WebConnection connection, final int id)
     implements SqlCursor {
   bool _closed = false;
   @override

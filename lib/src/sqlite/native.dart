@@ -1,17 +1,8 @@
-import 'dart:async';
-import 'dart:isolate';
-import 'dart:ffi' as ffi;
-
-import 'package:sqlite3/sqlite3.dart' as native;
-
 import '../../driver.dart';
-import 'execution.dart';
-import 'failure.dart';
 import 'opened.dart';
 import 'options.dart';
 
-part 'native_client.dart';
-part 'native_server.dart';
+import 'native_client.dart';
 
 Future<OpenedSqlite> connectSqlite(SqliteOptions options) async {
   if (options.path.isEmpty ||
@@ -22,7 +13,7 @@ Future<OpenedSqlite> connectSqlite(SqliteOptions options) async {
       'Set nativePath for SqliteOptions.persistent, and use memory() for memory storage.',
     );
   }
-  final worker = _SqliteWorker();
+  final worker = SqliteWorker();
   final (port, maxParameters, version) = await worker.open(options);
   worker.port = port;
   return (

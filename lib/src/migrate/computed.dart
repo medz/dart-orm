@@ -1,6 +1,14 @@
-part of '../../migrate.dart';
+import '../../driver.dart' show Backend, SqlDialect;
+import '../../runtime.dart' show SqlDatabase;
+import '../../schema_model.dart'
+    show Column, ComputedColumn, ComputedStorage, TableSchema;
+import 'checks.dart' show checkExpressions;
+import 'columns.dart' show ColumnInfo, temporalCollationKind;
+import 'schema.dart' show coerceColumn, columnStorageType;
+import 'sqlite_checks.dart'
+    show sqliteName, sqliteTokens, uncoerceDecimalDefault, uncoerceTemporal;
 
-Map<String, Object?> _computedJson(ComputedColumn value) => {
+Map<String, Object?> computedJson(ComputedColumn value) => {
   'sqlite': value.sqlite,
   'postgres': value.postgres,
   if (value.mysql != null && value.mysql != value.postgres)
@@ -10,15 +18,15 @@ Map<String, Object?> _computedJson(ComputedColumn value) => {
   'storage': value.storage.name,
 };
 
-typedef _SqliteComputed = ({
+typedef SqliteComputed = ({
   String column,
   ComputedColumn value,
   int start,
   int end,
 });
 
-List<_SqliteComputed> _sqliteComputed(String sql) {
-  final tokens = _sqliteTokens(sql), result = <_SqliteComputed>[];
+List<SqliteComputed> _sqliteComputed(String sql) {
+  final tokens = sqliteTokens(sql), result = <SqliteComputed>[];
   var depth = 0, beginning = false;
   String? column;
   for (var i = 0; i < tokens.length; i++) {
@@ -84,11 +92,11 @@ List<_SqliteComputed> _sqliteComputed(String sql) {
   return result;
 }
 
-Map<String, ComputedColumn> _sqliteComputedColumns(String sql) => {
-  for (final c in _sqliteComputed(sql)) _sqliteName(c.column): c.value,
+Map<String, ComputedColumn> sqliteComputedColumns(String sql) => {
+  for (final c in _sqliteComputed(sql)) sqliteName(c.column): c.value,
 };
 
-String _withoutComputed(String sql) {
+String withoutComputed(String sql) {
   final result = StringBuffer();
   var start = 0;
   for (final c in _sqliteComputed(sql)) {
@@ -98,14 +106,14 @@ String _withoutComputed(String sql) {
   return (result..write(sql.substring(start))).toString();
 }
 
-ComputedColumn? _declarationComputed(ColumnInfo column) {
+ComputedColumn? computedDeclaration(ColumnInfo column) {
   final value = column.computed;
   if (value != null &&
       column.storageType == 'TEXT' &&
       column.temporalPrecision != null) {
-    final expression = _uncoerceTemporal(
+    final expression = uncoerceTemporal(
       value.sqlite,
-      _temporalCollationKind(column.collation)!,
+      temporalCollationKind(column.collation)!,
       column.temporalPrecision!,
     );
     return expression == null
@@ -117,7 +125,7 @@ ComputedColumn? _declarationComputed(ColumnInfo column) {
       column.decimalPrecision == null) {
     return value;
   }
-  final expression = _uncoerceDecimalDefault(
+  final expression = uncoerceDecimalDefault(
     value.sqlite,
     column.decimalPrecision!,
     column.decimalScale ?? 0,
@@ -127,7 +135,7 @@ ComputedColumn? _declarationComputed(ColumnInfo column) {
       : ComputedColumn(expression, storage: value.storage);
 }
 
-Future<List<String>> _verifyComputed(
+Future<List<String>> verifyComputed(
   SqlDatabase<Backend> db,
   TableSchema table,
   List<ColumnInfo> actual, {
@@ -148,7 +156,7 @@ Future<List<String>> _verifyComputed(
     }
     paths.add(path);
     final pair = [
-      _coerceColumn(expected.expression(db.dialect), column, db.dialect),
+      coerceColumn(expected.expression(db.dialect), column, db.dialect),
       observed.expression(db.dialect),
     ];
     // PostgreSQL stores assignment casts in pg_attrdef. Compare both sides in
@@ -157,12 +165,12 @@ Future<List<String>> _verifyComputed(
       db.dialect == SqlDialect.postgres
           ? pair.map(
               (sql) =>
-                  'CAST(($sql\n) AS ${_columnStorageType(column, db.dialect)})',
+                  'CAST(($sql\n) AS ${columnStorageType(column, db.dialect)})',
             )
           : pair,
     );
   }
-  final signatures = await _checkExpressions(db, table.name, expressions);
+  final signatures = await checkExpressions(db, table.name, expressions);
   for (var i = 0; i < paths.length; i++) {
     if (signatures[i * 2] != signatures[i * 2 + 1]) {
       differences.add('${paths[i]} computed expression or storage differs');
@@ -171,7 +179,7 @@ Future<List<String>> _verifyComputed(
   return differences;
 }
 
-TableSchema _materializedColumns(TableSchema table) => TableSchema(
+TableSchema materializedColumns(TableSchema table) => TableSchema(
   table.name,
   columns: [
     for (final c in table.columns)

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:orm/drivers/mysql.dart';
+import 'package:orm/drivers/mariadb.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/runtime.dart';
 import 'package:test/test.dart';

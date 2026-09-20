@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:orm/driver.dart' as raw;
 import 'package:orm/migrate.dart' as migrations;
@@ -11,6 +13,34 @@ import 'package:orm/values.dart' as values;
 import 'package:test/test.dart';
 
 void main() {
+  test(
+    'libraries, executables, and generated fixtures are standalone Dart',
+    () {
+      final files = [
+        for (final root in ['lib', 'bin', 'tool', 'example', 'test'])
+          ..._dartFiles(Directory(root)),
+      ];
+      expect(files, isNotEmpty);
+      expect(files.any((file) => file.path.endsWith('.orm.dart')), isTrue);
+      expect(files.any((file) => file.path.endsWith('.snapshot.dart')), isTrue);
+      expect(files.any((file) => file.path.endsWith('.queries.dart')), isTrue);
+      for (final file in files) {
+        final unit = parseString(
+          content: file.readAsStringSync(),
+          path: file.path,
+        ).unit;
+        expect(
+          unit.directives.where(
+            (directive) =>
+                directive is PartDirective || directive is PartOfDirective,
+          ),
+          isEmpty,
+          reason: '${file.path} must import and export standalone libraries',
+        );
+      }
+    },
+  );
+
   test('values and metadata can be authored without a query or session', () {
     final decimal = values.Decimal.parse('9007199254740993.01');
     expect(
@@ -87,6 +117,29 @@ void main() {
             return uri.toFilePath().substring('$root/lib/'.length);
           }
           return null;
+        }
+
+        // Internal imports must obey the same boundaries as public facades.
+        // Otherwise importing src/query directly could evade the SQL-layer ban.
+        String layer(String name) {
+          if (name == 'src/schema/model.dart') return 'schema_model.dart';
+          if (name == 'src/schema/declaration.dart') return 'schema.dart';
+          for (final (prefix, entry) in [
+            ('src/values/', 'values.dart'),
+            ('src/driver/', 'driver.dart'),
+            ('src/query/', 'sql.dart'),
+            ('src/runtime/', 'runtime.dart'),
+            ('src/orm/', 'orm.dart'),
+            ('src/migrate/', 'migrate.dart'),
+            ('src/generate/', 'generate.dart'),
+            ('src/cli/', 'cli.dart'),
+            ('src/sqlite/', 'drivers/sqlite.dart'),
+            ('src/postgres/', 'drivers/postgres.dart'),
+            ('src/mysql/', 'drivers/mysql.dart'),
+          ]) {
+            if (name.startsWith(prefix)) return entry;
+          }
+          return name;
         }
 
         Set<Uri> dependencies(LibraryElement entry) {
@@ -202,7 +255,11 @@ void main() {
         };
         for (final entry in forbidden.entries) {
           final closure = dependencies(await resolve(entry.key));
-          final local = closure.map(localName).whereType<String>().toSet();
+          final local = closure
+              .map(localName)
+              .whereType<String>()
+              .map(layer)
+              .toSet();
           expect(
             local.intersection(entry.value),
             isEmpty,
@@ -233,6 +290,19 @@ void main() {
       }
     },
   );
+}
+
+Iterable<File> _dartFiles(Directory directory) sync* {
+  for (final entry in directory.listSync(followLinks: false)) {
+    if (entry is File && entry.path.endsWith('.dart')) {
+      yield entry;
+    } else if (entry is Directory) {
+      final name = entry.path.split(Platform.pathSeparator).last;
+      if (name != 'build' && !name.startsWith('.')) {
+        yield* _dartFiles(entry);
+      }
+    }
+  }
 }
 
 final _id = schema.Column('id', values.Codecs.integer);

@@ -1,6 +1,10 @@
-part of '../../runtime.dart';
+import 'package:meta/meta.dart' show internal;
 
-void _checkMysqlTransactionSql(String sql) {
+import '../../driver.dart';
+
+/// @nodoc
+@internal
+void checkMysqlTransactionSql(String sql) {
   Never reject() => throw const OrmException(
     'TRANSACTION.STATEMENT',
     'MySQL/MariaDB transactions allow one SELECT, INSERT, UPDATE, DELETE, '

@@ -1,26 +1,28 @@
-part of '../../migrate.dart';
+// MySQL and MariaDB DDL recovery against complete table states.
 
-/// One reviewed MySQL/MariaDB DDL statement and its complete physical table
-/// pre/postconditions. DDL is autocommit; each successful step is checkpointed.
-/// A null before means create, a null after means drop, differing names rename.
-final class CheckedTableSql extends MigrationStep {
-  final String sql;
-  final TableSchema? before, after;
-  CheckedTableSql(this.sql, {this.before, this.after}) {
-    if (before == null && after == null) {
-      throw ArgumentError(
-        'A checked table step needs a before or after schema.',
-      );
-    }
-  }
-  @override
-  Map<String, Object?> toJson() => {
-    'kind': 'checkedTableSql',
-    'sql': sql,
-    if (before != null) 'before': _tableJson(before!),
-    if (after != null) 'after': _tableJson(after!),
-  };
-}
+import '../../driver.dart' show Backend, SqlCommand;
+import '../../runtime.dart' show SqlDatabase;
+import '../../schema_model.dart' show TableSchema;
+import '../../values.dart' show OrmException;
+import 'backfill.dart'
+    show BackfillBudget, BackfillPaused, backfillChunk, verifyBackfill;
+import 'catalog.dart' show SchemaVerification, verifySchema;
+import 'execute.dart' show executeStep;
+import 'history.dart' show Migrator, recordMigration;
+import 'migration.dart' show Migration;
+import 'mysql_catalog.dart' show mysqlVerifySchema;
+import 'recovery.dart'
+    show
+        checkpoint,
+        hasMigrationTable,
+        loadMigrationProgress,
+        migrationSession,
+        savedBackfill;
+import 'snapshot.dart' show SchemaSnapshot;
+import 'sql_utils.dart' show migrationHash;
+import 'sqlite_checks.dart' show sqliteTokens;
+import 'step.dart' show Backfill, CheckedTableSql;
+import 'validation.dart' show validateMigrations;
 
 Future<bool> _mysqlExists(SqlDatabase<Backend> db, String table) async =>
     (await db.execute(
@@ -42,11 +44,11 @@ Future<bool> _mysqlStateMatches(
       await _mysqlExists(db, other.name)) {
     return false;
   }
-  final verified = await _mysqlVerifySchema(db, SchemaSnapshot([present]));
+  final verified = await mysqlVerifySchema(db, SchemaSnapshot([present]));
   return verified.matches && verified.unmanaged.isEmpty;
 }
 
-Future<R> _mysqlMigrationLock<R>(
+Future<R> mysqlMigrationLock<R>(
   SqlDatabase<Backend> session,
   Duration timeout,
   Future<R> Function() action,
@@ -63,7 +65,7 @@ Future<R> _mysqlMigrationLock<R>(
       'Select a MySQL/MariaDB database before migrating.',
     );
   }
-  final key = 'orm_migrate_${_hash(name).substring(0, 48)}';
+  final key = 'orm_migrate_${migrationHash(name).substring(0, 48)}';
   Object? primaryFailure;
   try {
     final locked = (await session.execute(
@@ -109,16 +111,17 @@ Future<R> _mysqlMigrationLock<R>(
   }
 }
 
-Future<List<String>> _applyRecoverableMysql(
+Future<List<String>> applyRecoverableMysql(
   SqlDatabase<Backend> session,
   List<Migration> migrations,
-  _BackfillBudget budget,
+  BackfillBudget budget,
 ) async {
   final pending = await Migrator(session).plan(migrations);
   if (pending.isEmpty) return [];
   await _mysqlRecoveryTables(session);
   final progress = {
-    for (final value in await _progress(session)) (value.id, value.step): value,
+    for (final value in await loadMigrationProgress(session))
+      (value.id, value.step): value,
   };
   final completed = <String>[];
   for (final migration in pending) {
@@ -127,7 +130,7 @@ Future<List<String>> _applyRecoverableMysql(
       final step = migration.steps[i];
       var phase = 'inspect';
       try {
-        await _checkpoint(session, migration, i, .running, phase);
+        await checkpoint(session, migration, i, .running, phase);
         if (step is CheckedTableSql) {
           final done = await _mysqlStateMatches(
             session,
@@ -142,7 +145,7 @@ Future<List<String>> _applyRecoverableMysql(
               );
             }
             phase = 'execute';
-            await _checkpoint(session, migration, i, .running, phase);
+            await checkpoint(session, migration, i, .running, phase);
             await session.execute(SqlCommand(step.sql));
             phase = 'verify';
             if (!await _mysqlStateMatches(session, step.after, step.before)) {
@@ -153,16 +156,16 @@ Future<List<String>> _applyRecoverableMysql(
             }
           }
           phase = 'record';
-          await _checkpoint(session, migration, i, .complete, 'complete');
+          await checkpoint(session, migration, i, .complete, 'complete');
         } else if (step is Backfill) {
-          await _verifyBackfill(session, step);
+          await verifyBackfill(session, step);
           while (!await session.transaction(
-            (tx) async => _backfillChunk(
+            (tx) async => backfillChunk(
               tx,
               migration,
               i,
               step,
-              await _savedBackfill(tx, migration.id, i),
+              await savedBackfill(tx, migration.id, i),
               budget,
               (value) => phase = value,
             ),
@@ -172,14 +175,14 @@ Future<List<String>> _applyRecoverableMysql(
           // its checkpoint share the same InnoDB transaction.
           phase = 'execute';
           await session.transaction((tx) async {
-            await _executeStep(tx, step);
-            await _checkpoint(tx, migration, i, .complete, 'complete');
+            await executeStep(tx, step);
+            await checkpoint(tx, migration, i, .complete, 'complete');
           });
         }
       } catch (error, stack) {
-        if (error is _BackfillPaused) return completed;
+        if (error is BackfillPaused) return completed;
         try {
-          await _checkpoint(
+          await checkpoint(
             session,
             migration,
             i,
@@ -201,7 +204,7 @@ Future<List<String>> _applyRecoverableMysql(
       }
     }
     if (migration.snapshot != null) {
-      final verified = await _mysqlVerifySchema(session, migration.snapshot!);
+      final verified = await mysqlVerifySchema(session, migration.snapshot!);
       if (!verified.matches || verified.unmanaged.isNotEmpty) {
         throw OrmException(
           'MIGRATION.DRIFT',
@@ -209,7 +212,7 @@ Future<List<String>> _applyRecoverableMysql(
         );
       }
     }
-    await session.transaction((tx) => _recordMigration(tx, migration));
+    await session.transaction((tx) => recordMigration(tx, migration));
     completed.add(migration.id);
   }
   return completed;
@@ -232,7 +235,7 @@ Future<void> _mysqlRecoveryTables(SqlDatabase<Backend> db) async {
   // history check. Validate the resolved names again after creating the durable
   // tables, before any application DDL or history/checkpoint writes.
   for (final table in ['_orm_migrations', '_orm_migration_steps']) {
-    if (!await _hasMigrationTable(db, table)) {
+    if (!await hasMigrationTable(db, table)) {
       throw const OrmException(
         'MIGRATION.SESSION',
         'Durable migration metadata tables could not be established.',
@@ -241,7 +244,7 @@ Future<void> _mysqlRecoveryTables(SqlDatabase<Backend> db) async {
   }
 }
 
-Future<SchemaVerification> _mysqlBaseline(
+Future<SchemaVerification> mysqlBaseline(
   Migrator migrator,
   List<Migration> migrations,
   SchemaSnapshot expected,
@@ -261,11 +264,11 @@ Future<SchemaVerification> _mysqlBaseline(
       'The final migration must carry the expected baseline snapshot.',
     );
   }
-  return _migrationSession(migrator.database, migrator.lockTimeout, (
+  return migrationSession(migrator.database, migrator.lockTimeout, (
     session,
   ) async {
     if ((await Migrator(session).history()).isNotEmpty ||
-        (await _progress(session)).isNotEmpty) {
+        (await loadMigrationProgress(session)).isNotEmpty) {
       throw const OrmException(
         'MIGRATION.BASELINE',
         'Migration history already exists.',
@@ -278,7 +281,7 @@ Future<SchemaVerification> _mysqlBaseline(
     await _mysqlRecoveryTables(session);
     await session.transaction((tx) async {
       for (final migration in migrations) {
-        await _recordMigration(tx, migration);
+        await recordMigration(tx, migration);
       }
     });
     return verified;
@@ -287,8 +290,8 @@ Future<SchemaVerification> _mysqlBaseline(
 
 // Migration steps are single reviewed statements. Executable comments may hide
 // session/DDL operations from the transaction classifier and are not accepted.
-void _validateMysqlStatement(String sql) {
-  final tokens = _sqliteTokens(sql);
+void validateMysqlStatement(String sql) {
+  final tokens = sqliteTokens(sql);
   var offset = 0;
   for (var i = 0; i <= tokens.length; i++) {
     final end = i == tokens.length ? sql.length : tokens[i].start;

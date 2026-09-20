@@ -1,11 +1,18 @@
-part of '../../cli.dart';
+import 'dart:io';
 
-Future<void> _initializeProject(List<String> args, _CliOutput output) async {
-  final (positionals, options) = _parse(args, {'database'});
+import 'package:dart_style/dart_style.dart';
+
+import '../../generate.dart';
+import '../../migrate.dart';
+import 'arguments.dart';
+import 'output.dart';
+
+Future<void> initializeProject(List<String> args, CliOutput output) async {
+  final (positionals, options) = parseOptions(args, {'database'});
   if (positionals.isNotEmpty) {
     throw const FormatException('init accepts no positional arguments.');
   }
-  final engine = _required(options, 'database');
+  final engine = requiredOption(options, 'database');
   if (!{'sqlite', 'postgres', 'mysql', 'mariadb'}.contains(engine)) {
     throw const FormatException(
       'Choose --database sqlite, postgres, mysql or mariadb.',

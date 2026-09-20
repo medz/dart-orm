@@ -93,7 +93,7 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
       expect(await base.skip(2).select((u) => u.id).get(), [3, 2, 1]);
       expect(await base.where((u) => u.id.isIn([])).exists(), false);
       expect(await base.where((u) => u.nickname.isNull()).count(), 5);
-      expect(await base.take(0).first(), null);
+      expect(await base.take(0).firstOrNull(), null);
       expect(base.single(), throwsA(isA<OrmException>()));
     });
 
@@ -244,7 +244,7 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
             .insert((u) => [u.email.set('same')])
             .onConflictDoNothing(target: (u) => [u.email])
             .returning((u) => u.id)
-            .first();
+            .firstOrNull();
         expect(skipped, null);
         expect(await db.table(users).count(), 1);
         expect(

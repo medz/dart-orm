@@ -1,15 +1,39 @@
-part of '../../migrate.dart';
+import 'dart:convert' show jsonEncode;
+
+import '../../driver.dart' show SqlDialect;
+import '../../schema_model.dart'
+    show CheckSchema, Column, ComputedColumn, TableSchema;
+import '../../values.dart' show OrmException;
+import 'migration.dart' show Migration;
+import 'snapshot.dart' show SchemaSnapshot;
+import 'step.dart'
+    show
+        Backfill,
+        CheckedSql,
+        CheckedTableSql,
+        DropConstraint,
+        DropTable,
+        ExecuteSql,
+        MigrationStep,
+        RebuildTable;
+import 'validation.dart' show validateMigrations;
 
 /// Statically imported migrations and their independently recorded fingerprints.
 /// Keep these entries in version order. [checked] validates before returning them.
 final class MigrationHistory {
+  /// The fixed database engine shared by every entry.
   final SqlDialect dialect;
+
+  /// Migration values paired with their independently reviewed checksums.
   final List<(Migration, String)> entries;
+
+  /// Copies the ordered entries; [checked] validates their reviewed fingerprints.
   MigrationHistory(
     Iterable<(Migration, String)> entries, {
     required this.dialect,
   }) : entries = List.unmodifiable(entries);
 
+  /// Returns an immutable, validated history or throws on a changed fingerprint.
   List<Migration> get checked {
     final migrations = <Migration>[];
     for (final (migration, expected) in entries) {

@@ -1,6 +1,8 @@
-part of 'functions.dart';
+import 'package:sqlite3/common.dart' as native;
 
-void _registerTemporals(native.CommonDatabase db) {
+import '../../values.dart';
+
+void registerTemporalFunctions(native.CommonDatabase db) {
   Object round(Object value, String kind, int digits) => switch (kind) {
     'time' => Codecs.time.decode(value).withPrecision(digits),
     'local_datetime' =>

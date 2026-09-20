@@ -1,28 +1,48 @@
-part of '../../migrate.dart';
+import '../../driver.dart' show SqlDialect;
+import '../../schema_model.dart'
+    show
+        CheckSchema,
+        Column,
+        ComputedColumn,
+        ForeignKey,
+        IndexSchema,
+        TableSchema;
+import 'computed.dart' show computedJson;
+import 'mysql_schema.dart' show isMysqlFamily, mysqlPhysicalTable;
+import 'schema.dart' show validateSchema;
+import 'sql_utils.dart' show migrationHash;
 
 /// Physical schema facts saved as Dart with migrations. Storage codecs support DDL;
 /// custom domain decoding remains in the generated application client.
 final class SchemaSnapshot {
+  /// Immutable physical tables in declaration order.
   final List<TableSchema> tables;
+
+  /// Validates physical metadata without opening a database connection.
   SchemaSnapshot(List<TableSchema> tables)
     : tables = List.unmodifiable(tables) {
-    _validateSchema(tables);
+    validateSchema(tables);
   }
 
   /// Resolves shared declarations to physical facts for this engine only.
   SchemaSnapshot forDialect(SqlDialect dialect) {
-    _validateSchema(tables, dialect);
-    return SchemaSnapshot([for (final t in tables) _targetTable(t, dialect)]);
+    validateSchema(tables, dialect);
+    return SchemaSnapshot([for (final t in tables) targetTable(t, dialect)]);
   }
 
+  /// Physical metadata for diagnostic reports and stable fingerprints.
+  ///
+  /// Use the Dart source emitters when saving a snapshot with a migration.
   Map<String, Object?> toJson() => {
     'format': 1,
-    'tables': [for (final table in tables) _tableJson(table)],
+    'tables': [for (final table in tables) tableJson(table)],
   };
-  String get checksum => _hash(toJson());
+
+  /// Stable fingerprint of the physical metadata.
+  String get checksum => migrationHash(toJson());
 }
 
-TableSchema _targetTable(TableSchema table, SqlDialect dialect) {
+TableSchema targetTable(TableSchema table, SqlDialect dialect) {
   final target = TableSchema(
     table.name,
     columns: [
@@ -53,7 +73,7 @@ TableSchema _targetTable(TableSchema table, SqlDialect dialect) {
       for (final c in table.checks) CheckSchema(c.name, c.expression(dialect)),
     ],
   );
-  return _isMysql(dialect) ? _mysqlPhysicalTable(target) : target;
+  return isMysqlFamily(dialect) ? mysqlPhysicalTable(target) : target;
 }
 
 Map<String, Object?> _checkJson(CheckSchema check) => {
@@ -66,13 +86,13 @@ Map<String, Object?> _checkJson(CheckSchema check) => {
     'mariadb': check.mariadb,
 };
 
-Map<String, Object?> _columnJson(Column<Object?> column) => {
+Map<String, Object?> columnJson(Column<Object?> column) => {
   'name': column.name,
   'type': column.codec.sqlType,
   'nullable': column.nullable,
   'generated': column.generated,
   if (column.defaultSql != null) 'default': column.defaultSql,
-  if (column.computed != null) 'computed': _computedJson(column.computed!),
+  if (column.computed != null) 'computed': computedJson(column.computed!),
   if (column.integerBits != null && column.integerBits != 64)
     'integerBits': column.integerBits,
   if (column.temporalPrecision != null && column.temporalPrecision != 6)
@@ -84,23 +104,23 @@ Map<String, Object?> _columnJson(Column<Object?> column) => {
       column.decimalScale != 0)
     'decimalScale': column.decimalScale,
 };
-Map<String, Object?> _indexJson(IndexSchema index) => {
+Map<String, Object?> indexJson(IndexSchema index) => {
   'name': index.name,
   'columns': index.columns,
   'unique': index.unique,
 };
-Map<String, Object?> _foreignKeyJson(ForeignKey key) => {
+Map<String, Object?> foreignKeyJson(ForeignKey key) => {
   'columns': key.columns,
   'target': key.target,
   'targetColumns': key.targetColumns,
   'onDelete': key.onDelete,
 };
-Map<String, Object?> _tableJson(TableSchema table) => {
+Map<String, Object?> tableJson(TableSchema table) => {
   'name': table.name,
-  'columns': [for (final column in table.columns) _columnJson(column)],
+  'columns': [for (final column in table.columns) columnJson(column)],
   'primaryKey': table.primaryKey,
   'uniqueKeys': table.uniqueKeys,
-  'indexes': [for (final index in table.indexes) _indexJson(index)],
-  'foreignKeys': [for (final key in table.foreignKeys) _foreignKeyJson(key)],
+  'indexes': [for (final index in table.indexes) indexJson(index)],
+  'foreignKeys': [for (final key in table.foreignKeys) foreignKeyJson(key)],
   if (table.checks.isNotEmpty) 'checks': table.checks.map(_checkJson).toList(),
 };

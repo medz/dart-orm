@@ -1,7 +1,10 @@
-part of '../../migrate.dart';
+import 'dart:convert' show jsonDecode, jsonEncode;
 
-typedef _SqliteToken = ({String text, int start, int end});
-typedef _SqliteCheck = ({
+import 'columns.dart' show ColumnInfo, temporalCollationKind;
+import 'schema.dart' show decimalCheck, integerCheck, temporalCheck;
+
+typedef SqliteToken = ({String text, int start, int end});
+typedef SqliteCheck = ({
   String signature,
   String expression,
   String? name,
@@ -16,15 +19,15 @@ bool _sqliteWord(int c) =>
     c >= 97 && c <= 122 ||
     c == 95 ||
     c == 36;
-String _sqliteName(String name) => String.fromCharCodes(
+String sqliteName(String name) => String.fromCharCodes(
   name.codeUnits.map((c) => c >= 65 && c <= 90 ? c + 32 : c),
 );
 
 // Tokenize constraint expressions without mistaking quoted defaults/comments for
 // constraints. Storage ranges still require exact emitted signatures below.
 // This is not a general SQL parser.
-List<_SqliteToken> _sqliteTokens(String sql) {
-  final result = <_SqliteToken>[];
+List<SqliteToken> sqliteTokens(String sql) {
+  final result = <SqliteToken>[];
   var i = 0;
   while (i < sql.length) {
     if (sql[i].trim().isEmpty) {
@@ -79,8 +82,8 @@ List<_SqliteToken> _sqliteTokens(String sql) {
   return result;
 }
 
-List<_SqliteCheck> _sqliteChecks(String sql) {
-  final tokens = _sqliteTokens(sql), checks = <_SqliteCheck>[];
+List<SqliteCheck> sqliteChecks(String sql) {
+  final tokens = sqliteTokens(sql), checks = <SqliteCheck>[];
   for (var i = 0; i + 1 < tokens.length; i++) {
     if (tokens[i].text != 'CHECK' || tokens[i + 1].text != '(') continue;
     var depth = 1, end = i + 2;
@@ -110,10 +113,10 @@ List<_SqliteCheck> _sqliteChecks(String sql) {
 }
 
 String _integerSignature(String name, int bits) => jsonEncode(
-  _sqliteTokens(_integerCheck(name, bits)).map((t) => t.text).toList(),
+  sqliteTokens(integerCheck(name, bits)).map((t) => t.text).toList(),
 );
 
-int _sqliteIntegerBits(String name, List<_SqliteCheck> checks) {
+int sqliteIntegerBits(String name, List<SqliteCheck> checks) {
   for (final bits in [16, 32]) {
     final signature = _integerSignature(name, bits);
     if (checks.any((c) => c.name == null && c.signature == signature)) {
@@ -123,12 +126,12 @@ int _sqliteIntegerBits(String name, List<_SqliteCheck> checks) {
   return 64;
 }
 
-String _withoutIntegerChecks(String sql, List<ColumnInfo> columns) {
+String withoutIntegerChecks(String sql, List<ColumnInfo> columns) {
   final known = {
     for (final c in columns.where((c) => c.temporalPrecision != null))
       _temporalSignature(
         c.name,
-        _temporalCollationKind(c.collation)!,
+        temporalCollationKind(c.collation)!,
         c.temporalPrecision!,
       ),
     for (final c in columns.where((c) => c.decimalPrecision != null))
@@ -138,7 +141,7 @@ String _withoutIntegerChecks(String sql, List<ColumnInfo> columns) {
   };
   final result = StringBuffer();
   var start = 0;
-  for (final check in _sqliteChecks(sql)) {
+  for (final check in sqliteChecks(sql)) {
     if (check.name != null || !known.contains(check.signature)) continue;
     result.write(sql.substring(start, check.start));
     start = check.end;
@@ -147,12 +150,12 @@ String _withoutIntegerChecks(String sql, List<ColumnInfo> columns) {
 }
 
 String _decimalSignature(String name, int precision, int scale) => jsonEncode(
-  _sqliteTokens(_decimalCheck(name, precision, scale))
+  sqliteTokens(decimalCheck(name, precision, scale))
       .map((t) => t.text)
       .toList(),
 );
 
-(int, int)? _sqliteDecimalDigits(String name, List<_SqliteCheck> checks) {
+(int, int)? sqliteDecimalDigits(String name, List<SqliteCheck> checks) {
   for (final check in checks) {
     if (check.name != null) continue;
     final tokens = (jsonDecode(check.signature) as List).cast<String>();
@@ -177,8 +180,8 @@ String _decimalSignature(String name, int precision, int scale) => jsonEncode(
   return null;
 }
 
-String? _uncoerceDecimalDefault(String sql, int precision, int scale) {
-  final tokens = _sqliteTokens(sql);
+String? uncoerceDecimalDefault(String sql, int precision, int scale) {
+  final tokens = sqliteTokens(sql);
   if (tokens.length < 8 ||
       tokens[0].text != 'ORM_DECIMAL_CAST_V1' ||
       tokens[1].text != '(' ||
@@ -206,7 +209,7 @@ String? _uncoerceDecimalDefault(String sql, int precision, int scale) {
   return sql.substring(tokens[2].start, tokens[a].start).trim();
 }
 
-typedef _SqliteCollation = ({
+typedef SqliteCollation = ({
   String column,
   String collation,
   int start,
@@ -215,8 +218,8 @@ typedef _SqliteCollation = ({
 
 // Only column-level clauses at the CREATE TABLE body's outer depth. COLLATE
 // inside CHECK/default expressions and table/index constraints is not erased.
-List<_SqliteCollation> _sqliteColumnCollations(String sql) {
-  final tokens = _sqliteTokens(sql), result = <_SqliteCollation>[];
+List<SqliteCollation> sqliteColumnCollations(String sql) {
+  final tokens = sqliteTokens(sql), result = <SqliteCollation>[];
   var depth = 0;
   String? column;
   var beginning = false;
@@ -262,15 +265,15 @@ List<_SqliteCollation> _sqliteColumnCollations(String sql) {
   return result;
 }
 
-String _withoutStorageCollations(String sql, List<ColumnInfo> columns) {
+String withoutStorageCollations(String sql, List<ColumnInfo> columns) {
   final names = {
     for (final c in columns.where((c) => c.storageType == 'TEXT'))
-      _sqliteName(c.name),
+      sqliteName(c.name),
   };
   final result = StringBuffer();
   var start = 0;
-  for (final c in _sqliteColumnCollations(sql)) {
-    if (!names.contains(_sqliteName(c.column)) ||
+  for (final c in sqliteColumnCollations(sql)) {
+    if (!names.contains(sqliteName(c.column)) ||
         !{
           'orm_decimal_v1',
           'orm_date_v1',
@@ -287,12 +290,12 @@ String _withoutStorageCollations(String sql, List<ColumnInfo> columns) {
 }
 
 String _temporalSignature(String name, String kind, int digits) => jsonEncode(
-  _sqliteTokens(_temporalCheck(name, kind, digits)).map((t) => t.text).toList(),
+  sqliteTokens(temporalCheck(name, kind, digits)).map((t) => t.text).toList(),
 );
-int? _sqliteTemporalPrecision(
+int? sqliteTemporalPrecision(
   String name,
   String kind,
-  List<_SqliteCheck> checks,
+  List<SqliteCheck> checks,
 ) {
   for (var digits = 0; digits < 6; digits++) {
     final signature = _temporalSignature(name, kind, digits);
@@ -303,8 +306,8 @@ int? _sqliteTemporalPrecision(
   return null;
 }
 
-String? _uncoerceTemporal(String sql, String kind, int digits) {
-  final tokens = _sqliteTokens(sql);
+String? uncoerceTemporal(String sql, String kind, int digits) {
+  final tokens = sqliteTokens(sql);
   if (tokens.length < 8 ||
       tokens[0].text != 'ORM_TEMPORAL_CAST_V1' ||
       tokens[1].text != '(' ||

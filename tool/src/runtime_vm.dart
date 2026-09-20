@@ -61,7 +61,7 @@ final class RuntimeVm {
             '_List',
             '_GrowableList',
             '_Map',
-            '_SelectionPlan',
+            'SelectionPlan',
           }.contains((row['class'] as Map)['name']))
             {
               'name': (row['class'] as Map)['name'],
@@ -82,7 +82,7 @@ final class RuntimeVm {
           '_List',
           '_GrowableList',
           '_Map',
-          '_SelectionPlan',
+          'SelectionPlan',
           '_Combined',
         }.contains(row['name'])) {
           classes[int.parse((row['id'] as String).split('/').last)] =

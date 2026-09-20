@@ -1,14 +1,43 @@
-part of '../../runtime.dart';
+import 'dart:async';
 
-/// SqlDatabase owns its driver. A transaction view borrows one connection and
-/// becomes unusable as soon as its callback finishes.
+import 'package:meta/meta.dart' show internal;
+
+import '../../driver.dart';
+import 'acquisition.dart';
+import 'events.dart';
+import 'mysql_transaction.dart';
+import 'options.dart';
+import 'transaction.dart';
+
+/// Raw SQL execution with owned driver resources and explicit callback scopes.
+///
+/// The root database owns its [driver]. Session and transaction callbacks receive
+/// borrowed views that expire when their callback finishes. Await every operation
+/// before leaving those scopes; active cursors and unfinished work are rejected.
+///
+/// ```dart
+/// Future<void> renameUser(SqlDatabase<Sqlite> db, int id, String name) async {
+///   await db.transaction((tx) async {
+///     await tx.execute(SqlCommand(
+///       'UPDATE users SET name = ?1 WHERE id = ?2', [name, id],
+///     ));
+///   });
+/// }
+/// ```
+///
+/// {@category Execution}
 class SqlDatabase<B extends Backend> {
+  /// Driver owned by the root database and shared with its borrowed views.
   final Driver<B> driver;
+
+  /// Optional observer for statements and cursor operations; errors are isolated.
   final void Function(QueryEvent)? onQuery;
+
+  /// Optional observer for connection acquisition and existing-lease reuse.
   final void Function(AcquisitionEvent)? onAcquire;
   final SqlConnection? _connection;
   final bool _transaction;
-  final _TransactionControl? _control;
+  final TransactionControl? _control;
   final Set<Future<void>> _pending = {};
   final Set<Future<void> Function()> _streams = {};
   final Set<Future<void> Function()> _cursors = {};
@@ -31,6 +60,8 @@ class SqlDatabase<B extends Backend> {
 
   /// Listen for explicitly reported physical table changes after commit.
   /// Raw SQL is never parsed to guess the tables it changes.
+  /// @nodoc
+  @internal
   void Function() addChangeListener(void Function(Set<String>) listener) {
     checkActive();
     _changeListeners.add(listener);
@@ -57,6 +88,8 @@ class SqlDatabase<B extends Backend> {
   /// Schedule cache invalidation after the transaction finishes. Rollback drops
   /// these callbacks; an uncertain COMMIT runs them conservatively. Savepoint
   /// callbacks join the parent transaction only after successful release.
+  /// @nodoc
+  @internal
   void deferInvalidation(void Function() action) {
     if (inTransaction) {
       _invalidations.add(action);
@@ -67,6 +100,8 @@ class SqlDatabase<B extends Backend> {
 
   /// Register owned resources to stop before pending SQL is drained on close.
   /// Returns a function that removes this listener.
+  /// @nodoc
+  @internal
   void Function() addCloseListener(Future<void> Function() listener) {
     checkActive();
     if (inSession) {
@@ -95,10 +130,13 @@ class SqlDatabase<B extends Backend> {
 
   /// Mark this transaction as failed when a multi-statement operation stops
   /// between statements. Catching its exception cannot commit a partial batch.
+  /// @nodoc
+  @internal
   void markFailed() {
     if (inTransaction) _statementFailed = true;
   }
 
+  /// Takes ownership of [driver]; close the root database to release it.
   SqlDatabase(this.driver, {this.onQuery, this.onAcquire})
     : _changeListeners = {},
       _connection = null,
@@ -113,11 +151,21 @@ class SqlDatabase<B extends Backend> {
     this._control,
     required this._changeListeners,
   });
+
+  /// Features and limits exposed by the actual driver and platform.
   Capabilities get capabilities => driver.capabilities;
+
+  /// Connected engine used for SQL syntax and transaction validation.
   SqlDialect get dialect => capabilities.dialect;
+
+  /// Whether this view belongs to a transaction or savepoint callback.
   bool get inTransaction => _transaction;
+
+  /// Whether this view already holds a connection lease.
   bool get inSession => _connection != null;
 
+  /// @nodoc
+  @internal
   void checkActive() {
     if (!_active) {
       throw const OrmException(
@@ -141,6 +189,10 @@ class SqlDatabase<B extends Backend> {
     }
   }
 
+  /// Runs [action] with an acquired or already leased connection.
+  ///
+  /// This does not start a transaction. [acquire] limits only connection waiting;
+  /// the connection must not escape [action]. Prefer [execute] for one command.
   Future<R> run<R>(
     Future<R> Function(SqlConnection) action, {
     AcquisitionOptions acquire = const AcquisitionOptions(),
@@ -184,7 +236,7 @@ class SqlDatabase<B extends Backend> {
     final callback = observer == null ? action : enter;
     if (connection == null &&
         (acquire.timeout != null || acquire.cancellation != null)) {
-      final wait = _ConnectionWait(
+      final wait = ConnectionWait(
         driver,
         callback,
         acquire,
@@ -228,6 +280,8 @@ class SqlDatabase<B extends Backend> {
     return _SessionConnection(_connection, this);
   }
 
+  /// @nodoc
+  @internal
   Future<SqlResult> executeOn(
     SqlConnection connection,
     SqlCommand command, {
@@ -293,6 +347,11 @@ class SqlDatabase<B extends Backend> {
     }
   }
 
+  /// Executes bound SQL and returns raw rows and affected-row metadata.
+  ///
+  /// [changedTables] explicitly reports writes for query invalidation; SQL text
+  /// is never parsed to infer write targets. A transaction publishes these changes
+  /// after commit and discards them after a confirmed rollback.
   Future<SqlResult> execute(
     SqlCommand command, {
     ExecutionOptions options = const ExecutionOptions(),
@@ -321,6 +380,10 @@ class SqlDatabase<B extends Backend> {
 
   /// Retains one connection across transactions and session-scoped operations.
   /// The borrowed view expires when the callback returns.
+  ///
+  /// A session does not begin a transaction. Use its [transaction] method for
+  /// atomic work; nested sessions are rejected. Returning with pending work or
+  /// an active stream fails and drains the borrowed view before lease release.
   Future<R> session<R>(
     Future<R> Function(SqlDatabase<B> session) action, {
     AcquisitionOptions acquire = const AcquisitionOptions(),
@@ -363,6 +426,10 @@ class SqlDatabase<B extends Backend> {
   }
 
   /// Discards a leased connection after its state can no longer be recovered.
+  ///
+  /// Only a borrowed session or transaction view can be discarded. The view
+  /// becomes unusable immediately; this does not prove a submitted write rolled
+  /// back and does not close an otherwise usable root driver or pool.
   Future<void> discard() async {
     final connection = _connection;
     if (connection == null) {
@@ -375,6 +442,16 @@ class SqlDatabase<B extends Backend> {
     await connection.invalidate();
   }
 
+  /// Runs [action] atomically and returns its result after confirmed commit.
+  ///
+  /// A failed statement marks the transaction failed even if its exception is
+  /// caught by application code. Use [savepoint] for recoverable work. Returning
+  /// with pending operations fails; borrowed transaction views cannot be reused.
+  ///
+  /// [timeout] starts after connection acquisition. [retry] has its own total
+  /// budget including acquisition and requires a safely repeatable callback.
+  /// Deadlines, cancellation, and retries require actual driver cancellation.
+  /// An uncertain COMMIT is reported and never replays the callback.
   Future<R> transaction<R>(
     Future<R> Function(SqlDatabase<B> tx) action, {
     TransactionOptions<B>? options,
@@ -385,7 +462,7 @@ class SqlDatabase<B extends Backend> {
   }) {
     checkActive();
     acquire.check();
-    retry?._check();
+    retry?.validate();
     if (options != null && options.dialect != dialect) {
       throw const OrmException(
         'TRANSACTION.OPTIONS',
@@ -415,9 +492,9 @@ class SqlDatabase<B extends Backend> {
       );
     }
     final link = cancellation != null && acquire.cancellation != null
-        ? _CancellationLink([cancellation, acquire.cancellation!])
+        ? CancellationLink([cancellation, acquire.cancellation!])
         : null;
-    final budget = retry == null ? null : _RetryBudget(retry);
+    final budget = retry == null ? null : RetryBudget(retry);
     try {
       final acquireTimeout = budget?.limit(acquire.timeout) ?? acquire.timeout;
       final totalLimitsAcquisition =
@@ -428,7 +505,7 @@ class SqlDatabase<B extends Backend> {
           final executionTimeout = budget?.limit(timeout) ?? timeout;
           final control = executionTimeout == null && cancellation == null
               ? null
-              : _TransactionControl(executionTimeout, cancellation);
+              : TransactionControl(executionTimeout, cancellation);
           if (_connection != null) _childActive = true;
           try {
             while (true) {
@@ -442,7 +519,7 @@ class SqlDatabase<B extends Backend> {
                   options,
                   action,
                 );
-              } on _RetryAfterRollback catch (failure) {
+              } on RetryAfterRollback catch (failure) {
                 if (await budget!.next(control!)) continue;
                 Error.throwWithStackTrace(failure.error, failure.stack);
               }
@@ -471,14 +548,14 @@ class SqlDatabase<B extends Backend> {
 
   Future<R> _transactionAttempt<R>(
     SqlConnection connection,
-    _TransactionControl? control,
-    _RetryBudget? budget,
+    TransactionControl? control,
+    RetryBudget? budget,
     TransactionOptions<B>? options,
     Future<R> Function(SqlDatabase<B>) action,
   ) async {
     final scoped = control == null
         ? connection
-        : _TransactionConnection(connection, control);
+        : TransactionConnection(connection, control);
     final tx = SqlDatabase<B>._(
       driver,
       scoped,
@@ -587,7 +664,7 @@ class SqlDatabase<B extends Backend> {
           error is SqlFailure &&
           error.retryTransaction &&
           budget != null) {
-        throw _RetryAfterRollback(error, stack);
+        throw RetryAfterRollback(error, stack);
       }
       Error.throwWithStackTrace(
         expired == null || identical(expired, error)
@@ -617,6 +694,11 @@ class SqlDatabase<B extends Backend> {
     return error;
   }
 
+  /// Runs nested work inside the current transaction using a database savepoint.
+  ///
+  /// Use the child view exclusively until [action] finishes. Success releases the
+  /// savepoint; failure rolls back the child work. A failed rollback invalidates
+  /// the connection instead of allowing the parent to continue in uncertain state.
   Future<R> savepoint<R>(Future<R> Function(SqlDatabase<B> tx) action) {
     if (!inTransaction) {
       throw const OrmException(
@@ -666,7 +748,7 @@ class SqlDatabase<B extends Backend> {
         return result;
       } catch (error, stack) {
         final cleanup = await child._drain();
-        final raw = _unscoped(scoped);
+        final raw = unscopedConnection(scoped);
         try {
           if (cleanup != null) throw cleanup;
           if (raw.transactionActive == false) {
@@ -689,6 +771,10 @@ class SqlDatabase<B extends Backend> {
     });
   }
 
+  /// Stops owned streams and watches, drains pending work, then closes the driver.
+  ///
+  /// Only the root database can close its driver. New operations are rejected
+  /// once closing starts; concurrent close calls await the same cleanup.
   Future<void> close() async {
     if (_connection != null) {
       throw const OrmException(
@@ -717,5 +803,325 @@ class SqlDatabase<B extends Backend> {
       await Future.wait(_pending.toList());
       await driver.close();
     }
+  }
+}
+
+/// A session's public execution port. The underlying physical lease and its
+/// transaction controls stay private to the runtime.
+final class _SessionConnection(
+  final SqlConnection inner,
+  final SqlDatabase<Backend> owner,
+) implements SqlConnection {
+  @override
+  bool? get transactionActive => inner.transactionActive;
+
+  Future<T> _run<T>(Future<T> Function() action, {String? sql}) {
+    final result = Future<T>.sync(() async {
+      owner.checkActive();
+      try {
+        if (sql != null &&
+            owner.inTransaction &&
+            (owner.dialect == SqlDialect.mysql ||
+                owner.dialect == SqlDialect.mariadb)) {
+          checkMysqlTransactionSql(sql);
+        }
+        return await action();
+      } catch (_) {
+        owner.markFailed();
+        rethrow;
+      }
+    });
+    owner._track(
+      result.then<void>((_) {}, onError: (Object _, StackTrace _) {}),
+    );
+    return result;
+  }
+
+  @override
+  Future<SqlResult> execute(
+    SqlCommand command, {
+    ExecutionOptions options = const ExecutionOptions(),
+  }) => _run(() => inner.execute(command, options: options), sql: command.sql);
+
+  @override
+  Future<SqlCursor> openCursor(
+    SqlCommand command, {
+    ExecutionOptions options = const ExecutionOptions(),
+  }) => _run(() async {
+    final cursor = _SessionCursor(
+      await inner.openCursor(command, options: options),
+      this,
+    );
+    owner._cursors.add(cursor.close);
+    return cursor;
+  }, sql: command.sql);
+
+  @override
+  Future<void> invalidate() {
+    owner.checkActive();
+    owner.markFailed();
+    return inner.invalidate();
+  }
+}
+
+final class _SessionCursor(
+  final SqlCursor inner,
+  final _SessionConnection connection,
+) implements SqlCursor {
+  Future<void>? _closing;
+  @override
+  Future<SqlResult> fetch(
+    int count, {
+    ExecutionOptions options = const ExecutionOptions(),
+  }) => connection._run(() {
+    if (_closing != null) {
+      throw const OrmException('CURSOR.CLOSED', 'Cursor has ended.');
+    }
+    return inner.fetch(count, options: options);
+  });
+  // Cleanup is allowed after the callback/deadline ends and runs only once.
+  @override
+  Future<void> close() => _closing ??= _close();
+  Future<void> _close() async {
+    try {
+      await inner.close();
+    } catch (_) {
+      connection.owner.markFailed();
+      rethrow;
+    } finally {
+      connection.owner._cursors.remove(close);
+    }
+  }
+}
+
+SqlConnection _physicalConnection(SqlConnection connection) =>
+    switch (connection) {
+      _SessionConnection() => _physicalConnection(connection.inner),
+      TransactionConnection() => _physicalConnection(connection.inner),
+      _ => connection,
+    };
+
+/// Demand-driven raw-row streaming with a bounded database cursor.
+///
+/// {@category Execution}
+extension SqlDatabaseStreaming on SqlDatabase<Backend> {
+  /// Streams raw rows, fetching at most [batchSize] rows per database request.
+  ///
+  /// Listening holds a connection until completion or subscription cancellation.
+  /// Outside a transaction, the stream owns a read transaction and rolls it back
+  /// on early exit. Pausing the subscription prevents the next batch fetch; an
+  /// asynchronous `listen` callback must explicitly pause for demand control.
+  Stream<List<Object?>> stream(
+    SqlCommand command, {
+    int batchSize = 128,
+    ExecutionOptions options = const ExecutionOptions(),
+  }) => streamRows(
+    command,
+    batchSize: batchSize,
+    options: options,
+    decode: (_, rows, _) async => rows,
+  );
+
+  /// @nodoc
+  @internal
+  Stream<R> streamRows<R>(
+    SqlCommand command, {
+    required int batchSize,
+    required ExecutionOptions options,
+    required Future<List<R>> Function(
+      SqlConnection,
+      List<List<Object?>>,
+      ExecutionOptions,
+    )
+    decode,
+  }) {
+    if (batchSize < 1) throw ArgumentError.value(batchSize, 'batchSize');
+    if (!capabilities.streaming) {
+      throw const OrmException(
+        'CAPABILITY.STREAM',
+        'This driver does not support database cursors.',
+      );
+    }
+    if ((options.cancellation != null || options.timeout != null) &&
+        !capabilities.cancellation) {
+      throw const OrmException(
+        'CAPABILITY.CANCEL',
+        'This driver cannot cancel a running statement.',
+      );
+    }
+    options.check();
+    if (command.parameters.length > capabilities.maxParameters) {
+      throw const OrmException(
+        'QUERY.PARAMETERS',
+        'Query exceeds the driver parameter limit.',
+      );
+    }
+    final cancellation = CancellationToken();
+    final execution = ExecutionOptions(
+      cancellation: capabilities.cancellation ? cancellation : null,
+      timeout: options.timeout,
+    );
+    final finished = Completer<void>();
+    Completer<void>? demand;
+    var stopped = false, started = false;
+    Object? cleanupFailure, requestedError;
+    late StreamController<R> controller;
+    void requestStop() {
+      stopped = true;
+      cancellation.cancel();
+      demand?.complete();
+      demand = null;
+    }
+
+    Future<void> stop() async {
+      requestStop();
+      if (started) await finished.future;
+      if (cleanupFailure != null) throw cleanupFailure!;
+    }
+
+    Future<void> waitForDemand() async {
+      if (controller.isPaused && !stopped) {
+        demand ??= Completer<void>();
+        await demand!.future;
+      }
+    }
+
+    Future<T> observe<T>(
+      QueryOperation operation,
+      Future<T> Function() action,
+    ) async {
+      final watch = onQuery == null ? null : (Stopwatch()..start());
+      Object? error;
+      T? result;
+      try {
+        return result = await action();
+      } catch (e) {
+        error = e;
+        if (inTransaction) _statementFailed = true;
+        rethrow;
+      } finally {
+        watch?.stop();
+        try {
+          onQuery?.call(
+            QueryEvent(
+              operation: operation,
+              sql: command.sql,
+              parameterCount: operation == .cursorOpen
+                  ? command.parameters.length
+                  : 0,
+              elapsed: watch!.elapsed,
+              rowCount: result is SqlResult ? result.rows.length : null,
+              error: error,
+            ),
+          );
+        } catch (_) {}
+      }
+    }
+
+    Future<void> produce() async {
+      started = true;
+      _streams.add(stop);
+      final unsubscribe = options.cancellation?.listen(() {
+        requestedError = const OrmException(
+          'OPERATION.CANCELLED',
+          'Stream cancelled.',
+        );
+        requestStop();
+      });
+      try {
+        await run(
+          (connection) async {
+            final ownsTransaction = !inTransaction;
+            SqlCursor? cursor;
+            var complete = false, began = false;
+            try {
+              if (stopped) return;
+              if (ownsTransaction) {
+                await _executeOn(
+                  connection is _SessionConnection
+                      ? connection.inner
+                      : connection,
+                  SqlCommand(switch (dialect) {
+                    SqlDialect.postgres => 'BEGIN READ ONLY',
+                    SqlDialect.mysql ||
+                    SqlDialect.mariadb => 'START TRANSACTION READ ONLY',
+                    SqlDialect.sqlite => 'BEGIN',
+                  }),
+                );
+                began = true;
+              }
+              cursor = await observe(
+                .cursorOpen,
+                () => connection.openCursor(command, options: execution),
+              );
+              while (!stopped) {
+                await waitForDemand();
+                if (stopped) break;
+                final batch = await observe(
+                  .cursorFetch,
+                  () => cursor!.fetch(batchSize, options: execution),
+                );
+                if (stopped) break;
+                final rows = await decode(connection, batch.rows, execution);
+                for (final row in rows) {
+                  await waitForDemand();
+                  if (stopped) break;
+                  controller.add(row);
+                }
+                if (batch.rows.length < batchSize) {
+                  complete = !stopped;
+                  break;
+                }
+              }
+            } finally {
+              try {
+                if (cursor != null) await observe(.cursorClose, cursor.close);
+                if (began) {
+                  await _executeOn(
+                    connection is _SessionConnection
+                        ? connection.inner
+                        : connection,
+                    SqlCommand(complete ? 'COMMIT' : 'ROLLBACK'),
+                  );
+                }
+              } catch (e) {
+                cleanupFailure = e;
+                if (inTransaction) _active = false;
+                await connection.invalidate();
+                rethrow;
+              }
+            }
+          },
+          acquire: AcquisitionOptions(
+            timeout: options.acquireTimeout,
+            cancellation: cancellation,
+          ),
+        );
+      } catch (error, stack) {
+        if (!stopped) controller.addError(error, stack);
+      } finally {
+        unsubscribe?.call();
+        if (requestedError != null) controller.addError(requestedError!);
+        _streams.remove(stop);
+        finished.complete();
+        // A cancellation cleanup error is already exposed by stop() or the
+        // error event. Do not report it again through an unobserved close future.
+        unawaited(controller.close().catchError((Object _) {}));
+      }
+    }
+
+    controller = StreamController<R>(
+      sync: true,
+      onListen: () => unawaited(produce()),
+      onPause: () {
+        demand ??= Completer<void>();
+      },
+      onResume: () {
+        demand?.complete();
+        demand = null;
+      },
+      onCancel: stop,
+    );
+    return controller.stream;
   }
 }
