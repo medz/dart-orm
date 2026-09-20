@@ -1,181 +1,153 @@
 # Dart ORM
 
-A Dart 3.13 ORM with ordinary immutable Dart models, typed relationships,
-composable selections, and explicit database sessions. Declare a class once;
-generated queries return that class directly.
+**Typed data. Plain Dart.**
 
-The implementation has separate real SQLite, PostgreSQL, MySQL, MariaDB, Chrome, Flutter Web and Android
-verification records. See [current progress](docs/progress.md),
-[capability limits](docs/capabilities.md) and [design acceptance](docs/acceptance.md)
-for which revision and scenarios each record covers.
+Declare immutable Dart models, query exactly the fields you need, and keep your
+schema and migrations in Dart. SQLite, PostgreSQL, MySQL and MariaDB share a typed
+query API, with explicit database capabilities and transaction boundaries.
 
-One package, independent modules and database adapters, no runtime reflection.
-This branch is unrelated to earlier ORM implementations.
+[Get started](#get-started) · [Documentation](doc/README.md) ·
+[Examples](example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.1)
 
-For a new application with the `orm` dependency:
+> **6.0 beta:** a new implementation requiring Dart 3.13+. This is a breaking
+> replacement for the Prisma-based 5.x client. Read the [release notes](CHANGELOG.md)
+> before upgrading an existing application.
+
+## Get started
+
+Create a Dart application and initialize SQLite:
 
 ```sh
+dart create -t console my_app
+cd my_app
+dart pub add orm:^6.0.0-beta.1
 dart run orm init --database sqlite
+```
+
+The CLI creates `orm.config.dart`, a model, its generated client, and a migration
+registry. The starter model in `lib/schema.dart` is ordinary Dart:
+
+```dart
+import 'package:orm/schema.dart';
+
+final class Task({
+  @Id.generated() required final int id,
+  required final String title,
+  @Default.sql('false') required final bool done,
+});
+
+final tasks = entity<Task>();
+```
+
+Create and review the first migration, then apply it:
+
+```sh
 dart run orm migrate create 0001_initial
-# Review the generated Dart migration.
+# Review migrations/m0001_initial.dart.
 dart run orm migrate apply
 ```
 
-Choose `postgres`, `mysql` or `mariadb` to initialize that engine's own history.
-The [project CLI](docs/cli.md) creates typed Dart configuration, a nominal model,
-the generated client and a static migration registry. Initialization and
-generation never connect or apply DDL.
-
-| Module | Independent use |
-| --- | --- |
-| `values.dart` | Codecs and precise domain values |
-| `driver.dart`, `drivers/*.dart` | Parameterized SQL contracts and database adapters |
-| `runtime.dart` | Raw SQL sessions, transactions and cursor lifetimes |
-| `schema_model.dart` | Physical table metadata |
-| `sql.dart` | Typed query construction and offline SQL compilation |
-| `orm.dart` | Typed execution and query subscriptions over `SqlDatabase` |
-| `migrate.dart` | Schema inspection, plans and immutable migration execution |
-| `schema.dart`, `generate.dart`, `cli.dart` | Declaration, static generation and project tools |
-
-These are separate Dart libraries with directed dependencies. Use a raw driver
-without the ORM, compile a typed query without a connection, or run migrations
-without current application models. See [API boundaries](docs/api.md).
-
-The [SQLite entry point](docs/sqlite-web.md) works on native platforms and the web,
-with background execution and the same generated query API. Flutter Web bundles
-its worker/WASM resources automatically; plain Dart uses `dart run orm web-assets`.
-The [native Flutter example](docs/flutter.md) verifies Android APK upgrades,
-background SQLite, persistence and commit-driven query subscriptions.
-
-```sh
-dart pub get
-dart run orm generate example/schema.dart
-dart run example/main.dart
-dart run example/queries.dart
-dart test
-```
-
-For incremental generation, enable `orm:orm` for explicit schema roots in
-`build.yaml` and run `dart run build_runner watch`. See
-[generation and builds](docs/generation.md) for setup, dependency tracking and
-reproducible generation measurements.
-
-Declare data once in [schema.dart](example/schema.dart):
+Replace `bin/my_app.dart` with:
 
 ```dart
-final class User({
-  @Id.generated() required final int id,
-  @Unique() required final String email,
-  required final String? nickname,
-});
-final users = entity<User>();
-```
-
-Import the generated client and a driver. The client exports `User` and the driver
-exports the portable query API:
-
-```dart
-import 'package:orm/migrate.dart';
+import 'package:my_app/schema.orm.dart';
 import 'package:orm/sqlite.dart';
-import 'schema.orm.dart';
 
 Future<void> main() async {
-  final db = await sqlite(const SqliteOptions.memory());
+  final db = await sqlite(const SqliteOptions.file('app.sqlite'));
   try {
-    await Migrator(db.sql).apply([
-      Migration.create('0001_initial', appSchema, dialect: .sqlite),
-    ]);
-    final User user = await db.users.create(email: 'seven@example.com');
-    await db.users.byId(user.id).patch(nickname: .set('Seven'));
-    final List<String> emails = await db.users.select((u) => u.email).get();
-    print(emails);
+    final Task task = await db.tasks.create(title: 'Ship something useful');
+
+    final List<(int, String)> pending = await db.tasks
+        .where((t) => t.done.eq(false))
+        .orderBy((t) => [t.id.asc()])
+        .select((t) => (t.id, t.title).row)
+        .get();
+    print(pending);
+
+    await db.transaction((tx) async {
+      await tx.tasks.byId(task.id).patch(done: .set(true));
+    });
   } finally {
     await db.close();
   }
 }
 ```
 
-For PostgreSQL, import `postgres.dart` and use
-`postgres(PostgresOptions(url: url))`; TLS certificate verification is the default.
-[MySQL and MariaDB](docs/mysql.md) use `mysql.dart` / `mariadb.dart` with
-`await mysql(MysqlOptions(url: url))` / `await mariadb(MariadbOptions(url: url))`.
-Each backend has its own transaction options and migration history. Choose the
-engine when initializing that history, and keep its reviewed Dart migrations and
-static registry in version control. A connection change does not translate history.
+Run `dart run`. When your model changes, create and review another migration.
+Use `dart run orm generate` when you only need to regenerate Dart code.
 
-The example above creates a temporary in-memory schema. The persistent
-[migration entrypoint](example/migrate.dart) fixes SQLite: run
-`dart run example/migrate.dart check`, then set `ORM_SQLITE_PATH` before `apply` or
-`verify`. A PostgreSQL project creates its own PostgreSQL history and connection
-entrypoint. See [migrations](docs/migrations.md) and [resumable backfills](docs/backfills.md).
+## Model once, choose your result
 
-Read [API and mental model](docs/api.md) for imports, current declarations versus
-historical schemas, prepared versus executed operations, selection nullability,
-and transaction ownership. Inside a transaction, build every query from `tx`;
-subqueries, CTEs and UNION operands must share that same view.
+Full-row queries return your model class. A scalar selection returns its value;
+`.row` returns a typed Record. Map selected values into a named Record or your
+own DTO. Create and patch inputs distinguish omission, a value, SQL NULL and a
+database default.
 
-For an existing database, [import a model declaration](docs/importing.md), review
-its report, generate the client, and baseline the current schema without copying
-existing rows.
+Relationships use declared keys. Select nested results explicitly: to-one
+relationships can join, and collections use parameter-aware batches. There are
+no lazy property reads that quietly issue SQL. See [relationships](doc/relations.md)
+and the [query cookbook](example/queries.dart).
 
-Declare [row CHECK constraints](docs/checks.md) with explicit SQL and optional
-backend overrides; generated snapshots support catalog verification, import and
-reviewed constraint migrations.
+Transactions use the provided `tx` session. Query subscriptions emit snapshots
+after relevant committed writes. Inspect SQL without connecting, or use raw and
+named SQL when a query needs database-specific features.
 
-Use [client defaults](docs/defaults.md) for typed Dart value factories and SQL
-defaults for database-generated values, with explicit omission/value/default inputs.
-Declare [computed columns](docs/computed.md) for database expressions with typed
-read-only results, explicit stored/virtual modes and reviewed migrations.
+## Choose your database
 
-Model [many-to-many memberships](docs/relations.md#many-to-many-with-business-fields)
-with an explicit association table, typed business fields and per-parent pagination.
-Run `dart run example/teams/main.dart` to see its selected records and SQL counts.
+| Database | Connection | Verified scope |
+| --- | --- | --- |
+| SQLite | `sqlite(SqliteOptions.file('app.sqlite'))` | Native Dart, Android Flutter, Chrome JS/WASM and Flutter Web |
+| PostgreSQL | `postgres(PostgresOptions(url: url))` | PostgreSQL 18, including migrations |
+| MySQL | `mysql(MysqlOptions(url: url))` | MySQL 8.4, including migrations |
+| MariaDB | `mariadb(MariadbOptions(url: url))` | MariaDB 11.8, including migrations |
 
-Use `query.inspect()` for SQL templates, selected columns, joins and conditional
-relation batches without connecting. Optional `onAcquire`, `onQuery` and `onDecode`
-callbacks measure execution phases. See [plans and observations](docs/observability.md).
+Import `package:orm/sqlite.dart`, `postgres.dart`, `mysql.dart` or `mariadb.dart`
+for the matching connection API. Server connections verify TLS certificates by
+default. `init --database` accepts `sqlite`, `postgres`, `mysql` and `mariadb`.
 
-For complex SQL files, [generate named queries](docs/named-sql.md) with typed
-Record parameters/results, native database structure checks and the same query
-composition, transaction and streaming APIs.
+Each migration history belongs to one engine and stores only that engine's
+reviewed steps and frozen schema. MySQL/MariaDB DDL uses recovery checkpoints
+because it can commit implicitly. See [migrations](doc/migrations.md).
 
-Use `query.stream(batchSize: 128)` with `await for` to read through a database
-cursor. Reads and mutations accept `ExecutionOptions` for connection acquisition
-limits, statement deadlines and cancellation. See [streaming and execution](docs/execution.md) for connection
-lifetime, batch sizing, transaction-wide deadlines and failure outcomes.
+Capabilities are explicit. MySQL/MariaDB do not support cursor streaming or token
+cancellation; their statement timeout discards the connection. Default Linux
+SQLite lacks interruption. See [capabilities](doc/capabilities.md) for exact numeric
+limits, database versions and platforms that have not been verified.
 
-The [runtime cost report](docs/performance.md) compares the same driver, SQL and
-result shapes across SQLite, local PostgreSQL and a controlled TCP delay. It
-separates normal timing from acquisition probes, live heap and allocation traces.
+## Dart and Flutter, native and web
 
-Single relationships use JOINs when declared keys prove uniqueness; collections
-load in parameter-aware batches. Both support typed nested selections. See
-[relationship strategies](docs/relations.md) for composite keys, per-parent
-pagination and explicit `.join`/`.batch` choices.
+The SQLite entrypoint selects a native isolate or browser worker. For persistent
+storage, use `SqliteOptions.persistent('app', nativePath: databasePath)`; native
+apps provide their own filesystem path, while browsers use named OPFS storage.
 
-Domain IDs, custom classes, record values and enums retain their types in generated
-APIs. Declare public const codecs with `@UseCodec`; use `@EnumValue` for stable
-stored labels. See [types and JSON](docs/types.md) for codec validation, nullable
-values and the distinction between SQL NULL and JSON null.
+Flutter Web bundles the SQLite worker and WASM assets automatically. Plain Dart
+Web exports the same resources with `dart run orm web-assets`. No separate
+`orm_flutter` package is needed. Start with the [Flutter example](example/flutter)
+or the [SQLite Web guide](doc/sqlite-web.md).
 
-Use `query.watch()` for typed snapshots after relevant committed writes.
-Transactions merge notifications; rollbacks do not notify. See
-[query subscriptions](docs/watch.md) for relation dependencies, pause/cancellation,
-and explicit notifications for raw SQL or external writers.
+## One package, independent libraries
 
-The [query cookbook](example/queries.dart) runs filters, joined ordering, relation
-counts, grouped CTEs, windows, subqueries and cursor pagination. See
-[query usage](docs/queries.md) for the API and PostgreSQL example configuration.
+Use the layer your application needs:
 
-Combine scalar or `.row` projections with `union`/`unionAll`, then map the
-result to a Record or DTO. Sets support typed exported columns, CTEs, streaming
-and subscriptions. See [queries](docs/queries.md) for scope,
-nullability and codec requirements.
+| Import | Purpose |
+| --- | --- |
+| `values.dart`, `schema_model.dart` | Domain values, codecs and physical schema metadata |
+| `driver.dart`, `drivers/*.dart` | SQL contracts and database adapters |
+| `runtime.dart` | Raw SQL sessions, transactions and cursor ownership |
+| `sql.dart`, `orm.dart` | Typed SQL construction and model execution |
+| `schema.dart`, `generate.dart`, `migrate.dart`, `cli.dart` | Declarations, generation, migration and project tooling |
 
-Set `ORM_TEST_POSTGRES` to a **disposable** local PostgreSQL database to include
-PostgreSQL integration tests. The tests create and drop their own test tables.
-Set `ORM_TEST_MYSQL` and `ORM_TEST_MARIADB` for their live suites; migration
-recovery tests additionally create and drop isolated databases. Use dedicated test
-servers and credentials with the necessary privileges. Their TLS setting defaults
-to `verifyFull`; self-signed local fixtures can explicitly set
-`ORM_TEST_MYSQL_TLS=require` / `ORM_TEST_MARIADB_TLS=require`.
+Compile typed SQL offline, use a driver without model generation, or run saved
+migrations without importing today's application models. See [API boundaries](doc/api.md).
+
+## Go further
+
+- [Model declarations and codecs](doc/authoring.md) · [Types](doc/types.md)
+- [Queries and pagination](doc/queries.md) · [Relations](doc/relations.md)
+- [Transactions and execution](doc/execution.md) · [Subscriptions](doc/watch.md)
+- [CLI](doc/cli.md) · [build_runner](doc/generation.md) · [Existing databases](doc/importing.md)
+- [SQL inspection](doc/observability.md) · [Named SQL](doc/named-sql.md)
+- [Contributing and validation](doc/contributing.md)
+
+Licensed under the [BSD 3-Clause License](LICENSE).

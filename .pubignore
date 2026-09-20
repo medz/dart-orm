@@ -1,0 +1,24 @@
+# Local output, credentials and generated API documentation.
+.dart_tool/
+build/
+**/.dart_tool/
+**/build/
+**/.gradle/
+**/local.properties
+**/.flutter-plugins*
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.DS_Store
+.env
+.env.*
+doc/api/
+
+# Repository maintenance; runtime assets and examples remain included.
+.github/
+AGENTS.md
+netlify.toml
+test/
+tool/
+dart_test.yaml
+pubspec.lock

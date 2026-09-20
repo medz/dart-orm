@@ -1,7 +1,15 @@
 name: orm
 description: Typed relational data access for Dart, from declaration to migration.
-version: 0.1.0-dev.1
-publish_to: none
+version: 6.0.0-beta.1
+repository: https://github.com/medz/dart-orm
+issue_tracker: https://github.com/medz/dart-orm/issues
+documentation: https://github.com/medz/dart-orm/tree/main/doc
+topics:
+  - orm
+  - database
+  - sqlite
+  - postgresql
+  - mysql
 environment:
   sdk: '>=3.13.0 <4.0.0'
 dependencies:

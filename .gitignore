@@ -5,3 +5,4 @@ build/
 *.sqlite-wal
 .DS_Store
 .env
+doc/api/

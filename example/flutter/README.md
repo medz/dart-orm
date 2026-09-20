@@ -18,7 +18,7 @@ they do not implement database drivers.
 
 The automated release runner is `dart run tool/test_flutter_web.dart /path/to/flutter`
 from the repository root. For native directory choices and current platform limits,
-see [SQLite setup](../../docs/sqlite-web.md).
+see [SQLite setup](../../doc/sqlite-web.md).
 
 ## Android acceptance
 

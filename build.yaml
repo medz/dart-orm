@@ -3,13 +3,13 @@ builders:
     import: "package:orm/builder.dart"
     builder_factories: ["ormBuilder"]
     build_extensions:
-      ".dart": [".orm.dart", ".orm.json"]
+      ".dart": [".orm.dart", ".snapshot.dart"]
     auto_apply: none
     build_to: source
   queries:
     import: "package:orm/builder.dart"
     builder_factories: ["ormQueryBuilder"]
     build_extensions:
-      ".dart": [".queries.dart", ".queries.json"]
+      ".dart": [".queries.dart"]
     auto_apply: none
     build_to: source
