@@ -192,11 +192,12 @@ final class SchemaReader(
               (d) => check.expression(d).trim().isEmpty,
             ) ||
             check.name != null &&
-                model.checks.any((c) => c.name == check.name)) {
+                (check.name!.isEmpty ||
+                    model.checks.any((c) => c.name == check.name))) {
           failAt(
             item,
             'CHECK',
-            'Use non-empty CHECK expressions and distinct constraint names.',
+            'Use non-empty CHECK expressions and distinct, non-empty constraint names, or omit name.',
           );
         }
         model.checks.add(check);
@@ -414,6 +415,9 @@ final class SchemaReader(
             'Generated symbol $symbol is ambiguous. Rename the Dart model or field and keep its physical name.',
           );
         }
+      }
+      if (model.fields.every((field) => field.computed != null)) {
+        failAt(node, 'COLUMN', 'A model needs at least one ordinary column.');
       }
       for (final key in model.primaryKey) {
         if (model.field(key).nullable) {

@@ -358,6 +358,14 @@ final Model note = model('notes', (id: identity(), ownerId: custom(alias).nullab
       'FIELDS',
     ),
     'empty': ("final Model person = model('people', ());", 'FIELDS'),
+    'empty_check_name': (
+      "final entry = model('entries', (id: identity(),), checks: [check('id > 0', name: '')]);",
+      'CHECK',
+    ),
+    'only_computed': (
+      "final entry = model('entries', (total: integer().computed('1'),));",
+      'COLUMN',
+    ),
     'key_nullable': (
       "final Model person = model('people', (id: integer().nullable(),), primaryKey: (p) => p.id);",
       'KEY',
