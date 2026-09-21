@@ -5,7 +5,7 @@ connection, executing statements or invoking result mappers. It works with the
 same query builder used by `get()` and `stream()`:
 
 ```dart
-final query = db.users.select((u) => (
+final query = db.user.select((u) => (
   u.name,
   u.memberships
     .orderBy((m) => [m.joinedAt.desc(), m.teamId.desc()])
@@ -113,6 +113,5 @@ Neither a successful SQL event nor a decode error alone establishes a transactio
 commit outcome. A result mapper runs in the existing mutation lifecycle and can
 fail after an autocommitted write; observation does not move transaction boundaries.
 
-Real backend and browser coverage checks event scopes, query/row counts,
-acquisition waiting/cancellation and observer failures. Runtime throughput and
-allocation comparisons remain a separate [acceptance gate](https://github.com/medz/dart-orm/blob/main/doc/acceptance.md).
+Use [performance measurements](https://github.com/medz/dart-orm/blob/main/doc/performance.md)
+to compare end-to-end latency, query volume and allocation costs in your workload.

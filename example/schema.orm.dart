@@ -2,37 +2,41 @@
 
 import 'package:orm/sql.dart';
 
-import "schema.dart" as models;
-export "schema.dart" show User, Post;
-
-final _usersId = Column<int>(
+/// A complete immutable row from "users".
+final class User({
+  required final int id,
+  required final String email,
+  required final String? nickname,
+  required final int score,
+});
+final _userId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _usersEmail = Column<String>(
+final _userEmail = Column<String>(
   "email",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final _usersNickname = Column<String?>(
+final _userNickname = Column<String?>(
   "nickname",
   Codecs.text.nullable(),
   nullable: true,
   generated: false,
 );
-final _usersScore = Column<int>(
+final _userScore = Column<int>(
   "score",
   Codecs.integer,
   nullable: false,
   generated: false,
   defaultSql: "0",
 );
-final usersSchema = TableSchema(
+final userSchema = TableSchema(
   "users",
-  columns: [_usersId, _usersEmail, _usersNickname, _usersScore],
+  columns: [_userId, _userEmail, _userNickname, _userScore],
   primaryKey: ["id"],
   uniqueKeys: [
     ["email"],
@@ -41,29 +45,32 @@ final usersSchema = TableSchema(
   foreignKeys: [],
 );
 
-final class UsersFields extends Fields {
-  UsersFields(super.table);
-  late final id = column(_usersId);
-  late final email = column(_usersEmail);
-  late final nickname = column(_usersNickname);
-  late final score = column(_usersScore);
-  Relation<models.Post, PostsFields> get posts =>
-      Relation(postsTable, parent: [id], child: (row) => [row.authorId]);
+final class UserFields extends Fields {
+  UserFields(super.table);
+  late final id = column(_userId);
+  late final email = column(_userEmail);
+  late final nickname = column(_userNickname);
+  late final score = column(_userScore);
+  Relation<Post, PostFields> get posts =>
+      Relation(postTable, parent: [id], child: (row) => [row.authorId]);
 }
 
-final usersTable = Table<models.User, UsersFields>(
-  usersSchema,
-  UsersFields.new,
-  (row) => (row.id, row.email, row.nickname, row.score).map(
-    (v0, v1, v2, v3) => models.User(id: v0, email: v1, nickname: v2, score: v3),
-  ),
+final userTable = Table<User, UserFields>(
+  userSchema,
+  UserFields.new,
+  (row) => (
+    row.id,
+    row.email,
+    row.nickname,
+    row.score,
+  ).map((v0, v1, v2, v3) => User(id: v0, email: v1, nickname: v2, score: v3)),
 );
 
-final class UsersTableSet extends TableSet<models.User, UsersFields> {
-  UsersTableSet(QueryContext db) : super(db, usersTable) {
+final class UserTableSet extends TableSet<User, UserFields> {
+  UserTableSet(QueryContext db) : super(db, userTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.User> create({
+  Future<User> create({
     Change<int> id = const Change.keep(),
     required String email,
     String? nickname,
@@ -76,10 +83,10 @@ final class UsersTableSet extends TableSet<models.User, UsersFields> {
       ...row.score.change(score),
     ],
   );
-  Query<models.User, UsersFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<User, UserFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension UsersUpdates on Query<models.User, UsersFields> {
+extension UserUpdates on Query<User, UserFields> {
   Future<int> patch({
     Change<String> email = const Change.keep(),
     Change<String?> nickname = const Change.keep(),
@@ -93,33 +100,40 @@ extension UsersUpdates on Query<models.User, UsersFields> {
   ).execute();
 }
 
-final _postsId = Column<int>(
+/// A complete immutable row from "posts".
+final class Post({
+  required final int id,
+  required final int authorId,
+  required final String title,
+  required final DateTime createdAt,
+});
+final _postId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _postsAuthorId = Column<int>(
+final _postAuthorId = Column<int>(
   "author_id",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _postsTitle = Column<String>(
+final _postTitle = Column<String>(
   "title",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final _postsCreatedAt = Column<DateTime>(
+final _postCreatedAt = Column<DateTime>(
   "created_at",
   Codecs.dateTime,
   nullable: false,
   generated: false,
 );
-final postsSchema = TableSchema(
+final postSchema = TableSchema(
   "posts",
-  columns: [_postsId, _postsAuthorId, _postsTitle, _postsCreatedAt],
+  columns: [_postId, _postAuthorId, _postTitle, _postCreatedAt],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [
@@ -134,30 +148,29 @@ final postsSchema = TableSchema(
   ],
 );
 
-final class PostsFields extends Fields {
-  PostsFields(super.table);
-  late final id = column(_postsId);
-  late final authorId = column(_postsAuthorId);
-  late final title = column(_postsTitle);
-  late final createdAt = column(_postsCreatedAt);
-  Relation<models.User, UsersFields> get author =>
-      Relation(usersTable, parent: [authorId], child: (row) => [row.id]);
+final class PostFields extends Fields {
+  PostFields(super.table);
+  late final id = column(_postId);
+  late final authorId = column(_postAuthorId);
+  late final title = column(_postTitle);
+  late final createdAt = column(_postCreatedAt);
+  Relation<User, UserFields> get author =>
+      Relation(userTable, parent: [authorId], child: (row) => [row.id]);
 }
 
-final postsTable = Table<models.Post, PostsFields>(
-  postsSchema,
-  PostsFields.new,
+final postTable = Table<Post, PostFields>(
+  postSchema,
+  PostFields.new,
   (row) => (row.id, row.authorId, row.title, row.createdAt).map(
-    (v0, v1, v2, v3) =>
-        models.Post(id: v0, authorId: v1, title: v2, createdAt: v3),
+    (v0, v1, v2, v3) => Post(id: v0, authorId: v1, title: v2, createdAt: v3),
   ),
 );
 
-final class PostsTableSet extends TableSet<models.Post, PostsFields> {
-  PostsTableSet(QueryContext db) : super(db, postsTable) {
+final class PostTableSet extends TableSet<Post, PostFields> {
+  PostTableSet(QueryContext db) : super(db, postTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Post> create({
+  Future<Post> create({
     Change<int> id = const Change.keep(),
     required int authorId,
     required String title,
@@ -170,10 +183,10 @@ final class PostsTableSet extends TableSet<models.Post, PostsFields> {
       row.createdAt.set(createdAt),
     ],
   );
-  Query<models.Post, PostsFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Post, PostFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension PostsUpdates on Query<models.Post, PostsFields> {
+extension PostUpdates on Query<Post, PostFields> {
   Future<int> patch({
     Change<int> authorId = const Change.keep(),
     Change<String> title = const Change.keep(),
@@ -187,9 +200,9 @@ extension PostsUpdates on Query<models.Post, PostsFields> {
   ).execute();
 }
 
-final appSchema = List<TableSchema>.unmodifiable([usersSchema, postsSchema]);
+final appSchema = List<TableSchema>.unmodifiable([userSchema, postSchema]);
 
 extension AppTables on QueryContext {
-  UsersTableSet get users => UsersTableSet(this);
-  PostsTableSet get posts => PostsTableSet(this);
+  UserTableSet get user => UserTableSet(this);
+  PostTableSet get post => PostTableSet(this);
 }

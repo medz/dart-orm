@@ -1,7 +1,6 @@
 import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
 
-import '../../../example/teams/schema.dart';
 import '../../../example/teams/schema.orm.dart';
 
 Future<void> checkTeams() async {
@@ -22,23 +21,23 @@ Future<void> checkTeams() async {
       db.sql,
     ).apply([Migration.create('0001_teams', appSchema, dialect: db.dialect)]);
     await db.transaction((tx) async {
-      await tx.users.create(id: 1, name: 'Ada');
-      await tx.users.create(id: 2, name: 'Ben');
-      await tx.users.create(id: 3, name: 'Cy');
-      await tx.teams.create(id: 10, name: 'Core');
-      await tx.teams.create(id: 20, name: 'Docs');
-      await tx.memberships.create(
+      await tx.user.create(id: 1, name: 'Ada');
+      await tx.user.create(id: 2, name: 'Ben');
+      await tx.user.create(id: 3, name: 'Cy');
+      await tx.team.create(id: 10, name: 'Core');
+      await tx.team.create(id: 20, name: 'Docs');
+      await tx.membership.create(
         teamId: 10,
         userId: 1,
         role: .set(MembershipRole.owner),
         joinedAt: DateTime.utc(2026, 1, 1),
       );
-      await tx.memberships.create(
+      await tx.membership.create(
         teamId: 20,
         userId: 1,
         joinedAt: DateTime.utc(2026, 1, 2),
       );
-      await tx.memberships.create(
+      await tx.membership.create(
         teamId: 10,
         userId: 2,
         joinedAt: DateTime.utc(2026, 1, 1),
@@ -47,7 +46,7 @@ Future<void> checkTeams() async {
     events.clear();
     acquired.clear();
     decoded.clear();
-    final query = db.users
+    final query = db.user
         .orderBy((u) => [u.id.asc()])
         .select(
           (u) => u.memberships
@@ -103,7 +102,7 @@ Future<void> checkTeams() async {
       return value;
     }
 
-    final mixed = db.users
+    final mixed = db.user
         .where((u) => u.id.eq(1))
         .select(
           (u) =>
@@ -143,8 +142,8 @@ Future<void> checkTeams() async {
       'Mixed projection evaluation order differs',
     );
     await db.transaction((tx) async {
-      await tx.teams.byId(10).patch(name: .set('Kernel'));
-      await tx.memberships
+      await tx.team.byId(10).patch(name: .set('Kernel'));
+      await tx.membership
           .byId(teamId: 10, userId: 2)
           .patch(role: .set(MembershipRole.owner));
     });
@@ -153,9 +152,9 @@ Future<void> checkTeams() async {
           (team: 'Kernel', role: MembershipRole.owner),
       'Transaction did not retain payload/endpoint changes',
     );
-    await db.teams.byId(10).delete().execute();
+    await db.team.byId(10).delete().execute();
     expect(
-      await db.memberships.count() == 1 && await db.users.count() == 3,
+      await db.membership.count() == 1 && await db.user.count() == 3,
       'Cascade removed an endpoint or retained invalid associations',
     );
     expect(

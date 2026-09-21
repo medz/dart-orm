@@ -45,26 +45,26 @@ Future<void> main() async {
         ),
       );
       final cases = {
-        'read': db.entries.select((e) => e.amount),
-        'average_half_even_scale_2': db.entries.select(
+        'read': db.entry.select((e) => e.amount),
+        'average_half_even_scale_2': db.entry.select(
           (e) => e.amount.average(scale: 2, rounding: .halfEven),
         ),
-        'window_average_half_even_scale_2': db.entries.select(
+        'window_average_half_even_scale_2': db.entry.select(
           (e) => e.amount
               .average(scale: 2, rounding: .halfEven)
               .over(orderBy: [e.id.asc()], frame: .rowsToCurrent),
         ),
-        'divide_half_even_scale_2': db.entries.select(
+        'divide_half_even_scale_2': db.entry.select(
           (e) => e.amount.divide(
             Decimal.parse('3'),
             scale: 2,
             rounding: .halfEven,
           ),
         ),
-        'round_half_even_scale_minus_1': db.entries.select(
+        'round_half_even_scale_minus_1': db.entry.select(
           (e) => e.amount.rounded(-1, rounding: .halfEven),
         ),
-        'window_divide_half_even_scale_2': db.entries.select(
+        'window_divide_half_even_scale_2': db.entry.select(
           (e) => e.amount
               .sum()
               .over(orderBy: [e.id.asc()], frame: .rowsToCurrent)

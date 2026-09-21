@@ -2,54 +2,60 @@
 
 import 'package:orm/sql.dart';
 
-import "schema.dart" as models;
-export "schema.dart" show Account, Event;
-
-final _accountsTenant = Column<int>(
+/// A complete immutable row from "accounts".
+final class Account({
+  required final int tenant,
+  required final int id,
+  required final String? label,
+  required final String? note,
+  required final int? managerId,
+  required final String? marker,
+});
+final _accountTenant = Column<int>(
   "tenant",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _accountsId = Column<int>(
+final _accountId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _accountsLabel = Column<String?>(
+final _accountLabel = Column<String?>(
   "label",
   Codecs.text.nullable(),
   nullable: true,
   generated: false,
 );
-final _accountsNote = Column<String?>(
+final _accountNote = Column<String?>(
   "note",
   Codecs.text.nullable(),
   nullable: true,
   generated: false,
 );
-final _accountsManagerId = Column<int?>(
+final _accountManagerId = Column<int?>(
   "manager_id",
   Codecs.integer.nullable(),
   nullable: true,
   generated: false,
 );
-final _accountsMarker = Column<String?>(
+final _accountMarker = Column<String?>(
   "_ORM_PRESENT",
   Codecs.text.nullable(),
   nullable: true,
   generated: false,
 );
-final accountsSchema = TableSchema(
+final accountSchema = TableSchema(
   "accounts",
   columns: [
-    _accountsTenant,
-    _accountsId,
-    _accountsLabel,
-    _accountsNote,
-    _accountsManagerId,
-    _accountsMarker,
+    _accountTenant,
+    _accountId,
+    _accountLabel,
+    _accountNote,
+    _accountManagerId,
+    _accountMarker,
   ],
   primaryKey: ["tenant", "id"],
   uniqueKeys: [],
@@ -64,57 +70,57 @@ final accountsSchema = TableSchema(
   ],
 );
 
-final class AccountsFields extends Fields {
-  AccountsFields(super.table);
-  late final tenant = column(_accountsTenant);
-  late final id = column(_accountsId);
-  late final label = column(_accountsLabel);
-  late final note = column(_accountsNote);
-  late final managerId = column(_accountsManagerId);
-  late final marker = column(_accountsMarker);
-  Relation<models.Account, AccountsFields> get manager => Relation(
-    accountsTable,
+final class AccountFields extends Fields {
+  AccountFields(super.table);
+  late final tenant = column(_accountTenant);
+  late final id = column(_accountId);
+  late final label = column(_accountLabel);
+  late final note = column(_accountNote);
+  late final managerId = column(_accountManagerId);
+  late final marker = column(_accountMarker);
+  Relation<Account, AccountFields> get manager => Relation(
+    accountTable,
     parent: [tenant, managerId],
     child: (row) => [row.tenant, row.id],
   );
-  Relation<models.Account, AccountsFields> get reports => Relation(
-    accountsTable,
+  Relation<Account, AccountFields> get reports => Relation(
+    accountTable,
     parent: [tenant, id],
     child: (row) => [row.tenant, row.managerId],
   );
-  Relation<models.Event, EventsFields> get events => Relation(
-    eventsTable,
+  Relation<Event, EventFields> get events => Relation(
+    eventTable,
     parent: [tenant, id],
     child: (row) => [row.tenant, row.owner],
   );
-  Relation<models.Event, EventsFields> get reviews => Relation(
-    eventsTable,
+  Relation<Event, EventFields> get reviews => Relation(
+    eventTable,
     parent: [tenant, id],
     child: (row) => [row.tenant, row.reviewer],
   );
 }
 
-final accountsTable = Table<models.Account, AccountsFields>(
-  accountsSchema,
-  AccountsFields.new,
+final accountTable = Table<Account, AccountFields>(
+  accountSchema,
+  AccountFields.new,
   (row) =>
       (row.tenant, row.id, row.label, row.note, row.managerId, row.marker).map(
-        (tenant, id, label, note, managerId, marker) => (
-          tenant: tenant,
-          id: id,
-          label: label,
-          note: note,
-          managerId: managerId,
-          marker: marker,
+        (v0, v1, v2, v3, v4, v5) => Account(
+          tenant: v0,
+          id: v1,
+          label: v2,
+          note: v3,
+          managerId: v4,
+          marker: v5,
         ),
       ),
 );
 
-final class AccountsTableSet extends TableSet<models.Account, AccountsFields> {
-  AccountsTableSet(QueryContext db) : super(db, accountsTable) {
+final class AccountTableSet extends TableSet<Account, AccountFields> {
+  AccountTableSet(QueryContext db) : super(db, accountTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Account> create({
+  Future<Account> create({
     required int tenant,
     required int id,
     String? label,
@@ -131,13 +137,11 @@ final class AccountsTableSet extends TableSet<models.Account, AccountsFields> {
       row.marker.set(marker),
     ],
   );
-  Query<models.Account, AccountsFields> byId({
-    required int tenant,
-    required int id,
-  }) => where((row) => row.tenant.eq(tenant).and(row.id.eq(id)));
+  Query<Account, AccountFields> byId({required int tenant, required int id}) =>
+      where((row) => row.tenant.eq(tenant).and(row.id.eq(id)));
 }
 
-extension AccountsUpdates on Query<models.Account, AccountsFields> {
+extension AccountUpdates on Query<Account, AccountFields> {
   Future<int> patch({
     Change<int> tenant = const Change.keep(),
     Change<int> id = const Change.keep(),
@@ -157,51 +161,60 @@ extension AccountsUpdates on Query<models.Account, AccountsFields> {
   ).execute();
 }
 
-final _eventsId = Column<int>(
+/// A complete immutable row from "events".
+final class Event({
+  required final int id,
+  required final int? tenant,
+  required final int? owner,
+  required final int? reviewer,
+  required final String title,
+  required final int score,
+});
+final _eventId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _eventsTenant = Column<int?>(
+final _eventTenant = Column<int?>(
   "tenant",
   Codecs.integer.nullable(),
   nullable: true,
   generated: false,
 );
-final _eventsOwner = Column<int?>(
+final _eventOwner = Column<int?>(
   "owner",
   Codecs.integer.nullable(),
   nullable: true,
   generated: false,
 );
-final _eventsReviewer = Column<int?>(
+final _eventReviewer = Column<int?>(
   "reviewer",
   Codecs.integer.nullable(),
   nullable: true,
   generated: false,
 );
-final _eventsTitle = Column<String>(
+final _eventTitle = Column<String>(
   "title",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final _eventsScore = Column<int>(
+final _eventScore = Column<int>(
   "score",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final eventsSchema = TableSchema(
+final eventSchema = TableSchema(
   "events",
   columns: [
-    _eventsId,
-    _eventsTenant,
-    _eventsOwner,
-    _eventsReviewer,
-    _eventsTitle,
-    _eventsScore,
+    _eventId,
+    _eventTenant,
+    _eventOwner,
+    _eventReviewer,
+    _eventTitle,
+    _eventScore,
   ],
   primaryKey: ["id"],
   uniqueKeys: [],
@@ -222,47 +235,47 @@ final eventsSchema = TableSchema(
   ],
 );
 
-final class EventsFields extends Fields {
-  EventsFields(super.table);
-  late final id = column(_eventsId);
-  late final tenant = column(_eventsTenant);
-  late final owner = column(_eventsOwner);
-  late final reviewer = column(_eventsReviewer);
-  late final title = column(_eventsTitle);
-  late final score = column(_eventsScore);
-  Relation<models.Account, AccountsFields> get author => Relation(
-    accountsTable,
+final class EventFields extends Fields {
+  EventFields(super.table);
+  late final id = column(_eventId);
+  late final tenant = column(_eventTenant);
+  late final owner = column(_eventOwner);
+  late final reviewer = column(_eventReviewer);
+  late final title = column(_eventTitle);
+  late final score = column(_eventScore);
+  Relation<Account, AccountFields> get author => Relation(
+    accountTable,
     parent: [tenant, owner],
     child: (row) => [row.tenant, row.id],
   );
-  Relation<models.Account, AccountsFields> get reviewerAccount => Relation(
-    accountsTable,
+  Relation<Account, AccountFields> get reviewerAccount => Relation(
+    accountTable,
     parent: [tenant, reviewer],
     child: (row) => [row.tenant, row.id],
   );
 }
 
-final eventsTable = Table<models.Event, EventsFields>(
-  eventsSchema,
-  EventsFields.new,
+final eventTable = Table<Event, EventFields>(
+  eventSchema,
+  EventFields.new,
   (row) =>
       (row.id, row.tenant, row.owner, row.reviewer, row.title, row.score).map(
-        (id, tenant, owner, reviewer, title, score) => (
-          id: id,
-          tenant: tenant,
-          owner: owner,
-          reviewer: reviewer,
-          title: title,
-          score: score,
+        (v0, v1, v2, v3, v4, v5) => Event(
+          id: v0,
+          tenant: v1,
+          owner: v2,
+          reviewer: v3,
+          title: v4,
+          score: v5,
         ),
       ),
 );
 
-final class EventsTableSet extends TableSet<models.Event, EventsFields> {
-  EventsTableSet(QueryContext db) : super(db, eventsTable) {
+final class EventTableSet extends TableSet<Event, EventFields> {
+  EventTableSet(QueryContext db) : super(db, eventTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Event> create({
+  Future<Event> create({
     required int id,
     int? tenant,
     int? owner,
@@ -279,11 +292,10 @@ final class EventsTableSet extends TableSet<models.Event, EventsFields> {
       row.score.set(score),
     ],
   );
-  Query<models.Event, EventsFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+  Query<Event, EventFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension EventsUpdates on Query<models.Event, EventsFields> {
+extension EventUpdates on Query<Event, EventFields> {
   Future<int> patch({
     Change<int> id = const Change.keep(),
     Change<int?> tenant = const Change.keep(),
@@ -303,12 +315,9 @@ extension EventsUpdates on Query<models.Event, EventsFields> {
   ).execute();
 }
 
-final appSchema = List<TableSchema>.unmodifiable([
-  accountsSchema,
-  eventsSchema,
-]);
+final appSchema = List<TableSchema>.unmodifiable([accountSchema, eventSchema]);
 
 extension AppTables on QueryContext {
-  AccountsTableSet get accounts => AccountsTableSet(this);
-  EventsTableSet get events => EventsTableSet(this);
+  AccountTableSet get account => AccountTableSet(this);
+  EventTableSet get event => EventTableSet(this);
 }

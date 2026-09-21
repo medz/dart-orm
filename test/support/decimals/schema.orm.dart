@@ -2,78 +2,77 @@
 
 import 'package:orm/sql.dart';
 
-import "schema.dart" as models;
-export "schema.dart" show Entry, Rate, Allocation;
-
-final _entriesId = Column<int>(
+/// A complete immutable row from "entries".
+final class Entry({
+  required final int id,
+  required final Decimal amount,
+  required final Decimal? fee,
+  required final Decimal tax,
+  required final String bucket,
+});
+final _entryId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _entriesAmount = Column<Decimal>(
+final _entryAmount = Column<Decimal>(
   "amount",
   Codecs.decimal,
   nullable: false,
   generated: false,
 );
-final _entriesFee = Column<Decimal?>(
+final _entryFee = Column<Decimal?>(
   "fee",
   Codecs.decimal.nullable(),
   nullable: true,
   generated: false,
 );
-final _entriesTax = Column<Decimal>(
+final _entryTax = Column<Decimal>(
   "tax",
   Codecs.decimal,
   nullable: false,
   generated: false,
   defaultSql: "'0.10'",
 );
-final _entriesBucket = Column<String>(
+final _entryBucket = Column<String>(
   "bucket",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final entriesSchema = TableSchema(
+final entrySchema = TableSchema(
   "entries",
-  columns: [
-    _entriesId,
-    _entriesAmount,
-    _entriesFee,
-    _entriesTax,
-    _entriesBucket,
-  ],
+  columns: [_entryId, _entryAmount, _entryFee, _entryTax, _entryBucket],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [],
   foreignKeys: [],
 );
 
-final class EntriesFields extends Fields {
-  EntriesFields(super.table);
-  late final id = column(_entriesId);
-  late final amount = column(_entriesAmount);
-  late final fee = column(_entriesFee);
-  late final tax = column(_entriesTax);
-  late final bucket = column(_entriesBucket);
+final class EntryFields extends Fields {
+  EntryFields(super.table);
+  late final id = column(_entryId);
+  late final amount = column(_entryAmount);
+  late final fee = column(_entryFee);
+  late final tax = column(_entryTax);
+  late final bucket = column(_entryBucket);
 }
 
-final entriesTable = Table<models.Entry, EntriesFields>(
-  entriesSchema,
-  EntriesFields.new,
+final entryTable = Table<Entry, EntryFields>(
+  entrySchema,
+  EntryFields.new,
   (row) => (row.id, row.amount, row.fee, row.tax, row.bucket).map(
-    (id, amount, fee, tax, bucket) =>
-        (id: id, amount: amount, fee: fee, tax: tax, bucket: bucket),
+    (v0, v1, v2, v3, v4) =>
+        Entry(id: v0, amount: v1, fee: v2, tax: v3, bucket: v4),
   ),
 );
 
-final class EntriesTableSet extends TableSet<models.Entry, EntriesFields> {
-  EntriesTableSet(QueryContext db) : super(db, entriesTable) {
+final class EntryTableSet extends TableSet<Entry, EntryFields> {
+  EntryTableSet(QueryContext db) : super(db, entryTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Entry> create({
+  Future<Entry> create({
     Change<int> id = const Change.keep(),
     required Decimal amount,
     Decimal? fee,
@@ -88,11 +87,10 @@ final class EntriesTableSet extends TableSet<models.Entry, EntriesFields> {
       row.bucket.set(bucket),
     ],
   );
-  Query<models.Entry, EntriesFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+  Query<Entry, EntryFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension EntriesUpdates on Query<models.Entry, EntriesFields> {
+extension EntryUpdates on Query<Entry, EntryFields> {
   Future<int> patch({
     Change<Decimal> amount = const Change.keep(),
     Change<Decimal?> fee = const Change.keep(),
@@ -108,52 +106,53 @@ extension EntriesUpdates on Query<models.Entry, EntriesFields> {
   ).execute();
 }
 
-final _ratesId = Column<Decimal>(
+/// A complete immutable row from "rates".
+final class Rate({required final Decimal id, required final String label});
+final _rateId = Column<Decimal>(
   "id",
   Codecs.decimal,
   nullable: false,
   generated: false,
 );
-final _ratesLabel = Column<String>(
+final _rateLabel = Column<String>(
   "label",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final ratesSchema = TableSchema(
+final rateSchema = TableSchema(
   "rates",
-  columns: [_ratesId, _ratesLabel],
+  columns: [_rateId, _rateLabel],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [],
   foreignKeys: [],
 );
 
-final class RatesFields extends Fields {
-  RatesFields(super.table);
-  late final id = column(_ratesId);
-  late final label = column(_ratesLabel);
-  Relation<models.Allocation, AllocationsFields> get allocations =>
-      Relation(allocationsTable, parent: [id], child: (row) => [row.rateId]);
+final class RateFields extends Fields {
+  RateFields(super.table);
+  late final id = column(_rateId);
+  late final label = column(_rateLabel);
+  Relation<Allocation, AllocationFields> get allocations =>
+      Relation(allocationTable, parent: [id], child: (row) => [row.rateId]);
 }
 
-final ratesTable = Table<models.Rate, RatesFields>(
-  ratesSchema,
-  RatesFields.new,
-  (row) => (row.id, row.label).map((id, label) => (id: id, label: label)),
+final rateTable = Table<Rate, RateFields>(
+  rateSchema,
+  RateFields.new,
+  (row) => (row.id, row.label).map((v0, v1) => Rate(id: v0, label: v1)),
 );
 
-final class RatesTableSet extends TableSet<models.Rate, RatesFields> {
-  RatesTableSet(QueryContext db) : super(db, ratesTable) {
+final class RateTableSet extends TableSet<Rate, RateFields> {
+  RateTableSet(QueryContext db) : super(db, rateTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Rate> create({required Decimal id, required String label}) =>
+  Future<Rate> create({required Decimal id, required String label}) =>
       createRow((row) => [row.id.set(id), row.label.set(label)]);
-  Query<models.Rate, RatesFields> byId(Decimal id) =>
-      where((row) => row.id.eq(id));
+  Query<Rate, RateFields> byId(Decimal id) => where((row) => row.id.eq(id));
 }
 
-extension RatesUpdates on Query<models.Rate, RatesFields> {
+extension RateUpdates on Query<Rate, RateFields> {
   Future<int> patch({
     Change<Decimal> id = const Change.keep(),
     Change<String> label = const Change.keep(),
@@ -162,21 +161,23 @@ extension RatesUpdates on Query<models.Rate, RatesFields> {
           .execute();
 }
 
-final _allocationsId = Column<int>(
+/// A complete immutable row from "allocations".
+final class Allocation({required final int id, required final Decimal rateId});
+final _allocationId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _allocationsRateId = Column<Decimal>(
+final _allocationRateId = Column<Decimal>(
   "rate_id",
   Codecs.decimal,
   nullable: false,
   generated: false,
 );
-final allocationsSchema = TableSchema(
+final allocationSchema = TableSchema(
   "allocations",
-  columns: [_allocationsId, _allocationsRateId],
+  columns: [_allocationId, _allocationRateId],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [],
@@ -185,46 +186,45 @@ final allocationsSchema = TableSchema(
   ],
 );
 
-final class AllocationsFields extends Fields {
-  AllocationsFields(super.table);
-  late final id = column(_allocationsId);
-  late final rateId = column(_allocationsRateId);
-  Relation<models.Rate, RatesFields> get rate =>
-      Relation(ratesTable, parent: [rateId], child: (row) => [row.id]);
+final class AllocationFields extends Fields {
+  AllocationFields(super.table);
+  late final id = column(_allocationId);
+  late final rateId = column(_allocationRateId);
+  Relation<Rate, RateFields> get rate =>
+      Relation(rateTable, parent: [rateId], child: (row) => [row.id]);
 }
 
-final allocationsTable = Table<models.Allocation, AllocationsFields>(
-  allocationsSchema,
-  AllocationsFields.new,
-  (row) => (row.id, row.rateId).map((id, rateId) => (id: id, rateId: rateId)),
+final allocationTable = Table<Allocation, AllocationFields>(
+  allocationSchema,
+  AllocationFields.new,
+  (row) => (row.id, row.rateId).map((v0, v1) => Allocation(id: v0, rateId: v1)),
 );
 
-final class AllocationsTableSet
-    extends TableSet<models.Allocation, AllocationsFields> {
-  AllocationsTableSet(QueryContext db) : super(db, allocationsTable) {
+final class AllocationTableSet extends TableSet<Allocation, AllocationFields> {
+  AllocationTableSet(QueryContext db) : super(db, allocationTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Allocation> create({
+  Future<Allocation> create({
     Change<int> id = const Change.keep(),
     required Decimal rateId,
   }) => createRow((row) => [...row.id.change(id), row.rateId.set(rateId)]);
-  Query<models.Allocation, AllocationsFields> byId(int id) =>
+  Query<Allocation, AllocationFields> byId(int id) =>
       where((row) => row.id.eq(id));
 }
 
-extension AllocationsUpdates on Query<models.Allocation, AllocationsFields> {
+extension AllocationUpdates on Query<Allocation, AllocationFields> {
   Future<int> patch({Change<Decimal> rateId = const Change.keep()}) =>
       update((row) => [...row.rateId.change(rateId)]).execute();
 }
 
 final appSchema = List<TableSchema>.unmodifiable([
-  entriesSchema,
-  ratesSchema,
-  allocationsSchema,
+  entrySchema,
+  rateSchema,
+  allocationSchema,
 ]);
 
 extension AppTables on QueryContext {
-  EntriesTableSet get entries => EntriesTableSet(this);
-  RatesTableSet get rates => RatesTableSet(this);
-  AllocationsTableSet get allocations => AllocationsTableSet(this);
+  EntryTableSet get entry => EntryTableSet(this);
+  RateTableSet get rate => RateTableSet(this);
+  AllocationTableSet get allocation => AllocationTableSet(this);
 }

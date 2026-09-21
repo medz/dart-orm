@@ -11,7 +11,7 @@ Future<void> main() async {
     ).apply([Migration.create('0001_local', appSchema, dialect: db.dialect)]);
     final last = LocalDate.fromJulianDay(LocalDate.maxJulianDay);
     final stamp = LocalDateTime.parse('294276-12-31 23:59:59.999999');
-    final row = await db.appointments.create(
+    final row = await db.appointment.create(
       day: last,
       time: Change.set(LocalTime(24)),
       starts: stamp,
@@ -19,19 +19,19 @@ Future<void> main() async {
     if (row.day != last || row.time != LocalTime(24) || row.starts != stamp) {
       throw StateError('Finite endpoint changed');
     }
-    await db.appointments.create(day: LocalDate.fromJulianDay(0));
-    final sorted = await db.appointments
+    await db.appointment.create(day: LocalDate.fromJulianDay(0));
+    final sorted = await db.appointment
         .orderBy((a) => [a.day.asc()])
         .stream(batchSize: 1)
         .toList();
     if (sorted.first.day.julianDay != 0 || sorted.last.day != last) {
       throw StateError('Calendar ordering changed');
     }
-    await db.holidays.create(day: LocalDate(0, 1, 1), label: 'era');
+    await db.holiday.create(day: LocalDate(0, 1, 1), label: 'era');
     await db.execute(
       SqlCommand("INSERT INTO visits (day) VALUES ('0000-01-01')"),
     );
-    final children = await db.holidays
+    final children = await db.holiday
         .select((h) => h.visits.select((v) => v.day).many())
         .single();
     if (children.single != LocalDate(0, 1, 1)) {

@@ -72,9 +72,9 @@ void main() {
             false,
             reason: imported.toJson().toString(),
           );
-          expect(imported.dart, contains('final class'));
-          expect(imported.dart, contains('@Id.generated()'));
-          expect(imported.dart, contains('LocalDateTime'));
+          expect(imported.dart, contains('model('));
+          expect(imported.dart, contains('.identity()'));
+          expect(imported.dart, contains('localDateTime('));
           expect(
             imported.issues.map((i) => i.code),
             contains('IMPORT.TEMPORAL_SEMANTICS'),
@@ -114,8 +114,7 @@ void main() {
           final source = File('${directory.path}/queries.dart');
           await source.writeAsString('''
 import 'package:orm/schema.dart';
-typedef Result = ({int value});
-final probe = sqlQuery<Result, ({int minimum})>($engine: 'query.sql');
+final probe = sqlQuery(result: (value: integer(),), parameters: (minimum: integer(),), $engine: 'query.sql');
 ''');
           await File('${directory.path}/query.sql')
               .writeAsString('SELECT :minimum AS value');
@@ -140,8 +139,7 @@ BEGIN INSERT INTO `$table` VALUES (1); RETURN 1; END; /* final delimiter */'''),
             final source = File('${directory.path}/queries.dart');
             await source.writeAsString('''
 import 'package:orm/schema.dart';
-typedef Result = ({int value});
-final probe = sqlQuery<Result, ({int minimum})>($engine: 'query.sql');
+final probe = sqlQuery(result: (value: integer(),), parameters: (minimum: integer(),), $engine: 'query.sql');
 ''');
             final sql = File('${directory.path}/query.sql');
             await sql.writeAsString('SELECT `$function`() + :minimum AS value');

@@ -2,17 +2,14 @@ import 'package:orm/schema.dart';
 
 import 'types.dart' as d;
 
-typedef Ticket = ({
-  @Id() @UseCodec(d.TicketId.codec) @ClientDefault(d.nextId) d.TicketId id,
-  @ClientDefault(d.nameFactory) String name,
-  @ClientDefault(d.empty<String>) String? label,
-  @Default.sql("'server'") @ClientDefault(d.Defaults.state) String state,
-  @ClientDefault(DateTime.now) DateTime createdAt,
-});
+final Model ticket = model("tickets", (
+  id: custom(d.TicketId.codec, clientDefault: d.nextId),
+  name: text(clientDefault: d.nameFactory),
+  label: text().nullable(clientDefault: d.empty<String>),
+  state: text(defaultSql: "'server'", clientDefault: d.Defaults.state),
+  createdAt: dateTime(clientDefault: DateTime.now),
+), primaryKey: (r) => r.id);
 
-final tickets = entity<Ticket>();
-
-typedef SequenceRow = ({
-  @Id.generated() @ClientDefault(d.clientIdentity) int id,
-});
-final sequences = entity<SequenceRow>();
+final Model sequenceRow = model("sequences", (
+  id: integer(clientDefault: d.clientIdentity).identity(),
+));

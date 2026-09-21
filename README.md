@@ -7,25 +7,45 @@ schema and migrations in Dart. SQLite, PostgreSQL, MySQL and MariaDB share a typ
 query API, with explicit database capabilities and transaction boundaries.
 
 [Get started](#get-started) · [Guides](https://github.com/medz/dart-orm/blob/main/doc/README.md) ·
-[API reference](https://pub.dev/documentation/orm/6.0.0-beta.2/) ·
-[Examples](https://github.com/medz/dart-orm/tree/main/example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.2)
+[API reference](https://pub.dev/documentation/orm/6.0.0-beta.3/) ·
+[Examples](https://github.com/medz/dart-orm/tree/main/example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.3)
 
 > **6.0 beta:** a new implementation requiring Dart 3.13+. This is a breaking
 > replacement for the Prisma-based 5.x client. Read the [release notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md)
 > before upgrading an existing application.
 
-Upgrading from beta.1: `first()` now requires a row. Use `firstOrNull()` when an
-empty result is expected. See the [beta.2 changes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#600-beta2)
-for export changes and the new `singleOrNull()` API.
+Upgrading from beta.2: replace annotated entities and hand-written row types with
+`model(...)` and regenerate your clients. Keep existing migration history; table
+and column names continue to identify the physical schema. See the
+[beta.3 changes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#600-beta3).
+
+## Record schemas
+
+Record schemas define each model and table together, without annotations:
+
+```dart
+final task = model('tasks', (
+  id: identity(),
+  title: text(),
+  done: boolean(defaultValue: false),
+));
+```
+
+Import `package:orm/schema.dart` in the definition. Generation produces the `Task`
+row, `db.task` and a standalone migration snapshot. See [authoring](https://github.com/medz/dart-orm/blob/main/doc/authoring.md)
+and the [complete company example](https://github.com/medz/dart-orm/blob/main/example/company/README.md).
 
 ## Get started
 
-Create a Dart application and initialize SQLite:
+Create a Dart application and add the package:
 
 ```sh
 dart create -t console my_app
 cd my_app
-dart pub add orm:^6.0.0-beta.2
+dart pub add orm:6.0.0-beta.3
+```
+
+```sh
 dart run orm init --database sqlite
 ```
 
@@ -35,13 +55,11 @@ registry. The starter model in `lib/schema.dart` is ordinary Dart:
 ```dart
 import 'package:orm/schema.dart';
 
-final class Task({
-  @Id.generated() required final int id,
-  required final String title,
-  @Default.sql('false') required final bool done,
-});
-
-final tasks = entity<Task>();
+final task = model('tasks', (
+  id: identity(),
+  title: text(),
+  done: boolean(defaultValue: false),
+));
 ```
 
 Create and review the first migration, then apply it:
@@ -61,9 +79,9 @@ import 'package:orm/sqlite.dart';
 Future<void> main() async {
   final db = await sqlite(const SqliteOptions.file('app.sqlite'));
   try {
-    final Task task = await db.tasks.create(title: 'Ship something useful');
+    final Task task = await db.task.create(title: 'Ship something useful');
 
-    final List<(int, String)> pending = await db.tasks
+    final List<(int, String)> pending = await db.task
         .where((t) => t.done.eq(false))
         .orderBy((t) => [t.id.asc()])
         .select((t) => (t.id, t.title).row)
@@ -71,7 +89,7 @@ Future<void> main() async {
     print(pending);
 
     await db.transaction((tx) async {
-      await tx.tasks.byId(task.id).patch(done: .set(true));
+      await tx.task.byId(task.id).patch(done: .set(true));
     });
   } finally {
     await db.close();
@@ -157,6 +175,6 @@ migrations without importing today's application models. See [API boundaries](ht
 - [Transactions and execution](https://github.com/medz/dart-orm/blob/main/doc/execution.md) · [Subscriptions](https://github.com/medz/dart-orm/blob/main/doc/watch.md)
 - [CLI](https://github.com/medz/dart-orm/blob/main/doc/cli.md) · [build_runner](https://github.com/medz/dart-orm/blob/main/doc/generation.md) · [Existing databases](https://github.com/medz/dart-orm/blob/main/doc/importing.md)
 - [SQL inspection](https://github.com/medz/dart-orm/blob/main/doc/observability.md) · [Named SQL](https://github.com/medz/dart-orm/blob/main/doc/named-sql.md)
-- [Contributing and validation](https://github.com/medz/dart-orm/blob/main/doc/contributing.md)
+- [Contributing and validation](https://github.com/medz/dart-orm/blob/main/CONTRIBUTING.md)
 
 Licensed under the [BSD 3-Clause License](https://github.com/medz/dart-orm/blob/main/LICENSE).

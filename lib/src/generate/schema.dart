@@ -10,7 +10,8 @@ import 'package:path/path.dart' as p;
 import '../../migrate.dart';
 import 'emitter.dart';
 import 'exception.dart';
-import 'reader.dart';
+import 'schema/reader.dart';
+import 'schema/sources.dart';
 import 'source.dart';
 import 'types.dart';
 
@@ -70,7 +71,7 @@ Future<GeneratedSchema> generateSchema(
     final import = p
         .relative(source, from: p.dirname(output))
         .replaceAll(r'\', '/');
-    return generateResolvedSchema(
+    return await generateResolvedSchema(
       resolved.unit,
       resolved.libraryElement,
       import,
@@ -79,20 +80,39 @@ Future<GeneratedSchema> generateSchema(
                 .relative(uri.toFilePath(), from: p.dirname(output))
                 .replaceAll(r'\', '/')
           : uri.toString(),
+      resolve: (library) async {
+        final result = await library.session.getResolvedUnit(
+          library.firstFragment.source.fullName,
+        );
+        if (result is! ResolvedUnitResult) {
+          throw GenerationException('Cannot analyze ${library.uri}.');
+        }
+        final errors = result.diagnostics.where(
+          (e) => e.severity.name.toLowerCase() == 'error',
+        );
+        if (errors.isNotEmpty) throw GenerationException(errors.join('\n'));
+        return result.unit;
+      },
     );
   } finally {
     await contexts.dispose();
   }
 }
 
-GeneratedSchema generateResolvedSchema(
+Future<GeneratedSchema> generateResolvedSchema(
   CompilationUnit unit,
   LibraryElement library,
   String sourceImport,
-  String Function(Uri) importUri,
-) {
+  String Function(Uri) importUri, {
+  required Future<CompilationUnit> Function(LibraryElement) resolve,
+}) async {
   final names = DartNames(library.uri, importUri);
-  final schema = SchemaReader(unit, library.typeSystem, names).read();
+  final schema = SchemaReader(
+    unit,
+    library.typeSystem,
+    names,
+    await schemaSources(unit, library, resolve),
+  ).read();
   return GeneratedSchema(
     DartFormatter(languageVersion: library.languageVersion.effective)
         .format(emitSchema(schema, sourceImport, names)),

@@ -54,7 +54,7 @@ Future<void> main() async {
       try {
         await check('page reload recovers committed rows and rolls back interrupted transaction', () async {
           expect(
-            (await recovered.users.single()).email == 'durable',
+            (await recovered.user.single()).email == 'durable',
             'Committed rows changed or interrupted write survived',
           );
           expect(
@@ -94,7 +94,7 @@ Future<void> main() async {
               'Upgrade schema differs',
             );
             expect(
-              (await recovered.users.single()).email == 'durable',
+              (await recovered.user.single()).email == 'durable',
               'Upgrade removed existing data',
             );
           },
@@ -121,33 +121,33 @@ Future<void> main() async {
           (await verifySchema(db.sql, SchemaSnapshot(appSchema))).matches,
           'Schema differs',
         );
-        await rejects(() => db.posts.create(authorId: 999, title: 'invalid'));
+        await rejects(() => db.post.create(authorId: 999, title: 'invalid'));
       });
       await check('query ownership, optional guards and write validation survive JS and WASM', () async {
         final isolated = await memory();
         try {
           await initialize(isolated);
-          await isolated.users.create(email: 'boundary');
+          await isolated.user.create(email: 'boundary');
           await isolated.transaction((tx) async {
-            final ids = isolated.users.select((u) => u.id);
+            final ids = isolated.user.select((u) => u.id);
             await rejects(
-              () => tx.users.where((u) => u.id.isInQuery(ids)).get(),
+              () => tx.user.where((u) => u.id.isInQuery(ids)).get(),
               code: 'QUERY.SESSION',
             );
             final cte = ids.asCte('root_ids').alias();
             await rejects(
-              () => tx.users
+              () => tx.user
                   .join(cte, on: (u, c) => u.id.equals(c.ref((u) => u.id)))
                   .get(),
               code: 'QUERY.SESSION',
             );
             expect(
-              await tx.users.count() == 1,
+              await tx.user.count() == 1,
               'Rejected queries damaged the transaction',
             );
           });
-          final present = usersTable.alias(), absent = usersTable.alias();
-          final query = isolated.users
+          final present = userTable.alias(), absent = userTable.alias();
+          final query = isolated.user
               .leftJoin(present, on: (u, p) => u.id.equals(p.id))
               .leftJoin(absent, on: (u, a) => a.id.eq(-1));
           await rejects(
@@ -171,21 +171,21 @@ Future<void> main() async {
             'Nested optional decoding differs',
           );
           await rejects(
-            () => isolated.users
+            () => isolated.user
                 .where((u) => u.id.count().gt(0))
                 .delete()
                 .execute(),
             code: 'QUERY.AGGREGATE',
           );
           await rejects(
-            () => isolated.users
+            () => isolated.user
                 .insert((u) => [u.email.set('invalid')])
                 .returning((_) => fields({}))
                 .get(),
             code: 'QUERY.EMPTY_SELECTION',
           );
           expect(
-            await isolated.users.count() == 1,
+            await isolated.user.count() == 1,
             'Rejected writes changed data',
           );
         } finally {
@@ -197,17 +197,17 @@ Future<void> main() async {
         try {
           await initialize(isolated);
           final initialCalls = models.nicknameCalls;
-          final row = await isolated.users.create(email: 'default');
+          final row = await isolated.user.create(email: 'default');
           expect(
             row.nickname == 'guest',
             'Omitted value did not use Dart factory',
           );
-          final explicit = await isolated.users.create(
+          final explicit = await isolated.user.create(
             email: 'explicit',
             nickname: .set(null),
           );
           expect(explicit.nickname == null, 'Explicit null used Dart factory');
-          final batch = isolated.users.insertMany([
+          final batch = isolated.user.insertMany([
             'batch-a',
             'batch-b',
           ], (u, email) => [u.email.set(email)]);
@@ -223,7 +223,7 @@ Future<void> main() async {
             'Compiling or executing reran factories',
           );
           expect(
-            await isolated.users.where((u) => u.nickname.eq('guest')).count() ==
+            await isolated.user.where((u) => u.nickname.eq('guest')).count() ==
                 3,
             'Batch defaults were not stored',
           );
@@ -235,15 +235,15 @@ Future<void> main() async {
         final isolated = await memory();
         try {
           await initialize(isolated);
-          final row = await isolated.users.create(email: 'computed');
+          final row = await isolated.user.create(email: 'computed');
           expect(
             row.emailSize == 8 && row.upperNickname == 'GUEST',
             'Computed creation differs',
           );
-          await isolated.users
+          await isolated.user
               .byId(row.id)
               .patch(email: .set('edited'), nickname: .set(null));
-          final updated = await isolated.users.single();
+          final updated = await isolated.user.single();
           expect(
             updated.emailSize == 6 && updated.upperNickname == null,
             'Computed update differs',
@@ -288,7 +288,7 @@ Future<void> main() async {
           );
           await Migrator(isolated.sql).apply([initial, migration]);
           expect(
-            (await isolated.users.single()).emailSize == 7,
+            (await isolated.user.single()).emailSize == 7,
             'Migration did not recompute existing row',
           );
           expect(
@@ -302,7 +302,7 @@ Future<void> main() async {
       await check(
         'generated CHECK enforcement and atomic constraint migrations',
         () async {
-          await rejects(() => db.users.create(email: ''));
+          await rejects(() => db.user.create(email: ''));
           expect(
             (await inspectTable(db.sql, 'users')).checks.length == 1,
             'Generated CHECK missing',
@@ -361,17 +361,14 @@ Future<void> main() async {
       await check(
         'generated records, projections and typed relation batches',
         () async {
-          final a = await db.users.create(email: 'a');
-          final b = await db.users.create(email: 'b');
+          final a = await db.user.create(email: 'a');
+          final b = await db.user.create(email: 'b');
           for (final user in [a, b]) {
             for (var i = 0; i < 5; i++) {
-              await db.posts.create(
-                authorId: user.id,
-                title: '${user.email}$i',
-              );
+              await db.post.create(authorId: user.id, title: '${user.email}$i');
             }
           }
-          final rows = await db.users
+          final rows = await db.user
               .orderBy((u) => [u.id.asc()])
               .select(
                 (u) => (
@@ -390,10 +387,10 @@ Future<void> main() async {
                 rows[1].posts.join(',') == 'b4,b3',
             '$rows',
           );
-          await db.users.byId(a.id).patch(nickname: .set('named'));
-          await db.users.byId(a.id).patch(nickname: .set(null));
+          await db.user.byId(a.id).patch(nickname: .set('named'));
+          await db.user.byId(a.id).patch(nickname: .set(null));
           expect(
-            (await db.users.byId(a.id).single()).nickname == null,
+            (await db.user.byId(a.id).single()).nickname == null,
             'Explicit NULL failed',
           );
         },
@@ -403,45 +400,45 @@ Future<void> main() async {
         await rejects(
           () => db.transaction((tx) async {
             escaped = tx;
-            await tx.users.create(email: 'rolled-back');
+            await tx.user.create(email: 'rolled-back');
             throw StateError('rollback');
           }),
         );
         expect(
-          !await db.users.where((u) => u.email.eq('rolled-back')).exists(),
+          !await db.user.where((u) => u.email.eq('rolled-back')).exists(),
           'Rollback leaked data',
         );
-        await rejects(() => escaped!.users.get(), code: 'SESSION.CLOSED');
+        await rejects(() => escaped!.user.get(), code: 'SESSION.CLOSED');
         await db.transaction((tx) async {
           await rejects(
             () => tx.savepoint((sp) async {
-              await sp.users.create(email: 'savepoint');
+              await sp.user.create(email: 'savepoint');
               throw StateError('rollback');
             }),
           );
           expect(
-            !await tx.users.where((u) => u.email.eq('savepoint')).exists(),
+            !await tx.user.where((u) => u.email.eq('savepoint')).exists(),
             'Savepoint leaked data',
           );
         });
       });
       await check('stream cursor batches and early release', () async {
-        final all = await db.posts
+        final all = await db.post
             .orderBy((p) => [p.id.asc()])
             .select((p) => p.title)
             .stream(batchSize: 3)
             .toList();
         expect(all.length == 10, 'Stream truncated');
-        await db.posts.stream(batchSize: 2).take(1).drain<void>();
-        expect(await db.posts.count() == 10, 'Cursor retained the lease');
+        await db.post.stream(batchSize: 2).take(1).drain<void>();
+        expect(await db.post.count() == 10, 'Cursor retained the lease');
       });
       await check('commit invalidation and watch snapshots', () async {
-        final stream = StreamIterator(db.users.select((u) => u.email).watch());
+        final stream = StreamIterator(db.user.select((u) => u.email).watch());
         try {
           expect(await stream.moveNext(), 'Missing first snapshot');
           final next = stream.moveNext();
           await db.transaction((tx) async {
-            await tx.users.create(email: 'watched');
+            await tx.user.create(email: 'watched');
           });
           expect(await next, 'Missing commit snapshot');
           expect(stream.current.contains('watched'), 'Watch missed commit');
@@ -454,7 +451,7 @@ Future<void> main() async {
         () async {
           final big = BigInt.parse('9223372036854775807');
           final amount = Decimal.parse('123456789012345678901.000000001');
-          final row = await db.values.create(
+          final row = await db.value.create(
             wide: big,
             bytes: Uint8List.fromList([0, 127, 255]),
             amount: amount,
@@ -487,7 +484,7 @@ Future<void> main() async {
                 raw.rows.single[1] == -big - BigInt.one,
             'Raw int64 was rounded',
           );
-          final total = await db.values.select((v) => v.amount.sum()).single();
+          final total = await db.value.select((v) => v.amount.sum()).single();
           expect(total == amount, 'Decimal aggregate changed');
         },
       );
@@ -497,14 +494,14 @@ Future<void> main() async {
           'Cancellation was falsely advertised',
         );
         await rejects(
-          () => db.users.get(
+          () => db.user.get(
             options: const ExecutionOptions(timeout: Duration(seconds: 1)),
           ),
           code: 'CAPABILITY.CANCEL',
         );
       });
       await check('large real values retain floating storage', () async {
-        final result = await db.users
+        final result = await db.user
             .take(1)
             .select((u) => value(1e20, Codecs.real))
             .single();
@@ -522,20 +519,20 @@ Future<void> main() async {
           ),
           code: 'CODEC.INTEGER',
         );
-        await db.readings.create(id: 1, value: 1e20);
-        await db.readings.create(id: 2, value: 1e20);
-        await db.readings.create(id: 3, value: 2e20);
-        final token = db.readings.cursorToken(
+        await db.reading.create(id: 1, value: 1e20);
+        await db.reading.create(id: 2, value: 1e20);
+        await db.reading.create(id: 3, value: 2e20);
+        final token = db.reading.cursorToken(
           (r) => [r.value.cursor(1e20), r.id.cursor(1)],
         );
-        final next = await db.readings
+        final next = await db.reading
             .seekToken(token, orderBy: (r) => [r.value.asc(), r.id.asc()])
             .get();
         expect(
           next.length == 2 && next[0].id == 2 && next[1].id == 3,
           'REAL cursor lost its value or stable tie breaker',
         );
-        final peers = await db.readings
+        final peers = await db.reading
             .orderBy((r) => [r.id.asc()])
             .select(
               (r) => r.peers
@@ -548,7 +545,7 @@ Future<void> main() async {
           peers.toString() == '[[1, 2], [1, 2], [3]]',
           'Query-only REAL relation keys lost their storage intent or equality',
         );
-        final same = await db.readings
+        final same = await db.reading
             .orderBy((r) => [r.id.asc()])
             .select((r) => r.sameReading.select((p) => p.id).many())
             .get();
@@ -665,10 +662,10 @@ Future<void> main() async {
         var persistent = await sqlite(options);
         try {
           await initialize(persistent);
-          await persistent.users.create(email: 'persisted');
+          await persistent.user.create(email: 'persisted');
           await rejects(() => sqlite(options));
           expect(
-            (await persistent.users.single()).email == 'persisted',
+            (await persistent.user.single()).email == 'persisted',
             'Failed competing open disturbed the owner',
           );
         } finally {
@@ -677,7 +674,7 @@ Future<void> main() async {
         persistent = await sqlite(options);
         try {
           expect(
-            (await persistent.users.single()).email == 'persisted',
+            (await persistent.user.single()).email == 'persisted',
             'OPFS lost committed data',
           );
         } finally {
@@ -688,9 +685,9 @@ Future<void> main() async {
     final name = 'reload-${DateTime.now().millisecondsSinceEpoch}';
     final persistent = await sqlite(SqliteOptions.persistent(name));
     await initialize(persistent);
-    await persistent.users.create(email: 'durable');
+    await persistent.user.create(email: 'durable');
     await persistent.transaction((tx) async {
-      await tx.users.create(email: 'interrupted');
+      await tx.user.create(email: 'interrupted');
       web.window.sessionStorage.setItem('orm_checks', jsonEncode(checks));
       web.window.sessionStorage.setItem('orm_database', name);
       // Reload without closing this connection or committing its transaction.

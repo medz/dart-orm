@@ -163,15 +163,30 @@ void main() {
             final query = db
                 .authorStats(minimum: 0)
                 .orderBy((s) => [s.author.asc()]);
-            expect(await query.get(), [
-              (author: 'a', postCount: 2, points: 4),
-              (author: 'b', postCount: 1, points: 7),
-            ]);
-            expect(await db.authorStats(minimum: 2, author: 'a').single(), (
-              author: 'a',
-              postCount: 1,
-              points: 3,
-            ));
+            expect(
+              (await query.get()).map(
+                (row) => (
+                  author: row.author,
+                  postCount: row.postCount,
+                  points: row.points,
+                ),
+              ),
+              [
+                (author: 'a', postCount: 2, points: 4),
+                (author: 'b', postCount: 1, points: 7),
+              ],
+            );
+            final stats = await db
+                .authorStats(minimum: 2, author: 'a')
+                .single();
+            expect(
+              (
+                author: stats.author,
+                postCount: stats.postCount,
+                points: stats.points,
+              ),
+              (author: 'a', postCount: 1, points: 3),
+            );
             expect(
               await query
                   .where((s) => s.points.gt(4))
@@ -188,7 +203,7 @@ void main() {
               await db.authorStats(minimum: 0, author: "a' OR 1=1 --").get(),
               isEmpty,
             );
-            expect(await db.constant().single(), (n: 42));
+            expect((await db.constant().single()).n, 42);
           },
         );
 
@@ -204,12 +219,16 @@ void main() {
               amount: amount,
               day: day,
             );
-            expect(await query.single(), (
-              value: ':ignored; " --',
-              at: instant,
-              amount: amount,
-              day: day,
-            ));
+            final echo = await query.single();
+            expect(
+              (
+                value: echo.value,
+                at: echo.at,
+                amount: echo.amount,
+                day: echo.day,
+              ),
+              (value: ':ignored; " --', at: instant, amount: amount, day: day),
+            );
             expect(await query.select((q) => q.amount).stream().toList(), [
               amount,
             ]);
@@ -316,9 +335,7 @@ void main() {
               ),
             );
             expect(left.rows.single.single, 0);
-            expect(await (db as Database<Postgres>).postgresOnly().single(), (
-              n: 42,
-            ));
+            expect((await db.postgresOnly().single()).n, 42);
           }
         });
 

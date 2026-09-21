@@ -2,8 +2,7 @@
 
 Choose an engine and platform explicitly. The shared query API does not make
 backend behavior identical: connections expose their actual capabilities and
-reject unsupported operations before execution where possible. Refer to
-[progress](https://github.com/medz/dart-orm/blob/main/doc/progress.md) for the revision and platforms most recently verified.
+reject unsupported operations before execution where possible.
 
 ## Values and physical storage
 
@@ -13,8 +12,8 @@ reject unsupported operations before execution where possible. Refer to
 | Decimal | Exact storage, comparison, keys and schema metadata on all four engines | SQLite/PostgreSQL support exact arithmetic, aggregates, windows and rounding. MySQL/MariaDB reject operations that can silently lose precision; see [engine limits](https://github.com/medz/dart-orm/blob/main/doc/mysql.md). |
 | Time | UTC `DateTime`, `LocalDate`, `LocalTime`, `LocalDateTime` and explicit temporal precision | An IANA zone name is a separate application value. Calendar SQL arithmetic and timezone-rule conversion have no typed API. |
 | JSON | `SqlJson` distinguishes JSON null from SQL NULL | A Dart Map is not an entity mapping. Backend-specific JSON path operations require explicit SQL. |
-| Enum | Checked enum codecs and stable `EnumValue` text labels | Native PostgreSQL enums need separate metadata and migration support. |
-| Binary and custom IDs | `Uint8List` and public const `UseCodec` declarations | Codec changes do not automatically produce DDL. Domain equality and ordering must match the chosen storage. |
+| Enum | Checked enum codecs and explicit text labels | Native PostgreSQL enums need separate metadata and migration support. |
+| Binary and custom IDs | `Uint8List` and public const codecs | Codec changes do not automatically produce DDL. Domain equality and ordering must match the chosen storage. |
 
 See [types and codecs](https://github.com/medz/dart-orm/blob/main/doc/types.md) and [decimals](https://github.com/medz/dart-orm/blob/main/doc/decimals.md) for exact conversion,
 precision and nullability rules. Catalog import reads physical metadata without
@@ -88,14 +87,21 @@ an application-owned path; browsers choose a named OPFS database. Flutter Web
 bundles matching worker/WASM resources. [SQLite Web](https://github.com/medz/dart-orm/blob/main/doc/sqlite-web.md) documents
 resource overrides, secure-context requirements and exclusive ownership.
 
-The release baseline covers native SQLite/PostgreSQL, real MySQL 8.4/MariaDB 11.8,
-Chrome JS/WASM, Flutter Web release builds and an Android emulator's debug-to-AOT
-upgrade and process restart. This does not certify every server version, browser,
-physical device, iOS or macOS Flutter. Remote/serverless transports, replica
-routing and alternative pools need their own adapters and validation.
+| Platform | Scope |
+| --- | --- |
+| Native Dart | SQLite, PostgreSQL, MySQL and MariaDB adapters; engine restrictions above apply |
+| Browser | SQLite in Chrome JS/WASM; secure context and worker/OPFS requirements apply |
+| Flutter | SQLite on Android and Flutter Web; persistence and resource ownership follow the platform driver |
+| Other browsers and devices | Safari, Firefox, physical-device and iOS/macOS Flutter behavior are not verified |
 
-Immutable model classes and Record declarations share the generator; classes
-retain nominal result types. Editor symbol refactoring depends on the Dart SDK.
-Regenerate and analyze after schema edits. [Generation](https://github.com/medz/dart-orm/blob/main/doc/generation.md) describes
-build/watch behavior and editor probes; [performance](https://github.com/medz/dart-orm/blob/main/doc/performance.md) describes
-reproducible cost measurements without implying universal latency guarantees.
+Record schema generation has been exercised with SQLite and PostgreSQL. Its
+integration with MySQL/MariaDB, browser and Flutter clients is not yet verified.
+Remote/serverless transports, replica routing and alternative pools require
+separate adapters.
+
+Record schemas generate immutable model classes and typed queries.
+Editor completion checks local fields; cross-model mapping names and schema
+semantics are checked during generation. Regenerate and analyze after edits.
+See [generation](https://github.com/medz/dart-orm/blob/main/doc/generation.md) for
+build/watch behavior and [performance](https://github.com/medz/dart-orm/blob/main/doc/performance.md)
+for workload-specific cost measurements.

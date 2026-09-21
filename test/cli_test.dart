@@ -40,7 +40,7 @@ void main() {
         TableSchema(
           'users',
           columns: [
-            ...usersSchema.columns,
+            ...userSchema.columns,
             Column('status', Codecs.text, defaultSql: "'active'"),
             Column(
               'email_size',
@@ -48,13 +48,13 @@ void main() {
               computed: const ComputedColumn('length(email)'),
             ),
           ],
-          primaryKey: usersSchema.primaryKey,
-          uniqueKeys: usersSchema.uniqueKeys,
+          primaryKey: userSchema.primaryKey,
+          uniqueKeys: userSchema.uniqueKeys,
           checks: const [
             CheckSchema('valid_status', "status IN ('active', 'disabled')"),
           ],
         ),
-        postsSchema,
+        postSchema,
       ]);
       await project.target(next);
       await project.run(['create', '0002_status']);
@@ -105,17 +105,17 @@ void main() {
         for (final sql in createSchema(appSchema, SqlDialect.sqlite)) {
           await db.execute(sql);
         }
-        await db.users.create(email: 'existing');
+        await db.user.create(email: 'existing');
       } finally {
         await db.close();
       }
       expect((await project.run(['baseline']))['matches'], true);
       final read = await sqlite(SqliteOptions.readOnly(project.databasePath));
       try {
-        expect((await read.users.single()).email, 'existing');
+        expect((await read.user.single()).email, 'existing');
         expect(await Migrator(read.sql).history(), hasLength(1));
         await expectLater(
-          read.users.create(email: 'forbidden'),
+          read.user.create(email: 'forbidden'),
           throwsA(isA<SqliteFailure>()),
         );
       } finally {

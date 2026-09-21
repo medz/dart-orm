@@ -1,27 +1,52 @@
 import 'package:orm/schema.dart';
 
-typedef Line = ({
-  @Id.generated() int id,
-  int price,
-  int quantity,
-  String label,
-  String? note,
-  @Computed.sql('price * quantity') int total,
-  @Computed.sql(
-    'length(label)',
-    postgres: 'char_length(label)',
-    storage: ComputedStorage.virtual,
-  )
-  int labelSize,
-  @Computed.sql('upper(note)') String? normalizedNote,
-});
+final Model line = model(
+  "lines",
+  (
+    id: integer().identity(),
+    price: integer(),
+    quantity: integer(),
+    label: text(),
+    note: text().nullable(),
+    total: integer().computed(
+      "price * quantity",
+      postgres: "price * quantity",
+      mysql: "price * quantity",
+      mariadb: "price * quantity",
+      storage: .stored,
+    ),
+    labelSize: integer().computed(
+      "length(label)",
+      postgres: "char_length(label)",
+      mysql: "length(label)",
+      mariadb: "length(label)",
+      storage: .virtual,
+    ),
+    normalizedNote: text().nullable().computed(
+      "upper(note)",
+      postgres: "upper(note)",
+      mysql: "upper(note)",
+      mariadb: "upper(note)",
+      storage: .stored,
+    ),
+  ),
+  indexes: (r) => [index(r.total, name: "by_total", unique: false)],
+  checks: [
+    check(
+      "price >= 0 AND quantity >= 0",
+      name: "nonnegative",
+      postgres: "price >= 0 AND quantity >= 0",
+      mysql: "price >= 0 AND quantity >= 0",
+      mariadb: "price >= 0 AND quantity >= 0",
+    ),
+  ],
+  relations: (r) =>
+      (band: references((id: r.total), () => band, constraint: false)),
+);
 
-final lines = entity<Line>();
-final byTotal = lines.index((r) => r.total);
-final nonnegative = lines.check('price >= 0 AND quantity >= 0');
-
-typedef Band = ({@Id() int id, String name});
-final bands = entity<Band>();
-final band = lines
-    .key((r) => r.total)
-    .relatesTo(bands.key((b) => b.id), inverse: 'lines');
+final Model band = model(
+  "bands",
+  (id: integer(), name: text()),
+  primaryKey: (r) => r.id,
+  relations: (r) => (lines: referencedBy(() => line, on: (total: r.id))),
+);

@@ -59,11 +59,11 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
         expect(await Migrator(db.sql).apply([initial]), ['0001_initial']);
         final time = DateTime.utc(2026, 9, 15, 1, 2, 3, 456, 789);
         final user = await db.transaction((tx) async {
-          final user = await tx.users.create(
+          final user = await tx.user.create(
             email: 'seven@example.com',
             score: .set(10),
           );
-          await tx.posts.create(
+          await tx.post.create(
             authorId: user.id,
             title: 'Hello',
             createdAt: time,
@@ -71,18 +71,18 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
           return user;
         });
         expect(user.score, 10);
-        await db.users.byId(user.id).patch(nickname: .set('Seven'));
-        expect((await db.users.byId(user.id).single()).nickname, 'Seven');
-        await db.users.byId(user.id).patch(nickname: .set(null));
-        final titles = await db.users
+        await db.user.byId(user.id).patch(nickname: .set('Seven'));
+        expect((await db.user.byId(user.id).single()).nickname, 'Seven');
+        await db.user.byId(user.id).patch(nickname: .set(null));
+        final titles = await db.user
             .byId(user.id)
             .select((u) => u.posts.select((p) => p.title).many())
             .single();
         expect(titles, ['Hello']);
-        expect((await db.posts.single()).createdAt, time);
+        expect((await db.post.single()).createdAt, time);
         expect(await verifyColumns(db.sql, appSchema), isEmpty);
-        await db.users.byId(user.id).delete().execute();
-        expect(await db.posts.count(), 0);
+        await db.user.byId(user.id).delete().execute();
+        expect(await db.post.count(), 0);
       },
     );
 
@@ -119,11 +119,11 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
       for (final statement in createSchema(appSchema, db.dialect)) {
         await db.execute(statement);
       }
-      final user = await db.users.create(email: 'already-exists');
+      final user = await db.user.create(email: 'already-exists');
       final verification = await Migrator(db.sql)
           .baseline([initial], expected: SchemaSnapshot(appSchema));
       expect(verification.matches, true);
-      expect((await db.users.byId(user.id).single()).email, 'already-exists');
+      expect((await db.user.byId(user.id).single()).email, 'already-exists');
       expect(await Migrator(db.sql).plan([initial]), isEmpty);
       await expectLater(
         Migrator(db.sql)
@@ -145,13 +145,13 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
           TableSchema(
             'users',
             columns: [
-              ...usersSchema.columns.where((c) => c.name != 'score'),
+              ...userSchema.columns.where((c) => c.name != 'score'),
               Column('score', Codecs.integer, defaultSql: '1'),
             ],
-            primaryKey: usersSchema.primaryKey,
-            uniqueKeys: usersSchema.uniqueKeys,
+            primaryKey: userSchema.primaryKey,
+            uniqueKeys: userSchema.uniqueKeys,
           ),
-          postsSchema,
+          postSchema,
         ]);
         final differences = (await verifySchema(db.sql, changed)).differences;
         expect(differences, contains('users.score default differs'));
@@ -173,7 +173,7 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
         Migrator(db.sql).plan([]),
         throwsA(isA<OrmException>()),
       );
-      expect(await db.users.count(), 0);
+      expect(await db.user.count(), 0);
     });
 
     test('failed DDL rolls back schema and history atomically', () async {

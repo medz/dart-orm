@@ -124,7 +124,7 @@ void main() {
       Migration upgrade(Migration first) => Migration.diff(
         '0002_instant',
         from: first.snapshot!,
-        to: SchemaSnapshot([momentsSchema]),
+        to: SchemaSnapshot([momentSchema]),
         previous: first.checksum,
         using: (db.dialect == SqlDialect.sqlite
             ? {
@@ -148,11 +148,11 @@ void main() {
           DateTime.fromMicrosecondsSinceEpoch(8640000000000000000, isUtc: true),
         ];
         for (final date in dates) {
-          final row = await db.events.create(at: date);
+          final row = await db.event.create(at: date);
           expect(row.at, date);
           expect(row.created.isUtc, true);
           expect(
-            await db.events
+            await db.event
                 .byId(row.id)
                 .select((e) => value(date, Codecs.dateTime))
                 .single(),
@@ -160,7 +160,7 @@ void main() {
           );
         }
         expect(
-          (await db.events
+          (await db.event
                   .orderBy((e) => [e.id.asc()])
                   .stream(batchSize: 1)
                   .toList())
@@ -172,7 +172,7 @@ void main() {
             await s.execute(SqlCommand("SET DateStyle TO 'SQL, DMY'"));
             await s.execute(SqlCommand("SET TIME ZONE 'Europe/Paris'"));
             expect(
-              (await s.events.orderBy((e) => [e.id.asc()]).get()).map(
+              (await s.event.orderBy((e) => [e.id.asc()]).get()).map(
                 (e) => e.at,
               ),
               dates,
@@ -185,26 +185,26 @@ void main() {
         await create();
         final epoch = DateTime.utc(2024),
             next = DateTime.utc(2024, 1, 1, 0, 0, 0, 0, 1);
-        await db.events.create(at: epoch);
-        await db.events.create(at: next);
+        await db.event.create(at: epoch);
+        await db.event.create(at: next);
         await db.execute(
           SqlCommand("INSERT INTO events (at) VALUES ('2024-01-01 08:00+08')"),
         );
         expect(
-          await db.events
+          await db.event
               .orderBy((e) => [e.at.asc(), e.id.asc()])
               .select((e) => e.at)
               .get(),
           [epoch, epoch, next],
         );
-        expect(await db.events.where((e) => e.at.gt(epoch)).count(), 1);
-        expect(await db.events.where((e) => e.at.isIn([epoch])).count(), 2);
+        expect(await db.event.where((e) => e.at.gt(epoch)).count(), 1);
+        expect(await db.event.where((e) => e.at.isIn([epoch])).count(), 2);
         expect(
-          await db.events.select((e) => (e.at.min(), e.at.max()).row).single(),
+          await db.event.select((e) => (e.at.min(), e.at.max()).row).single(),
           (epoch, next),
         );
         expect(
-          await db.events
+          await db.event
               .groupBy((e) => [e.at])
               .orderBy((e) => [e.at.asc()])
               .select((e) => (e.at, e.id.count()).row)
@@ -212,7 +212,7 @@ void main() {
           [(epoch, 2), (next, 1)],
         );
         expect(
-          await db.events
+          await db.event
               .orderBy((e) => [e.id.asc()])
               .select(
                 (e) => e.at.max().over(
@@ -223,7 +223,7 @@ void main() {
               .get(),
           [epoch, next, next],
         );
-        final source = db.events.select((e) => e.at),
+        final source = db.event.select((e) => e.at),
             cte = source.asCte('times');
         expect(
           await cte.query.where((c) => c.ref((e) => e.at).gt(epoch)).get(),
@@ -233,11 +233,11 @@ void main() {
           await source.union(source).get(),
           unorderedEquals([epoch, next]),
         );
-        final token = db.events.cursorToken(
+        final token = db.event.cursorToken(
           (e) => [e.at.cursor(epoch), e.id.cursor(3)],
         );
         expect(
-          (await db.events
+          (await db.event
                   .seekToken(token, orderBy: (e) => [e.at.asc(), e.id.asc()])
                   .get())
               .map((e) => e.at),
@@ -250,20 +250,20 @@ void main() {
         () async {
           await create();
           final date = DateTime.utc(2024);
-          await db.moments.create(at: date);
+          await db.moment.create(at: date);
           await db.execute(
             SqlCommand(
               "INSERT INTO links (at) VALUES ('2024-01-01 08:00:00+0800')",
             ),
           );
           expect(
-            await db.moments
+            await db.moment
                 .select((m) => m.links.select((l) => l.at).many())
                 .single(),
             [date],
           );
           expect(
-            await db.links
+            await db.link
                 .select((l) => l.moment.select((m) => m.at).one())
                 .single(),
             date,
@@ -277,7 +277,7 @@ void main() {
             throwsA(isA<SqlFailure>()),
           );
           if (backend == 'sqlite') {
-            final command = db.moments.byId(date).compile();
+            final command = db.moment.byId(date).compile();
             final plan = await db.execute(
               SqlCommand(
                 'EXPLAIN QUERY PLAN ${command.sql}',
@@ -300,7 +300,7 @@ void main() {
         expect(await verifyColumns(db.sql, appSchema), isEmpty);
         final imported = await importSchema(db.sql);
         expect(imported.issues, isEmpty);
-        expect(imported.dart, contains('DateTime'));
+        expect(imported.dart, contains('dateTime('));
         final directory = await Directory(
           '.dart_tool/orm-instant-import-$backend',
         ).create(recursive: true);
@@ -384,7 +384,7 @@ void main() {
           isEmpty,
         );
         expect(
-          await db.moments
+          await db.moment
               .orderBy((m) => [m.at.asc()])
               .select((m) => m.at)
               .get(),
@@ -426,7 +426,7 @@ void main() {
             SqlCommand("DELETE FROM moments WHERE at = '2024-02-31 00:00'"),
           );
           await Migrator(db.sql).apply([first, second]);
-          expect((await db.moments.single()).at, DateTime.utc(2024));
+          expect((await db.moment.single()).at, DateTime.utc(2024));
         });
       }
 
@@ -438,7 +438,7 @@ void main() {
           DateTime.utc(0),
         ];
         for (final time in times) {
-          await db.moments.create(at: time);
+          await db.moment.create(at: time);
         }
         final first = Migration.create(
           '0001_instant',
@@ -449,7 +449,7 @@ void main() {
           '0002_backfill',
           [
             Backfill(
-              momentsSchema,
+              momentSchema,
               set: {'label': "'done'"},
               where: "label = 'pending'",
               doneWhen: "SELECT NOT EXISTS (SELECT 1 FROM moments WHERE label = 'pending')",
@@ -461,11 +461,11 @@ void main() {
         );
         await Migrator(db.sql).apply([first, second], maxBackfillBatches: 1);
         expect(
-          (await db.moments.where((m) => m.label.eq('done')).single()).at,
+          (await db.moment.where((m) => m.label.eq('done')).single()).at,
           DateTime.utc(0),
         );
         await Migrator(db.sql).apply([first, second]);
-        expect(await db.moments.where((m) => m.label.eq('done')).count(), 3);
+        expect(await db.moment.where((m) => m.label.eq('done')).count(), 3);
       });
 
       test('external infinity and out-of-DateTime values fail decoding without wrapping', () async {
@@ -489,9 +489,9 @@ void main() {
             throwsFormatException,
           );
         }
-        await expectLater(db.events.get(), throwsFormatException);
+        await expectLater(db.event.get(), throwsFormatException);
         expect(
-          (await db.events.create(at: DateTime.utc(2024))).at,
+          (await db.event.create(at: DateTime.utc(2024))).at,
           DateTime.utc(2024),
         );
       });

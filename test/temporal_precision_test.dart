@@ -7,7 +7,6 @@ import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
-import 'support/temporal_precision/schema.dart' as models;
 import 'support/temporal_precision/schema.orm.dart';
 
 LocalTime t(String text) => LocalTime.parse(text);
@@ -46,7 +45,7 @@ void main() {
       Future<void> create() => Migrator(db.sql).apply([
         Migration.create('0001_precision', appSchema, dialect: db.dialect),
       ]);
-      Future<models.Moment> sample() => db.moments.create(
+      Future<Moment> sample() => db.moment.create(
         clock: t('12:00:00.1235'),
         local: dt('1999-12-31 23:59:59.9995'),
         instant: instant('1999-12-31 23:59:59.5Z'),
@@ -61,16 +60,16 @@ void main() {
         expect(a.optional, isNull);
         expect(a.defaulted, t('24:00'));
         expect(a.rounded, t('12:00'));
-        await db.moments
+        await db.moment
             .byId(a.id)
             .patch(
               clock: Change.set(t('23:59:59.9995')),
               optional: Change.set(t('01:02:03.125')),
             );
-        final updated = await db.moments.byId(a.id).single();
+        final updated = await db.moment.byId(a.id).single();
         expect(updated.clock, t('24:00'));
         expect(updated.optional, t('01:02:03.13'));
-        await db.moments
+        await db.moment
             .byId(a.id)
             .update(
               (m) => [
@@ -78,7 +77,7 @@ void main() {
               ],
             )
             .execute();
-        expect((await db.moments.byId(a.id).single()).clock, t('01:00:00.778'));
+        expect((await db.moment.byId(a.id).single()).clock, t('01:00:00.778'));
         expect(await verifyColumns(db.sql, appSchema), isEmpty);
         final verified = await verifySchema(db.sql, SchemaSnapshot(appSchema));
         expect(verified.differences, isEmpty);
@@ -109,7 +108,7 @@ void main() {
                   .add(Duration(microseconds: expectedTicks));
               final expectedBefore = dt('2000-01-01 00:00')
                   .add(Duration(microseconds: -expectedTicks));
-              final result = await db.moments
+              final result = await db.moment
                   .select(
                     (_) => (
                       value(time, Codecs.time).withPrecision(p),
@@ -134,7 +133,7 @@ void main() {
               expect(instant('${before}Z').withPrecision(p), result.$4);
             }
           }
-          final end = await db.moments
+          final end = await db.moment
               .select(
                 (_) =>
                     value(t('23:59:59.999999'), Codecs.time).withPrecision(0),
@@ -148,10 +147,10 @@ void main() {
         await create();
         await sample();
         expect(
-          await db.moments.select((m) => m.optional.withPrecision(0)).single(),
+          await db.moment.select((m) => m.optional.withPrecision(0)).single(),
           isNull,
         );
-        final cte = db.moments
+        final cte = db.moment
             .select((m) => m.clock.withPrecision(0))
             .asCte('whole_seconds');
         expect(
@@ -161,14 +160,14 @@ void main() {
           t('12:00'),
         );
         expect(
-          await db.moments
+          await db.moment
               .select((m) => m.clock.withPrecision(0))
               .stream(batchSize: 1)
               .single,
           t('12:00'),
         );
         expect(
-          await db.moments
+          await db.moment
               .groupBy((m) => [m.clock.withPrecision(0)])
               .select(
                 (m) => (
@@ -180,14 +179,14 @@ void main() {
           (t('12:00'), 1),
         );
         expect(
-          () => db.moments
+          () => db.moment
               .groupBy((m) => [m.clock])
               .select((m) => m.clock.withPrecision(0))
               .compile(),
           returnsNormally,
         );
         expect(
-          () => db.moments
+          () => db.moment
               .groupBy((m) => [m.clock.withPrecision(1)])
               .select((m) => m.clock.withPrecision(0))
               .compile(),
@@ -197,25 +196,25 @@ void main() {
 
       test('rounded keys work in batch writes, upserts and foreign-key relation loading', () async {
         await create();
-        await db.slots.insertMany([
+        await db.slot.insertMany([
           '01:00:00.1235',
           '02:00:00.1235',
         ], (s, v) => [s.time.set(t(v)), s.label.set(v)]).execute();
-        final booking = await db.bookings.create(time: t('01:00:00.1239'));
-        final related = await db.bookings
+        final booking = await db.booking.create(time: t('01:00:00.1239'));
+        final related = await db.booking
             .byId(booking.id)
             .select((b) => b.slot.select((s) => s.label).one())
             .single();
         expect(related, '01:00:00.1235');
         await expectLater(
-          db.slots.insertMany([
+          db.slot.insertMany([
             '03:00:00.1235',
             '01:00:00.1236',
           ], (s, v) => [s.time.set(t(v)), s.label.set(v)]).execute(),
           throwsA(isA<SqlFailure>()),
         );
-        expect(await db.slots.count(), 2);
-        await db.slots
+        expect(await db.slot.count(), 2);
+        await db.slot
             .insert(
               (s) => [s.time.set(t('01:00:00.1238')), s.label.set('updated')],
             )
@@ -227,10 +226,7 @@ void main() {
             )
             .execute();
         expect(
-          await db.slots
-              .byId(t('01:00:00.124'))
-              .select((s) => s.label)
-              .single(),
+          await db.slot.byId(t('01:00:00.124')).select((s) => s.label).single(),
           'updated',
         );
       });
@@ -258,7 +254,7 @@ void main() {
             tables: ['moments', 'slots', 'bookings'],
           );
           expect(draft.issues.where((i) => i.blocking), isEmpty);
-          expect(draft.dart, contains('@TemporalPrecision(3)'));
+          expect(draft.dart, contains('precision: 3'));
           final dir = await Directory(
             '.dart_tool/temporal-precision-import-$backend',
           ).create(recursive: true);
@@ -421,7 +417,7 @@ void main() {
             );
             final draft = await importSchema(db.sql, tables: ['explicit_six']);
             expect(draft.issues.where((i) => i.blocking), isEmpty);
-            expect(draft.dart, isNot(contains('@TemporalPrecision')));
+            expect(draft.dart, isNot(contains('precision:')));
           }
         },
       );
@@ -437,7 +433,7 @@ void main() {
           ]) {
             final original = dt(text);
             expect(
-              await db.moments
+              await db.moment
                   .select(
                     (_) =>
                         value(original, Codecs.localDateTime).withPrecision(3),
@@ -448,7 +444,7 @@ void main() {
           }
           final upper = instant('275760-09-12 23:59:59.999999+00');
           expect(
-            await db.moments
+            await db.moment
                 .select((_) => value(upper, Codecs.dateTime).withPrecision(0))
                 .single(),
             DateTime.utc(275760, 9, 13),
@@ -475,7 +471,7 @@ void main() {
             await db.execute(
               SqlCommand("INSERT INTO slots VALUES ('01:00:00.1234','raw')"),
             );
-            expect((await db.slots.single()).time, t('01:00:00.123'));
+            expect((await db.slot.single()).time, t('01:00:00.123'));
           }
         },
       );
@@ -546,7 +542,7 @@ void main() {
     }
   });
 
-  test('generator rejects invalid annotations and preserves generated fixture metadata', () async {
+  test('generator rejects invalid precision declarations and preserves generated fixture metadata', () async {
     final generated = await generateSchema(
       'test/support/temporal_precision/schema.dart',
     );
@@ -565,14 +561,14 @@ void main() {
     try {
       final file = File('${dir.path}/schema.dart');
       for (final field in [
-        '@TemporalPrecision(-1) LocalTime t',
-        '@TemporalPrecision(7) LocalDateTime t',
-        '@TemporalPrecision(3) LocalDate t',
-        '@TemporalPrecision(3) String t',
-        '@TemporalPrecision(3) @TemporalPrecision(2) DateTime t',
+        't: time(precision: -1)',
+        't: localDateTime(precision: 7)',
+        't: custom(Codecs.date, precision: 3)',
+        't: custom(Codecs.text, precision: 3)',
+        't: dateTime(precision: 3, precision: 2)',
       ]) {
         await file.writeAsString(
-          "import 'package:orm/schema.dart'; typedef Row=({$field}); final rows=entity<Row>();",
+          "import 'package:orm/schema.dart'; final row=model('rows', ($field,));",
         );
         await expectLater(
           generateSchema(file.path),

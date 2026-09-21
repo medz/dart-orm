@@ -1,3 +1,23 @@
+## 6.0.0-beta.3
+
+Breaking schema authoring change: replace annotated entities and hand-written row
+types with `model(...)`, then regenerate clients. Table and column names still
+identify the physical schema; keep existing migration history unchanged.
+
+- Add `model(...)` with named Record column declarations, generating nominal
+  rows and typed queries from one definition without annotations.
+- Support model-local keys, indexes, checks and relationships, including self,
+  composite and alternate-key references; follow exported/cross-file models.
+- Name relations with Record fields. Declare reverse navigation on its own model,
+  reject ambiguous references, and select target keys with named column mappings.
+- Report Record schema errors with source locations and diagnostic codes. Keep
+  snapshots independent of application types and preserve migration histories.
+- Replace entity declarations and storage annotations with `model(...)`; remove
+  the previous schema reader. Catalog import and project initialization emit the
+  same Record schema syntax.
+- Declare named SQL result and parameter columns with the same helpers and
+  generate their result classes alongside query methods.
+
 ## 6.0.0-beta.2
 
 - Replace shared `part` libraries with independent modules and explicit public

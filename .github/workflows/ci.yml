@@ -74,7 +74,7 @@ jobs:
           persist-credentials: false
       - uses: dart-lang/setup-dart@v1
         with:
-          sdk: 3.13.3
+          sdk: 3.13.4
       - name: Install dependencies
         run: dart pub get --enforce-lockfile
       - name: Check formatting
@@ -82,7 +82,7 @@ jobs:
       - name: Analyze Dart package and examples
         # The Flutter example is a separate package with its own SDK dependency.
         run: |
-          for target in bin lib test tool example/*.dart example/migrations example/teams; do
+          for target in bin lib test tool example/*.dart example/migrations example/teams example/company; do
             dart analyze "$target"
           done
       - name: Check committed SQLite web assets
@@ -102,7 +102,7 @@ jobs:
           persist-credentials: false
       - uses: dart-lang/setup-dart@v1
         with:
-          sdk: 3.13.3
+          sdk: 3.13.4
       - name: Install dependencies
         run: dart pub get --enforce-lockfile
       - name: Locate Chrome

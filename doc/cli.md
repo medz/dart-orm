@@ -14,8 +14,8 @@ dart run orm migrate verify
 
 | File | Purpose |
 | --- | --- |
-| `lib/schema.dart` | Editable nominal Dart model and table declaration |
-| `lib/schema.orm.dart` | Generated typed query client |
+| `lib/schema.dart` | Editable Record schema |
+| `lib/schema.orm.dart` | Generated models and typed queries |
 | `lib/schema.snapshot.dart` | Standalone physical schema |
 | `migrations/migrations.g.dart` | Static imports and one fixed engine |
 | `orm.config.dart` | Typed project configuration and executable entrypoint |
@@ -23,8 +23,7 @@ dart run orm migrate verify
 Initialization refuses an existing destination before writing anything. It never
 connects to a database, creates a database file or applies DDL. The first client
 and snapshot are generated before writing the config, so its static imports are
-valid immediately. No JSON schema loader, reflection, package-specific runtime
-registration or build_runner setup is needed for this workflow.
+valid immediately. build_runner is optional for this workflow.
 
 SQLite defaults to `app.sqlite`; edit its typed options in the config to change
 the path. Server connections read `DATABASE_URL` only when connecting. Missing

@@ -2,16 +2,22 @@
 
 import 'package:orm/sql.dart';
 
-import "schema.dart" as models;
-export "schema.dart" show Product, Line;
-
-final _productsId = Column<int>(
+/// A complete immutable row from "products".
+final class Product({
+  required final int id,
+  required final int stock,
+  required final double price,
+  required final double? discount,
+  required final String state,
+  required final String? label,
+});
+final _productId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _productsStock = Column<int>(
+final _productStock = Column<int>(
   "stock",
   Codecs.integer,
   nullable: false,
@@ -19,39 +25,39 @@ final _productsStock = Column<int>(
   defaultSql: "0",
   integerBits: 16,
 );
-final _productsPrice = Column<double>(
+final _productPrice = Column<double>(
   "price",
   Codecs.real,
   nullable: false,
   generated: false,
 );
-final _productsDiscount = Column<double?>(
+final _productDiscount = Column<double?>(
   "discount",
   Codecs.real.nullable(),
   nullable: true,
   generated: false,
 );
-final _productsState = Column<String>(
+final _productState = Column<String>(
   "state",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final _productsLabel = Column<String?>(
+final _productLabel = Column<String?>(
   "label",
   Codecs.text.nullable(),
   nullable: true,
   generated: false,
 );
-final productsSchema = TableSchema(
+final productSchema = TableSchema(
   "products",
   columns: [
-    _productsId,
-    _productsStock,
-    _productsPrice,
-    _productsDiscount,
-    _productsState,
-    _productsLabel,
+    _productId,
+    _productStock,
+    _productPrice,
+    _productDiscount,
+    _productState,
+    _productLabel,
   ],
   primaryKey: ["id"],
   uniqueKeys: [],
@@ -103,39 +109,39 @@ final productsSchema = TableSchema(
   foreignKeys: [],
 );
 
-final class ProductsFields extends Fields {
-  ProductsFields(super.table);
-  late final id = column(_productsId);
-  late final stock = column(_productsStock);
-  late final price = column(_productsPrice);
-  late final discount = column(_productsDiscount);
-  late final state = column(_productsState);
-  late final label = column(_productsLabel);
-  Relation<models.Line, LinesFields> get lines =>
-      Relation(linesTable, parent: [id], child: (row) => [row.productId]);
+final class ProductFields extends Fields {
+  ProductFields(super.table);
+  late final id = column(_productId);
+  late final stock = column(_productStock);
+  late final price = column(_productPrice);
+  late final discount = column(_productDiscount);
+  late final state = column(_productState);
+  late final label = column(_productLabel);
+  Relation<Line, LineFields> get lines =>
+      Relation(lineTable, parent: [id], child: (row) => [row.productId]);
 }
 
-final productsTable = Table<models.Product, ProductsFields>(
-  productsSchema,
-  ProductsFields.new,
+final productTable = Table<Product, ProductFields>(
+  productSchema,
+  ProductFields.new,
   (row) =>
       (row.id, row.stock, row.price, row.discount, row.state, row.label).map(
-        (id, stock, price, discount, state, label) => (
-          id: id,
-          stock: stock,
-          price: price,
-          discount: discount,
-          state: state,
-          label: label,
+        (v0, v1, v2, v3, v4, v5) => Product(
+          id: v0,
+          stock: v1,
+          price: v2,
+          discount: v3,
+          state: v4,
+          label: v5,
         ),
       ),
 );
 
-final class ProductsTableSet extends TableSet<models.Product, ProductsFields> {
-  ProductsTableSet(QueryContext db) : super(db, productsTable) {
+final class ProductTableSet extends TableSet<Product, ProductFields> {
+  ProductTableSet(QueryContext db) : super(db, productTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Product> create({
+  Future<Product> create({
     Change<int> id = const Change.keep(),
     Change<int> stock = const Change.keep(),
     required double price,
@@ -152,11 +158,10 @@ final class ProductsTableSet extends TableSet<models.Product, ProductsFields> {
       row.label.set(label),
     ],
   );
-  Query<models.Product, ProductsFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+  Query<Product, ProductFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension ProductsUpdates on Query<models.Product, ProductsFields> {
+extension ProductUpdates on Query<Product, ProductFields> {
   Future<int> patch({
     Change<int> stock = const Change.keep(),
     Change<double> price = const Change.keep(),
@@ -174,21 +179,23 @@ extension ProductsUpdates on Query<models.Product, ProductsFields> {
   ).execute();
 }
 
-final _linesId = Column<int>(
+/// A complete immutable row from "lines".
+final class Line({required final int id, required final int productId});
+final _lineId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _linesProductId = Column<int>(
+final _lineProductId = Column<int>(
   "product_id",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final linesSchema = TableSchema(
+final lineSchema = TableSchema(
   "lines",
-  columns: [_linesId, _linesProductId],
+  columns: [_lineId, _lineProductId],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [],
@@ -197,43 +204,40 @@ final linesSchema = TableSchema(
   ],
 );
 
-final class LinesFields extends Fields {
-  LinesFields(super.table);
-  late final id = column(_linesId);
-  late final productId = column(_linesProductId);
-  Relation<models.Product, ProductsFields> get product =>
-      Relation(productsTable, parent: [productId], child: (row) => [row.id]);
+final class LineFields extends Fields {
+  LineFields(super.table);
+  late final id = column(_lineId);
+  late final productId = column(_lineProductId);
+  Relation<Product, ProductFields> get product =>
+      Relation(productTable, parent: [productId], child: (row) => [row.id]);
 }
 
-final linesTable = Table<models.Line, LinesFields>(
-  linesSchema,
-  LinesFields.new,
-  (row) => (
-    row.id,
-    row.productId,
-  ).map((id, productId) => (id: id, productId: productId)),
+final lineTable = Table<Line, LineFields>(
+  lineSchema,
+  LineFields.new,
+  (row) => (row.id, row.productId).map((v0, v1) => Line(id: v0, productId: v1)),
 );
 
-final class LinesTableSet extends TableSet<models.Line, LinesFields> {
-  LinesTableSet(QueryContext db) : super(db, linesTable) {
+final class LineTableSet extends TableSet<Line, LineFields> {
+  LineTableSet(QueryContext db) : super(db, lineTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Line> create({
+  Future<Line> create({
     Change<int> id = const Change.keep(),
     required int productId,
   }) =>
       createRow((row) => [...row.id.change(id), row.productId.set(productId)]);
-  Query<models.Line, LinesFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Line, LineFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension LinesUpdates on Query<models.Line, LinesFields> {
+extension LineUpdates on Query<Line, LineFields> {
   Future<int> patch({Change<int> productId = const Change.keep()}) =>
       update((row) => [...row.productId.change(productId)]).execute();
 }
 
-final appSchema = List<TableSchema>.unmodifiable([productsSchema, linesSchema]);
+final appSchema = List<TableSchema>.unmodifiable([productSchema, lineSchema]);
 
 extension AppTables on QueryContext {
-  ProductsTableSet get products => ProductsTableSet(this);
-  LinesTableSet get lines => LinesTableSet(this);
+  ProductTableSet get product => ProductTableSet(this);
+  LineTableSet get line => LineTableSet(this);
 }

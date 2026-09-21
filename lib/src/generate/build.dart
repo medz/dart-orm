@@ -80,7 +80,7 @@ final class _OrmBuilder implements builder.Builder {
     }
     final output = input.changeExtension('.orm.dart');
     final (unit, library) = await _resolveSchema(step);
-    final result = generateResolvedSchema(
+    final result = await generateResolvedSchema(
       unit,
       library,
       p.url.relative(input.path, from: p.url.dirname(output.path)),
@@ -93,6 +93,26 @@ final class _OrmBuilder implements builder.Builder {
           );
         }
         return p.url.relative(asset.path, from: p.url.dirname(output.path));
+      },
+      resolve: (library) async {
+        final node = await step.resolver.astNodeFor(
+          library.firstFragment,
+          resolve: true,
+        );
+        if (node is! CompilationUnit) {
+          throw GenerationException('Cannot resolve schema ${library.uri}.');
+        }
+        final errors = await node.declaredFragment!.element.session.getErrors(
+          library.firstFragment.source.fullName,
+        );
+        if (errors is! ErrorsResult) {
+          throw GenerationException('Cannot validate schema ${library.uri}.');
+        }
+        final failures = errors.diagnostics.where(
+          (e) => e.severity.name.toLowerCase() == 'error',
+        );
+        if (failures.isNotEmpty) throw GenerationException(failures.join('\n'));
+        return node;
       },
     );
     // Both outputs are fully constructed before touching the build writer.

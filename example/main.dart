@@ -10,16 +10,16 @@ Future<void> main() async {
       db.sql,
     ).apply([Migration.create('0001_initial', appSchema, dialect: db.dialect)]);
     final User user = await db.transaction((tx) async {
-      final User user = await tx.users.create(email: 'seven@example.com');
-      await tx.posts.create(
+      final User user = await tx.user.create(email: 'seven@example.com');
+      await tx.post.create(
         authorId: user.id,
         title: 'Hello Dart',
         createdAt: DateTime.now(),
       );
       return user;
     });
-    await db.users.byId(user.id).patch(nickname: .set('Seven'));
-    final cards = await db.users
+    await db.user.byId(user.id).patch(nickname: .set('Seven'));
+    final cards = await db.user
         .select(
           (u) => (
             u.email,

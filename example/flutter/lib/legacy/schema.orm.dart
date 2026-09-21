@@ -2,58 +2,61 @@
 
 import 'package:orm/sql.dart';
 
-import "schema.dart" as models;
-export "schema.dart" show Note;
-
-final _notesId = Column<int>(
+/// A complete immutable row from "notes".
+final class Note({
+  required final int id,
+  required final String body,
+  required final DateTime createdAt,
+});
+final _noteId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _notesBody = Column<String>(
+final _noteBody = Column<String>(
   "body",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final _notesCreatedAt = Column<DateTime>(
+final _noteCreatedAt = Column<DateTime>(
   "created_at",
   Codecs.dateTime,
   nullable: false,
   generated: false,
 );
-final notesSchema = TableSchema(
+final noteSchema = TableSchema(
   "notes",
-  columns: [_notesId, _notesBody, _notesCreatedAt],
+  columns: [_noteId, _noteBody, _noteCreatedAt],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [],
   foreignKeys: [],
 );
 
-final class NotesFields extends Fields {
-  NotesFields(super.table);
-  late final id = column(_notesId);
-  late final body = column(_notesBody);
-  late final createdAt = column(_notesCreatedAt);
+final class NoteFields extends Fields {
+  NoteFields(super.table);
+  late final id = column(_noteId);
+  late final body = column(_noteBody);
+  late final createdAt = column(_noteCreatedAt);
 }
 
-final notesTable = Table<models.Note, NotesFields>(
-  notesSchema,
-  NotesFields.new,
+final noteTable = Table<Note, NoteFields>(
+  noteSchema,
+  NoteFields.new,
   (row) => (
     row.id,
     row.body,
     row.createdAt,
-  ).map((id, body, createdAt) => (id: id, body: body, createdAt: createdAt)),
+  ).map((v0, v1, v2) => Note(id: v0, body: v1, createdAt: v2)),
 );
 
-final class NotesTableSet extends TableSet<models.Note, NotesFields> {
-  NotesTableSet(QueryContext db) : super(db, notesTable) {
+final class NoteTableSet extends TableSet<Note, NoteFields> {
+  NoteTableSet(QueryContext db) : super(db, noteTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Note> create({
+  Future<Note> create({
     Change<int> id = const Change.keep(),
     required String body,
     required DateTime createdAt,
@@ -64,10 +67,10 @@ final class NotesTableSet extends TableSet<models.Note, NotesFields> {
       row.createdAt.set(createdAt),
     ],
   );
-  Query<models.Note, NotesFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Note, NoteFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension NotesUpdates on Query<models.Note, NotesFields> {
+extension NoteUpdates on Query<Note, NoteFields> {
   Future<int> patch({
     Change<String> body = const Change.keep(),
     Change<DateTime> createdAt = const Change.keep(),
@@ -76,8 +79,8 @@ extension NotesUpdates on Query<models.Note, NotesFields> {
   ).execute();
 }
 
-final appSchema = List<TableSchema>.unmodifiable([notesSchema]);
+final appSchema = List<TableSchema>.unmodifiable([noteSchema]);
 
 extension AppTables on QueryContext {
-  NotesTableSet get notes => NotesTableSet(this);
+  NoteTableSet get note => NoteTableSet(this);
 }

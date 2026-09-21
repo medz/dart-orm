@@ -15,13 +15,10 @@ void main() {
     final source = File('${directory.path}/schema.dart');
     await source.writeAsString('''
 import 'package:orm/schema.dart';
-final class Entry(
-  @Id() final int id,
-  final int source,
-  @Computed.sql('source + 1', postgres: 'source + 2', mysql: 'source + 3', mariadb: 'source + 4') final int? computed,
-);
-final entries = entity<Entry>();
-final valid = entries.check('source >= 1', postgres: 'source >= 2', mysql: 'source >= 3', mariadb: 'source >= 4');
+final entry = model('entries', (
+  id: integer(), source: integer(),
+  computed: integer().nullable().computed('source + 1', postgres: 'source + 2', mysql: 'source + 3', mariadb: 'source + 4'),
+), primaryKey: (e) => e.id, checks: [check('source >= 1', name: 'valid', postgres: 'source >= 2', mysql: 'source >= 3', mariadb: 'source >= 4')]);
 ''');
     final result = await generateSchema(source.path);
     for (final (index, dialect) in SqlDialect.values.indexed) {
@@ -44,15 +41,14 @@ final valid = entries.check('source >= 1', postgres: 'source >= 2', mysql: 'sour
       final source = File('${directory.path}/queries.dart');
       await source.writeAsString('''
 import 'package:orm/schema.dart';
-typedef Result = ({int value});
-final result = sqlQuery<Result, ({int minimum})>(
+final result = sqlQuery(result: (value: integer(),), parameters: (minimum: integer(),),
   sqlite: 'query.sql',
   postgres: 'query.sql',
   mysql: 'query.sql',
   mariadb: 'query.sql',
 );
-final mysqlOnly = sqlQuery<Result, ({int minimum})>(mysql: 'query.sql');
-final mariaOnly = sqlQuery<Result, ({int minimum})>(mariadb: 'query.sql');
+final mysqlOnly = sqlQuery(result: (value: integer(),), parameters: (minimum: integer(),), mysql: 'query.sql');
+final mariaOnly = sqlQuery(result: (value: integer(),), parameters: (minimum: integer(),), mariadb: 'query.sql');
 ''');
       await File('${directory.path}/query.sql')
           .writeAsString('SELECT :minimum AS value');

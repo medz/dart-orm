@@ -48,10 +48,10 @@ void main() {
         tearDown(() => db.close());
 
         test(
-          'omitted values use typed Dart factories and return stored records',
+          'omitted values use typed Dart factories and return stored rows',
           () async {
             final before = DateTime.now().toUtc();
-            final row = await db.tickets.create();
+            final row = await db.ticket.create();
             expect(row.id, d.TicketId(1));
             expect(row.name, 'ticket-1');
             expect(row.label, isNull);
@@ -62,7 +62,17 @@ void main() {
               [d.idCalls, d.nameCalls, d.stateCalls, d.nullCalls],
               [1, 1, 1, 1],
             );
-            expect(await db.tickets.single(), row);
+            final stored = await db.ticket.single();
+            expect(
+              (
+                stored.id,
+                stored.name,
+                stored.label,
+                stored.state,
+                stored.createdAt,
+              ),
+              (row.id, row.name, row.label, row.state, row.createdAt),
+            );
           },
         );
 
@@ -70,7 +80,7 @@ void main() {
           'explicit values, null and SQL DEFAULT bypass their client factory',
           () async {
             final instant = DateTime.utc(2026, 9, 15);
-            final row = await db.tickets.create(
+            final row = await db.ticket.create(
               id: .set(d.TicketId(20)),
               name: .set('explicit'),
               label: .set(null),
@@ -85,7 +95,7 @@ void main() {
               [0, 0, 0, 0],
             );
             await expectLater(
-              db.tickets.create(name: .defaultValue()),
+              db.ticket.create(name: .defaultValue()),
               throwsA(
                 isA<OrmException>().having(
                   (e) => e.code,
@@ -94,12 +104,12 @@ void main() {
                 ),
               ),
             );
-            expect(await db.tickets.count(), 1);
+            expect(await db.ticket.count(), 1);
           },
         );
 
         test('prepared mutations, repeated compilation and conflicts retain one generated value', () async {
-          final prepared = db.tickets.insert((row) => []);
+          final prepared = db.ticket.insert((row) => []);
           expect(
             [d.idCalls, d.nameCalls, d.stateCalls, d.nullCalls],
             [1, 1, 1, 1],
@@ -115,11 +125,11 @@ void main() {
             [d.idCalls, d.nameCalls, d.stateCalls, d.nullCalls],
             [1, 1, 1, 1],
           );
-          expect((await db.tickets.single()).id, d.TicketId(1));
+          expect((await db.ticket.single()).id, d.TicketId(1));
         });
 
         test('batch insert prepares defaults once per omitted row and preserves explicit values', () async {
-          final batch = db.tickets.insertMany(
+          final batch = db.ticket.insertMany(
             [null, 20, null],
             (row, int? id) => [
               if (id != null) row.id.set(d.TicketId(id)),
@@ -152,14 +162,14 @@ void main() {
         test(
           'updates and conflict updates do not reset omitted client values',
           () async {
-            final row = await db.tickets.create();
-            await db.tickets.byId(row.id).patch(name: .set('changed'));
-            expect((await db.tickets.single()).state, 'client-1');
+            final row = await db.ticket.create();
+            await db.ticket.byId(row.id).patch(name: .set('changed'));
+            expect((await db.ticket.single()).state, 'client-1');
             expect(
               [d.idCalls, d.nameCalls, d.stateCalls, d.nullCalls],
               [1, 1, 1, 1],
             );
-            await db.tickets
+            await db.ticket
                 .insert((t) => [t.id.set(row.id), t.name.set('incoming')])
                 .onConflictUpdate(
                   target: (t) => [t.id],
@@ -168,26 +178,26 @@ void main() {
                   ],
                 )
                 .execute();
-            expect((await db.tickets.single()).name, 'incoming');
-            expect((await db.tickets.single()).state, 'client-1');
+            expect((await db.ticket.single()).name, 'incoming');
+            expect((await db.ticket.single()).state, 'client-1');
             expect(d.stateCalls, 2); // The attempted INSERT prepared a value; UPDATE kept the stored state.
           },
         );
 
         test('factory errors issue no writes, and rollback does not reverse Dart side effects', () async {
           d.failName = true;
-          expect(() => db.tickets.insert((t) => []), throwsStateError);
-          expect(await db.tickets.count(), 0);
+          expect(() => db.ticket.insert((t) => []), throwsStateError);
+          expect(await db.ticket.count(), 0);
           d.failName = false;
           await expectLater(
             db.transaction((tx) async {
-              await tx.tickets.create();
+              await tx.ticket.create();
               throw StateError('rollback');
             }),
             throwsStateError,
           );
-          expect(await db.tickets.count(), 0);
-          final row = await db.tickets.create();
+          expect(await db.ticket.count(), 0);
+          final row = await db.ticket.create();
           expect(row.id, d.TicketId(3));
           expect(d.nameCalls, 3);
         });
@@ -217,16 +227,16 @@ void main() {
             ['state'],
           );
           final imported = await importSchema(db.sql);
-          expect(imported.dart, isNot(contains('ClientDefault')));
+          expect(imported.dart, isNot(contains('clientDefault:')));
           expect(
             [d.idCalls, d.nameCalls, d.stateCalls, d.nullCalls],
             [0, 0, 0, 0],
           );
         });
         test('explicit DEFAULT can choose database identity instead of the client value', () async {
-          final client = await db.sequences.create();
+          final client = await db.sequenceRow.create();
           expect(client.id, 1001);
-          final server = await db.sequences.create(id: .defaultValue());
+          final server = await db.sequenceRow.create(id: .defaultValue());
           expect(server.id, dialect == SqlDialect.sqlite ? 1002 : 1);
           expect(d.identityCalls, 1);
         });

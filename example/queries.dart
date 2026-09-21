@@ -22,23 +22,23 @@ Future<Map<String, Object?>> queryCookbook(
     db.sql,
   ).apply([Migration.create('0001_example', appSchema, dialect: db.dialect)]);
   final (z, a) = await db.transaction((tx) async {
-    final z = await tx.users.create(
+    final z = await tx.user.create(
       email: 'z@example.com',
       nickname: 'Z',
       score: .set(2),
     );
-    final a = await tx.users.create(email: 'a@example.com');
-    await tx.posts.create(
+    final a = await tx.user.create(email: 'a@example.com');
+    await tx.post.create(
       authorId: z.id,
       title: 'Z1',
       createdAt: DateTime.utc(2026, 1, 1),
     );
-    await tx.posts.create(
+    await tx.post.create(
       authorId: z.id,
       title: 'Z2',
       createdAt: DateTime.utc(2026, 1, 2),
     );
-    await tx.posts.create(
+    await tx.post.create(
       authorId: a.id,
       title: 'A1',
       createdAt: DateTime.utc(2026, 1, 1),
@@ -46,7 +46,7 @@ Future<Map<String, Object?>> queryCookbook(
     return (z, a);
   });
 
-  var query = db.users.where((u) => u.email.like('%@example.com'));
+  var query = db.user.where((u) => u.email.like('%@example.com'));
   if (minimumScore != null) {
     query = query.where((u) => u.score.gte(minimumScore));
   }
@@ -64,8 +64,8 @@ Future<Map<String, Object?>> queryCookbook(
     'Dynamic typed filter and scalar selection',
   );
 
-  final author = usersTable.alias();
-  final joined = await db.posts
+  final author = userTable.alias();
+  final joined = await db.post
       .join(author, on: (p, a) => p.authorId.equals(a.id))
       .orderBy((p) => [author.fields.email.asc(), p.id.asc()])
       .select((p) => (p.title, author.fields.email).row)
@@ -76,7 +76,7 @@ Future<Map<String, Object?>> queryCookbook(
         joined.indexed.every((e) => e.$2 == expectedJoined[e.$1]),
     'Joined field orders root rows',
   );
-  final relationOrder = await db.users
+  final relationOrder = await db.user
       .orderBy((u) => [u.posts.count().desc(), u.id.asc()])
       .select((u) => u.email)
       .get();
@@ -85,7 +85,7 @@ Future<Map<String, Object?>> queryCookbook(
     'Correlated relation count orders root rows',
   );
 
-  final totals = db.posts
+  final totals = db.post
       .groupBy((p) => [p.authorId])
       .having((p) => p.id.count().gt(1))
       .select((p) => (p.authorId, p.id.count()).row)
@@ -97,7 +97,7 @@ Future<Map<String, Object?>> queryCookbook(
     active.length == 1 && active.single == (z.id, 2),
     'Grouping, HAVING and CTE exported columns',
   );
-  final ranks = await db.posts
+  final ranks = await db.post
       .orderBy((p) => [p.id.asc()])
       .select(
         (p) => (
@@ -113,15 +113,15 @@ Future<Map<String, Object?>> queryCookbook(
     jsonEncode(ranks.map((r) => r.$2).toList()) == '[2,1,1]',
     'Window ordering is independent of result ordering',
   );
-  final selectedAuthors = db.posts.select((p) => p.authorId);
+  final selectedAuthors = db.post.select((p) => p.authorId);
   check(
-    await db.users.where((u) => u.id.isInQuery(selectedAuthors)).count() == 2,
+    await db.user.where((u) => u.id.isInQuery(selectedAuthors)).count() == 2,
     'Typed IN subquery',
   );
-  final counts = await db.users
+  final counts = await db.user
       .orderBy((u) => [u.id.asc()])
       .select(
-        (u) => db.posts
+        (u) => db.post
             .where((p) => p.authorId.equals(u.id))
             .select((p) => p.id.count())
             .scalar(),
@@ -129,18 +129,18 @@ Future<Map<String, Object?>> queryCookbook(
       .get();
   check(jsonEncode(counts) == '[2,1]', 'Correlated scalar aggregate');
 
-  final first = await db.users
+  final first = await db.user
       .orderBy((u) => [u.nickname.asc(nulls: .last), u.id.asc()])
       .take(1)
       .get();
   final last = first.single;
-  final token = db.users.cursorToken(
+  final token = db.user.cursorToken(
     (u) => [
       u.nickname.cursor(last.nickname, nulls: .last),
       u.id.cursor(last.id),
     ],
   );
-  final next = await db.users
+  final next = await db.user
       .seekToken(
         token,
         orderBy: (u) => [u.nickname.asc(nulls: .last), u.id.asc()],

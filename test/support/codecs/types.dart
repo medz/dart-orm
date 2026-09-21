@@ -22,13 +22,7 @@ final class Email {
   }
 }
 
-enum Membership {
-  @EnumValue('pending-payment')
-  pending,
-  active,
-  @EnumValue('closed')
-  cancelled,
-}
+enum Membership { pending, active, cancelled }
 
 typedef Location = ({String city, int zone});
 const locationCodec = Codec<Location>('json', _location, _locationJson);

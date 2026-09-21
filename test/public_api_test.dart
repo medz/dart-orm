@@ -73,7 +73,47 @@ void main() {
         );
         expect(
           exports(schema),
-          containsAll(['entity', 'Id', 'Codec', 'Decimal', 'ComputedStorage']),
+          containsAll([
+            'Model',
+            'model',
+            'Codec',
+            'Decimal',
+            'ComputedStorage',
+          ]),
+        );
+        expect(
+          exports(schema),
+          isNot(
+            anyOf([
+              contains('entity'),
+              contains('Entity'),
+              contains('EntityKey'),
+              contains('SchemaConstraint'),
+              contains('Id'),
+              contains('UseCodec'),
+              contains('ColumnName'),
+              contains('Unique'),
+              contains('Default'),
+              contains('ClientDefault'),
+              contains('Computed'),
+              contains('EnumValue'),
+              contains('IntegerBits'),
+              contains('DecimalDigits'),
+              contains('TemporalPrecision'),
+            ]),
+          ),
+        );
+        final modelType =
+            schema.exportNamespace.definedNames2['Model'] as ClassElement;
+        expect(modelType.typeParameters, isEmpty);
+        expect(
+          modelType.constructors.where((c) => c.isPublic),
+          isEmpty,
+          reason: 'Create declarations only through model(...).',
+        );
+        expect(
+          modelType.methods.where((m) => m.isPublic && m.isStatic),
+          isEmpty,
         );
         expect(exports(runtime), isNot(contains('Migration')));
         for (final path in ['lib/mysql.dart', 'lib/drivers/mysql.dart']) {
@@ -164,7 +204,7 @@ void main() {
         final client = exports(await library('example/schema.orm.dart'));
         expect(
           client,
-          containsAll(['User', 'Post', 'UsersFields', 'AppTables']),
+          containsAll(['User', 'Post', 'UserFields', 'AppTables']),
         );
         expect(
           client,

@@ -19,8 +19,7 @@ void main() {
       await fixture.write('lib/queries.dart', '''
 import 'package:orm/schema.dart';
 import 'models.dart';
-typedef QueryRow = ({String title, Status status});
-final namedRows = sqlQuery<QueryRow, ({int minimum})>(sqlite: 'rows.sql');
+final namedRows = sqlQuery(result: (title: text(), status: enumeration(Status.values, labels: {Status.pending: pendingLabel, Status.ready: 'ready'})), parameters: (minimum: integer(),), sqlite: 'rows.sql');
 ''');
       const sql = 'SELECT title, status FROM rows_0 WHERE score >= :minimum';
       await fixture.write('lib/rows.sql', sql);

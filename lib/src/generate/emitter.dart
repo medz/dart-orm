@@ -5,11 +5,13 @@ import 'types.dart';
 
 String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
   final b = StringBuffer('// GENERATED CODE - DO NOT MODIFY BY HAND.\n\n')
-    ..writeln("import 'package:orm/sql.dart';")
-    ..writeln("import ${dartLiteral(import)} as models;")
-    ..writeln(
-      "export ${dartLiteral(import)} show ${schema.map((e) => e.row).toSet().join(', ')};",
-    );
+    ..writeln("import 'package:orm/sql.dart';");
+  if (names.usesSource) {
+    b.writeln("import ${dartLiteral(import)} as models;");
+  }
+  for (final (uri, symbols) in names.exports) {
+    b.writeln('export ${dartLiteral(uri)} show ${symbols.join(', ')};');
+  }
   if (names.typedData) {
     b.writeln("import 'dart:typed_data';");
   }
@@ -18,6 +20,10 @@ String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
   }
   b.writeln('');
   for (final entity in schema) {
+    b.writeln(
+      '/// A complete immutable row from ${dartLiteral(entity.table)}.',
+    );
+    b.writeln(rowDeclaration(entity));
     for (final f in entity.fields) {
       b.writeln(
         'final ${columnSymbol(entity, f)} = Column<${f.type}>(${dartLiteral(f.column)}, ${f.codec}, '
@@ -54,7 +60,7 @@ String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
       );
     }
     b.writeln('}');
-    final selection = _modelSelection(entity, 'row');
+    final selection = modelSelection(entity, 'row');
     b.writeln(
       'final ${entity.name}Table = Table<${entity.rowType}, ${entity.fieldsType}>('
       '${entity.name}Schema, ${entity.fieldsType}.new, (row) => $selection);',
@@ -63,23 +69,38 @@ String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
       'final class ${entity.setType} extends TableSet<${entity.rowType}, ${entity.fieldsType}> {'
       '${entity.setType}(QueryContext db) : super(db, ${entity.name}Table) { db.registerSchema(appSchema); }',
     );
+    var input = 'row';
+    final create =
+        entity.fields.any((f) => f.computed == null && f.name == 'createRow')
+        ? 'this.createRow'
+        : 'createRow';
+    final where = entity.primaryKey.contains('where') ? 'this.where' : 'where';
+    final update =
+        entity.fields.any(
+          (f) => !f.generated && f.computed == null && f.name == 'update',
+        )
+        ? 'this.update'
+        : 'update';
+    for (var suffix = 2; entity.fields.any((f) => f.name == input); suffix++) {
+      input = 'row$suffix';
+    }
     final parameters = <String>[];
     final assignments = <String>[];
     for (final f in entity.fields) {
       if (f.computed != null) continue;
       if (f.generated || f.defaultSql != null || f.clientDefault != null) {
         parameters.add('Change<${f.type}> ${f.name} = const Change.keep()');
-        assignments.add('...row.${f.name}.change(${f.name})');
+        assignments.add('...$input.${f.name}.change(${f.name})');
       } else if (f.nullable) {
         parameters.add('${f.type} ${f.name}');
-        assignments.add('row.${f.name}.set(${f.name})');
+        assignments.add('$input.${f.name}.set(${f.name})');
       } else {
         parameters.add('required ${f.type} ${f.name}');
-        assignments.add('row.${f.name}.set(${f.name})');
+        assignments.add('$input.${f.name}.set(${f.name})');
       }
     }
     b.writeln(
-      'Future<${entity.rowType}> create({${parameters.join(', ')}}) => createRow((row) => [${assignments.join(', ')}]);',
+      'Future<${entity.rowType}> create({${parameters.join(', ')}}) => $create(($input) => [${assignments.join(', ')}]);',
     );
     if (entity.primaryKey.isNotEmpty) {
       final positional = entity.primaryKey.length == 1;
@@ -90,7 +111,7 @@ String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
           .join(', ');
       b.writeln(
         'Query<${entity.rowType}, ${entity.fieldsType}> byId(${positional ? params : '{$params}'}) => '
-        'where((row) => ${entity.primaryKey.map((k) => 'row.$k.eq($k)').join('.and(')}${')' * (entity.primaryKey.length - 1)});',
+        '$where(($input) => ${entity.primaryKey.map((k) => '$input.$k.eq($k)').join('.and(')}${')' * (entity.primaryKey.length - 1)});',
       );
     }
     b.writeln('}');
@@ -98,7 +119,7 @@ String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
       b.writeln(
         'extension ${entity.symbol}Updates on Query<${entity.rowType}, ${entity.fieldsType}> {'
         'Future<int> patch({${entity.fields.where((f) => !f.generated && f.computed == null).map((f) => 'Change<${f.type}> ${f.name} = const Change.keep()').join(', ')}}) => '
-        'update((row) => [${entity.fields.where((f) => !f.generated && f.computed == null).map((f) => '...row.${f.name}.change(${f.name})').join(', ')}]).execute(); }',
+        '$update(($input) => [${entity.fields.where((f) => !f.generated && f.computed == null).map((f) => '...$input.${f.name}.change(${f.name})').join(', ')}]).execute(); }',
       );
     }
   }
@@ -113,11 +134,9 @@ String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
   return b.toString();
 }
 
-String _modelSelection(ModelEntity entity, String row) {
-  final named = entity.constructorNamedFields;
-  if (named == null) return recordSelection(entity.fields, row);
+String modelSelection(ModelEntity entity, String row) {
   String construct(String Function(ModelField) value) =>
-      '${entity.rowType}(${entity.fields.map((f) => '${named.contains(f.name) ? '${f.name}: ' : ''}${value(f)}').join(', ')})';
+      '${entity.rowType}(${entity.fields.map((f) => '${f.name}: ${value(f)}').join(', ')})';
   final fields = entity.fields;
   if (fields.length == 1) {
     return '$row.${fields.single.name}.map((value) => ${construct((_) => 'value')})';
@@ -152,3 +171,6 @@ String recordSelection(List<ModelField> fields, String row) {
 
 String _computedLiteral(ComputedColumn value) =>
     'ComputedColumn.forDialects(sqlite: ${dartLiteral(value.sqlite)}, postgres: ${dartLiteral(value.postgres)}, mysql: ${value.mysql == null ? 'null' : dartLiteral(value.mysql!)}, mariadb: ${value.mariadb == null ? 'null' : dartLiteral(value.mariadb!)}, storage: ComputedStorage.${value.storage.name})';
+
+String rowDeclaration(ModelEntity entity) =>
+    'final class ${entity.row}({${entity.fields.map((f) => 'required final ${f.type} ${f.name}').join(', ')}});';

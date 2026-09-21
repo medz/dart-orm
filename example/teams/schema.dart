@@ -1,35 +1,38 @@
 import 'package:orm/schema.dart';
 
-typedef User = ({@Id() int id, String name});
-typedef Team = ({@Id() int id, String name});
-
 enum MembershipRole { owner, member }
 
-typedef Membership = ({
-  int teamId,
-  int userId,
-  @Default.sql("'member'") MembershipRole role,
-  DateTime joinedAt,
-});
+final Model user = model(
+  'users',
+  (id: integer(), name: text()),
+  primaryKey: (u) => u.id,
+  relations: (u) => (memberships: referencedBy(() => membership)),
+);
 
-final users = entity<User>();
-final teams = entity<Team>();
-final memberships = entity<Membership>();
-final membershipKey = memberships.primaryKey((m) => (m.teamId, m.userId));
-final team = memberships
-    .key((m) => m.teamId)
-    .references(
-      teams.key((t) => t.id),
-      inverse: 'memberships',
-      onDelete: .cascade,
-    );
-final user = memberships
-    .key((m) => m.userId)
-    .references(
-      users.key((u) => u.id),
-      inverse: 'memberships',
-      onDelete: .cascade,
-    );
-final userMemberships = memberships.index(
-  (m) => (m.userId, m.joinedAt, m.teamId),
+final Model team = model(
+  'teams',
+  (id: integer(), name: text()),
+  primaryKey: (t) => t.id,
+  relations: (t) => (memberships: referencedBy(() => membership)),
+);
+
+final membership = model(
+  'memberships',
+  (
+    teamId: integer(),
+    userId: integer(),
+    role: enumeration(
+      MembershipRole.values,
+      defaultValue: MembershipRole.member,
+    ),
+    joinedAt: dateTime(),
+  ),
+  primaryKey: (m) => (m.teamId, m.userId),
+  indexes: (m) => [
+    index((m.userId, m.joinedAt, m.teamId), name: 'user_memberships'),
+  ],
+  relations: (m) => (
+    team: references(m.teamId, () => team, onDelete: .cascade),
+    user: references(m.userId, () => user, onDelete: .cascade),
+  ),
 );

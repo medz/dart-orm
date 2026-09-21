@@ -1,143 +1,8 @@
-import '../../values.dart' show Codec;
+import 'dart:typed_data' show Uint8List;
+
+import '../../values.dart'
+    show Codec, Decimal, LocalDate, LocalDateTime, LocalTime, SqlJson;
 import 'model.dart' show ComputedStorage;
-
-/// A public const codec reference. Generation reads its type and storage tag;
-/// it never executes the application's encode/decode functions.
-final class UseCodec<T> {
-  /// Public constant codec used to encode and decode the annotated field.
-  final Codec<T> codec;
-
-  /// Associates a field with a public const variable or static const codec.
-  const UseCodec(this.codec);
-}
-
-/// Stable database text for an enum constant, independent of its Dart name.
-final class EnumValue {
-  /// Unique text label stored for the annotated enum constant.
-  final String value;
-
-  /// Overrides the default storage label, which is the Dart constant name.
-  const EnumValue(this.value);
-}
-
-/// Marks a field as part of the table's primary key.
-///
-/// Multiple [Id] fields form a composite key in field order. Use [Id.generated]
-/// only for a single, non-null integer primary key.
-///
-/// ```dart
-/// final class User(@Id.generated() final int id, final String name);
-/// ```
-///
-/// {@category Declarations}
-final class Id {
-  /// Whether the database generates the identity when an insert omits it.
-  final bool generated;
-
-  /// Declares an application-supplied primary-key field.
-  const Id() : generated = false;
-
-  /// Declares a database-generated integer primary key.
-  const Id.generated() : generated = true;
-}
-
-/// Declares a unique constraint for the annotated field.
-final class Unique {
-  /// Requires stored non-null values to be unique under database semantics.
-  const Unique();
-}
-
-/// Overrides the physical column name while preserving the Dart field name.
-final class ColumnName {
-  /// Physical SQL column name, quoted as an identifier during SQL generation.
-  final String name;
-
-  /// Associates a Dart field with a stable database column name.
-  const ColumnName(this.name);
-}
-
-/// A database SQL default used when an insert omits the annotated field.
-///
-/// The expression is trusted SQL, not a bound parameter. It does not supply a
-/// Dart constructor default or run when an existing row is decoded.
-final class Default {
-  /// SQL expression placed in the column DEFAULT clause.
-  final String expression;
-
-  /// Declares a database default such as `CURRENT_TIMESTAMP` or `false`.
-  const Default.sql(this.expression);
-}
-
-/// Generates an omitted insert value in Dart. This never declares SQL DEFAULT.
-/// The factory is referenced during generation, not invoked.
-final class ClientDefault<T> {
-  /// Public, synchronous factory invoked only when constructing an insert.
-  final T Function() factory;
-
-  /// Uses a public top-level function, static method, or constructor tear-off.
-  const ClientDefault(this.factory);
-}
-
-/// SQL computed by the database; omitted from generated writes.
-final class Computed {
-  /// Default trusted SQL expression used when a dialect override is absent.
-  final String expression;
-
-  /// Optional SQLite expression using physical column names.
-  final String? sqlite;
-
-  /// Optional PostgreSQL expression using physical column names.
-  final String? postgres;
-
-  /// Optional MySQL expression using physical column names.
-  final String? mysql;
-
-  /// Optional MariaDB expression using physical column names.
-  final String? mariadb;
-
-  /// Whether the database stores the result or computes it when read.
-  final ComputedStorage storage;
-
-  /// Declares a generated column excluded from generated create and patch APIs.
-  const Computed.sql(
-    this.expression, {
-    this.sqlite,
-    this.postgres,
-    this.mysql,
-    this.mariadb,
-    this.storage = ComputedStorage.stored,
-  });
-}
-
-/// Signed integer column storage. SQL expression results retain the int codec.
-final class IntegerBits {
-  /// Signed storage width: 16, 32, or 64 bits.
-  final int value;
-
-  /// Constrains an integer column; unsupported widths fail generation.
-  const IntegerBits(this.value);
-}
-
-/// Decimal column precision and scale, matching PostgreSQL NUMERIC(p, s).
-final class DecimalDigits {
-  /// Total declared decimal precision, from 1 through 1000.
-  final int precision;
-
-  /// Declared scale, from -1000 through 1000; defaults to zero.
-  final int scale;
-
-  /// Constrains decimal column storage; each database validates its own limits.
-  const DecimalDigits(this.precision, [this.scale = 0]);
-}
-
-/// Fractional second digits (0..6) for time, local timestamp or UTC instant columns.
-final class TemporalPrecision {
-  /// Number of fractional second digits, from 0 through 6.
-  final int digits;
-
-  /// Declares storage precision without changing the Dart field type.
-  const TemporalPrecision(this.digits);
-}
 
 /// Database behavior when a referenced row is deleted.
 enum ReferentialAction {
@@ -157,148 +22,330 @@ enum ReferentialAction {
   noAction,
 }
 
-/// A fixed SQL file with declared result and parameter Record types.
-/// Run query generation, then check the output against each target database.
-/// Paths are relative to this declaration's Dart library. [R] is a named-record
-/// result typedef; [P] is a named record or `()` for no parameters.
+/// One source definition for a physical table and its generated immutable row.
 ///
-/// ```dart
-/// typedef UserName = ({String name});
-/// final userNames = sqlQuery<UserName, ({int minimumId})>(
-///   sqlite: 'user_names.sql',
-/// );
-/// ```
-///
-/// {@category Declarations}
-SqlDeclaration<R, P> sqlQuery<R, P>({
-  String? sqlite,
-  String? postgres,
-  String? mysql,
-  String? mariadb,
-}) => SqlDeclaration(sqlite, postgres, mysql, mariadb);
+/// Create declarations with [model]; this type has no public constructor.
+/// Use `final Model employee = model(...)` to break type inference cycles in
+/// self references or mutually related models. Other declarations can infer
+/// their type with `final employee = model(...)`.
+/// Model identity belongs to the declaration, independently of Record equality.
+final class Model {
+  /// Explicit physical table name, independent of the Dart declaration name.
+  final String table;
 
-/// Source metadata for a typed SQL query; creating it does not execute SQL.
-///
-/// Use [sqlQuery] in a top-level declaration recognized by the generator.
-final class SqlDeclaration<R, P> {
-  /// SQLite SQL file, relative to the declaring Dart library.
-  final String? sqlite;
+  /// Column declarations. Runtime Record access does not provide field discovery;
+  /// generation reads the original named fields and their source order.
+  final Record fields;
 
-  /// PostgreSQL SQL file, relative to the declaring Dart library.
-  final String? postgres;
-
-  /// MySQL SQL file, relative to the declaring Dart library.
-  final String? mysql;
-
-  /// MariaDB SQL file, relative to the declaring Dart library.
-  final String? mariadb;
-
-  /// Stores dialect-specific source paths without opening them.
-  const SqlDeclaration(this.sqlite, this.postgres, this.mysql, this.mariadb);
+  const Model._(this.table, this.fields);
 }
 
-/// Declares an independently named table backed by the Dart model [M].
+/// Defines a model using named column declarations and local constraints.
 ///
-/// Place this call in a public top-level variable. [M] must be a supported final
-/// primary-constructor class or named-record typedef in the same source file.
-/// The variable name determines the default physical name unless [table] is set.
-/// Model constructors are not executed during generation.
+/// Declare a public `final employee = model('employees', (...))`. The named
+/// Record's shape supplies the types in local key, index and relation selectors.
+/// Add an explicit [Model] type to break self-reference or mutual-reference
+/// inference cycles; selector field types are preserved in either form.
 ///
-/// ```dart
-/// final class User(@Id() final int id, final String email);
-/// final users = entity<User>(table: 'app_users');
-/// final emailIndex = users.index((user) => user.email);
-/// ```
+/// Select keys with a direct column or an ordered positional Record of columns.
+/// Selectors must be arrow expressions. [relations] returns a named Record of
+/// [references]/[referencedBy] declarations; other collections are literal lists.
+/// Every field of [fields] must be a column declaration, checked by generation.
+/// Callbacks are not executed and do not register mutable runtime metadata.
+/// Generate and import the client to query typed rows.
+Model model<S extends Record>(
+  String table,
+  S fields, {
+  Object Function(S)? primaryKey,
+  List<Object> Function(S)? uniqueKeys,
+  List<IndexDefinition> Function(S)? indexes,
+  Record Function(S)? relations,
+  List<CheckDefinition>? checks,
+}) => Model._(table, fields);
+
+/// Typed source syntax for a stored column, interpreted by static generation.
 ///
-/// {@category Declarations}
-Entity<M> entity<M>({String? table}) => Entity<M>(table);
+/// Helpers such as [integer] and [text] provide the Dart value type. This object
+/// does not encode values, execute SQL or expose runtime constraint metadata.
+final class ColumnDefinition<T> {
+  const ColumnDefinition._();
 
-/// A source-level table declaration with model, key, and constraint types.
-///
-/// Use [entity] to create a declaration the generator can discover. Constraint
-/// methods describe source syntax; calling them does not modify a live database.
-///
-/// {@category Declarations}
-final class Entity<M> {
-  /// Explicit physical table name, or null to derive it from the declaration.
-  final String? table;
+  /// Permits SQL NULL and generates a nullable Dart field.
+  /// [clientDefault] may return null and runs only for omitted insert values.
+  ColumnDefinition<T?> nullable({T? Function()? clientDefault}) =>
+      ColumnDefinition<T?>._();
 
-  /// Stores the optional physical name without registering or opening a table.
-  const Entity(this.table);
+  /// Uses an integer-storage domain codec as a database-generated primary key.
+  /// The column must be non-nullable and be the table's only primary-key field.
+  ColumnDefinition<T> identity() => this;
 
-  /// Selects one field or a record of fields for a relationship key.
-  ///
-  /// Selector order determines composite-key column order.
-  EntityKey<M, K> key<K>(K Function(M) selector) => EntityKey(this, selector);
-
-  /// Declares a primary key in a separate top-level variable.
-  ///
-  /// Selected columns must be non-nullable and cannot duplicate an annotated key.
-  SchemaConstraint primaryKey<K>(K Function(M) selector) =>
-      const SchemaConstraint();
-
-  /// Declares a unique key on one field or an ordered record of fields.
-  SchemaConstraint unique<K>(K Function(M) selector) =>
-      const SchemaConstraint();
-
-  /// Trusted SQL using physical column names. Omitted name uses the declaration
-  /// name; explicit name: null preserves an unnamed imported constraint.
-  SchemaConstraint check(
+  /// Computes the value in the database and excludes it from generated writes.
+  /// Expressions are trusted SQL using physical column names, never parameters.
+  /// Computed columns cannot also declare identity or insert defaults.
+  ColumnDefinition<T> computed(
     String expression, {
-    String? name,
     String? sqlite,
     String? postgres,
     String? mysql,
     String? mariadb,
-  }) => const SchemaConstraint();
-
-  /// Declares an index on the selected physical columns in selector order.
-  ///
-  /// The top-level declaration supplies the default name; [name] overrides it.
-  /// [unique] also permits this index to serve as a foreign-key target.
-  SchemaConstraint index<K>(
-    K Function(M) selector, {
-    String? name,
-    bool unique = false,
-  }) => const SchemaConstraint();
+    ComputedStorage storage = ComputedStorage.stored,
+  }) => this;
 }
 
-/// An ordered set of model fields used to declare a relationship.
+/// A generated integer primary key. It may not be nullable or part of a
+/// composite key. Omitted insert values are supplied by the database.
+ColumnDefinition<int> identity({String? name}) => const ColumnDefinition._();
+
+/// A signed integer column.
 ///
-/// Obtain this through [Entity.key]. The generator reads the selector syntax and
-/// does not call it against an application object.
-final class EntityKey<M, K> {
-  /// Table declaration owning the selected fields.
-  final Entity<M> entity;
+/// [name] fixes the physical column name; otherwise snake_case is derived from
+/// the Record field. [defaultSql] is trusted database SQL. [clientDefault] runs
+/// only for omitted insert values and may coexist with a database default.
+ColumnDefinition<int> integer({
+  String? name,
+  bool unique = false,
+  int? defaultValue,
+  String? defaultSql,
+  int Function()? clientDefault,
+  int? bits,
+}) => const ColumnDefinition._();
 
-  /// Source selector for one field or a record of fields.
-  final K Function(M) selector;
-
-  /// Stores a table and selector without evaluating the selector.
-  const EntityKey(this.entity, this.selector);
-
-  /// Declares a foreign key and generated query navigation to [target].
-  ///
-  /// The target must be a primary or unique key in matching column order, with
-  /// compatible Dart and storage types. [inverse] adds reverse navigation;
-  /// [onDelete] controls database-enforced deletion behavior.
-  SchemaConstraint references<N>(
-    EntityKey<N, K> target, {
-    String? inverse,
-    ReferentialAction onDelete = ReferentialAction.restrict,
-  }) => const SchemaConstraint();
-
-  /// Read-only query navigation without a database foreign key. Matching rows
-  /// may be absent or duplicated; this declaration creates no write effects.
-  SchemaConstraint relatesTo<N>(EntityKey<N, K> target, {String? inverse}) =>
-      const SchemaConstraint();
-}
-
-/// Marker returned by source-level key, index, check, and relation declarations.
+/// A text column.
 ///
-/// The generator reads the original top-level expression. This marker carries no
-/// runtime database operation or mutable constraint registry.
-final class SchemaConstraint {
-  /// Creates a marker without evaluating or applying a schema change.
-  const SchemaConstraint();
+/// [name] fixes the physical column name; otherwise snake_case is derived from
+/// the Record field. [defaultSql] is trusted database SQL. [clientDefault] runs
+/// only for omitted insert values and may coexist with a database default.
+ColumnDefinition<String> text({
+  String? name,
+  bool unique = false,
+  String? defaultValue,
+  String? defaultSql,
+  String Function()? clientDefault,
+}) => const ColumnDefinition._();
+
+/// A boolean column.
+///
+/// [name] fixes the physical column name; otherwise snake_case is derived from
+/// the Record field. [defaultSql] is trusted database SQL. [clientDefault] runs
+/// only for omitted insert values and may coexist with a database default.
+ColumnDefinition<bool> boolean({
+  String? name,
+  bool unique = false,
+  bool? defaultValue,
+  String? defaultSql,
+  bool Function()? clientDefault,
+}) => const ColumnDefinition._();
+
+/// A floating-point column.
+///
+/// [name] fixes the physical column name; otherwise snake_case is derived from
+/// the Record field. [defaultSql] is trusted database SQL. [clientDefault] runs
+/// only for omitted insert values and may coexist with a database default.
+ColumnDefinition<double> real({
+  String? name,
+  bool unique = false,
+  double? defaultValue,
+  String? defaultSql,
+  double Function()? clientDefault,
+}) => const ColumnDefinition._();
+
+/// An exact large integer column.
+///
+/// [name] fixes the physical column name; otherwise snake_case is derived from
+/// the Record field. [defaultSql] is trusted database SQL. [clientDefault] runs
+/// only for omitted insert values and may coexist with a database default.
+ColumnDefinition<BigInt> bigInteger({
+  String? name,
+  bool unique = false,
+  String? defaultSql,
+  BigInt Function()? clientDefault,
+}) => const ColumnDefinition._();
+
+/// An exact decimal column.
+///
+/// [name] fixes the physical column name; otherwise snake_case is derived from
+/// the Record field. [defaultSql] is trusted database SQL. [clientDefault] runs
+/// only for omitted insert values and may coexist with a database default.
+ColumnDefinition<Decimal> decimal({
+  String? name,
+  bool unique = false,
+  String? defaultSql,
+  Decimal Function()? clientDefault,
+  int? precision,
+  int? scale,
+}) => const ColumnDefinition._();
+
+/// A UTC instant column.
+///
+/// [name] fixes the physical column name; otherwise snake_case is derived from
+/// the Record field. [defaultSql] is trusted database SQL. [clientDefault] runs
+/// only for omitted insert values and may coexist with a database default.
+ColumnDefinition<DateTime> dateTime({
+  String? name,
+  bool unique = false,
+  String? defaultSql,
+  DateTime Function()? clientDefault,
+  int? precision,
+}) => const ColumnDefinition._();
+
+/// A calendar date without a timezone.
+///
+/// [name] fixes the physical column name; otherwise snake_case is derived from
+/// the Record field. [defaultSql] is trusted database SQL. [clientDefault] runs
+/// only for omitted insert values and may coexist with a database default.
+ColumnDefinition<LocalDate> date({
+  String? name,
+  bool unique = false,
+  String? defaultSql,
+  LocalDate Function()? clientDefault,
+}) => const ColumnDefinition._();
+
+/// A wall-clock time without a timezone.
+///
+/// [name] fixes the physical column name; otherwise snake_case is derived from
+/// the Record field. [defaultSql] is trusted database SQL. [clientDefault] runs
+/// only for omitted insert values and may coexist with a database default.
+ColumnDefinition<LocalTime> time({
+  String? name,
+  bool unique = false,
+  String? defaultSql,
+  LocalTime Function()? clientDefault,
+  int? precision,
+}) => const ColumnDefinition._();
+
+/// A local timestamp without a timezone.
+///
+/// [name] fixes the physical column name; otherwise snake_case is derived from
+/// the Record field. [defaultSql] is trusted database SQL. [clientDefault] runs
+/// only for omitted insert values and may coexist with a database default.
+ColumnDefinition<LocalDateTime> localDateTime({
+  String? name,
+  bool unique = false,
+  String? defaultSql,
+  LocalDateTime Function()? clientDefault,
+  int? precision,
+}) => const ColumnDefinition._();
+
+/// A binary column.
+///
+/// [name] fixes the physical column name; otherwise snake_case is derived from
+/// the Record field. [defaultSql] is trusted database SQL. [clientDefault] runs
+/// only for omitted insert values and may coexist with a database default.
+ColumnDefinition<Uint8List> bytes({
+  String? name,
+  bool unique = false,
+  String? defaultSql,
+  Uint8List Function()? clientDefault,
+}) => const ColumnDefinition._();
+
+/// A JSON document; its content can itself be JSON null.
+///
+/// [name] fixes the physical column name; otherwise snake_case is derived from
+/// the Record field. [defaultSql] is trusted database SQL. [clientDefault] runs
+/// only for omitted insert values and may coexist with a database default.
+ColumnDefinition<SqlJson> json({
+  String? name,
+  bool unique = false,
+  String? defaultSql,
+  SqlJson Function()? clientDefault,
+}) => const ColumnDefinition._();
+
+/// An enum stored as text. Pass `Status.values`; optional [labels] maps every
+/// constant to a distinct stable storage label without annotations.
+/// [defaultValue] is encoded into a database default during generation.
+ColumnDefinition<E> enumeration<E extends Enum>(
+  List<E> values, {
+  String? name,
+  bool unique = false,
+  Map<E, String>? labels,
+  E? defaultValue,
+  String? defaultSql,
+  E Function()? clientDefault,
+}) => ColumnDefinition<E>._();
+
+/// A domain value with a public const codec. Generation reads its storage tag
+/// and references its encode/decode functions without executing them.
+/// [bits] constrains integer storage to 16, 32 or 64 bits. [precision] and
+/// [scale] configure decimal storage; temporal storage accepts [precision]
+/// from 0 to 6. These options describe storage, independently of the Dart type.
+ColumnDefinition<T> custom<T>(
+  Codec<T> codec, {
+  String? name,
+  bool unique = false,
+  String? defaultSql,
+  T Function()? clientDefault,
+  int? bits,
+  int? precision,
+  int? scale,
+}) => ColumnDefinition<T>._();
+
+/// An index declaration for the `indexes` selector of [model].
+final class IndexDefinition {
+  const IndexDefinition._();
 }
+
+/// Selects a direct column or an ordered positional Record of columns.
+/// The physical [name] is explicit and does not depend on local variable names.
+IndexDefinition index(
+  Object columns, {
+  required String name,
+  bool unique = false,
+}) => const IndexDefinition._();
+
+/// A relationship in the named Record returned by the `relations` selector
+/// of [model].
+/// Its Record field name becomes the generated query navigation name.
+final class ReferenceDefinition {
+  const ReferenceDefinition._();
+}
+
+/// Declares a foreign key and forward navigation on the current model.
+///
+/// [columns] selects a local column or a positional Record in target primary-key
+/// order. A named Record instead maps target field names to local columns, e.g.
+/// `(tenantId: m.tenantId, code: m.teamCode)`. Generation validates target names,
+/// value types, codecs and uniqueness, and orders the mapping by the target key.
+/// Named mappings do not provide Dart completion for target fields.
+///
+/// [target] must name a model, e.g. `() => employee`; generation never invokes it.
+/// The relation's name comes from its enclosing Record field, e.g.
+/// `relations: (e) => (manager: references(e.managerId, () => employee),)`.
+/// [constraint] false creates read-only navigation without a database foreign
+/// key. It does not infer uniqueness or add an index.
+ReferenceDefinition references(
+  Object columns,
+  Model Function() target, {
+  ReferentialAction onDelete = ReferentialAction.restrict,
+  bool constraint = true,
+}) => const ReferenceDefinition._();
+
+/// Declares reverse navigation on the current model, without another foreign key.
+///
+/// [target] must name a model, e.g. `() => employee`, with a forward [references]
+/// declaration pointing to the current model. Generation requires one matching
+/// reference; no match or ambiguity is an error, never a naming heuristic.
+///
+/// When several references exist, [on] maps target foreign-key field names to
+/// local columns, e.g. `referencedBy(() => post, on: (authorId: u.id))`.
+/// This also supports composite keys. Mapping names are checked by generation;
+/// local columns retain native Dart types and completion. A reverse of a
+/// read-only forward reference is also read-only. Callbacks are never invoked.
+ReferenceDefinition referencedBy(Model Function() target, {Record? on}) =>
+    const ReferenceDefinition._();
+
+/// A trusted database CHECK declaration for the `checks` argument of [model].
+final class CheckDefinition {
+  const CheckDefinition._();
+}
+
+/// Declares a CHECK using physical column names. The database evaluates
+/// the trusted SQL expression. Dialect overrides are explicit. Use a stable
+/// [name], or `name: null` to preserve an unnamed imported constraint.
+CheckDefinition check(
+  String expression, {
+  required String? name,
+  String? sqlite,
+  String? postgres,
+  String? mysql,
+  String? mariadb,
+}) => const CheckDefinition._();

@@ -1,14 +1,15 @@
 # Named SQL queries
 
-Declare parameters and results as Dart records, keep complex SQL in files, and
+Declare parameters and results with named Records of column helpers, keep SQL in files, and
 generate a typed database method. This path uses the same Query, Selection,
 connection, transaction and cursor implementation as generated tables.
 
 ```dart
 import 'package:orm/schema.dart';
 
-typedef AuthorStats = ({String author, int postCount, int points});
-final authorStats = sqlQuery<AuthorStats, ({int minimum, String? author})>(
+final authorStats = sqlQuery(
+  result: (author: text(), postCount: integer(), points: integer()),
+  parameters: (minimum: integer(), author: text().nullable()),
   sqlite: 'stats.sqlite.sql',
   postgres: 'stats.postgres.sql',
 );
@@ -60,17 +61,19 @@ await db.transaction((tx) async {
 ```
 
 Non-null parameter fields generate required named arguments. Nullable parameters
-default to SQL NULL. Use `()` for no parameters. The result must be a public,
-non-generic named-record typedef in the declaring file. Parameters may use such a
-typedef or an inline named record. Enums and `@UseCodec` use the ordinary generator's
-type and codec analysis. Result names use snake_case by default; `@ColumnName`
-selects an explicit SQL alias. Query declarations do not accept identity, default,
-index, integer-width or decimal-precision column metadata.
+default to SQL NULL. Omit `parameters` or use `()` when no parameters are needed.
+The result Record generates a nominal class named after the declaration:
+`authorStats` produces `AuthorStats`. Import that class from the generated file.
 
-A declaration containing only `postgres:` generates an extension on
-`Database<Postgres>`, so SQLite code cannot call it. A declaration containing both
-targets works on either backend. Database checks validate only the selected target;
-run both commands when shipping both files.
+Use `enumeration(...)` for enum labels and `custom(codec)` for domain values.
+Result fields use snake_case SQL aliases by default; `text(name: 'display_name')`
+sets an explicit alias. Parameters keep their Dart names. Query columns do not
+accept identities, defaults, computed expressions or storage-width constraints.
+
+Each supplied SQL path enables that database engine. Bindings target `QueryContext`,
+so the same API works with a database, transaction or offline `SqlBuilder`.
+Binding a query for an engine without a SQL variant fails with `QUERY.DIALECT`
+before execution. Database checks validate only the selected engine.
 
 ## What the checks establish
 
@@ -79,8 +82,8 @@ uses SQL `PREPARE` for that projection, reads the prepared statement's native
 result types, then deallocates it on the same leased connection. Neither path
 executes the application SELECT. Missing tables, missing declared aliases and
 invalid SQL fail. PostgreSQL also checks storage-type families against the declared
-codecs. Its checker is verified against PostgreSQL 18.4, including the
-`pg_prepared_statements.result_types` catalog column. These paths follow the
+codecs using the `pg_prepared_statements.result_types` catalog column. The checker
+requires this catalog metadata. These paths follow the
 [PostgreSQL PREPARE lifecycle](https://www.postgresql.org/docs/current/sql-prepare.html),
 [prepared-statement metadata](https://www.postgresql.org/docs/current/view-pg-prepared-statements.html),
 and [SQLite EXPLAIN behavior](https://www.sqlite.org/lang_explain.html). The checker
@@ -92,8 +95,8 @@ variable and clears it afterwards. It validates syntax, table references and
 declared result aliases, but reports storage types and nullability as unchecked.
 This follows the [MySQL PREPARE lifecycle](https://dev.mysql.com/doc/refman/8.4/en/prepare.html)
 and [MariaDB PREPARE lifecycle](https://mariadb.com/docs/server/reference/sql-statements/prepared-statements/prepare-statement).
-Ordinary `EXPLAIN` is unsuitable for this guarantee: our MariaDB 11.8 fixture
-executes a stored function with an INSERT side effect during planning.
+MariaDB planning can evaluate stored functions, so ordinary `EXPLAIN` does not
+provide the same no-execution guarantee.
 
 These checks do not infer expression nullability, integer range, decimal scale,
 enum labels or custom codec correctness. Integer declarations can accept native
@@ -162,10 +165,4 @@ Run `dart run build_runner watch`. Both the Dart library and referenced SQL asse
 participate in dependency tracking. Imported enum/codec declarations are tracked
 by the analyzer resolver. A SQL parameter mismatch fails the build; fixing the
 file restores output. This builder is independent of `orm:orm`, and a library may
-contain both entity and named-query declarations when both builders target it.
-
-The native fixtures cover both dialects, transactions, cursor reads, typed temporal
-and Decimal parameters, raw-SQL subscriptions, failed structure checks and absence
-of expression evaluation during checking. A compiled macOS executable exercises
-the generated SQLite runtime without the analyzer. Browser, Flutter and query
-throughput acceptance are separate work.
+contain both model and named-query declarations when both builders target it.

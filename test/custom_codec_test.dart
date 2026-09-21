@@ -53,7 +53,7 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
     Future<Person> person({
       String email = 'seven@example.com',
       SqlJson? details,
-    }) => db.people.create(
+    }) => db.person.create(
       email: Email(email),
       membership: .pending,
       tags: ['dart', '数据库'],
@@ -75,8 +75,8 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
         expect(value.tags, ['dart', '数据库']);
         expect(value.location, (city: '成都', zone: 8));
         expect(value.alternate.label, 'different domain');
-        final Query<({Email email, Location? location}), PeopleFields>
-        projection = db.people
+        final Query<({Email email, Location? location}), PersonFields>
+        projection = db.person
             .byId(id)
             .select(
               (p) => (
@@ -85,7 +85,7 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
               ).map((email, location) => (email: email, location: location)),
             );
         expect((await projection.single()).email.value, value.email.value);
-        await db.people
+        await db.person
             .byId(id)
             .patch(
               email: .set(const Email('updated@example.com')),
@@ -94,7 +94,7 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
               tags: .set([]),
               location: .set(null),
             );
-        final updated = await db.people.byId(id).single();
+        final updated = await db.person.byId(id).single();
         expect(updated.email.value, 'updated@example.com');
         expect(updated.membership, Membership.cancelled);
         expect(updated.previousMembership, Membership.pending);
@@ -111,7 +111,7 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
             .single,
         ['pending-payment'],
       );
-      await db.people.byId(value.id).patch(membership: .set(.cancelled));
+      await db.person.byId(value.id).patch(membership: .set(.cancelled));
       expect(
         (await db.execute(SqlCommand('SELECT membership FROM people')))
             .rows
@@ -122,20 +122,20 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
         SqlCommand("UPDATE people SET membership = 'future-value'"),
       );
       await expectLater(
-        db.people.get(),
+        db.person.get(),
         throwsA(
           isA<OrmException>().having((e) => e.code, 'code', 'CODEC.ENUM'),
         ),
       );
       // Decoding is outside SQL execution; a bad value does not lose the lease.
-      expect(await db.people.count(), 1);
+      expect(await db.person.count(), 1);
     });
 
     test(
       'domain validation and bound parameters apply to writes and predicates',
       () async {
         final value = await person(email: "'@x'); DROP TABLE people; --");
-        final query = db.people.where((p) => p.email.eq(value.email));
+        final query = db.person.where((p) => p.email.eq(value.email));
         final command = query.compile();
         expect(command.sql, isNot(contains(value.email.value)));
         expect(command.parameters, [value.email.value]);
@@ -143,7 +143,7 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
         final events = <QueryEvent>[];
         final observed = Database(db.driver, onQuery: events.add);
         await expectLater(
-          () => observed.people.create(
+          () => observed.person.create(
             email: const Email('invalid'),
             membership: .active,
             tags: [],
@@ -153,8 +153,8 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
         );
         expect(events, isEmpty);
         await db.execute(SqlCommand("UPDATE people SET email = 'invalid'"));
-        await expectLater(db.people.single(), throwsFormatException);
-        expect(await db.people.count(), 1);
+        await expectLater(db.person.single(), throwsFormatException);
+        expect(await db.person.count(), 1);
       },
     );
 
@@ -163,7 +163,7 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
       () async {
         final value = await person();
         expect(value.details, isNull);
-        expect(await db.people.where((p) => p.details.isNull()).count(), 1);
+        expect(await db.person.where((p) => p.details.isNull()).count(), 1);
         for (final document in <Object?>[
           null,
           'plain string',
@@ -176,23 +176,23 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
             'nested': [null, '文本'],
           },
         ]) {
-          await db.people
+          await db.person
               .byId(value.id)
               .patch(details: .set(SqlJson(document)));
-          final result = await db.people
+          final result = await db.person
               .byId(value.id)
               .select((p) => p.details)
               .single();
           expect(result, isA<SqlJson>());
           expect(result!.value, document);
-          expect(await db.people.where((p) => p.details.isNull()).count(), 0);
+          expect(await db.person.where((p) => p.details.isNull()).count(), 0);
           final raw = (await db.execute(
             SqlCommand('SELECT details FROM people'),
           )).rows.single.single;
           expect(Codecs.json.decode(raw), document);
         }
-        await db.people.byId(value.id).patch(details: .set(null));
-        expect((await db.people.single()).details, isNull);
+        await db.person.byId(value.id).patch(details: .set(null));
+        expect((await db.person.single()).details, isNull);
       },
     );
 
@@ -201,24 +201,24 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
       await db.execute(
         SqlCommand('UPDATE people SET location = ${parameter(1)}', ['null']),
       );
-      await expectLater(db.people.single(), throwsA(isA<TypeError>()));
-      await db.people.byId(value.id).patch(location: .set(null));
-      expect((await db.people.single()).location, isNull);
+      await expectLater(db.person.single(), throwsA(isA<TypeError>()));
+      await db.person.byId(value.id).patch(location: .set(null));
+      expect((await db.person.single()).location, isNull);
     });
 
     test('custom IDs and domain projections work across joined and batched relations', () async {
       final owner = await person();
       for (var i = 0; i < 3; i++) {
-        await db.notes.create(ownerId: owner.id, body: 'note$i');
+        await db.note.create(ownerId: owner.id, body: 'note$i');
       }
       final events = <QueryEvent>[];
       final observed = Database(db.driver, onQuery: events.add);
-      final emails = await observed.notes
+      final emails = await observed.note
           .select((n) => n.owner.select((p) => p.email).required())
           .get();
       expect(emails.map((e) => e.value), List.filled(3, owner.email.value));
       expect(events.length, 1);
-      final children = await db.people
+      final children = await db.person
           .select(
             (p) => p.notes
                 .orderBy((n) => [n.id.desc()])
@@ -230,7 +230,7 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
           )
           .single();
       expect(children, [(owner.id, 'note2'), (owner.id, 'note1')]);
-      final batch = await db.notes
+      final batch = await db.note
           .select(
             (n) =>
                 n.owner.select((p) => p.membership).required(strategy: .batch),
@@ -242,7 +242,7 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
     test(
       'custom values participate in atomic batch writes and native upsert',
       () async {
-        final ids = await db.people
+        final ids = await db.person
             .insertMany(
               [1, 2, 3],
               (p, i) => [
@@ -255,7 +255,7 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
             .returning((p) => p.id)
             .get();
         expect(ids.map((id) => id.value), [1, 2, 3]);
-        await db.people
+        await db.person
             .insert(
               (p) => [
                 p.email.set(const Email('batch1@example.com')),
@@ -272,10 +272,10 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
               ],
             )
             .execute();
-        final value = await db.people.byId(ids.first).single();
+        final value = await db.person.byId(ids.first).single();
         expect(value.membership, Membership.cancelled);
         expect(value.tags, ['changed']);
-        expect(await db.people.count(), 3);
+        expect(await db.person.count(), 3);
       },
     );
 
@@ -290,17 +290,17 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
           email: 'second@example.com',
           details: const SqlJson(null),
         );
-        final token = db.people.cursorToken(
+        final token = db.person.cursorToken(
           (p) => [p.membership.cursor(first.membership), p.id.cursor(first.id)],
         );
-        final rows = await db.people
+        final rows = await db.person
             .seekToken(token, orderBy: (p) => [p.membership.asc(), p.id.asc()])
             .stream(batchSize: 1)
             .toList();
         expect(rows.single.id, second.id);
         expect(rows.single.details, isA<SqlJson>());
         expect(rows.single.details!.value, isNull);
-        final docs = await db.people
+        final docs = await db.person
             .orderBy((p) => [p.id.asc()])
             .select((p) => p.details)
             .stream(batchSize: 1)

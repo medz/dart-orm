@@ -64,27 +64,19 @@ and an exclusive owner; unsupported storage fails explicitly. Deployment base
 paths, content security policy, advanced resource overrides and browser limits are
 covered in [SQLite Web](https://github.com/medz/dart-orm/blob/main/doc/sqlite-web.md).
 
-Hot reload retains application state. Release tests do not establish that Flutter
-Web hot restart always releases abandoned JS resources. Close a live OPFS session
+Hot reload retains application state. Flutter Web hot restart can abandon live
+JavaScript resources without releasing the database. Close a live OPFS session
 or refresh the page when restarting. Query subscriptions cover known committed
 writes; another tab or independent connection needs [explicit invalidation](https://github.com/medz/dart-orm/blob/main/doc/watch.md).
 
-## Verify upgrades and lifecycle
+## Upgrades and lifecycle
 
-The repository [Flutter example](https://github.com/medz/dart-orm/blob/main/example/flutter/README.md) includes native and
-browser runners. Its Android workflow installs a legacy debug APK, upgrades it to
-a release AOT APK with retained application data, then force-stops and reopens it
-in another process. Assertions cover fixed migration history, preserved rows,
-new defaults and relationships, generated writes, rollback, subscriptions,
-read-only reopening, worker progress and supported cancellation.
+Apply saved migrations when opening the application database. Test upgrades using
+an existing database with representative data, including a process restart after
+migration. Close the database when its application owner shuts down; do not open
+another instance for each widget rebuild.
 
-Run `tool/test_flutter.dart` with a dedicated emulator and the two built APKs as
-shown in the example instructions. It refuses an existing acceptance installation
-and writes reports, logs and a screenshot under `.dart_tool/flutter/`. The
-Web runner is `dart run tool/test_flutter_web.dart /absolute/path/to/flutter`.
-
-Animation and timer progress while SQL is running checks worker separation. It
-is not a frame-rate measurement. Emulator process restart does not simulate
-power loss, and Android checks do not certify iOS, macOS Flutter or physical
-devices. [Progress](https://github.com/medz/dart-orm/blob/main/doc/progress.md) records the tested revision and current validation
-status; [capabilities](https://github.com/medz/dart-orm/blob/main/doc/capabilities.md) describes driver-specific limits.
+The [Flutter example](https://github.com/medz/dart-orm/blob/main/example/flutter/README.md)
+includes upgrade and restart instructions. See
+[capabilities](https://github.com/medz/dart-orm/blob/main/doc/capabilities.md) for
+platform support and driver limits.

@@ -3,59 +3,71 @@
 import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
-export "schema.dart" show Account, Note;
+export "schema.dart" show Email;
 
-final _accountsId = Column<int>(
+/// A complete immutable row from "nominal_accounts".
+final class Account({
+  required final int id,
+  required final models.Email email,
+  required final String? label,
+  required final bool enabled,
+  required final String marker,
+  required final int a,
+  required final int b,
+  required final int c,
+  required final int total,
+});
+final _accountId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _accountsEmail = Column<models.Email>(
+final _accountEmail = Column<models.Email>(
   "email",
   models.emailCodec,
   nullable: false,
   generated: false,
 );
-final _accountsLabel = Column<String?>(
+final _accountLabel = Column<String?>(
   "display_name",
   Codecs.text.nullable(),
   nullable: true,
   generated: false,
 );
-final _accountsEnabled = Column<bool>(
+final _accountEnabled = Column<bool>(
   "enabled",
   Codecs.boolean,
   nullable: false,
   generated: false,
   defaultSql: "false",
 );
-final _accountsMarker = Column<String>(
+final _accountMarker = Column<String>(
   "marker",
   Codecs.text,
   nullable: false,
   generated: false,
   clientDefault: models.defaultMarker,
 );
-final _accountsA = Column<int>(
+final _accountA = Column<int>(
   "a",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _accountsB = Column<int>(
+final _accountB = Column<int>(
   "b",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _accountsC = Column<int>(
+final _accountC = Column<int>(
   "c",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _accountsTotal = Column<int>(
+final _accountTotal = Column<int>(
   "total",
   Codecs.integer,
   nullable: false,
@@ -68,18 +80,18 @@ final _accountsTotal = Column<int>(
     storage: ComputedStorage.stored,
   ),
 );
-final accountsSchema = TableSchema(
+final accountSchema = TableSchema(
   "nominal_accounts",
   columns: [
-    _accountsId,
-    _accountsEmail,
-    _accountsLabel,
-    _accountsEnabled,
-    _accountsMarker,
-    _accountsA,
-    _accountsB,
-    _accountsC,
-    _accountsTotal,
+    _accountId,
+    _accountEmail,
+    _accountLabel,
+    _accountEnabled,
+    _accountMarker,
+    _accountA,
+    _accountB,
+    _accountC,
+    _accountTotal,
   ],
   primaryKey: ["id"],
   uniqueKeys: [
@@ -89,24 +101,24 @@ final accountsSchema = TableSchema(
   foreignKeys: [],
 );
 
-final class AccountsFields extends Fields {
-  AccountsFields(super.table);
-  late final id = column(_accountsId);
-  late final email = column(_accountsEmail);
-  late final label = column(_accountsLabel);
-  late final enabled = column(_accountsEnabled);
-  late final marker = column(_accountsMarker);
-  late final a = column(_accountsA);
-  late final b = column(_accountsB);
-  late final c = column(_accountsC);
-  late final total = readColumn(_accountsTotal);
-  Relation<models.Note, NotesFields> get notes =>
-      Relation(notesTable, parent: [id], child: (row) => [row.accountId]);
+final class AccountFields extends Fields {
+  AccountFields(super.table);
+  late final id = column(_accountId);
+  late final email = column(_accountEmail);
+  late final label = column(_accountLabel);
+  late final enabled = column(_accountEnabled);
+  late final marker = column(_accountMarker);
+  late final a = column(_accountA);
+  late final b = column(_accountB);
+  late final c = column(_accountC);
+  late final total = readColumn(_accountTotal);
+  Relation<Note, NoteFields> get notes =>
+      Relation(noteTable, parent: [id], child: (row) => [row.accountId]);
 }
 
-final accountsTable = Table<models.Account, AccountsFields>(
-  accountsSchema,
-  AccountsFields.new,
+final accountTable = Table<Account, AccountFields>(
+  accountSchema,
+  AccountFields.new,
   (row) =>
       (
         (row.id, row.email, row.label, row.enabled, row.marker).map(
@@ -125,25 +137,25 @@ final accountsTable = Table<models.Account, AccountsFields>(
           row.total,
         ).map((a, b, c, total) => (a: a, b: b, c: c, total: total)),
       ).map(
-        (left, right) => models.Account(
-          left.id,
-          left.email,
-          left.label,
-          left.enabled,
-          left.marker,
-          right.a,
-          right.b,
-          right.c,
-          right.total,
+        (left, right) => Account(
+          id: left.id,
+          email: left.email,
+          label: left.label,
+          enabled: left.enabled,
+          marker: left.marker,
+          a: right.a,
+          b: right.b,
+          c: right.c,
+          total: right.total,
         ),
       ),
 );
 
-final class AccountsTableSet extends TableSet<models.Account, AccountsFields> {
-  AccountsTableSet(QueryContext db) : super(db, accountsTable) {
+final class AccountTableSet extends TableSet<Account, AccountFields> {
+  AccountTableSet(QueryContext db) : super(db, accountTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Account> create({
+  Future<Account> create({
     Change<int> id = const Change.keep(),
     required models.Email email,
     String? label,
@@ -164,11 +176,10 @@ final class AccountsTableSet extends TableSet<models.Account, AccountsFields> {
       row.c.set(c),
     ],
   );
-  Query<models.Account, AccountsFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+  Query<Account, AccountFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension AccountsUpdates on Query<models.Account, AccountsFields> {
+extension AccountUpdates on Query<Account, AccountFields> {
   Future<int> patch({
     Change<models.Email> email = const Change.keep(),
     Change<String?> label = const Change.keep(),
@@ -190,27 +201,33 @@ extension AccountsUpdates on Query<models.Account, AccountsFields> {
   ).execute();
 }
 
-final _notesId = Column<int>(
+/// A complete immutable row from "nominal_notes".
+final class Note({
+  required final int id,
+  required final int accountId,
+  required final String body,
+});
+final _noteId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _notesAccountId = Column<int>(
+final _noteAccountId = Column<int>(
   "account_id",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _notesBody = Column<String>(
+final _noteBody = Column<String>(
   "body",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final notesSchema = TableSchema(
+final noteSchema = TableSchema(
   "nominal_notes",
-  columns: [_notesId, _notesAccountId, _notesBody],
+  columns: [_noteId, _noteAccountId, _noteBody],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [],
@@ -219,30 +236,30 @@ final notesSchema = TableSchema(
   ],
 );
 
-final class NotesFields extends Fields {
-  NotesFields(super.table);
-  late final id = column(_notesId);
-  late final accountId = column(_notesAccountId);
-  late final body = column(_notesBody);
-  Relation<models.Account, AccountsFields> get account =>
-      Relation(accountsTable, parent: [accountId], child: (row) => [row.id]);
+final class NoteFields extends Fields {
+  NoteFields(super.table);
+  late final id = column(_noteId);
+  late final accountId = column(_noteAccountId);
+  late final body = column(_noteBody);
+  Relation<Account, AccountFields> get account =>
+      Relation(accountTable, parent: [accountId], child: (row) => [row.id]);
 }
 
-final notesTable = Table<models.Note, NotesFields>(
-  notesSchema,
-  NotesFields.new,
+final noteTable = Table<Note, NoteFields>(
+  noteSchema,
+  NoteFields.new,
   (row) => (
     row.id,
     row.accountId,
     row.body,
-  ).map((v0, v1, v2) => models.Note(id: v0, accountId: v1, body: v2)),
+  ).map((v0, v1, v2) => Note(id: v0, accountId: v1, body: v2)),
 );
 
-final class NotesTableSet extends TableSet<models.Note, NotesFields> {
-  NotesTableSet(QueryContext db) : super(db, notesTable) {
+final class NoteTableSet extends TableSet<Note, NoteFields> {
+  NoteTableSet(QueryContext db) : super(db, noteTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Note> create({
+  Future<Note> create({
     Change<int> id = const Change.keep(),
     required int accountId,
     required String body,
@@ -253,10 +270,10 @@ final class NotesTableSet extends TableSet<models.Note, NotesFields> {
       row.body.set(body),
     ],
   );
-  Query<models.Note, NotesFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Note, NoteFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension NotesUpdates on Query<models.Note, NotesFields> {
+extension NoteUpdates on Query<Note, NoteFields> {
   Future<int> patch({
     Change<int> accountId = const Change.keep(),
     Change<String> body = const Change.keep(),
@@ -265,9 +282,9 @@ extension NotesUpdates on Query<models.Note, NotesFields> {
   ).execute();
 }
 
-final appSchema = List<TableSchema>.unmodifiable([accountsSchema, notesSchema]);
+final appSchema = List<TableSchema>.unmodifiable([accountSchema, noteSchema]);
 
 extension AppTables on QueryContext {
-  AccountsTableSet get accounts => AccountsTableSet(this);
-  NotesTableSet get notes => NotesTableSet(this);
+  AccountTableSet get account => AccountTableSet(this);
+  NoteTableSet get note => NoteTableSet(this);
 }

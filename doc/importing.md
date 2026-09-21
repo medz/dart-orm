@@ -43,16 +43,17 @@ missing targets and temporary objects shadowing selected tables produce issues.
 
 ## Declarations and reports
 
+Catalog import emits `model(...)` declarations using the same column helpers,
+keys and relationships as a handwritten schema:
+
 ```dart
 import 'package:orm/schema.dart';
 
-final class AccountsRow({
-  @ColumnName('id') @Id.generated() required final int id,
-  @ColumnName('email') required final String email,
-  @ColumnName('display_name') required final String? displayName,
-});
-final accounts = entity<AccountsRow>(table: 'accounts');
-final accountsUnique = accounts.unique((row) => row.email);
+final accounts = model('accounts', (
+  id: integer(name: 'id').identity(),
+  email: text(name: 'email'),
+  displayName: text(name: 'display_name').nullable(),
+), uniqueKeys: (a) => [a.email]);
 ```
 
 Every table and field retains an explicit physical name. Dart keywords, punctuation,
@@ -65,7 +66,7 @@ Foreign-key actions include SET DEFAULT on supporting engines; MySQL/MariaDB
 reject it. Unsupported unsigned and binary storage must be reviewed explicitly;
 see [MySQL/MariaDB limits](https://github.com/medz/dart-orm/blob/main/doc/mysql.md).
 
-Ordinary enforced [CHECK constraints](https://github.com/medz/dart-orm/blob/main/doc/checks.md) become `.check(...)` declarations
+Ordinary enforced [CHECK constraints](https://github.com/medz/dart-orm/blob/main/doc/checks.md) become `check(...)` declarations
 with their native names and SQL. A nonblocking `IMPORT.CHECK_SQL` note requests
 review of backend-specific expressions before deployment on another dialect.
 PostgreSQL unvalidated, unenforced and inheritance-specific checks remain unmanaged.
@@ -92,7 +93,7 @@ rows or a column name.
 |---|---|---|
 | INTEGER | SMALLINT / INTEGER / BIGINT | int, with width metadata where needed |
 | TEXT | TEXT | String |
-| TEXT COLLATE orm_decimal_v1, optional precision CHECK | NUMERIC, NUMERIC(p,s) | Decimal, optional DecimalDigits |
+| TEXT COLLATE orm_decimal_v1, optional precision CHECK | NUMERIC, NUMERIC(p,s) | Decimal, optional precision and scale |
 | REAL | DOUBLE PRECISION | double |
 | BLOB | BYTEA | Uint8List |
 | — | BOOLEAN | bool |
@@ -106,7 +107,7 @@ Nullability is preserved. SQLite TEXT may contain timestamps, enums, bigints or
 JSON, and INTEGER may hold application booleans. Add reviewed codecs when needed;
 the catalog does not establish those meanings. PostgreSQL NUMERIC
 imports as finite `Decimal`, never as BigInt; constrained columns retain
-`@DecimalDigits(precision, scale)`. Import does not sample values;
+`decimal(precision: ..., scale: ...)`. Import does not sample values;
 existing NaN or Infinity values will fail typed decoding. SQLite requires the
 recognized column collation to establish decimal storage and recognizes only the
 emitted precision CHECK. Varchar, arrays, domains and other native types still
@@ -114,8 +115,8 @@ need explicit support. See
 [decimal boundaries](https://github.com/medz/dart-orm/blob/main/doc/decimals.md) before reviewing a draft.
 
 SQLite rowid integer primary keys and PostgreSQL BY DEFAULT integer primary-key
-identities get `@Id.generated()`. [Computed expressions](https://github.com/medz/dart-orm/blob/main/doc/computed.md) become
-`@Computed.sql` with their stored/virtual mode and an `IMPORT.COMPUTED_SQL`
+identities get `.identity()`. [Computed expressions](https://github.com/medz/dart-orm/blob/main/doc/computed.md) become
+`.computed(...)` with their stored/virtual mode and an `IMPORT.COMPUTED_SQL`
 portability review note. ALWAYS identities,
 non-primary identities and nullable primary keys require explicit write semantics
 and are currently blocking. Sequence defaults such as a BIGSERIAL default retain
@@ -128,7 +129,7 @@ restrictions do not block them. Imported names that collide with Database member
 receive a distinct Dart name while retaining the physical SQL name.
 
 PostgreSQL SMALLINT/INTEGER columns and SQLite INTEGER columns with recognized
-ORM range checks retain their `@IntegerBits(16)` or `@IntegerBits(32)` declaration.
+ORM range checks retain their `integer(bits: 16)` or `integer(bits: 32)` declaration.
 See [integer widths](https://github.com/medz/dart-orm/blob/main/doc/types.md#signed-integer-column-widths) for range enforcement,
 aggregation and migration behavior.
 
@@ -153,8 +154,8 @@ It is reported when either flag is set or a policy exists, including disabled
 policies. These metadata descriptions are not executable migration SQL.
 `verifySchema` and baseline return them for review without claiming that the
 Record snapshot models access-control policy. Neither operation changes those
-settings. Trigger definitions likewise remain unmanaged; import/verification
-tests exercise real triggers on both databases and verify they still execute.
+settings. Trigger definitions likewise remain unmanaged and are not modified by
+import or verification.
 
 ## Tooling API
 

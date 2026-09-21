@@ -251,7 +251,7 @@ void wrong(Database<Sqlite> db) {
   db.users.byId(1).patch(email: const Change<String>.set(null));
   db.users.select((u) => u.email.eq(1));
   db.transaction((tx) async {}, options: const PostgresTransaction());
-  final Query<int, UsersFields> bad = db.users.select((u) => u.email);
+  final Query<int, UserFields> bad = db.users.select((u) => u.email);
   db.users.seekAfter((u) => [u.id.cursor('wrong')]);
   print(bad);
   db.people.byId(1);

@@ -38,6 +38,48 @@ const databaseMembers = {
   'toString',
 };
 
+// Names referenced without a prefix in generated clients.
+const generatedTypeNames = {
+  'Column',
+  'Codecs',
+  'TableSchema',
+  'Fields',
+  'Table',
+  'Query',
+  'QueryContext',
+  'TableSet',
+  'Change',
+  'Relation',
+  'IndexSchema',
+  'ForeignKey',
+  'ComputedColumn',
+  'ComputedStorage',
+  'CheckSchema',
+  'String',
+  'int',
+  'double',
+  'bool',
+  'DateTime',
+  'List',
+  'Map',
+  'Set',
+  'Object',
+  'Record',
+  'Future',
+  'BigInt',
+  'Decimal',
+  'LocalDate',
+  'LocalTime',
+  'LocalDateTime',
+  'SqlJson',
+  'Uint8List',
+  'Expr',
+  'Codec',
+  'SqlQueryDefinition',
+  'SqlDialect',
+  'SqlTemplate',
+};
+
 final class ModelField {
   final String name;
   final String column;
@@ -110,32 +152,24 @@ final class ModelEntity {
   final String row;
   final List<ModelField> fields;
 
-  /// Null for structural Record rows; otherwise the primary constructor's
-  /// named parameters. Positional parameters retain declaration order.
-  final Set<String>? constructorNamedFields;
   List<String> primaryKey;
   final List<List<String>> uniqueKeys;
   final List<ModelIndex> indexes = [];
   final List<ModelRelation> edges = [];
   final List<CheckSchema> checks = [];
-  ModelEntity(
-    this.name,
-    this.table,
-    this.row,
-    this.fields, {
-    this.constructorNamedFields,
-  }) : primaryKey = [
-         for (final f in fields)
-           if (f.id) f.name,
-       ],
-       uniqueKeys = [
-         for (final f in fields)
-           if (f.unique) [f.name],
-       ];
+  ModelEntity(this.name, this.table, this.row, this.fields)
+    : primaryKey = [
+        for (final f in fields)
+          if (f.id) f.name,
+      ],
+      uniqueKeys = [
+        for (final f in fields)
+          if (f.unique) [f.name],
+      ];
   String get symbol => name[0].toUpperCase() + name.substring(1);
   String get fieldsType => '${symbol}Fields';
   String get setType => '${symbol}TableSet';
-  String get rowType => 'models.$row';
+  String get rowType => row;
   ModelField field(String name) => fields.firstWhere(
     (f) => f.name == name,
     orElse: () => throw GenerationException('$this has no field $name.'),

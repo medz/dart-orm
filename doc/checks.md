@@ -1,34 +1,27 @@
 # Row CHECK constraints
 
-Declare a row constraint beside its entity. Expressions use physical SQL column
-names; generation reads literal SQL and never executes a sample Dart record.
+Declare row constraints in the model's `checks` list. Expressions use physical
+SQL column names:
 
 ```dart
-typedef Product = ({
-  @Id.generated() int id,
-  double price,
-  double? discount,
-  String label,
-});
-final products = entity<Product>();
-final nonnegativePrice = products.check('price >= 0');
-final validDiscount = products.check('discount >= 0 AND discount <= price');
-final shortLabel = products.check(
-  'length(label) <= 20',
-  postgres: 'char_length(label) <= 20',
+final product = model(
+  'products',
+  (id: identity(), price: real(), discount: real().nullable(), label: text()),
+  checks: [
+    check('price >= 0', name: 'nonnegative_price'),
+    check('discount >= 0 AND discount <= price', name: 'valid_discount'),
+    check('length(label) <= 20',
+      postgres: 'char_length(label) <= 20', name: 'short_label'),
+  ],
 );
 ```
 
-`name` defaults to the declaration's snake_case name, for example
-`nonnegative_price`. Set an explicit stable name to rename the Dart declaration
-without renaming its database constraint. `name: null` deliberately emits an
-unnamed constraint. Names must be nonempty and unique per table. SQLite compares
-ASCII identifier case without distinction; PostgreSQL preserves quoted case.
-Expressions and optional overrides are string literals. An override replaces the
-common expression for that backend; the expression selected by the migration
-target must be nonempty.
+Constraint names are explicit, stable and unique per table. Renaming a Dart model
+or field does not rename them. SQLite compares ASCII identifier case without
+distinction; PostgreSQL preserves quoted case. An engine override replaces the
+common expression for that backend; the selected expression must be nonempty.
 
-These are trusted schema SQL fragments, like `@Default.sql`; do not construct
+These are trusted schema SQL fragments, like `defaultSql`; do not construct
 them from user input. Dart checks the declaration API, while the database checks
 SQL syntax and enforces the predicate. This feature does not type-check SQL column
 names or translate arbitrary Dart boolean closures.
@@ -42,7 +35,7 @@ and [SQLite CHECK semantics](https://www.sqlite.org/lang_createtable.html#check_
 
 ## Snapshots, verification and import
 
-The current generated `TableSchema.checks` retains overrides in `CheckSchema`.
+The generated `TableSchema.checks` retains overrides in `CheckSchema`.
 Saved migration schemas freeze only their chosen engine's expressions. Changing
 an unused override does not change that migration target's physical fingerprint.
 
@@ -57,8 +50,8 @@ SQLite comparison tokenizes SQL, ignores comments, identifier quoting and outer
 parentheses, and retains string literals, casts and precedence. It preserves
 SQLite's non-ASCII identifier case distinctions. This is conservative comparison,
 not a general SQL parser or proof that differently written predicates are equivalent.
-The exact unnamed range/precision expressions emitted for `@IntegerBits` and
-`@DecimalDigits` remain reserved storage metadata; named row checks are separate.
+The exact unnamed range/precision expressions emitted for integer widths and
+decimal precision remain reserved storage metadata; named row checks are separate.
 
 PostgreSQL rewrites SQL when storing a constraint. Verification uses one
 `EXPLAIN (VERBOSE, FORMAT JSON)` projection per checked table to render declared

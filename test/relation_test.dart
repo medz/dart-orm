@@ -68,7 +68,7 @@ void runTests(
     test(
       'automatic unique joins preserve root pagination in one statement',
       () async {
-        final rows = await db.events
+        final rows = await db.event
             .orderBy((e) => [e.id.asc()])
             .skip(2)
             .take(4)
@@ -101,7 +101,7 @@ void runTests(
     test(
       'all-null projections still distinguish a present row from absence',
       () async {
-        final rows = await db.events
+        final rows = await db.event
             .orderBy((e) => [e.id.asc()])
             .select(
               (e) => e.author
@@ -128,7 +128,7 @@ void runTests(
           _LimitedDriver(db.driver, 7),
           onQuery: events.add,
         );
-        final rows = await limited.events
+        final rows = await limited.event
             .orderBy((e) => [e.id.asc()])
             .select(
               (e) => e.author
@@ -157,7 +157,7 @@ void runTests(
         expect(events.skip(1).every((e) => e.parameterCount <= 7), isTrue);
         events.clear();
         expect(
-          await limited.events
+          await limited.event
               .where((e) => e.id.gt(8))
               .select((e) => e.author.one(strategy: .batch))
               .get(),
@@ -174,7 +174,7 @@ void runTests(
           _LimitedDriver(db.driver, 9),
           onQuery: events.add,
         );
-        final rows = await limited.accounts
+        final rows = await limited.account
             .orderBy((a) => [a.tenant.asc(), a.id.asc()])
             .select(
               (a) => a.events
@@ -219,7 +219,7 @@ void runTests(
     test(
       'nested self joins and two edges to the same table use distinct aliases',
       () async {
-        final rows = await db.events
+        final rows = await db.event
             .where((e) => e.id.eq(3))
             .select(
               (e) => (
@@ -244,7 +244,7 @@ void runTests(
     test(
       'batch collection below a joined optional parent loads on the same plan',
       () async {
-        final rows = await db.events
+        final rows = await db.event
             .where((e) => e.id.eq(1).or(e.id.eq(9)))
             .orderBy((e) => [e.id.asc()])
             .select(
@@ -273,15 +273,12 @@ void runTests(
       'join refuses unproven cardinality while automatic batch checks it',
       () async {
         expect(
-          () => db.accounts.select((a) => a.events.one(strategy: .join)),
+          () => db.account.select((a) => a.events.one(strategy: .join)),
           throwsA(code('RELATION.JOIN_KEY')),
         );
         expect(events, isEmpty);
         await expectLater(
-          db.accounts
-              .byId(tenant: 1, id: 1)
-              .select((a) => a.events.one())
-              .get(),
+          db.account.byId(tenant: 1, id: 1).select((a) => a.events.one()).get(),
           throwsA(code('RELATION.CARDINALITY')),
         );
       },
@@ -289,7 +286,7 @@ void runTests(
 
     test('filters and to-one pagination do not drop root rows', () async {
       for (final strategy in [ToOneStrategy.join, ToOneStrategy.batch]) {
-        final query = db.events.where((e) => e.id.eq(3));
+        final query = db.event.where((e) => e.id.eq(3));
         expect(
           await query
               .select(
@@ -325,7 +322,7 @@ void runTests(
     });
 
     test('joined records survive CTE projection and cursor decoding', () async {
-      final cte = db.events
+      final cte = db.event
           .orderBy((e) => [e.id.asc()])
           .select(
             (e) => (
@@ -350,7 +347,7 @@ void runTests(
       'required tests row presence independently of nullable selected values',
       () async {
         for (final strategy in [ToOneStrategy.join, ToOneStrategy.batch]) {
-          final result = await db.events
+          final result = await db.event
               .byId(1)
               .select(
                 (e) => e.author
@@ -360,7 +357,7 @@ void runTests(
               .single();
           expect(result, isNull);
           await expectLater(
-            db.events
+            db.event
                 .byId(9)
                 .select(
                   (e) => e.author
@@ -377,7 +374,7 @@ void runTests(
     test(
       'relation aggregates restore the alias used by a joined selection',
       () async {
-        final row = await db.events.byId(3).select((e) {
+        final row = await db.event.byId(3).select((e) {
           final author = e.author;
           return (
             author.select((a) => a.id).required(),
@@ -391,7 +388,7 @@ void runTests(
     );
 
     test('reusing an identical edge deduplicates its join', () async {
-      final query = db.events.where((e) => e.id.eq(3)).select((e) {
+      final query = db.event.where((e) => e.id.eq(3)).select((e) {
         final author = e.author;
         return (
           author.select((a) => a.id).required(),
@@ -403,7 +400,7 @@ void runTests(
     });
 
     test('different filters need fresh relation occurrences', () async {
-      final query = db.events.select((e) {
+      final query = db.event.select((e) {
         final author = e.author;
         return (
           author.where((a) => a.id.eq(1)).one(),
@@ -429,7 +426,7 @@ void runTests(
         ),
       );
       events.clear();
-      final rows = await db.accounts
+      final rows = await db.account
           .where((a) => a.tenant.eq(3))
           .orderBy((a) => [a.id.asc()])
           .select((a) => a.events.select((e) => e.title).many())

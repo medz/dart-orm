@@ -42,7 +42,7 @@ void main() {
 
       test('column coercion rounds signed ties and handles negative and excess scales', () async {
         await create();
-        final a = await db.wallets.create(
+        final a = await db.wallet.create(
           amount: d('123.455'),
           hundreds: d('12350'),
           fraction: d('.001235'),
@@ -51,7 +51,7 @@ void main() {
           (a.amount, a.hundreds, a.fraction, a.defaulted, a.optional),
           (d('123.46'), d('12400'), d('.00124'), d('1.24'), null),
         );
-        final b = await db.wallets.create(
+        final b = await db.wallet.create(
           amount: d('-123.455'),
           hundreds: d('-12350'),
           fraction: d('-.001235'),
@@ -61,7 +61,7 @@ void main() {
           (b.amount, b.hundreds, b.fraction, b.optional),
           (d('-123.46'), d('-12400'), d('-.00124'), d('-1.24')),
         );
-        final zero = await db.wallets.create(
+        final zero = await db.wallet.create(
           amount: Decimal.zero,
           hundreds: Decimal.zero,
           fraction: Decimal.zero,
@@ -73,7 +73,7 @@ void main() {
           ('0', '0', '.009995'),
         ]) {
           await expectLater(
-            db.wallets.create(
+            db.wallet.create(
               amount: d(values.$1),
               hundreds: d(values.$2),
               fraction: d(values.$3),
@@ -81,38 +81,38 @@ void main() {
             throwsA(isA<SqlFailure>()),
           );
         }
-        expect(await db.wallets.count(), 3);
+        expect(await db.wallet.count(), 3);
       });
 
       test('writes constrain columns while arithmetic and wider aggregates retain their result precision', () async {
         await create();
-        final a = await db.wallets.create(
+        final a = await db.wallet.create(
           amount: d('999.994'),
           hundreds: d('99949'),
           fraction: d('.009994'),
         );
-        await db.wallets.create(
+        await db.wallet.create(
           amount: d('999.99'),
           hundreds: Decimal.zero,
           fraction: Decimal.zero,
         );
         expect(
-          await db.wallets.select((w) => w.amount.sum()).single(),
+          await db.wallet.select((w) => w.amount.sum()).single(),
           d('1999.98'),
         );
         expect(
-          await db.wallets
+          await db.wallet
               .select((w) => w.amount.sum().constrained(6, 1))
               .single(),
           d('2000'),
         );
         expect(
-          await db.wallets
+          await db.wallet
               .where((w) => w.amount.constrained(6, 0).eq(d('1000')))
               .count(),
           2,
         );
-        final rounded = db.wallets
+        final rounded = db.wallet
             .select((w) => w.amount.constrained(5, 1))
             .asCte('rounded');
         expect(
@@ -122,36 +122,36 @@ void main() {
           [d('1000'), d('1000')],
         );
         expect(
-          await db.wallets
+          await db.wallet
               .byId(a.id)
               .select((w) => w.amount.times(d('1000')))
               .single(),
           d('999990'),
         );
         await expectLater(
-          db.wallets
+          db.wallet
               .byId(a.id)
               .update((w) => [w.amount.setExpression(w.amount.plus(d('.005')))])
               .execute(),
           throwsA(isA<SqlFailure>()),
         );
-        expect((await db.wallets.byId(a.id).single()).amount, d('999.99'));
-        await db.wallets
+        expect((await db.wallet.byId(a.id).single()).amount, d('999.99'));
+        await db.wallet
             .byId(a.id)
             .patch(
               amount: Change.set(d('1.235')),
               optional: Change.set(d('2.225')),
             );
-        expect((await db.wallets.byId(a.id).single()).amount, d('1.24'));
-        await db.wallets.byId(a.id).patch(optional: const Change.set(null));
-        expect((await db.wallets.byId(a.id).single()).optional, null);
+        expect((await db.wallet.byId(a.id).single()).amount, d('1.24'));
+        await db.wallet.byId(a.id).patch(optional: const Change.set(null));
+        expect((await db.wallet.byId(a.id).single()).optional, null);
       });
 
       test(
         'batch inserts and upserts use column coercion and roll back as a unit',
         () async {
           await create();
-          final ids = await db.prices
+          final ids = await db.price
               .insertMany([
                 '1.234',
                 '2.345',
@@ -159,7 +159,7 @@ void main() {
               .returning((p) => p.id)
               .get();
           expect(ids, [d('1.23'), d('2.35')]);
-          await db.prices
+          await db.price
               .insert((p) => [p.id.set(d('1.234')), p.label.set('updated')])
               .onConflictUpdate(
                 target: (p) => [p.id],
@@ -168,19 +168,19 @@ void main() {
                 ],
               )
               .execute();
-          expect((await db.prices.byId(d('1.23')).single()).label, 'updated');
+          expect((await db.price.byId(d('1.23')).single()).label, 'updated');
           await expectLater(
-            db.prices.insertMany([
+            db.price.insertMany([
               '3.456',
               '99.995',
             ], (p, v) => [p.id.set(d(v)), p.label.set(v)]).execute(),
             throwsA(isA<SqlFailure>()),
           );
-          expect(await db.prices.count(), 2);
-          final child = await db.receipts.create(priceId: d('1.234'));
+          expect(await db.price.count(), 2);
+          final child = await db.receipt.create(priceId: d('1.234'));
           expect(child.priceId, d('1.23'));
           expect(
-            await db.receipts
+            await db.receipt
                 .select((r) => r.price.select((p) => p.label).required())
                 .single(),
             'updated',
@@ -207,7 +207,10 @@ void main() {
         ]);
         final draft = await importSchema(db.sql);
         expect(draft.issues, isEmpty);
-        expect(draft.dart, contains('@DecimalDigits(3, -2)'));
+        expect(
+          draft.dart,
+          allOf(contains('precision: 3'), contains('scale: -2')),
+        );
         final dir = await Directory('.dart_tool/orm-precision-import-$backend')
             .create(recursive: true);
         try {
@@ -385,7 +388,7 @@ void main() {
         () async {
           await create();
           for (final n in ['1.234', '2.345', '3.456']) {
-            await db.prices.create(id: d(n), label: 'pending');
+            await db.price.create(id: d(n), label: 'pending');
           }
           final first = Migration.create(
             '0001_precision',
@@ -396,7 +399,7 @@ void main() {
             '0002_backfill',
             [
               Backfill(
-                pricesSchema,
+                priceSchema,
                 set: {'label': "'done'"},
                 doneWhen: "SELECT NOT EXISTS(SELECT 1 FROM prices WHERE label <> 'done')",
                 batchSize: 1,
@@ -407,7 +410,7 @@ void main() {
           );
           await Migrator(db.sql).apply([first, next], maxBackfillBatches: 1);
           await Migrator(db.sql).apply([first, next]);
-          expect(await db.prices.where((p) => p.label.eq('done')).count(), 3);
+          expect(await db.price.where((p) => p.label.eq('done')).count(), 3);
         },
       );
     });
@@ -513,21 +516,21 @@ void main() {
     }
   });
 
-  test('generation validates DecimalDigits and retains custom decimal codec types', () async {
+  test('generation validates precision and scale and retains custom decimal codec types', () async {
     final dir = await Directory('.dart_tool/orm-precision-validation')
         .create(recursive: true);
     try {
       final file = File('${dir.path}/schema.dart');
       for (final declaration in [
-        '@DecimalDigits(0) Decimal n',
-        '@DecimalDigits(1001) Decimal n',
-        '@DecimalDigits(2, -1001) Decimal n',
-        '@DecimalDigits(2, 1001) Decimal n',
-        '@DecimalDigits(2) int n',
-        '@DecimalDigits(2) @DecimalDigits(3) Decimal n',
+        'n: decimal(precision: 0)',
+        'n: decimal(precision: 1001)',
+        'n: decimal(precision: 2, scale: -1001)',
+        'n: decimal(precision: 2, scale: 1001)',
+        'n: custom(Codecs.integer, precision: 2)',
+        'n: decimal(precision: 2, precision: 3)',
       ]) {
         await file.writeAsString(
-          "import 'package:orm/schema.dart'; typedef Row = ({$declaration}); final rows = entity<Row>();",
+          "import 'package:orm/schema.dart'; final row = model('rows', ($declaration,));",
         );
         await expectLater(
           generateSchema(file.path),
@@ -541,8 +544,7 @@ extension type Money(Decimal value) {
   static Money decode(Object? value) => Money(Codecs.decimal.decode(value));
   static String encode(Money value) => value.value.toString();
 }
-typedef Row = ({@DecimalDigits(8, 2) @UseCodec(Money.codec) Money n});
-final rows = entity<Row>();
+final row = model('rows', (n: custom(Money.codec, precision: 8, scale: 2),));
 """);
       final generated = await generateSchema(file.path);
       expect(generated.dart, contains('Column<models.Money>'));

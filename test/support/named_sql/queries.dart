@@ -1,17 +1,20 @@
 import 'package:orm/schema.dart';
 
-typedef AuthorStats = ({String author, int postCount, int points});
-final authorStats = sqlQuery<AuthorStats, ({int minimum, String? author})>(
+final authorStats = sqlQuery(
+  result: (author: text(), postCount: integer(), points: integer()),
+  parameters: (minimum: integer(), author: text().nullable()),
   sqlite: 'stats.sqlite.sql',
   postgres: 'stats.postgres.sql',
 );
-
-typedef Echo = ({String value, DateTime at, Decimal amount, LocalDate day});
-final echo = sqlQuery<Echo, Echo>(sqlite: 'echo.sql', postgres: 'echo.sql');
-
-typedef Constant = ({int n});
-final constant = sqlQuery<Constant, ()>(
+final echo = sqlQuery(
+  result: (value: text(), at: dateTime(), amount: decimal(), day: date()),
+  parameters: (value: text(), at: dateTime(), amount: decimal(), day: date()),
+  sqlite: 'echo.sql',
+  postgres: 'echo.sql',
+);
+final constant = sqlQuery(
+  result: (n: integer()),
   sqlite: 'constant.sql',
   postgres: 'constant.sql',
 );
-final postgresOnly = sqlQuery<Constant, ()>(postgres: 'constant.sql');
+final postgresOnly = sqlQuery(result: (n: integer()), postgres: 'constant.sql');

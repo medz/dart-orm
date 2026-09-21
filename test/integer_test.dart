@@ -40,12 +40,12 @@ void main() {
 
       test('storage bounds, nulls and wider sums keep the normal integer value codec', () async {
         await create();
-        final a = await db.samples.create(
+        final a = await db.sample.create(
           small: 32767,
           medium: 2147483647,
           large: 9007199254740993,
         );
-        final b = await db.samples.create(
+        final b = await db.sample.create(
           small: 32767,
           medium: 2147483647,
           large: -9007199254740993,
@@ -53,11 +53,11 @@ void main() {
         );
         expect(a.optional, null);
         expect(b.optional, -32768);
-        final sums = await db.samples
+        final sums = await db.sample
             .select((s) => (s.small.sum(), s.medium.sum(), s.large.sum()).row)
             .single();
         expect(sums, (65534, 4294967294, 0));
-        expect((await db.samples.byId(a.id).single()).large, 9007199254740993);
+        expect((await db.sample.byId(a.id).single()).large, 9007199254740993);
         for (final values in [
           (32768, 0),
           (-32769, 0),
@@ -65,11 +65,11 @@ void main() {
           (0, -2147483649),
         ]) {
           await expectLater(
-            db.samples.create(small: values.$1, medium: values.$2, large: 0),
+            db.sample.create(small: values.$1, medium: values.$2, large: 0),
             throwsA(isA<SqlFailure>()),
           );
         }
-        expect(await db.samples.count(), 2);
+        expect(await db.sample.count(), 2);
         await expectLater(
           db.execute(SqlCommand('UPDATE samples SET small = 32768')),
           throwsA(isA<SqlFailure>()),
@@ -91,26 +91,26 @@ void main() {
 
       test('relations, union and cursors share int expressions across physical widths', () async {
         await create();
-        final a = await db.samples.create(small: 10, medium: 20, large: 30);
-        await db.owners.create(id: 1, sampleId: a.id);
+        final a = await db.sample.create(small: 10, medium: 20, large: 30);
+        await db.owner.create(id: 1, sampleId: a.id);
         expect(
-          await db.owners
+          await db.owner
               .select((o) => o.sample.select((s) => s.small).required())
               .single(),
           10,
         );
-        final set = db.samples
+        final set = db.sample
             .select((s) => s.small)
-            .unionAll(db.samples.select((s) => s.medium));
+            .unionAll(db.sample.select((s) => s.medium));
         expect(await set.get(), unorderedEquals([10, 20]));
-        final values = await db.samples.orderBy((s) => [s.id.asc()]).get();
+        final values = await db.sample.orderBy((s) => [s.id.asc()]).get();
         expect(values.single.id, a.id);
         final stream = await set.stream().toList();
         expect(stream, unorderedEquals([10, 20]));
-        final b = await db.samples.create(small: 11, medium: 21, large: 31);
-        final token = db.samples.cursorToken((s) => [s.id.cursor(a.id)]);
+        final b = await db.sample.create(small: 11, medium: 21, large: 31);
+        final token = db.sample.cursorToken((s) => [s.id.cursor(a.id)]);
         expect(
-          (await db.samples
+          (await db.sample
                   .seekToken(token, orderBy: (s) => [s.id.asc()])
                   .single())
               .id,
@@ -171,8 +171,8 @@ void main() {
         expect(restored.checksum, snapshot.checksum);
         final imported = await importSchema(db.sql);
         expect(imported.issues, isEmpty);
-        expect(imported.dart, contains('@IntegerBits(16)'));
-        expect(imported.dart, contains('@IntegerBits(32)'));
+        expect(imported.dart, contains('bits: 16'));
+        expect(imported.dart, contains('bits: 32'));
         final directory = await Directory(
           '.dart_tool/orm-integer-import-$backend',
         ).create(recursive: true);
@@ -436,18 +436,18 @@ void main() {
     });
   }
 
-  test('analyzer validates width annotations and integer-backed domain codecs', () async {
+  test('analyzer validates width declarations and integer-backed domain codecs', () async {
     final directory = await Directory('.dart_tool/orm-integer-source')
         .create(recursive: true);
     try {
       final source = File('${directory.path}/schema.dart');
       for (final declaration in [
-        '@IntegerBits(8) int id',
-        '@IntegerBits(32) String id',
-        '@IntegerBits(16) @IntegerBits(32) int id',
+        'id: integer(bits: 8)',
+        'id: custom(Codecs.text, bits: 32)',
+        'id: integer(bits: 16, bits: 32)',
       ]) {
         await source.writeAsString(
-          "import 'package:orm/schema.dart';\ntypedef Row = ({$declaration});\nfinal rows = entity<Row>();",
+          "import 'package:orm/schema.dart';\nfinal row = model('rows', ($declaration,));",
         );
         await expectLater(
           generateSchema(source.path),
@@ -459,8 +459,7 @@ extension type Identifier(int value) {}
 Identifier decode(Object? value) => Identifier(value as int);
 int encode(Identifier value) => value.value;
 const idCodec = Codec<Identifier>.integer(decode, encode);
-typedef Row = ({@IntegerBits(16) @UseCodec(idCodec) Identifier id});
-final rows = entity<Row>();
+final row = model('rows', (id: custom(idCodec, bits: 16),));
 ''');
       final generated = await generateSchema(source.path);
       final column = generated.snapshot.tables.single.columns.single;

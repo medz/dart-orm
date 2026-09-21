@@ -123,7 +123,10 @@ void main() {
         // Otherwise importing src/query directly could evade the SQL-layer ban.
         String layer(String name) {
           if (name == 'src/schema/model.dart') return 'schema_model.dart';
-          if (name == 'src/schema/declaration.dart') return 'schema.dart';
+          if (name == 'src/schema/declaration.dart' ||
+              name == 'src/schema/queries.dart') {
+            return 'schema.dart';
+          }
           for (final (prefix, entry) in [
             ('src/values/', 'values.dart'),
             ('src/driver/', 'driver.dart'),

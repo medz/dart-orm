@@ -73,9 +73,9 @@ targets:
 
   static String domain({String label = 'waiting', int defaultScore = 0}) =>
       '''
-import 'package:orm/schema.dart';
 const defaultScore = '$defaultScore';
-enum Status { @EnumValue('$label') pending, ready }
+const pendingLabel = '$label';
+enum Status { pending, ready }
 ''';
 
   static String schema(
@@ -87,8 +87,7 @@ enum Status { @EnumValue('$label') pending, ready }
 import 'package:orm/schema.dart';
 import 'models.dart';
 ${[for (var i = 0; i < models; i++) '''
-typedef Row$i = ({@Id.generated() int id, String title, @Default.sql(defaultScore) int score, Status status${extra && i == 0 ? ', bool enabled' : ''}});
-final rows$i = entity<Row$i>(table: 'rows_$i');
+final row$i = model('rows_$i', (id: identity(), title: text(), score: integer(defaultSql: defaultScore), status: enumeration(Status.values, labels: {Status.pending: pendingLabel, Status.ready: 'ready'})${extra && i == 0 ? ', enabled: boolean()' : ''}));
 '''].join()}
 ${invalid ? 'int invalid = "not an integer";' : ''}
 ''';

@@ -1,17 +1,17 @@
 import 'package:orm/schema.dart';
 
-typedef Sample = ({
-  @Id.generated() @IntegerBits(32) int id,
-  @IntegerBits(16) int small,
-  @IntegerBits(32) int medium,
-  int large,
-  @IntegerBits(16) int? optional,
-});
+final Model sample = model("samples", (
+  id: integer(bits: 32).identity(),
+  small: integer(bits: 16),
+  medium: integer(bits: 32),
+  large: integer(),
+  optional: integer(bits: 16).nullable(),
+), relations: (r) => (owners: referencedBy(() => owner, on: (sampleId: r.id))));
 
-typedef Owner = ({@Id() int id, @IntegerBits(32) int sampleId});
-
-final samples = entity<Sample>();
-final owners = entity<Owner>();
-final sample = owners
-    .key((o) => o.sampleId)
-    .references(samples.key((s) => s.id), inverse: 'owners');
+final Model owner = model(
+  "owners",
+  (id: integer(), sampleId: integer(bits: 32)),
+  primaryKey: (r) => r.id,
+  relations: (r) =>
+      (sample: references((id: r.sampleId), () => sample, onDelete: .restrict)),
+);

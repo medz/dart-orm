@@ -1,160 +1,248 @@
-# Models and typed queries
+# Define your schema
 
-Declare an immutable Dart class once. The generated client returns instances of
-that class, including from inserts and relationships. It does not generate a
-second row type or convert the class into a Record.
+Declare each model and table together with `model(...)`. Name columns in a
+Record, then add keys, indexes and relationships in the same definition.
+Generation produces immutable row classes and typed queries; no annotations or
+separate hand-written row classes are needed.
 
 ```dart
 import 'package:orm/schema.dart';
 
-final class User({
-  @Id.generated() required final int id,
-  @Unique() required final String email,
-  required final String? nickname,
-  @Default.sql('false') required final bool active,
-});
-
-final class Post(
-  @Id.generated() final int id,
-  final int authorId,
-  final String title,
+final Model user = model(
+  'users',
+  (
+    id: identity(),
+    email: text(unique: true),
+    nickname: text().nullable(),
+    active: boolean(defaultValue: true),
+  ),
+  relations: (u) => (posts: referencedBy(() => post),),
 );
 
-final users = entity<User>(table: 'users');
-final posts = entity<Post>(table: 'posts');
-final author = posts
-    .key((p) => p.authorId)
-    .references(users.key((u) => u.id), inverse: 'posts', onDelete: .cascade);
+final post = model(
+  'posts',
+  (
+    id: identity(),
+    authorId: integer(),
+    title: text(),
+    createdAt: dateTime(clientDefault: DateTime.now),
+  ),
+  relations: (p) => (
+    author: references(p.authorId, () => user, onDelete: .cascade),
+  ),
+  indexes: (p) => [
+    index((p.authorId, p.createdAt, p.id), name: 'posts_author_timeline'),
+  ],
+);
 ```
 
-Primary constructors require Dart 3.13. They declare fields and constructor
-parameters together; they are ordinary Dart classes with ordinary nominal type
-identity. See the [Dart language documentation](https://dart.dev/language/primary-constructors).
+Run `dart run orm generate lib/schema.dart`, or use
+[build_runner watch](https://github.com/medz/dart-orm/blob/main/doc/generation.md). This produces `schema.orm.dart` with the
+immutable `User`/`Post` row classes and typed query API, plus an independent
+`schema.snapshot.dart` for migrations. The [company example](https://github.com/medz/dart-orm/blob/main/example/company/schema.dart)
+includes self references and a many-to-many association with business fields;
+`dart run example/company/main.dart` runs it against SQLite in memory.
 
-`entity<User>()` gives the table its own identity and physical name. Two tables
-can use the same row class, and a self-join still has separate table occurrences.
-Row identity does not determine SQL scope.
+Use `final name = model(...)` by default. `Model` is a non-generic declaration
+type with no public constructor. For self references, write
+`final Model name = model(...)`. For mutually related models, annotate enough
+declarations to break every type inference cycle; the example annotates `user`.
+These type annotations preserve field types in all selector callbacks.
 
-Generate with `dart run orm generate lib/schema.dart`, then import the generated
-client and the chosen driver. [Generation](https://github.com/medz/dart-orm/blob/main/doc/generation.md) describes standalone
-and build_runner workflows. New projects can start with `dart run orm init
---database sqlite`; after initialization, `dart run orm generate` reads the typed
-project configuration.
+The table name is explicit. The Dart declaration `user` supplies `User` and
+`db.user`; the generator does not guess English singular/plural forms. Two models
+with identical Record shapes still have separate table and nominal row identities.
+
+The second argument is a named Record of `ColumnDefinition<T>` values. Dart
+preserves each field's type and provides completion in local relation/index/key callbacks.
+Generation also checks that every entry is a supported column declaration.
+
+## Rows, inserts and updates
 
 ```dart
-final User user = await db.users.create(email: 'seven@example.com');
-await db.users.byId(user.id).patch(nickname: .set('Seven'));
-await db.users.byId(user.id).patch(nickname: .set(null));
+final User created = await db.user.create(email: 'seven@example.com');
+await db.user.byId(created.id).patch(nickname: .set('Seven'));
+await db.user.byId(created.id).patch(nickname: .set(null));
 
-final List<User> active = await db.users
-    .where((u) => u.active.eq(true))
-    .get();
-
-final List<Post> posts = await db.users
-    .byId(user.id)
-    .select((u) => u.posts.many())
-    .single();
+final List<String> titles = await db.user.byId(created.id)
+    .select((u) => u.posts.select((p) => p.title).many()).single();
 ```
 
-The same field declarations determine constructor values, typed query fields,
-create parameters, patch parameters, codecs and the physical schema. Application
-code does not repeat column types in a table class or a generated row interface.
-The generated client imports `sql.dart` and binds to `QueryContext`. It can be used
-with an offline `SqlBuilder` as well as a connected ORM `Database`; the model
-declaration itself only depends on the schema/value layer.
+A generated row contains every stored field. Its constructor requires all values,
+including nullable columns and identities. Inserts have their own contract:
 
-## Full rows, writes and projections
+- Non-null columns without defaults are required.
+- Nullable columns without defaults can be omitted and are inserted as SQL NULL.
+- Identity and defaulted columns use `Change<T>`: omission keeps the default;
+  `.set(value)` explicitly supplies a value.
+- Computed columns are absent from generated inserts and patches.
 
-The model constructor represents a complete database row. Every constructor
-parameter is required, including nullable columns and generated IDs. `User.id`
-stays `int`: creating a user does not require weakening the stored row to `int?`.
+All patch parameters use `Change<T>`. Omission leaves a column unchanged;
+`.set(null)` clears a nullable column. Projections remain independent of full rows.
+Relations load only through explicit selections; rows have no implicit lazy queries,
+equality generation, serialization, `copyWith` or global identity map.
 
-The generated `create` method has its own insert contract:
+## Column types and defaults
 
-- Ordinary non-null columns are required.
-- Nullable columns without defaults can be omitted and are inserted as NULL.
-- Generated values, SQL defaults and client defaults use `Change<T>` with
-  `.keep()` as the default. `.set(value)` explicitly supplies a value.
-- Computed columns are absent from writes.
+| Declaration | Dart value |
+| --- | --- |
+| `identity()`, `integer()` | `int` |
+| `text()`, `boolean()`, `real()` | `String`, `bool`, `double` |
+| `bigInteger()`, `decimal()` | `BigInt`, `Decimal` |
+| `dateTime()` | `DateTime` UTC instant |
+| `date()`, `time()`, `localDateTime()` | `LocalDate`, `LocalTime`, `LocalDateTime` |
+| `bytes()`, `json()` | `Uint8List`, `SqlJson` |
+| `enumeration(Status.values)` | `Status` |
+| `custom(emailCodec)` | The public const codec's domain type |
 
-Patch parameters use `Change<T>` to distinguish omission from explicit NULL.
-`patch()` keeps an omitted field; `patch(nickname: .set(null))` clears it.
-Generated identities and computed columns are absent from patch parameters.
+Append `.nullable()` for SQL NULL. `json()` retains the distinction between a JSON
+null document and SQL NULL. An integer-storage domain ID can use
+`custom(PersonId.codec).identity()`; it must remain a single non-null primary key.
 
-Use `@Default.sql` for database defaults and `@ClientDefault(factory)` for Dart
-insert defaults. Constructor defaults are rejected: they would otherwise suggest
-an insert behavior that the database does not implement. Neither constructors nor
-client factories run during generation. Client factories run when building the
-insert; the model constructor runs when decoding the resulting row.
+`name: 'existing_column'` fixes a physical column name; otherwise the generator
+uses snake_case. `integer(bits: 32)`, `decimal(precision: 10, scale: 2)` and temporal
+`precision: 3` declare storage limits; each migration engine checks its capabilities.
 
-Selected shapes remain independent of complete models. Project a scalar, a typed
-Record, or a separate application DTO:
+`defaultValue` on integer, text, boolean, real and enum columns declares a typed
+SQL constant. Text is escaped as a literal. Enum constants are encoded using the
+same labels as their column codec. For stable labels independent of Dart renames:
 
 ```dart
-final cards = await db.users.select((u) => (
-  u.id,
-  u.email,
-  u.posts.take(3).select((p) => p.title).many(),
-).map((id, email, posts) => (id: id, email: email, posts: posts))).get();
-// List<({int id, String email, List<String> posts})>
+status: enumeration(
+  Status.values,
+  labels: {Status.pending: 'waiting', Status.done: 'complete'},
+  defaultValue: Status.pending,
+),
 ```
 
-Selecting two columns does not produce a partly populated `User`. Relationships
-are explicit query selections; they do not add hidden lazy-loading properties or
-queries to the row class. A foreign key remains a separate typed declaration,
-including for composite keys and multiple edges to the same table.
+Every enum constant needs a distinct label. Use the full enum constant name in the
+generic default argument; dot shorthand has no suitable context there.
+Enum labels are application codecs over text storage. Changing those labels needs
+an explicit data migration; schema diffing does not infer a label rename.
 
-## Supported declarations and errors
+`defaultSql: 'CURRENT_TIMESTAMP'` is trusted database SQL. `clientDefault:
+DateTime.now` is a public function or constructor tear-off, invoked only when an
+insert omits the value. It may coexist with a database default: omission uses
+the client factory, while `.defaultValue()` requests the database default.
+Choose either `defaultValue` or `defaultSql` for the database default. Generation
+never executes a factory or codec. Use `.computed('price * quantity')` for a read-only
+computed column; it accepts explicit dialect overrides and `storage:`. Add trusted
+checks inside the model with `checks: [check('price >= 0', name: 'positive_price')]`.
 
-Generated entity classes must be public, final, non-generic classes declared in
-the selected schema file. Their unnamed primary constructor accepts public,
-explicitly typed `final` declaring parameters. Required positional parameters,
-required named parameters, and a mixture of both are supported. A constant
-primary constructor is also valid. Classes cannot have inheritance, mixins,
-implemented interfaces or members in their body. Add application behavior with
-Dart extensions; arbitrary constructor logic is outside the database decoder's
-contract.
+## Keys and relationships
 
-Annotations use the same validation for classes and Records. Built-in values,
-enums and explicit `@UseCodec` domain values retain their resolved Dart types.
-The generator checks codec compatibility without executing codecs. It rejects
-ambiguous field names, duplicate physical columns, invalid generated identities,
-nullable primary keys, computed-column/default conflicts, invalid selectors and
-foreign keys without a matching target key.
-
-Dart analysis rejects wrong create/patch value types, unknown query fields and
-assignment of an unrelated model with the same fields. Generation rejects
-unsupported declaration forms and database-schema conflicts. Database-specific
-capabilities are checked when selecting the migration engine.
-
-These are ordinary classes: the ORM does not generate equality, `copyWith`, JSON
-serialization or a global identity map. Two separately read rows are separate
-instances. Serialization remains application code, while column codecs control
-database encoding. In particular, SQL NULL, an omitted insert value and a missing
-JSON property are different concepts.
-
-## Records and schema history
-
-Named Record typedefs remain an explicit structural data form:
+`identity()` declares a database-generated primary key. Other primary keys use
+`primaryKey: (m) => m.code` or an ordered composite tuple:
 
 ```dart
-typedef Coordinate = ({@Id() int id, double x, double y});
-final coordinates = entity<Coordinate>();
+primaryKey: (m) => (m.projectId, m.employeeId),
+uniqueKeys: (m) => [(m.departmentId, m.email)],
 ```
 
-They share the same schema validation and query runtime. A Record typedef does
-not create nominal identity; another typedef with the same shape is assignable.
-Classes are the default for models and catalog-import drafts. Records are useful
-for projections and fixed SQL result shapes.
+Relationships are named members of the Record returned by `relations`. A forward
+reference declares a database foreign key and a query member on the current model.
+A reverse member is declared on the model that exposes it:
 
-Changing a row declaration from a Record to a class does not change its physical
-schema. Snapshots and saved migrations contain standalone physical metadata,
-without imports of current model classes, constructors, codecs or client-default
-functions. A class field rename can retain the database column with
-`@ColumnName('old_name')`; absent that explicit name, normal schema diff rules
-apply and never infer a destructive rename.
+```dart
+final Model employee = model(
+  'employees',
+  (id: identity(), name: text(), managerId: integer().nullable()),
+  relations: (e) => (
+    manager: references(e.managerId, () => employee, onDelete: .setNull),
+    reports: referencedBy(() => employee),
+  ),
+);
+```
 
-Class fields support Dart's normal symbol navigation and rename tools.
-Regenerate after edits and repair affected generated-API references; a model
-rename does not promise that an IDE will edit the regenerated client or all its
-consumers automatically.
+`manager` and `reports` are generated query members, not string options or stored
+row fields. `references` defaults to the target's primary key and deletion action
+`restrict`; `cascade` and `setNull` are explicit. Reverse navigation reuses a
+forward reference and creates neither another foreign key nor an implicit index.
+Renaming either relation changes the query API without changing the physical
+schema. A unique foreign key expresses a one-to-one constraint. Many-to-many
+associations use an explicit model, which can also hold business fields.
+
+`referencedBy(() => model)` requires exactly one forward reference from that model
+to the current one. If several exist, choose the foreign-key mapping explicitly:
+
+```dart
+// On user, when post has both authorId and reviewerId references to user:
+relations: (u) => (
+  authoredPosts: referencedBy(() => post, on: (authorId: u.id)),
+  reviewedPosts: referencedBy(() => post, on: (reviewerId: u.id)),
+),
+```
+
+No match or ambiguity is a generation error. The generator never guesses from a
+relation name or chooses the first candidate. Reverse declarations work across
+files, regardless of declaration order. Their mapping references fields, so a
+forward relation's query name can change independently.
+
+For composite primary keys, a positional Record retains target primary-key order:
+
+```dart
+relations: (m) => (
+  team: references((m.tenantId, m.teamCode), () => team),
+),
+```
+
+A named Record instead maps **target Dart field names to local columns**. This
+selects an alternate unique key or spells out a composite mapping without strings:
+
+```dart
+relations: (m) => (
+  team: references((tenantId: m.tenantId, code: m.teamCode), () => team),
+  owner: references((email: m.ownerEmail), () => user),
+),
+```
+
+Named mappings are normalized to the declared target key order; reordering their
+entries does not change a foreign key. Target fields must form a primary or unique
+key. `constraint: false` on `references` allows read-only navigation without a
+database foreign key, including to non-unique fields; its reverse is read-only too.
+
+**Typing boundary:** `m.teamCode` and `u.id` have native Dart types and completion.
+Target mapping names (`code`, `authorId`) are checked against the referenced model
+by generation, not Dart member completion. No `dynamic` selector or generated input
+library is used. Invalid names, incompatible value types/codecs, repeated columns,
+invalid target uniqueness and unmatched inverse mappings fail before emission.
+The `relations` callback must return a literal named Record containing direct
+`references`/`referencedBy` calls; it is read statically and never executed.
+
+## Split schemas and static boundaries
+
+Use ordinary independent Dart libraries. A schema root can export selected models:
+
+```dart
+export 'employees.dart' show employee;
+export 'projects.dart' show project, projectMember;
+```
+
+Generation includes the root's local models and exported models, then follows
+model references transitively. Unrelated imports and other unexported models are
+not additional roots. Imported enum/domain types retain their defining library;
+unambiguous public types are reexported by the generated client. For colliding
+domain names, import the original libraries with prefixes.
+
+Declarations are static source, not executable configuration scripts. Model and
+column helper calls must be direct. Key callbacks are arrow expressions selecting
+local fields; relation members are a named Record and other constraint collections
+are literal lists, without control flow or
+spreads. String/bool/numeric configuration accepts literals and const references.
+Factories, mutation-based registration and dynamic schema assembly are not run.
+Unsupported discovered declarations fail with a source diagnostic rather than
+silently disappearing. Schema-specific checks run during generation. Keep
+build_runner watch active to catch those errors while editing.
+
+Keep physical names fixed during Dart refactoring. Regenerate and analyze consumers
+after changing declarations. Generated model/field renames do not promise automatic
+IDE edits across every generated API. Migration snapshots contain physical metadata,
+without application imports, and destructive renames are never inferred.
+
+## Updating an existing schema
+
+Use `model(...)` for every table and move column settings into the column helpers.
+Generate the new clients and update application imports to use their row classes.
+Keep physical table and column names fixed, then compare the generated snapshots
+before creating a migration. Saved migration definitions remain independent of
+current schema declarations and must not be regenerated.

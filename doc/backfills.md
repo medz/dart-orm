@@ -129,10 +129,3 @@ parameters. Filter and verification SQL may still scan substantial data: inspect
 their query plans and add appropriate indexes as reviewed migrations. This feature
 does not promise a particular throughput, zero downtime, or automatic repair of an
 incorrect transformation. Statement timeouts and lock waits retain driver behavior.
-
-Reproduce the standalone SQLite native acceptance check with:
-
-```sh
-dart build cli --target test/support/native_backfill.dart --output .dart_tool/backfill-aot
-.dart_tool/backfill-aot/bundle/bin/native_backfill
-```

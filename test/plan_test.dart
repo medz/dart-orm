@@ -6,7 +6,6 @@ import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
-import '../example/teams/schema.dart';
 import '../example/teams/schema.orm.dart';
 import 'support/relations/schema.orm.dart' as composite;
 
@@ -17,7 +16,7 @@ void main() {
       () {
         final db = Database(_NoConnection(dialect));
         final query = db
-            .table(composite.accountsTable)
+            .table(composite.accountTable)
             .select(
               (a) => a.events
                   .orderBy((e) => [e.id.asc()])
@@ -33,14 +32,14 @@ void main() {
         expect(load.maxKeysPerBatch, 1);
         expect(load.query!.sql, contains('PARTITION BY'));
         expect(
-          () => db.users.select((u) => u.memberships.take(1).many()).inspect(),
+          () => db.user.select((u) => u.memberships.take(1).many()).inspect(),
           throwsA(
             isA<OrmException>().having((e) => e.code, 'code', 'RELATION.ORDER'),
           ),
         );
         expect(
           () => db
-              .table(composite.accountsTable)
+              .table(composite.accountTable)
               .select(
                 (a) => a.events
                     .where((e) => e.id.gt(0).and(e.score.gt(0)))
@@ -64,7 +63,7 @@ void main() {
       () {
         final driver = _NoConnection(dialect), db = Database(driver);
         var decoded = false;
-        final query = db.users
+        final query = db.user
             .where((u) => u.name.eq('bound-secret'))
             .select(
               (u) =>
@@ -136,7 +135,7 @@ void main() {
       'inspect ${dialect.name} distinguishes same-statement joins and skipped batches',
       () {
         final db = Database(_NoConnection(dialect));
-        final plan = db.memberships
+        final plan = db.membership
             .select(
               (m) => (
                 m.team.select((t) => t.name).one(),
@@ -147,7 +146,7 @@ void main() {
         expect(plan.sqlTemplateCount, 1);
         expect(plan.loads, isEmpty);
         expect(plan.joins.map((j) => j.table), ['teams', 'users']);
-        final skipped = db.users
+        final skipped = db.user
             .select((u) => u.memberships.take(0).many())
             .inspect();
         expect(skipped.loads.single.skipped, true);
@@ -160,12 +159,12 @@ void main() {
       'inspect ${dialect.name} retains CTE, UNION and raw SQL boundaries',
       () {
         final db = Database(_NoConnection(dialect));
-        final cte = db.users.select((u) => u.name).asCte('names');
-        final plan = cte.query.union(db.teams.select((t) => t.name)).inspect();
+        final cte = db.user.select((u) => u.name).asCte('names');
+        final plan = cte.query.union(db.team.select((t) => t.name)).inspect();
         expect(plan.reads, ['teams', 'users']);
         expect(plan.sql, contains('UNION'));
         expect(plan.sqlTemplateCount, 1);
-        final raw = db.users
+        final raw = db.user
             .select((u) => sql<int>(['length(name)'], [], Codecs.integer))
             .inspect();
         expect(raw.opaqueReads, true);
@@ -200,9 +199,9 @@ void main() {
           await Migrator(db.sql).apply([
             Migration.create('0001_teams', appSchema, dialect: db.dialect),
           ]);
-          await db.users.create(id: 1, name: 'Ada');
-          await db.teams.create(id: 10, name: 'Core');
-          await db.memberships.create(
+          await db.user.create(id: 1, name: 'Ada');
+          await db.team.create(id: 10, name: 'Core');
+          await db.membership.create(
             teamId: 10,
             userId: 1,
             joinedAt: DateTime.utc(2026),
@@ -213,7 +212,7 @@ void main() {
         test(
           'one-key SQL templates match executed SQL and internal slots',
           () async {
-            final query = db.users.select(
+            final query = db.user.select(
               (u) => u.memberships
                   .orderBy((m) => [m.teamId.asc()])
                   .take(2)

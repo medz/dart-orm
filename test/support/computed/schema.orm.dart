@@ -2,40 +2,48 @@
 
 import 'package:orm/sql.dart';
 
-import "schema.dart" as models;
-export "schema.dart" show Line, Band;
-
-final _linesId = Column<int>(
+/// A complete immutable row from "lines".
+final class Line({
+  required final int id,
+  required final int price,
+  required final int quantity,
+  required final String label,
+  required final String? note,
+  required final int total,
+  required final int labelSize,
+  required final String? normalizedNote,
+});
+final _lineId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _linesPrice = Column<int>(
+final _linePrice = Column<int>(
   "price",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _linesQuantity = Column<int>(
+final _lineQuantity = Column<int>(
   "quantity",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _linesLabel = Column<String>(
+final _lineLabel = Column<String>(
   "label",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final _linesNote = Column<String?>(
+final _lineNote = Column<String?>(
   "note",
   Codecs.text.nullable(),
   nullable: true,
   generated: false,
 );
-final _linesTotal = Column<int>(
+final _lineTotal = Column<int>(
   "total",
   Codecs.integer,
   nullable: false,
@@ -48,7 +56,7 @@ final _linesTotal = Column<int>(
     storage: ComputedStorage.stored,
   ),
 );
-final _linesLabelSize = Column<int>(
+final _lineLabelSize = Column<int>(
   "label_size",
   Codecs.integer,
   nullable: false,
@@ -61,7 +69,7 @@ final _linesLabelSize = Column<int>(
     storage: ComputedStorage.virtual,
   ),
 );
-final _linesNormalizedNote = Column<String?>(
+final _lineNormalizedNote = Column<String?>(
   "normalized_note",
   Codecs.text.nullable(),
   nullable: true,
@@ -74,17 +82,17 @@ final _linesNormalizedNote = Column<String?>(
     storage: ComputedStorage.stored,
   ),
 );
-final linesSchema = TableSchema(
+final lineSchema = TableSchema(
   "lines",
   columns: [
-    _linesId,
-    _linesPrice,
-    _linesQuantity,
-    _linesLabel,
-    _linesNote,
-    _linesTotal,
-    _linesLabelSize,
-    _linesNormalizedNote,
+    _lineId,
+    _linePrice,
+    _lineQuantity,
+    _lineLabel,
+    _lineNote,
+    _lineTotal,
+    _lineLabelSize,
+    _lineNormalizedNote,
   ],
   primaryKey: ["id"],
   uniqueKeys: [],
@@ -103,25 +111,25 @@ final linesSchema = TableSchema(
   foreignKeys: [],
 );
 
-final class LinesFields extends Fields {
-  LinesFields(super.table);
-  late final id = column(_linesId);
-  late final price = column(_linesPrice);
-  late final quantity = column(_linesQuantity);
-  late final label = column(_linesLabel);
-  late final note = column(_linesNote);
-  late final total = readColumn(_linesTotal);
-  late final labelSize = readColumn(_linesLabelSize);
-  late final normalizedNote = readColumn(_linesNormalizedNote);
+final class LineFields extends Fields {
+  LineFields(super.table);
+  late final id = column(_lineId);
+  late final price = column(_linePrice);
+  late final quantity = column(_lineQuantity);
+  late final label = column(_lineLabel);
+  late final note = column(_lineNote);
+  late final total = readColumn(_lineTotal);
+  late final labelSize = readColumn(_lineLabelSize);
+  late final normalizedNote = readColumn(_lineNormalizedNote);
 
   /// Read-only navigation; no database foreign key or write effects.
-  Relation<models.Band, BandsFields> get band =>
-      Relation(bandsTable, parent: [total], child: (row) => [row.id]);
+  Relation<Band, BandFields> get band =>
+      Relation(bandTable, parent: [total], child: (row) => [row.id]);
 }
 
-final linesTable = Table<models.Line, LinesFields>(
-  linesSchema,
-  LinesFields.new,
+final lineTable = Table<Line, LineFields>(
+  lineSchema,
+  LineFields.new,
   (row) =>
       (
         (row.id, row.price, row.quantity, row.label, row.note).map(
@@ -141,7 +149,7 @@ final linesTable = Table<models.Line, LinesFields>(
           ),
         ),
       ).map(
-        (left, right) => (
+        (left, right) => Line(
           id: left.id,
           price: left.price,
           quantity: left.quantity,
@@ -154,11 +162,11 @@ final linesTable = Table<models.Line, LinesFields>(
       ),
 );
 
-final class LinesTableSet extends TableSet<models.Line, LinesFields> {
-  LinesTableSet(QueryContext db) : super(db, linesTable) {
+final class LineTableSet extends TableSet<Line, LineFields> {
+  LineTableSet(QueryContext db) : super(db, lineTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Line> create({
+  Future<Line> create({
     Change<int> id = const Change.keep(),
     required int price,
     required int quantity,
@@ -173,10 +181,10 @@ final class LinesTableSet extends TableSet<models.Line, LinesFields> {
       row.note.set(note),
     ],
   );
-  Query<models.Line, LinesFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Line, LineFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension LinesUpdates on Query<models.Line, LinesFields> {
+extension LineUpdates on Query<Line, LineFields> {
   Future<int> patch({
     Change<int> price = const Change.keep(),
     Change<int> quantity = const Change.keep(),
@@ -192,53 +200,55 @@ extension LinesUpdates on Query<models.Line, LinesFields> {
   ).execute();
 }
 
-final _bandsId = Column<int>(
+/// A complete immutable row from "bands".
+final class Band({required final int id, required final String name});
+final _bandId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _bandsName = Column<String>(
+final _bandName = Column<String>(
   "name",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final bandsSchema = TableSchema(
+final bandSchema = TableSchema(
   "bands",
-  columns: [_bandsId, _bandsName],
+  columns: [_bandId, _bandName],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [],
   foreignKeys: [],
 );
 
-final class BandsFields extends Fields {
-  BandsFields(super.table);
-  late final id = column(_bandsId);
-  late final name = column(_bandsName);
+final class BandFields extends Fields {
+  BandFields(super.table);
+  late final id = column(_bandId);
+  late final name = column(_bandName);
 
   /// Read-only navigation; no database foreign key or write effects.
-  Relation<models.Line, LinesFields> get lines =>
-      Relation(linesTable, parent: [id], child: (row) => [row.total]);
+  Relation<Line, LineFields> get lines =>
+      Relation(lineTable, parent: [id], child: (row) => [row.total]);
 }
 
-final bandsTable = Table<models.Band, BandsFields>(
-  bandsSchema,
-  BandsFields.new,
-  (row) => (row.id, row.name).map((id, name) => (id: id, name: name)),
+final bandTable = Table<Band, BandFields>(
+  bandSchema,
+  BandFields.new,
+  (row) => (row.id, row.name).map((v0, v1) => Band(id: v0, name: v1)),
 );
 
-final class BandsTableSet extends TableSet<models.Band, BandsFields> {
-  BandsTableSet(QueryContext db) : super(db, bandsTable) {
+final class BandTableSet extends TableSet<Band, BandFields> {
+  BandTableSet(QueryContext db) : super(db, bandTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Band> create({required int id, required String name}) =>
+  Future<Band> create({required int id, required String name}) =>
       createRow((row) => [row.id.set(id), row.name.set(name)]);
-  Query<models.Band, BandsFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Band, BandFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension BandsUpdates on Query<models.Band, BandsFields> {
+extension BandUpdates on Query<Band, BandFields> {
   Future<int> patch({
     Change<int> id = const Change.keep(),
     Change<String> name = const Change.keep(),
@@ -247,9 +257,9 @@ extension BandsUpdates on Query<models.Band, BandsFields> {
           .execute();
 }
 
-final appSchema = List<TableSchema>.unmodifiable([linesSchema, bandsSchema]);
+final appSchema = List<TableSchema>.unmodifiable([lineSchema, bandSchema]);
 
 extension AppTables on QueryContext {
-  LinesTableSet get lines => LinesTableSet(this);
-  BandsTableSet get bands => BandsTableSet(this);
+  LineTableSet get line => LineTableSet(this);
+  BandTableSet get band => BandTableSet(this);
 }

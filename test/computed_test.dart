@@ -102,22 +102,18 @@ void main() {
           await Migrator(db.sql).apply([
             Migration.create('0001_initial', appSchema, dialect: db.dialect),
           ]);
-          final row = await db.lines.create(
-            price: 4,
-            quantity: 3,
-            label: 'cat',
-          );
+          final row = await db.line.create(price: 4, quantity: 3, label: 'cat');
           expect((row.total, row.labelSize, row.normalizedNote), (12, 3, null));
-          await db.lines
+          await db.line
               .byId(row.id)
               .patch(quantity: .set(5), note: .set('Hello'));
           expect(
-            await db.lines
+            await db.line
                 .select((r) => (r.total, r.labelSize, r.normalizedNote).row)
                 .single(),
             (20, 3, 'HELLO'),
           );
-          final inserted = await db.lines
+          final inserted = await db.line
               .insertMany(
                 [2, 3],
                 (r, int q) => [
@@ -129,7 +125,7 @@ void main() {
               .returning((r) => r.total)
               .get();
           expect(inserted, [20, 30]);
-          final updated = await db.lines
+          final updated = await db.line
               .insert(
                 (r) => [
                   r.id.set(row.id),
@@ -147,24 +143,24 @@ void main() {
               .returning((r) => r.total)
               .get();
           expect(updated, [35]);
-          expect(await db.lines.where((r) => r.total.gt(25)).count(), 2);
-          await db.bands.create(id: 35, name: 'large');
+          expect(await db.line.where((r) => r.total.gt(25)).count(), 2);
+          await db.band.create(id: 35, name: 'large');
           expect(
-            await db.lines
+            await db.line
                 .byId(row.id)
                 .select((r) => r.band.select((b) => b.name).one())
                 .single(),
             'large',
           );
           expect(
-            await db.bands
+            await db.band
                 .byId(35)
                 .select((b) => b.lines.select((r) => r.total).many())
                 .single(),
             [35],
           );
           expect(
-            () => db.lines.update((r) => [r.column(r.total.definition).set(1)]),
+            () => db.line.update((r) => [r.column(r.total.definition).set(1)]),
             throwsA(
               isA<OrmException>().having(
                 (e) => e.code,
@@ -216,7 +212,7 @@ void main() {
                 false,
                 reason: '${imported.issues.map((i) => i.toJson())}',
               );
-              expect(imported.dart, contains('@Computed.sql('));
+              expect(imported.dart, contains('.computed('));
               final source = File('${dir.path}/schema.dart');
               await source.writeAsString(imported.dart);
               final generated = await generateSchema(source.path);

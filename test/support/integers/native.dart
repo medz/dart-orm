@@ -9,24 +9,24 @@ Future<void> main() async {
     await Migrator(
       db.sql,
     ).apply([Migration.create('0001_initial', appSchema, dialect: db.dialect)]);
-    final first = await db.samples.create(
+    final first = await db.sample.create(
       small: 32767,
       medium: 2147483647,
       large: 9007199254740993,
     );
-    await db.samples.create(
+    await db.sample.create(
       small: 32767,
       medium: 2147483647,
       large: -9007199254740993,
     );
-    final sums = await db.samples
+    final sums = await db.sample
         .select((s) => (s.small.sum(), s.medium.sum(), s.large.sum()).row)
         .single();
     if (sums != (65534, 4294967294, 0)) {
       throw StateError('Integer sums were narrowed');
     }
-    await db.owners.create(id: 1, sampleId: first.id);
-    if (await db.owners
+    await db.owner.create(id: 1, sampleId: first.id);
+    if (await db.owner
             .select((o) => o.sample.select((s) => s.small).required())
             .single() !=
         32767) {
@@ -34,7 +34,7 @@ Future<void> main() async {
     }
     var rejected = false;
     try {
-      await db.samples.create(small: 32768, medium: 0, large: 0);
+      await db.sample.create(small: 32768, medium: 0, large: 0);
     } on SqlFailure {
       rejected = true;
     }
