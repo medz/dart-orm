@@ -118,7 +118,19 @@ final class SchemaReader(
       );
     }
     _validate();
-    return _models.values.toList();
+    // Preserve local declaration order and existing snapshots. External models
+    // have no local source order; use physical identity so Dart renames cannot
+    // reorder a barrel's migration snapshot.
+    final external =
+        _models.values
+            .where((model) => _definitions[model]!.root != unit)
+            .toList()
+          ..sort((a, b) => a.table.compareTo(b.table));
+    return [
+      for (final model in _models.values)
+        if (_definitions[model]!.root == unit) model,
+      ...external,
+    ];
   }
 
   void _constraints(ModelEntity model, InvocationExpression call) {

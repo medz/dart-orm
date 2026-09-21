@@ -208,6 +208,8 @@ final class ModelIndex(
   final bool unique,
 );
 
+/// Keys follow query navigation: [parentKeys] belong to the declaring model and
+/// [childKeys] to [target], independently of the physical foreign-key direction.
 final class ModelRelation(
   final String name,
   final ModelEntity target,

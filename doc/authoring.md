@@ -219,8 +219,10 @@ export 'projects.dart' show project, projectMember;
 ```
 
 Generation includes the root's local models and exported models, then follows
-model references transitively. Unrelated imports and other unexported models are
-not additional roots. Imported enum/domain types retain their defining library;
+model references transitively. Local models retain declaration order; external
+models are ordered by physical table name so renaming exported Dart variables
+does not change the snapshot fingerprint. Unrelated imports and other unexported
+models are not additional roots. Imported enum/domain types retain their defining library;
 unambiguous public types are reexported by the generated client. For colliding
 domain names, import the original libraries with prefixes.
 

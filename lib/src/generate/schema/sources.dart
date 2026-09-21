@@ -31,13 +31,10 @@ Future<List<VariableDeclaration>> schemaSources(
 ) async {
   final units = <LibraryElement, CompilationUnit>{library: root};
   final result = <VariableElement, VariableDeclaration>{};
-  final exports =
-      library.exportNamespace.definedNames2.values
-          .map(modelVariable)
-          .whereType<VariableElement>()
-          .toSet()
-          .toList()
-        ..sort((a, b) => a.name!.compareTo(b.name!));
+  final exports = library.exportNamespace.definedNames2.values
+      .map(modelVariable)
+      .whereType<VariableElement>()
+      .toSet();
   final pending = <VariableElement>[
     for (final variable in topLevelVariables(root))
       if (isModel(variable.declaredFragment!.element.type))

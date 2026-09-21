@@ -186,6 +186,43 @@ final Model employee = model('employees', (
     );
   });
 
+  for (final local in [false, true]) {
+    test(
+      'exported model renames preserve snapshot identity (local: $local)',
+      () async {
+        final split = await Directory('${fixtures.path}/rename_$local')
+            .create();
+        final first = File('${split.path}/first.dart');
+        Future<void> rename(String name) => first.writeAsString('''
+import 'package:orm/schema.dart';
+final $name = model('first_table', (id: identity(),));
+''');
+        await rename('a');
+        await File('${split.path}/second.dart').writeAsString('''
+import 'package:orm/schema.dart';
+final m = model('second_table', (id: identity(),));
+''');
+        final root = File('${split.path}/schema.dart');
+        await root.writeAsString('''
+${local ? "import 'package:orm/schema.dart';" : ''}
+export 'first.dart';
+export 'second.dart';
+${local ? "final root = model('root_table', (id: identity(),));" : ''}
+''');
+        final before = await generateSchema(root.path);
+        await rename('z');
+        final after = await generateSchema(root.path);
+        expect(after.snapshotDart, before.snapshotDart);
+        expect(after.snapshot.checksum, before.snapshot.checksum);
+        expect(after.snapshot.tables.map((table) => table.name), [
+          if (local) 'root_table',
+          'first_table',
+          'second_table',
+        ]);
+      },
+    );
+  }
+
   test(
     'ordinary field names cannot shadow generated callback variables',
     () async {
