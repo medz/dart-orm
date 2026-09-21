@@ -40,28 +40,28 @@ Future<void> main(List<String> args) async {
           name: 'table_entries',
           file: 'lib/client.dart',
           source: _client('db./*caret*/;'),
-          required: ['rows0', 'rows${models - 1}'],
+          required: ['row0', 'row${models - 1}'],
           forbidden: <String>[],
         ),
         (
           name: 'schema_record_fields',
           file: 'lib/schema.dart',
           source:
-              '$source\nfinal editorProbe = rows0.key((r) => r./*caret*/);\n',
+              "$source\nfinal editorProbe = model('editor_probes', (id: integer(), title: text(), score: integer(), status: enumeration(Status.values)), primaryKey: (r) => r./*caret*/);\n",
           required: ['id', 'title', 'score', 'status'],
           forbidden: <String>[],
         ),
         (
           name: 'query_fields',
           file: 'lib/client.dart',
-          source: _client('db.rows0.where((r) => r./*caret*/);'),
+          source: _client('db.row0.where((r) => r./*caret*/);'),
           required: ['id', 'title', 'score', 'status'],
           forbidden: <String>[],
         ),
         (
           name: 'create_arguments',
           file: 'lib/client.dart',
-          source: _client('await db.rows0.create(/*caret*/);'),
+          source: _client('await db.row0.create(/*caret*/);'),
           required: ['title:', 'status:'],
           forbidden: <String>[],
         ),
@@ -69,7 +69,7 @@ Future<void> main(List<String> args) async {
           name: 'projected_record_fields',
           file: 'lib/client.dart',
           source: _client(
-            'final rows = await db.rows0.select((r) => (r.id,r.title).map((id,title) => (id:id,title:title))).get(); final row = rows.first; row./*caret*/;',
+            'final rows = await db.row0.select((r) => (r.id,r.title).map((id,title) => (id:id,title:title))).get(); final row = rows.first; row./*caret*/;',
           ),
           required: ['id', 'title'],
           forbidden: ['score', 'status'],
@@ -166,25 +166,25 @@ Future<void> main(List<String> args) async {
       for (final (name, body, code, token) in [
         (
           'create_type',
-          "await db.rows0.create(title: 123, status: Status.pending);",
+          "await db.row0.create(title: 123, status: Status.pending);",
           'argument_type_not_assignable',
           '123',
         ),
         (
           'predicate_type',
-          "db.rows0.where((r) => r.score.eq('wrong'));",
+          "db.row0.where((r) => r.score.eq('wrong'));",
           'argument_type_not_assignable',
           "'wrong'",
         ),
         (
           'selected_result',
-          "final rows = await db.rows0.select((r) => r.title).get(); final int wrong = rows.first; print(wrong);",
+          "final rows = await db.row0.select((r) => r.title).get(); final int wrong = rows.first; print(wrong);",
           'invalid_assignment',
           'rows.first',
         ),
         (
           'missing_selected_field',
-          "final rows = await db.rows0.select((r) => (r.id,r.title).map((id,title) => (id:id,title:title))).get(); print(rows.first.score);",
+          "final rows = await db.row0.select((r) => (r.id,r.title).map((id,title) => (id:id,title:title))).get(); print(rows.first.score);",
           'undefined_getter',
           'score',
         ),
@@ -216,7 +216,7 @@ Future<void> main(List<String> args) async {
         stdout.writeln('  diagnostic: $name');
       }
       final clean = _client(
-        "await db.rows0.create(title: 'ok', status: Status.pending);",
+        "await db.row0.create(title: 'ok', status: Status.pending);",
       );
       final repair = Stopwatch()..start();
       final cleanVersion = server.open(client.path, clean);
@@ -241,10 +241,8 @@ Future<void> main(List<String> args) async {
       server.open(symbols.path, _symbols);
       final renames = <Map<String, Object?>>[];
       for (final (name, marker, newName) in [
-        ('record_field', 'String name', 'displayName'),
-        ('primary_constructor_field', 'final String name', 'displayName'),
-        ('table_field', 'late final name', 'displayName'),
-        ('record_alias', 'typedef RecordUser', 'RenamedUser'),
+        ('model_handle', 'Model person', 'employee'),
+        ('schema_field', 'managerId:', 'supervisorId'),
       ]) {
         final text = await symbols.readAsString();
         final offset = text.indexOf(marker) + marker.lastIndexOf(' ') + 1;
@@ -278,9 +276,8 @@ Future<void> main(List<String> args) async {
             : applied == null
             ? 'unavailable'
             : 'applied';
-        if (name != 'record_field' &&
-            (applied?['lib/symbols.dart'] as Map?)?['edits'] !=
-                (name == 'record_alias' ? 3 : 2)) {
+        if (name == 'model_handle' &&
+            (applied?['lib/symbols.dart'] as Map?)?['edits'] != 3) {
           throw StateError('Unexpected $name rename: $response / $error');
         }
         renames.add({
@@ -296,7 +293,7 @@ Future<void> main(List<String> args) async {
       }
       // A valid Dart selector may still violate the ORM's restricted selector AST.
       final invalid =
-          '$source\nfinal invalid = rows0.index((r) => r.id + 1);\n';
+          "$source\nfinal invalid = model('invalid', (id: integer(),), indexes: (r) => [index([r.id], name: 'invalid_index')]);\n";
       await fixture.write('lib/schema.dart', invalid);
       server.open(schema.path, invalid);
       final dartAnalysis = await fixture.run(['analyze', 'lib/schema.dart']);
@@ -364,10 +361,10 @@ Future<void> main(List<String> args) async {
         p: sha256.convert(await File(p).readAsBytes()).toString(),
     },
     'scope':
-        'Direct stdio LSP client against the installed Dart Analysis Server, isolated consumer packages and real generated APIs; no database. Includes client transport/JSON costs, excludes GUI/plugin rendering and dependency download. ${sameSession ? 'Each scale retains the same server across completion, deliberate errors, repair and symbol renames; PIDs are recorded.' : 'Each scale uses one fresh server for completion/diagnostics and another for symbol renames.'} Startup and initial project analysis are measured separately from completion. First completion follows a fresh diagnostic for the incomplete source and is not a cold OS/cache measurement. Warm probes use unchanged documents after two unrecorded warmups. Diagnostic probes serialize changes and await a fresh notification; this SDK omits document versions. Final CLI analysis verifies the edited sources. Symbol-form probes compare language rename behavior only, not three ORM authoring frontends or identical generated APIs from each form.',
+        'Direct stdio LSP client against the installed Dart Analysis Server, isolated consumer packages and real generated APIs; no database. Includes client transport/JSON costs, excludes GUI/plugin rendering and dependency download. ${sameSession ? 'Each scale retains the same server across completion, deliberate errors, repair and symbol renames; PIDs are recorded.' : 'Each scale uses one fresh server for completion/diagnostics and another for symbol renames.'} Startup and initial project analysis are measured separately from completion. First completion follows a fresh diagnostic for the incomplete source and is not a cold OS/cache measurement. Warm probes use unchanged documents after two unrecorded warmups. Diagnostic probes serialize changes and await a fresh notification; this SDK omits document versions. Final CLI analysis verifies the edited sources. Rename probes use model handles and named column declarations, including self and forward references. Regeneration remains a separate step after schema edits.',
     'limits': [
       if (!sameSession) 'This capture restarts the server for renames and does not establish mixed-session rename after diagnostic recovery.',
-      'The named Record field remains unavailable for automatic rename in this SDK. A successful bounded sequence does not establish every IDE/plugin workflow.',
+      'Named Record field rename support depends on the SDK; inspect each probe response. A successful bounded sequence does not establish every IDE/plugin workflow.',
     ],
     'results': results,
   };
@@ -403,20 +400,12 @@ Map<String, Object?> _stats(List<int> times) {
 }
 
 const _symbols = '''
-import 'package:orm/orm.dart';
-typedef RecordUser = ({int id, String name});
-typedef OtherRecord = ({int id, String name});
-final class ClassUser(final int id, final String name);
-final class UserTable extends Fields {
-  UserTable(super.table);
-  late final id = column(Column('id', Codecs.integer));
-  late final name = column(Column('name', Codecs.text));
-}
-String recordLabel(RecordUser user) => user.name;
-String otherLabel(OtherRecord user) => user.name;
-RecordUser recordValue() => (id: 1, name: 'first');
-String classLabel(ClassUser user) => user.name;
-Expr<String> tableLabel(UserTable table) => table.name;
+import 'package:orm/schema.dart';
+final Model person = model('people', (
+  id: identity(), managerId: integer().nullable(),
+), relations: (p) => (manager: references(p.managerId, () => person),));
+final report = model('reports', (id: identity(), authorId: integer()),
+  relations: (r) => (author: references(r.authorId, () => person),));
 ''';
 
 Object? _relative(Object? value, Directory root) => switch (value) {

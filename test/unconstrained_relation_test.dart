@@ -77,11 +77,8 @@ void main() {
               true,
             );
             // A dangling reference and duplicate lookup keys are valid stored data.
-            expect(await db.entries.count(), 7);
-            expect(
-              await db.accounts.where((a) => a.label.eq('dup')).count(),
-              3,
-            );
+            expect(await db.entry.count(), 7);
+            expect(await db.account.where((a) => a.label.eq('dup')).count(), 3);
           },
         );
 
@@ -89,11 +86,11 @@ void main() {
           'adding and removing a real FK remains a reviewed physical migration',
           () async {
             final constrained = [
-              accountsSchema,
+              accountSchema,
               TableSchema(
-                entriesSchema.name,
-                columns: entriesSchema.columns,
-                primaryKey: entriesSchema.primaryKey,
+                entrySchema.name,
+                columns: entrySchema.columns,
+                primaryKey: entrySchema.primaryKey,
                 foreignKeys: [
                   const ForeignKey(
                     ['tenant', 'owner'],
@@ -102,7 +99,7 @@ void main() {
                   ),
                 ],
               ),
-              readingsSchema,
+              readingSchema,
             ];
             final first = Migration.create(
               '0001_initial',
@@ -124,9 +121,9 @@ void main() {
               (await verifySchema(db.sql, SchemaSnapshot(appSchema))).matches,
               true,
             );
-            expect(await db.entries.count(), 7);
-            await db.entries.byId(2).patch(owner: .set(1));
-            await db.entries.byId(6).patch(tenant: .set(1));
+            expect(await db.entry.count(), 7);
+            await db.entry.byId(2).patch(owner: .set(1));
+            await db.entry.byId(6).patch(tenant: .set(1));
             await Migrator(db.sql).apply([first, enforce]);
             expect(
               (await inspectTable(db.sql, 'entries')).foreignKeys.length,
@@ -144,10 +141,10 @@ void main() {
               (await verifySchema(db.sql, SchemaSnapshot(appSchema))).matches,
               true,
             );
-            await db.entries.create(id: 8, tenant: 9, owner: 99);
-            expect(await db.entries.count(), 8);
+            await db.entry.create(id: 8, tenant: 9, owner: 99);
+            expect(await db.entry.count(), 8);
             expect(
-              await db.entries
+              await db.entry
                   .byId(8)
                   .select((e) => e.ownerAccount.one())
                   .single(),
@@ -157,7 +154,7 @@ void main() {
         );
 
         test('unique joins preserve root rows, NULL components and missing targets', () async {
-          final rows = await db.entries
+          final rows = await db.entry
               .orderBy((e) => [e.id.asc()])
               .select(
                 (e) => (
@@ -178,7 +175,7 @@ void main() {
           expect(events.length, 1);
           expect(events.single.sql, contains('LEFT JOIN'));
           events.clear();
-          final page = await db.entries
+          final page = await db.entry
               .orderBy((e) => [e.id.asc()])
               .skip(1)
               .take(2)
@@ -195,33 +192,30 @@ void main() {
 
         test('required target and filter visibility remain explicit', () async {
           await expectLater(
-            db.entries
-                .byId(2)
-                .select((e) => e.ownerAccount.required())
-                .single(),
+            db.entry.byId(2).select((e) => e.ownerAccount.required()).single(),
             throwsA(code('RELATION.MISSING')),
           );
           expect(
-            await db.entries
+            await db.entry
                 .byId(1)
                 .select((e) => e.ownerAccount.where((a) => a.id.eq(2)).one())
                 .single(),
             isNull,
           );
           expect(
-            await db.entries
+            await db.entry
                 .byId(7)
                 .select((e) => e.ownerAccount.select((a) => a.label).required())
                 .single(),
             isNull,
           );
-          expect(await db.entries.count(), 7);
+          expect(await db.entry.count(), 7);
         });
 
         test(
           'nonunique composite collections batch by tuple and page per parent',
           () async {
-            final rows = await db.entries
+            final rows = await db.entry
                 .orderBy((e) => [e.id.asc()])
                 .select(
                   (e) => e.matchingAccounts
@@ -241,7 +235,7 @@ void main() {
             ]);
             expect(events.length, 2);
             events.clear();
-            final pages = await db.entries
+            final pages = await db.entry
                 .orderBy((e) => [e.id.asc()])
                 .select(
                   (e) => e.matchingAccounts
@@ -270,22 +264,19 @@ void main() {
           'to-one uses cardinality checks without assuming a unique lookup',
           () async {
             expect(
-              () => db.entries.select(
+              () => db.entry.select(
                 (e) => e.matchingAccounts.one(strategy: .join),
               ),
               throwsA(code('RELATION.JOIN_KEY')),
             );
             expect(events, isEmpty);
             await expectLater(
-              db.entries
-                  .byId(1)
-                  .select((e) => e.matchingAccounts.one())
-                  .single(),
+              db.entry.byId(1).select((e) => e.matchingAccounts.one()).single(),
               throwsA(code('RELATION.CARDINALITY')),
             );
             expect(events.length, 2);
             expect(
-              await db.entries
+              await db.entry
                   .byId(1)
                   .select(
                     (e) => e.matchingAccounts
@@ -297,7 +288,7 @@ void main() {
               2,
             );
             expect(
-              await db.entries
+              await db.entry
                   .byId(1)
                   .select(
                     (e) => e.matchingAccounts
@@ -315,7 +306,7 @@ void main() {
         test(
           'correlated filters and counts do not materialize related rows',
           () async {
-            final rows = await db.entries
+            final rows = await db.entry
                 .orderBy((e) => [e.id.asc()])
                 .select(
                   (e) => (
@@ -342,7 +333,7 @@ void main() {
         test(
           'self relations and inverse collections share the existing planner',
           () async {
-            final rows = await db.accounts
+            final rows = await db.account
                 .orderBy((a) => [a.tenant.asc(), a.id.asc()])
                 .select(
                   (a) => (
@@ -362,7 +353,7 @@ void main() {
               [],
             ]);
             expect(events.length, 2);
-            final entries = await db.accounts
+            final entries = await db.account
                 .byId(tenant: 1, id: 1)
                 .select((a) => a.entries.select((e) => e.id).many())
                 .single();
@@ -374,7 +365,7 @@ void main() {
           'delete has no cascade and watches track the joined target',
           () async {
             final snapshots = StreamIterator(
-              db.entries
+              db.entry
                   .byId(1)
                   .select((e) => e.ownerAccount.select((a) => a.id).one())
                   .watch(),
@@ -385,16 +376,16 @@ void main() {
                 true,
               );
               expect(snapshots.current, [1]);
-              await db.accounts.byId(tenant: 1, id: 1).delete().execute();
+              await db.account.byId(tenant: 1, id: 1).delete().execute();
               expect(
                 await snapshots.moveNext().timeout(const Duration(seconds: 5)),
                 true,
               );
               expect(snapshots.current, [null]);
-              expect(await db.entries.count(), 7);
-              expect((await db.entries.byId(1).single()).owner, 1);
+              expect(await db.entry.count(), 7);
+              expect((await db.entry.byId(1).single()).owner, 1);
               expect(
-                (await db.accounts.byId(tenant: 1, id: 2).single()).managerId,
+                (await db.account.byId(tenant: 1, id: 2).single()).managerId,
                 1,
               );
             } finally {
@@ -406,9 +397,9 @@ void main() {
         test('transaction reads observe writes and outer rollback restores targets', () async {
           await expectLater(
             db.transaction((tx) async {
-              await tx.accounts.byId(tenant: 1, id: 1).delete().execute();
+              await tx.account.byId(tenant: 1, id: 1).delete().execute();
               expect(
-                await tx.entries
+                await tx.entry
                     .byId(1)
                     .select((e) => e.ownerAccount.one())
                     .single(),
@@ -419,7 +410,7 @@ void main() {
             throwsStateError,
           );
           expect(
-            await db.entries
+            await db.entry
                 .byId(1)
                 .select((e) => e.ownerAccount.select((a) => a.id).one())
                 .single(),
@@ -430,7 +421,7 @@ void main() {
         test(
           'streaming preserves optional and batched relation result shapes',
           () async {
-            final rows = await db.entries
+            final rows = await db.entry
                 .orderBy((e) => [e.id.asc()])
                 .select(
                   (e) => (
@@ -459,10 +450,10 @@ void main() {
         test(
           'floating relation keys retain storage intent and key equality',
           () async {
-            await db.readings.create(id: 1, value: 1e20);
-            await db.readings.create(id: 2, value: 1e20);
-            await db.readings.create(id: 3, value: 2e20);
-            final rows = await db.readings
+            await db.reading.create(id: 1, value: 1e20);
+            await db.reading.create(id: 2, value: 1e20);
+            await db.reading.create(id: 3, value: 2e20);
+            final rows = await db.reading
                 .orderBy((r) => [r.id.asc()])
                 .select(
                   (r) => r.peers

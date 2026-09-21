@@ -17,7 +17,9 @@ Old code and upstream architecture are retired.
 - Each migration history fixes one database engine. Save only that engine's SQL,
   steps and frozen schema; reject mixed histories and mismatched connections.
 - Prefer small Conventional Commits. Do not push without explicit authorization.
-- Keep `doc/progress.md` accurate, including unfinished work and validation limits.
+- Keep `doc/` focused on public usage, examples and compatibility limits.
+  Keep research notes and development/test-run records out of public documentation;
+  put reusable contributor workflows in `CONTRIBUTING.md`.
 - Schema snapshots and saved migrations are Dart source. Retire the old JSON file
   workflow directly; do not add compatibility readers or parallel output modes.
 - Keep historical migration definitions independent of current application models.

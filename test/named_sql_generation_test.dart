@@ -17,69 +17,86 @@ void main() {
   tearDown(() => directory.delete(recursive: true));
   File file(String name) => File('${directory.path}/$name');
 
-  Future<void> declaration(String record, String call, String sql) async {
+  Future<void> declaration(String result, String options, String sql) async {
     await file('query.dart').writeAsString(
-      "import 'package:orm/schema.dart';\n$record\nfinal query = $call;\n",
+      "import 'package:orm/schema.dart';\nfinal sample = sqlQuery(result: $result, $options);\n",
     );
     await file('query.sql').writeAsString(sql);
   }
 
-  test('source contracts reject missing/extra parameters and row metadata', () async {
-    for (final (record, call, sql) in [
-      (
-        'typedef Row = ({int n});',
-        "sqlQuery<Row, ({int missing})>(sqlite: 'query.sql')",
-        'SELECT :n AS n',
-      ),
-      (
-        'typedef Row = ({@Id() int n});',
-        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
-        'SELECT 1 AS n',
-      ),
-      (
-        "typedef Row = ({@Computed.sql('1') int n});",
-        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
-        'SELECT 1 AS n',
-      ),
-      (
-        "int factory() => 1; typedef Row = ({@ClientDefault(factory) int n});",
-        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
-        'SELECT 1 AS n',
-      ),
-      (
-        'typedef Row = ({@TemporalPrecision(2) DateTime n});',
-        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
-        'SELECT 1 AS n',
-      ),
-      (
-        'typedef Row = ({int n, @ColumnName("n") String duplicate});',
-        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
-        'SELECT 1 AS n',
-      ),
-      (
-        'typedef Row = (int,);',
-        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
-        'SELECT 1 AS n',
-      ),
-      ('typedef Row = ({int n});', 'sqlQuery<Row, ()>()', 'SELECT 1 AS n'),
-      (
-        'typedef Row = ({int n});',
-        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
-        'SELECT 1; DELETE FROM posts',
-      ),
+  test(
+    'source contracts reject missing/extra parameters and row metadata',
+    () async {
+      for (final (result, options, sql) in [
+        (
+          '(n: integer(),)',
+          "parameters: (missing: integer(),), sqlite: 'query.sql'",
+          'SELECT :n AS n',
+        ),
+        ('(n: identity(),)', "sqlite: 'query.sql'", 'SELECT 1 AS n'),
+        (
+          "(n: integer().computed('1'),)",
+          "sqlite: 'query.sql'",
+          'SELECT 1 AS n',
+        ),
+        (
+          "(n: text(clientDefault: String.fromEnvironment),)",
+          "sqlite: 'query.sql'",
+          'SELECT 1 AS n',
+        ),
+        (
+          '(n: dateTime(precision: 2),)',
+          "sqlite: 'query.sql'",
+          'SELECT 1 AS n',
+        ),
+        (
+          '(n: integer(), duplicate: text(name: "n"))',
+          "sqlite: 'query.sql'",
+          'SELECT 1 AS n',
+        ),
+        ('(integer(),)', "sqlite: 'query.sql'", 'SELECT 1 AS n'),
+        ('(n: integer(),)', '', 'SELECT 1 AS n'),
+        (
+          '(n: integer(),)',
+          "sqlite: 'query.sql'",
+          'SELECT 1; DELETE FROM posts',
+        ),
+      ]) {
+        await declaration(result, options, sql);
+        await expectLater(
+          generateQueries(file('query.dart').path),
+          throwsA(anyOf(isA<GenerationException>(), isA<OrmException>())),
+        );
+      }
+    },
+  );
+
+  test('generated query classes reject symbol collisions', () async {
+    await file('query.sql').writeAsString('SELECT 1 AS n');
+    for (final declarations in [
+      "final query = sqlQuery(result: (n: integer(),), sqlite: 'query.sql');",
+      "final stats = sqlQuery(result: (n: integer(),), sqlite: 'query.sql');"
+          "final statsFields = sqlQuery(result: (n: integer(),), sqlite: 'query.sql');",
     ]) {
-      await declaration(record, call, sql);
+      await file('query.dart')
+          .writeAsString("import 'package:orm/schema.dart';\n$declarations");
       await expectLater(
         generateQueries(file('query.dart').path),
-        throwsA(anyOf(isA<GenerationException>(), isA<OrmException>())),
+        throwsA(
+          isA<GenerationException>().having(
+            (error) => error.toString(),
+            'message',
+            contains('ambiguous'),
+          ),
+        ),
       );
     }
   });
 
   test('SQL edits and modified generated code fail freshness checks', () async {
     await declaration(
-      'typedef Row = ({int n});',
-      "sqlQuery<Row, ()>(sqlite: 'query.sql')",
+      '(n: integer(),)',
+      "sqlite: 'query.sql'",
       'SELECT 1 AS n',
     );
     final source = file('query.dart').path;
@@ -107,7 +124,9 @@ void main() {
     await writeGeneratedQueries(source, output: output);
     await checkGeneratedQueries(source, output: output);
     await file('query.dart').writeAsString(
-      (await file('query.dart').readAsString()).replaceAll('int n', 'double n'),
+      (await file(
+        'query.dart',
+      ).readAsString()).replaceAll('integer()', 'real()'),
     );
     await expectLater(
       checkGeneratedQueries(source, output: output),
@@ -199,8 +218,8 @@ void main() {
     'CLI checks a persistent SQLite database without creating missing files',
     () async {
       await declaration(
-        'typedef Row = ({int n});',
-        "sqlQuery<Row, ()>(sqlite: 'query.sql')",
+        '(n: integer(),)',
+        "sqlite: 'query.sql'",
         'SELECT COUNT(*) AS n FROM entries',
       );
       Future<ProcessResult> run(List<String> arguments) => Process.run(

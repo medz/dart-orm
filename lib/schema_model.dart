@@ -8,7 +8,7 @@
 /// metadata does not apply DDL: migration tooling validates the target engine and
 /// executes reviewed schema changes separately.
 ///
-/// Use `package:orm/schema.dart` for application model annotations.
+/// Use `package:orm/schema.dart` for application model declarations.
 ///
 /// {@category Schema}
 /// {@canonicalFor model.CheckSchema}

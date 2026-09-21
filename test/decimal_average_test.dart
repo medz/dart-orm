@@ -76,7 +76,7 @@ void main() {
       tearDown(() => db.close());
       Future<void> rows(List<String> values, {String bucket = 'a'}) async {
         for (final v in values) {
-          await db.entries.create(amount: d(v), bucket: bucket);
+          await db.entry.create(amount: d(v), bucket: bucket);
         }
       }
 
@@ -84,33 +84,33 @@ void main() {
         'empty null and constant inputs retain aggregate semantics',
         () async {
           expect(
-            await db.entries.select((e) => e.amount.average(scale: 2)).single(),
+            await db.entry.select((e) => e.amount.average(scale: 2)).single(),
             null,
           );
           expect(
-            await db.entries
+            await db.entry
                 .select((e) => value(d('2'), Codecs.decimal).average(scale: 2))
                 .single(),
             null,
           );
           await rows(['1', '2', '3']);
           expect(
-            await db.entries.select((e) => e.amount.average(scale: 2)).single(),
+            await db.entry.select((e) => e.amount.average(scale: 2)).single(),
             d('2'),
           );
           expect(
-            await db.entries.select((e) => e.fee.average(scale: 2)).single(),
+            await db.entry.select((e) => e.fee.average(scale: 2)).single(),
             null,
           );
           expect(
-            await db.entries
+            await db.entry
                 .select((e) => value(d('2'), Codecs.decimal).average(scale: 2))
                 .single(),
             d('2'),
           );
-          await db.entries.byId(2).patch(fee: Change.set(d('4')));
+          await db.entry.byId(2).patch(fee: Change.set(d('4')));
           expect(
-            await db.entries.select((e) => e.fee.average(scale: 2)).single(),
+            await db.entry.select((e) => e.fee.average(scale: 2)).single(),
             d('4'),
           );
         },
@@ -128,7 +128,7 @@ void main() {
             ['1250', '1450'],
             ['-1250', '-1450'],
           ]) {
-            await db.entries.delete().execute();
+            await db.entry.delete().execute();
             await rows(values);
             final sum = values.map(d).reduce((a, b) => a + b);
             for (final mode in DecimalRounding.values) {
@@ -143,7 +143,7 @@ void main() {
                 } on FormatException {
                   /* Exact mode intentionally rejects rounding. */
                 }
-                final result = db.entries
+                final result = db.entry
                     .select(
                       (e) => e.amount.average(scale: scale, rounding: mode),
                     )
@@ -168,16 +168,16 @@ void main() {
         () async {
           await rows(['9e131071', '9e131071']);
           await expectLater(
-            db.entries.select((e) => e.amount.sum()).single(),
+            db.entry.select((e) => e.amount.sum()).single(),
             throwsA(isA<Exception>()),
           );
           expect(
-            await db.entries.select((e) => e.amount.average(scale: 0)).single(),
+            await db.entry.select((e) => e.amount.average(scale: 0)).single(),
             d('9e131071'),
           );
-          await db.entries.delete().execute();
+          await db.entry.delete().execute();
           await rows(['9e131071', '-9e131071', '1']);
-          final actual = await db.entries
+          final actual = await db.entry
               .select(
                 (e) => e.amount.average(scale: 16383, rounding: .halfEven),
               )
@@ -186,10 +186,10 @@ void main() {
             actual == d('1').divide(d('3'), scale: 16383, rounding: .halfEven),
             isTrue,
           );
-          await db.entries.delete().execute();
+          await db.entry.delete().execute();
           await rows(['-9e131071', '-9e131071']);
           expect(
-            await db.entries.select((e) => e.amount.average(scale: 0)).single(),
+            await db.entry.select((e) => e.amount.average(scale: 0)).single(),
             d('-9e131071'),
           );
         },
@@ -201,7 +201,7 @@ void main() {
         () async {
           await rows(['1e-16383', '0']);
           expect(
-            await db.entries
+            await db.entry
                 .select(
                   (e) => e.amount.average(scale: 16383, rounding: .halfEven),
                 )
@@ -209,7 +209,7 @@ void main() {
             d('0'),
           );
           expect(
-            await db.entries
+            await db.entry
                 .select(
                   (e) => e.amount.average(
                     scale: 16383,
@@ -219,10 +219,10 @@ void main() {
                 .single(),
             d('1e-16383'),
           );
-          await db.entries.delete().execute();
+          await db.entry.delete().execute();
           await rows(['5e131071', '5e131071']);
           expect(
-            await db.entries
+            await db.entry
                 .select(
                   (e) => e.amount.average(scale: -131072, rounding: .halfEven),
                 )
@@ -230,7 +230,7 @@ void main() {
             d('0'),
           );
           await expectLater(
-            db.entries
+            db.entry
                 .select(
                   (e) => e.amount.average(
                     scale: -131072,
@@ -248,7 +248,7 @@ void main() {
         () async {
           await rows(['1', '2'], bucket: 'a');
           await rows(['2', '3'], bucket: 'b');
-          final grouped = db.entries
+          final grouped = db.entry
               .groupBy((e) => [e.bucket])
               .having((e) => e.amount.average(scale: 1).gt(d('2')))
               .orderBy((e) => [e.amount.average(scale: 1).desc()])
@@ -264,7 +264,7 @@ void main() {
             [('b', d('2.5'))],
           );
           expect(await grouped.union(grouped).get(), [('b', d('2.5'))]);
-          final unique = db.entries
+          final unique = db.entry
               .select((e) => e.amount)
               .distinct()
               .asCte('unique_amounts');
@@ -281,15 +281,14 @@ void main() {
         'illegal window nesting and aggregate assignments fail before SQL',
         () {
           expect(
-            () => db.entries.select(
-              (e) => e.amount.sum().over().average(scale: 2),
-            ),
+            () =>
+                db.entry.select((e) => e.amount.sum().over().average(scale: 2)),
             throwsA(
               isA<OrmException>().having((e) => e.code, 'code', 'QUERY.WINDOW'),
             ),
           );
           expect(
-            () => db.entries.select(
+            () => db.entry.select(
               (e) => e.amount
                   .average(scale: 2)
                   .over(orderBy: [e.amount.sum().over().asc()]),
@@ -299,7 +298,7 @@ void main() {
             ),
           );
           expect(
-            () => db.entries
+            () => db.entry
                 .update(
                   (e) => [e.fee.setExpression(e.amount.average(scale: 2))],
                 )
@@ -320,7 +319,7 @@ void main() {
         () async {
           await rows(['1', '2', '3']);
           await rows(['10', '20'], bucket: 'b');
-          Expr<Decimal?> mean(EntriesFields e) => e.amount
+          Expr<Decimal?> mean(EntryFields e) => e.amount
               .average(scale: 2)
               .over(
                 partitionBy: [e.bucket],
@@ -328,11 +327,11 @@ void main() {
                 frame: .rowsToCurrent,
               );
           expect(
-            await db.entries.orderBy((e) => [e.id.asc()]).select(mean).get(),
+            await db.entry.orderBy((e) => [e.id.asc()]).select(mean).get(),
             ['1', '1.5', '2', '10', '15'].map(d),
           );
           expect(
-            await db.entries
+            await db.entry
                 .orderBy((e) => [mean(e).desc()])
                 .select(mean)
                 .skip(1)
@@ -341,26 +340,26 @@ void main() {
             [d('10'), d('2')],
           );
           expect(
-            await db.entries
+            await db.entry
                 .where((e) => e.bucket.eq('a'))
                 .orderBy((e) => [e.id.asc()])
                 .select((e) => mean(e).rounded(0, rounding: .halfEven))
                 .get(),
             [d('1'), d('2'), d('2')],
           );
-          final cte = db.entries.select(mean).asCte('running_means');
+          final cte = db.entry.select(mean).asCte('running_means');
           expect(await cte.query.where((e) => e.ref(mean).gt(d('10'))).get(), [
             d('15'),
           ]);
           expect(
-            await db.entries
+            await db.entry
                 .orderBy((e) => [e.id.asc()])
                 .select(mean)
                 .stream()
                 .toList(),
             ['1', '1.5', '2', '10', '15'].map(d),
           );
-          final mixed = await db.entries
+          final mixed = await db.entry
               .where((e) => e.bucket.eq('a'))
               .orderBy((e) => [e.id.asc()])
               .select(
@@ -378,10 +377,10 @@ void main() {
             (d('1.5'), d('3')),
             (d('2'), d('6')),
           ]);
-          Expr<Decimal?> complete(EntriesFields e) =>
+          Expr<Decimal?> complete(EntryFields e) =>
               e.amount.average(scale: 1).over(frame: .rowsAll);
           expect(
-            await db.entries
+            await db.entry
                 .where((e) => e.bucket.eq('a'))
                 .orderBy((e) => [complete(e).asc()])
                 .select(complete)
@@ -395,8 +394,8 @@ void main() {
       test('correlated means can update values and failures roll back transactions', () async {
         await rows(['1', '2'], bucket: 'a');
         await rows(['1', '0', '0'], bucket: 'b');
-        final source = db.entries;
-        await db.entries
+        final source = db.entry;
+        await db.entry
             .where((e) => e.bucket.eq('a'))
             .update(
               (e) => [
@@ -410,7 +409,7 @@ void main() {
             )
             .execute();
         expect(
-          await db.entries
+          await db.entry
               .where((e) => e.bucket.eq('a'))
               .select((e) => e.fee)
               .get(),
@@ -418,10 +417,10 @@ void main() {
         );
         await expectLater(
           db.transaction((tx) async {
-            await tx.entries
+            await tx.entry
                 .where((e) => e.bucket.eq('a'))
                 .patch(fee: Change.set(d('99')));
-            await tx.entries
+            await tx.entry
                 .where((e) => e.bucket.eq('b'))
                 .select((e) => e.amount.average(scale: 1))
                 .single();
@@ -429,7 +428,7 @@ void main() {
           throwsA(isA<SqlFailure>()),
         );
         expect(
-          await db.entries
+          await db.entry
               .where((e) => e.bucket.eq('a'))
               .select((e) => e.fee)
               .get(),
@@ -439,13 +438,13 @@ void main() {
 
       test('batched relationship windows keep per-parent limits', () async {
         for (final n in ['2', '4']) {
-          await db.rates.create(id: d(n), label: n);
+          await db.rate.create(id: d(n), label: n);
           for (var i = 0; i < 3; i++) {
-            await db.allocations.create(rateId: d(n));
+            await db.allocation.create(rateId: d(n));
           }
         }
         expect(
-          await db.rates
+          await db.rate
               .orderBy((r) => [r.id.asc()])
               .select(
                 (r) => (
@@ -473,7 +472,7 @@ void main() {
       if (backend == 'sqlite') {
         test('sliding windows remove values, reset empty frames and reject varying policies', () async {
           for (final fee in ['1', null, '3', null, null]) {
-            await db.entries.create(
+            await db.entry.create(
               amount: d('0'),
               fee: fee == null ? null : d(fee),
               bucket: 'a',
@@ -506,7 +505,7 @@ void main() {
         await rows(['6'], bucket: 'b');
         await rows(['100'], bucket: 'excluded');
         expect(
-          await db.entries
+          await db.entry
               .groupBy((e) => [e.bucket])
               .having((e) => e.amount.sum().lt(d('50')))
               .orderBy((e) => [e.bucket.asc()])
@@ -536,7 +535,7 @@ void main() {
               Codecs.decimal,
             );
             expect(
-              await db.entries.select((e) => next.average(scale: 1)).single(),
+              await db.entry.select((e) => next.average(scale: 1)).single(),
               d('2'),
             );
             expect(
@@ -546,7 +545,7 @@ void main() {
               3,
             );
             expect(
-              await db.entries
+              await db.entry
                   .orderBy((e) => [e.id.asc()])
                   .select(
                     (e) => next
@@ -563,7 +562,7 @@ void main() {
               6,
             );
             expect(
-              await db.entries
+              await db.entry
                   .select(
                     (e) => e.amount
                         .average(scale: 1)
@@ -578,7 +577,7 @@ void main() {
               )).rows.single.single,
               9,
             );
-            final repeated = db.entries
+            final repeated = db.entry
                 .select((e) => e.bucket)
                 .asCte('repeated_anchors');
             expect(
@@ -594,7 +593,7 @@ void main() {
               12,
             );
             expect(
-              await db.entries
+              await db.entry
                   .where((e) => e.id.lt(0))
                   .select((e) => next.average(scale: 1))
                   .single(),

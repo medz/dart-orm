@@ -1,4 +1,7 @@
 import 'package:orm/schema.dart';
 
-typedef Note = ({@Id.generated() int id, String body, DateTime createdAt});
-final notes = entity<Note>(table: 'notes');
+final note = model('notes', (
+  id: identity(),
+  body: text(),
+  createdAt: dateTime(),
+));

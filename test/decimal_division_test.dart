@@ -48,7 +48,7 @@ void main() {
         int scale,
         DecimalRounding mode,
       ) async {
-        return db.entries
+        return db.entry
             .select(
               (e) => value(
                 a,
@@ -76,13 +76,13 @@ void main() {
           '.4999999999999999999999999999',
         ]) {
           for (final b in ['2', '-2', '.03', '-.03']) {
-            await db.entries.create(amount: d(a), fee: d(b), bucket: 'a');
+            await db.entry.create(amount: d(a), fee: d(b), bucket: 'a');
           }
         }
-        final input = await db.entries.orderBy((e) => [e.id.asc()]).get();
+        final input = await db.entry.orderBy((e) => [e.id.asc()]).get();
         for (final mode in DecimalRounding.values.where((m) => m != .exact)) {
           for (final scale in [-3, -1, 0, 1, 2, 8, 100]) {
-            final output = await db.entries
+            final output = await db.entry
                 .orderBy((e) => [e.id.asc()])
                 .select(
                   (e) => (
@@ -112,11 +112,11 @@ void main() {
       test(
         'exact defaults reject lost digits and zero divisors, NULL propagates',
         () async {
-          await db.entries.create(amount: d('1'), bucket: 'a');
+          await db.entry.create(amount: d('1'), bucket: 'a');
           expect(await ratio(d('1'), d('8'), 3, .exact), d('.125'));
           expect(await ratio(d('1200'), d('2'), -2, .exact), d('600'));
           expect(
-            await db.entries.select((e) => e.amount.rounded(0)).single(),
+            await db.entry.select((e) => e.amount.rounded(0)).single(),
             d('1'),
           );
           await expectLater(
@@ -128,23 +128,23 @@ void main() {
             throwsA(isA<Exception>()),
           );
           await expectLater(
-            db.entries.select((e) => e.amount.rounded(-1)).single(),
+            db.entry.select((e) => e.amount.rounded(-1)).single(),
             throwsA(isA<Exception>()),
           );
           expect(
-            await db.entries
+            await db.entry
                 .select((e) => e.fee.divide(d('0'), scale: 2))
                 .single(),
             null,
           );
           expect(
-            await db.entries
+            await db.entry
                 .select((e) => e.amount.divideExpression(e.fee, scale: 2))
                 .single(),
             null,
           );
           expect(
-            await db.entries.select((e) => e.fee.rounded(-2)).single(),
+            await db.entry.select((e) => e.fee.rounded(-2)).single(),
             null,
           );
         },
@@ -153,7 +153,7 @@ void main() {
       test(
         'precision exceeds native division scale without double rounding',
         () async {
-          await db.entries.create(amount: d('1'), bucket: 'a');
+          await db.entry.create(amount: d('1'), bucket: 'a');
           for (final scale in [50, 1000, Decimal.maxFractionDigits]) {
             final actual = await ratio(d('1'), d('3'), scale, .halfEven);
             expect(
@@ -194,7 +194,7 @@ void main() {
       test(
         'huge remainders avoid overflowing intermediate scaled products',
         () async {
-          await db.entries.create(amount: d('1'), bucket: 'a');
+          await db.entry.create(amount: d('1'), bucket: 'a');
           final huge = d('9e131071');
           final pairs = [
             (d('8e131071'), huge),
@@ -225,7 +225,7 @@ void main() {
       test(
         'outermost integer scale and result overflow are explicit',
         () async {
-          await db.entries.create(amount: d('1'), bucket: 'a');
+          await db.entry.create(amount: d('1'), bucket: 'a');
           expect(
             await ratio(d('5e131071'), d('1'), -131072, .halfEven),
             d('0'),
@@ -251,10 +251,10 @@ void main() {
       );
 
       test('aggregates windows CTEs predicates and unions compose', () async {
-        await db.entries.create(amount: d('2.345'), bucket: 'a');
-        await db.entries.create(amount: d('4.345'), bucket: 'a');
+        await db.entry.create(amount: d('2.345'), bucket: 'a');
+        await db.entry.create(amount: d('4.345'), bucket: 'a');
         expect(
-          await db.entries
+          await db.entry
               .select(
                 (e) => e.amount.sum().divide(
                   d('2'),
@@ -266,7 +266,7 @@ void main() {
           d('3.34'),
         );
         expect(
-          await db.entries
+          await db.entry
               .groupBy((e) => [e.bucket])
               .select(
                 (e) => (
@@ -278,7 +278,7 @@ void main() {
           ('a', d('6.7')),
         );
         expect(
-          await db.entries
+          await db.entry
               .orderBy((e) => [e.id.asc()])
               .select(
                 (e) => e.amount
@@ -289,7 +289,7 @@ void main() {
               .get(),
           [d('1.17'), d('3.34')],
         );
-        final cte = db.entries
+        final cte = db.entry
             .select(
               (e) => e.amount.divide(d('2'), scale: 2, rounding: .halfEven),
             )
@@ -311,15 +311,15 @@ void main() {
           [d('2.17')],
         );
         expect(
-          await db.entries
+          await db.entry
               .where((e) => e.amount.rounded(0, rounding: .halfEven).eq(d('2')))
               .count(),
           1,
         );
-        final set = db.entries
+        final set = db.entry
             .select((e) => e.amount.rounded(0, rounding: .halfEven))
             .union(
-              db.entries.select(
+              db.entry.select(
                 (e) => e.amount.divide(d('1'), scale: 0, rounding: .halfEven),
               ),
             );
@@ -329,12 +329,12 @@ void main() {
       test(
         'expression assignments and transaction rollback preserve values',
         () async {
-          final row = await db.entries.create(
+          final row = await db.entry.create(
             amount: d('10'),
             fee: d('3'),
             bucket: 'a',
           );
-          await db.entries
+          await db.entry
               .byId(row.id)
               .update(
                 (e) => [
@@ -342,13 +342,13 @@ void main() {
                 ],
               )
               .execute();
-          expect((await db.entries.byId(row.id).single()).amount, d('2.5'));
+          expect((await db.entry.byId(row.id).single()).amount, d('2.5'));
           await expectLater(
             db.transaction((tx) async {
-              await tx.entries
+              await tx.entry
                   .byId(row.id)
                   .patch(bucket: const Change.set('changed'));
-              await tx.entries
+              await tx.entry
                   .byId(row.id)
                   .update(
                     (e) => [
@@ -359,29 +359,29 @@ void main() {
             }),
             throwsA(isA<Exception>()),
           );
-          expect((await db.entries.byId(row.id).single()).bucket, 'a');
-          expect((await db.entries.byId(row.id).single()).amount, d('2.5'));
+          expect((await db.entry.byId(row.id).single()).bucket, 'a');
+          expect((await db.entry.byId(row.id).single()).amount, d('2.5'));
         },
       );
 
       test('window filtering ordering DISTINCT and pagination keep their SQL order', () async {
         for (final n in ['1', '3', '5']) {
-          await db.entries.create(amount: d(n), bucket: 'a');
+          await db.entry.create(amount: d(n), bucket: 'a');
         }
-        await db.entries.create(amount: d('100'), bucket: 'excluded');
-        Expr<Decimal?> running(EntriesFields e) => e.amount
+        await db.entry.create(amount: d('100'), bucket: 'excluded');
+        Expr<Decimal?> running(EntryFields e) => e.amount
             .sum()
             .over(orderBy: [e.id.asc()], frame: .rowsToCurrent)
             .divide(d('2'), scale: 1);
-        final query = db.entries
+        final query = db.entry
             .where((e) => e.bucket.eq('a'))
             .orderBy((e) => [running(e).desc()]);
         expect(await query.select(running).get(), [d('4.5'), d('2'), d('.5')]);
         expect(await query.select(running).skip(1).take(1).get(), [d('2')]);
         expect(await query.select((e) => e.id).get(), [3, 2, 1]);
-        Expr<Decimal?> total(EntriesFields e) =>
+        Expr<Decimal?> total(EntryFields e) =>
             e.amount.sum().over(frame: .rowsAll).divide(d('3'), scale: 0);
-        final distinct = db.entries
+        final distinct = db.entry
             .where((e) => e.bucket.eq('a'))
             .orderBy((e) => [total(e).desc()])
             .select(total)
@@ -391,11 +391,11 @@ void main() {
       });
 
       test('windows over grouped aggregates run after HAVING', () async {
-        await db.entries.create(amount: d('1'), bucket: 'a');
-        await db.entries.create(amount: d('3'), bucket: 'a');
-        await db.entries.create(amount: d('6'), bucket: 'b');
-        await db.entries.create(amount: d('100'), bucket: 'excluded');
-        final result = await db.entries
+        await db.entry.create(amount: d('1'), bucket: 'a');
+        await db.entry.create(amount: d('3'), bucket: 'a');
+        await db.entry.create(amount: d('6'), bucket: 'b');
+        await db.entry.create(amount: d('100'), bucket: 'excluded');
+        final result = await db.entry
             .groupBy((e) => [e.bucket])
             .having((e) => e.amount.sum().lt(d('50')))
             .orderBy((e) => [e.bucket.asc()])
@@ -416,13 +416,13 @@ void main() {
       test(
         'window results compose through CTEs sets and correlated subqueries',
         () async {
-          await db.entries.create(amount: d('1'), bucket: 'a');
-          await db.entries.create(amount: d('3'), bucket: 'a');
-          Expr<Decimal?> running(EntriesFields e) => e.amount
+          await db.entry.create(amount: d('1'), bucket: 'a');
+          await db.entry.create(amount: d('3'), bucket: 'a');
+          Expr<Decimal?> running(EntryFields e) => e.amount
               .sum()
               .over(orderBy: [e.id.asc()], frame: .rowsToCurrent)
               .divide(d('2'), scale: 1);
-          final projected = db.entries
+          final projected = db.entry
               .orderBy((e) => [e.id.asc()])
               .select(running);
           final cte = projected.asCte('running_halves');
@@ -448,8 +448,8 @@ void main() {
             await projected.union(projected).get(),
             unorderedEquals([d('.5'), d('2')]),
           );
-          final outer = db.entries;
-          final inner = db.entries;
+          final outer = db.entry;
+          final inner = db.entry;
           final result = await outer
               .orderBy((e) => [e.id.asc()])
               .select(
@@ -468,8 +468,8 @@ void main() {
               )
               .get();
           expect(result, [d('.5'), d('2')]);
-          final alias = entriesTable.alias();
-          final joined = await db.entries
+          final alias = entryTable.alias();
+          final joined = await db.entry
               .leftJoin(alias, on: (e, a) => e.id.equals(a.id).and(a.id.eq(1)))
               .orderBy((e) => [e.id.asc()])
               .select(
@@ -486,12 +486,12 @@ void main() {
 
       test('batched relations retain per-parent window pagination', () async {
         for (final n in ['2', '4']) {
-          await db.rates.create(id: d(n), label: n);
+          await db.rate.create(id: d(n), label: n);
           for (var i = 0; i < 2; i++) {
-            await db.allocations.create(rateId: d(n));
+            await db.allocation.create(rateId: d(n));
           }
         }
-        final result = await db.rates
+        final result = await db.rate
             .orderBy((r) => [r.id.asc()])
             .select(
               (r) => (
@@ -518,7 +518,7 @@ void main() {
 
       if (backend == 'postgres') {
         test('volatile operands are evaluated exactly once each', () async {
-          await db.entries.create(amount: d('1'), bucket: 'a');
+          await db.entry.create(amount: d('1'), bucket: 'a');
           await db.execute(SqlCommand('CREATE SEQUENCE division_calls'));
           final next = sql<Decimal>(
             ["nextval('division_calls')::numeric"],
@@ -526,7 +526,7 @@ void main() {
             Codecs.decimal,
           );
           expect(
-            await db.entries
+            await db.entry
                 .select((e) => next.divideExpression(next, scale: 2))
                 .single(),
             d('.5'),
@@ -538,7 +538,7 @@ void main() {
             2,
           );
           expect(
-            await db.entries.select((e) => next.rounded(0)).single(),
+            await db.entry.select((e) => next.rounded(0)).single(),
             d('3'),
           );
           expect(
@@ -547,8 +547,8 @@ void main() {
             )).rows.single.single,
             3,
           );
-          await db.entries.create(amount: d('1'), bucket: 'a');
-          final windowed = await db.entries
+          await db.entry.create(amount: d('1'), bucket: 'a');
+          final windowed = await db.entry
               .orderBy((e) => [e.id.asc()])
               .select(
                 (e) => e.amount

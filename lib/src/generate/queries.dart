@@ -9,10 +9,11 @@ import 'package:path/path.dart' as p;
 
 import '../../runtime.dart';
 import '../../sql.dart';
-import 'emitter.dart' show recordSelection;
+import 'emitter.dart' show modelSelection, rowDeclaration;
 import 'exception.dart';
 import 'model.dart';
-import 'reader.dart';
+import 'schema/columns.dart';
+import 'schema/syntax.dart';
 import 'source.dart';
 import 'types.dart';
 
@@ -123,38 +124,19 @@ Future<GeneratedQueries> generateResolvedQueries(
   Future<String> Function(String) readSql,
 ) async {
   final names = DartNames(library.uri, importUri);
-  final reader = SchemaReader(unit, library.typeSystem, names);
-  final aliases = {
-    for (final alias in unit.declarations.whereType<GenericTypeAlias>())
-      alias.name.lexeme: alias,
-  };
   final queries = <_NamedQuery>[];
-  RecordTypeAnnotation record(TypeAnnotation type) {
-    if (type is RecordTypeAnnotation) return type;
-    final alias = aliases[type.toSource()];
-    if (alias == null ||
-        alias.typeParameters != null ||
-        alias.type is! RecordTypeAnnotation) {
+  final symbols = {...generatedTypeNames};
+  List<ModelField> fields(Expression? expression, {required bool parameters}) {
+    if (expression == null && parameters) return [];
+    if (expression is! RecordLiteral ||
+        expression.fields.any((f) => f is! RecordLiteralNamedField)) {
       throw const GenerationException(
-        'Named SQL requires non-generic record typedefs in the source library.',
-      );
-    }
-    return alias.type as RecordTypeAnnotation;
-  }
-
-  List<ModelField> fields(
-    RecordTypeAnnotation record, {
-    required bool parameters,
-  }) {
-    if (record.positionalFields.isNotEmpty) {
-      throw const GenerationException(
-        'Named SQL records require named fields.',
+        'Named SQL requires a named Record of column declarations.',
       );
     }
     final fields = [
-      for (final f
-          in record.namedFields?.fields ?? <RecordTypeAnnotationNamedField>[])
-        reader.readField(f, f.name.lexeme, f.type.type, f.metadata),
+      for (final f in expression.fields.cast<RecordLiteralNamedField>())
+        readColumn(f, library.typeSystem, names).$1,
     ];
     for (final f in fields) {
       if (f.id ||
@@ -167,12 +149,12 @@ Future<GeneratedQueries> generateResolvedQueries(
           f.integerBits != null ||
           f.decimalPrecision != null) {
         throw const GenerationException(
-          'Query fields accept codec and column-name annotations only.',
+          'Query columns declare value types and SQL names, without table constraints or defaults.',
         );
       }
       if (parameters && f.column != snakeCase(f.name)) {
         throw const GenerationException(
-          'SQL parameters use Dart field names, without ColumnName.',
+          'SQL parameters use Dart field names, without a name override.',
         );
       }
     }
@@ -193,34 +175,35 @@ Future<GeneratedQueries> generateResolvedQueries(
       if (call is! MethodInvocation ||
           call.methodName.name != 'sqlQuery' ||
           call.methodName.element?.library?.uri.toString() !=
-              schemaDeclarationUri) {
+              'package:orm/src/schema/queries.dart') {
         continue;
       }
-      final types = call.typeArguments?.arguments;
-      if (types == null ||
-          types.length != 2 ||
-          types.first is RecordTypeAnnotation) {
-        throw const GenerationException(
-          'sqlQuery<Result, Parameters> requires an explicit result typedef.',
-        );
-      }
       final name = variable.name.lexeme;
-      if (name.startsWith('_')) {
+      if (!declaration.variables.isFinal || name.startsWith('_')) {
         throw const GenerationException('Named queries must be public.');
       }
       if (databaseMembers.contains(name)) {
         throw GenerationException('$name conflicts with a Database member.');
       }
-      if (types.first.toSource().startsWith('_')) {
-        throw const GenerationException(
-          'Query result typedefs must be public.',
-        );
+      final symbol = name[0].toUpperCase() + name.substring(1);
+      for (final generated in [symbol, '${symbol}Fields', '${symbol}Sql']) {
+        if (!symbols.add(generated)) {
+          throw GenerationException(
+            'Generated symbol $generated is ambiguous. Rename the Dart query.',
+          );
+        }
       }
-      final resultFields = fields(record(types.first), parameters: false);
-      final parameterFields = fields(record(types.last), parameters: true);
+      final resultFields = fields(
+        namedArgument(call, 'result'),
+        parameters: false,
+      );
+      final parameterFields = fields(
+        namedArgument(call, 'parameters'),
+        parameters: true,
+      );
       final sql = <SqlDialect, String>{};
       for (final dialect in SqlDialect.values) {
-        final path = reader.namedString(call, dialect.name);
+        final path = namedString(call, dialect.name);
         if (path == null) continue;
         if (path.isEmpty ||
             p.url.isAbsolute(path) ||
@@ -253,7 +236,7 @@ Future<GeneratedQueries> generateResolvedQueries(
           ModelEntity(
             name,
             '_orm_sql_${snakeCase(name)}',
-            types.first.toSource(),
+            symbol,
             resultFields,
           ),
           parameterFields,
@@ -263,9 +246,7 @@ Future<GeneratedQueries> generateResolvedQueries(
     }
   }
   if (queries.isEmpty) {
-    throw const GenerationException(
-      'No sqlQuery<Result, Parameters>() declarations found.',
-    );
+    throw const GenerationException('No sqlQuery(...) declarations found.');
   }
   return GeneratedQueries(
     DartFormatter(languageVersion: library.languageVersion.effective)
@@ -301,11 +282,13 @@ String _emitQueries(
   DartNames names,
 ) {
   final b = StringBuffer('// GENERATED CODE - DO NOT MODIFY BY HAND.\n\n')
-    ..writeln("import 'package:orm/sql.dart';")
-    ..writeln('import ${dartLiteral(sourceImport)} as models;')
-    ..writeln(
-      'export ${dartLiteral(sourceImport)} show ${queries.map((q) => q.result.row).toSet().join(', ')};',
-    );
+    ..writeln("import 'package:orm/sql.dart';");
+  if (names.usesSource) {
+    b.writeln('import ${dartLiteral(sourceImport)} as models;');
+  }
+  for (final (uri, symbols) in names.exports) {
+    b.writeln('export ${dartLiteral(uri)} show ${symbols.join(', ')};');
+  }
   if (names.typedData) b.writeln("import 'dart:typed_data';");
   for (final (uri, prefix) in names.imports) {
     b.writeln('import ${dartLiteral(uri)} as $prefix;');
@@ -317,6 +300,7 @@ String _emitQueries(
   }
   for (final query in queries) {
     final entity = query.result;
+    b.writeln(rowDeclaration(entity));
     for (final f in entity.fields) {
       b.writeln(
         'final ${_queryColumn(entity, f)} = Column<${f.type}>(${dartLiteral(f.column)}, ${f.codec}, nullable: ${f.nullable});',
@@ -332,7 +316,7 @@ String _emitQueries(
     b.writeln(
       'final _sqlDefinition${entity.symbol} = SqlQueryDefinition<${entity.rowType}, ${entity.fieldsType}>('
       'Table(TableSchema(${dartLiteral(entity.table)}, columns: [${entity.fields.map((f) => _queryColumn(entity, f)).join(', ')}]), '
-      '${entity.fieldsType}.new, (row) => ${recordSelection(entity.fields, 'row')}), {'
+      '${entity.fieldsType}.new, (row) => ${modelSelection(entity, 'row')}), {'
       '${query.sql.entries.map((entry) => 'SqlDialect.${entry.key.name}: SqlTemplate(${dartLiteral(entry.value)}, dialect: SqlDialect.${entry.key.name})').join(', ')}'
       '});',
     );

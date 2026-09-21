@@ -4,11 +4,8 @@ import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
 
 import 'exception.dart';
-import 'source.dart';
 
-// Match defining libraries, not consumer import text. Reexports preserve these
-// identities, so user-defined lookalike annotations and codecs are rejected.
-const schemaDeclarationUri = 'package:orm/src/schema/declaration.dart';
+// Match defining libraries, not consumer import text. Reexports retain identity.
 const codecLibraryUri = 'package:orm/src/values/codec.dart';
 const valueLibraryUris = {
   codecLibraryUri,
@@ -19,7 +16,39 @@ const valueLibraryUris = {
 /// Resolve symbols by defining library rather than copying source import text.
 final class DartNames(final Uri source, final String Function(Uri) importUri) {
   final Map<Uri, String> _prefixes = {};
+  final Map<Uri, Set<String>> _exports = {};
+  bool usesSource = false;
   bool typedData = false;
+  Iterable<(String, Set<String>)> get exports sync* {
+    final counts = <String, int>{};
+    for (final symbols in _exports.values) {
+      for (final symbol in symbols) {
+        counts.update(symbol, (n) => n + 1, ifAbsent: () => 1);
+      }
+    }
+    for (final entry in _exports.entries) {
+      final symbols = entry.value.where((name) => counts[name] == 1).toSet();
+      if (symbols.isNotEmpty) yield (importUri(entry.key), symbols);
+    }
+  }
+
+  void exportType(DartType value) {
+    final element =
+        value.alias?.element ?? (value is InterfaceType ? value.element : null);
+    if (element != null) {
+      final uri = element.library.uri;
+      if (!uri.toString().startsWith('dart:') &&
+          !valueLibraryUris.contains(uri.toString())) {
+        _exports.putIfAbsent(uri, () => {}).add(element.name!);
+      }
+    }
+    if (value is InterfaceType) {
+      for (final argument in value.typeArguments) {
+        exportType(argument);
+      }
+    }
+  }
+
   Iterable<(String, String)> get imports sync* {
     for (final entry in _prefixes.entries) {
       yield (importUri(entry.key), entry.value);
@@ -34,6 +63,7 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
       );
     }
     final uri = library.uri;
+    if (uri == source) usesSource = true;
     if (uri.toString() == 'dart:typed_data') typedData = true;
     if ({
       'dart:core',
@@ -83,45 +113,13 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
         !variable.isStatic ||
         variable.isPrivate) {
       throw const GenerationException(
-        'UseCodec requires a public const codec variable or static field.',
+        'custom() requires a public const codec variable or static field.',
       );
     }
     if (variable case FieldElement(:final enclosingElement)) {
       return '${name(enclosingElement)}.${variable.name}';
     }
     return name(variable);
-  }
-
-  String enumeration(EnumElement element) {
-    final values = <String, String>{};
-    final labels = <String>{};
-    for (final field in element.fields.where((f) => f.isEnumConstant)) {
-      String? label;
-      for (final annotation in field.metadata.annotations) {
-        final value = annotation.computeConstantValue();
-        final type = value?.type;
-        if (type is InterfaceType &&
-            type.element.name == 'EnumValue' &&
-            type.element.library.uri.toString() == schemaDeclarationUri) {
-          if (label != null) {
-            throw GenerationException(
-              'EnumValue appears twice on ${field.name}.',
-            );
-          }
-          label = value!.getField('value')!.toStringValue()!;
-        }
-      }
-      label ??= field.name!;
-      if (!labels.add(label)) {
-        throw GenerationException('Duplicate enum storage label $label.');
-      }
-      values[field.name!] = label;
-    }
-    if (values.isEmpty) {
-      throw GenerationException('An empty enum cannot be stored.');
-    }
-    final symbol = name(element);
-    return 'Codecs.enumeration<$symbol>({${values.entries.map((e) => '$symbol.${e.key}: ${dartLiteral(e.value)}').join(', ')}})';
   }
 
   String factoryReference(
@@ -140,7 +138,7 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
     if (variable is VariableElement) {
       if (!variable.isConst || !variable.isStatic || variable.isPrivate) {
         throw const GenerationException(
-          'ClientDefault factory variables must be public const references.',
+          'clientDefault factory variables must be public const references.',
         );
       }
       if (variable case FieldElement(:final enclosingElement)) {
@@ -150,7 +148,7 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
     }
     if (function.isPrivate) {
       throw const GenerationException(
-        'ClientDefault requires a public factory.',
+        'clientDefault requires a public factory.',
       );
     }
     if (function is ConstructorElement) {
@@ -162,7 +160,7 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
     if (function.typeParameters.isNotEmpty &&
         (arguments == null || arguments.isEmpty)) {
       throw const GenerationException(
-        'Instantiate generic ClientDefault factories explicitly.',
+        'Instantiate generic clientDefault factories explicitly.',
       );
     }
     final suffix = arguments == null || arguments.isEmpty
@@ -173,7 +171,7 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
       return '${name(function.enclosingElement!)}.${function.name}$suffix';
     }
     throw const GenerationException(
-      'ClientDefault requires a public top-level function, static method or constructor.',
+      'clientDefault requires a public top-level function, static method or constructor.',
     );
   }
 }

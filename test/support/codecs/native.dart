@@ -11,7 +11,7 @@ Future<void> main() async {
     await Migrator(
       db.sql,
     ).apply([Migration.create('0001_initial', appSchema, dialect: db.dialect)]);
-    final first = await db.people.create(
+    final first = await db.person.create(
       email: const Email('aot@example.com'),
       membership: .pending,
       tags: ['AOT', '类型'],
@@ -27,22 +27,22 @@ Future<void> main() async {
         first.details?.value != 'scalar') {
       throw StateError('Custom value decoding failed');
     }
-    await db.notes.create(ownerId: first.id, body: 'relation');
-    final email = await db.notes
+    await db.note.create(ownerId: first.id, body: 'relation');
+    final email = await db.note
         .select((n) => n.owner.select((p) => p.email).required())
         .single();
     if (email.value != first.email.value) {
       throw StateError('Custom relation failed');
     }
-    final token = db.people.cursorToken((p) => [p.id.cursor(first.id)]);
-    final second = await db.people.create(
+    final token = db.person.cursorToken((p) => [p.id.cursor(first.id)]);
+    final second = await db.person.create(
       email: const Email('second@example.com'),
       membership: .active,
       tags: [],
       alternate: const alt.Email('other'),
       details: const SqlJson(null),
     );
-    final rows = await db.people
+    final rows = await db.person
         .seekToken(token, orderBy: (p) => [p.id.asc()])
         .stream(batchSize: 1)
         .toList();

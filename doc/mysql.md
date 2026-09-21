@@ -186,24 +186,3 @@ parameters instead of depending on string-literal escaping.
   `null`, and works on both engines. The upstream decoder otherwise erases
   this distinction for a direct MySQL JSON column. Its parsed non-null JSON
   results are wrapped in `SqlJson` so JSON string scalars remain strings.
-
-## Real database tests
-
-`test/mysql_driver_test.dart` imports only the low-level driver libraries.
-Set `ORM_TEST_MYSQL` and `ORM_TEST_MARIADB` to disposable database URLs.
-The corresponding `ORM_TEST_MYSQL_TLS` and `ORM_TEST_MARIADB_TLS` variables
-choose `verifyFull`, `require`, or `disable` (default `verifyFull`).
-
-```sh
-dart test test/mysql_driver_test.dart
-```
-
-The suite covers actual prepared statements, values, commit/rollback,
-savepoints, abandoned transaction cleanup, error recovery, engine mismatch,
-lease serialization, close draining, invalidation, and timeout handling.
-Without a database URL that engine's integration group is explicitly skipped.
-See `doc/progress.md` for which server versions have actually been validated.
-`test/mysql_database_test.dart` exercises typed queries, JSON and decimal
-boundaries, generated-row reads, relations, and transaction behavior.
-`test/sql_mysql_review_test.dart` adds compiler and fault-injection regressions;
-these synthetic checks do not replace the real database suites.

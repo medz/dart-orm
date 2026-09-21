@@ -3,30 +3,37 @@
 import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
-export "schema.dart" show User, Post, Value, Reading;
 
 import 'dart:typed_data';
 
-final _usersId = Column<int>(
+/// A complete immutable row from "users".
+final class User({
+  required final int id,
+  required final String email,
+  required final String? nickname,
+  required final int emailSize,
+  required final String? upperNickname,
+});
+final _userId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _usersEmail = Column<String>(
+final _userEmail = Column<String>(
   "email",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final _usersNickname = Column<String?>(
+final _userNickname = Column<String?>(
   "nickname",
   Codecs.text.nullable(),
   nullable: true,
   generated: false,
   clientDefault: models.defaultNickname,
 );
-final _usersEmailSize = Column<int>(
+final _userEmailSize = Column<int>(
   "email_size",
   Codecs.integer,
   nullable: false,
@@ -39,7 +46,7 @@ final _usersEmailSize = Column<int>(
     storage: ComputedStorage.stored,
   ),
 );
-final _usersUpperNickname = Column<String?>(
+final _userUpperNickname = Column<String?>(
   "upper_nickname",
   Codecs.text.nullable(),
   nullable: true,
@@ -52,14 +59,14 @@ final _usersUpperNickname = Column<String?>(
     storage: ComputedStorage.virtual,
   ),
 );
-final usersSchema = TableSchema(
+final userSchema = TableSchema(
   "users",
   columns: [
-    _usersId,
-    _usersEmail,
-    _usersNickname,
-    _usersEmailSize,
-    _usersUpperNickname,
+    _userId,
+    _userEmail,
+    _userNickname,
+    _userEmailSize,
+    _userUpperNickname,
   ],
   primaryKey: ["id"],
   uniqueKeys: [
@@ -78,37 +85,37 @@ final usersSchema = TableSchema(
   foreignKeys: [],
 );
 
-final class UsersFields extends Fields {
-  UsersFields(super.table);
-  late final id = column(_usersId);
-  late final email = column(_usersEmail);
-  late final nickname = column(_usersNickname);
-  late final emailSize = readColumn(_usersEmailSize);
-  late final upperNickname = readColumn(_usersUpperNickname);
-  Relation<models.Post, PostsFields> get posts =>
-      Relation(postsTable, parent: [id], child: (row) => [row.authorId]);
+final class UserFields extends Fields {
+  UserFields(super.table);
+  late final id = column(_userId);
+  late final email = column(_userEmail);
+  late final nickname = column(_userNickname);
+  late final emailSize = readColumn(_userEmailSize);
+  late final upperNickname = readColumn(_userUpperNickname);
+  Relation<Post, PostFields> get posts =>
+      Relation(postTable, parent: [id], child: (row) => [row.authorId]);
 }
 
-final usersTable = Table<models.User, UsersFields>(
-  usersSchema,
-  UsersFields.new,
+final userTable = Table<User, UserFields>(
+  userSchema,
+  UserFields.new,
   (row) =>
       (row.id, row.email, row.nickname, row.emailSize, row.upperNickname).map(
-        (id, email, nickname, emailSize, upperNickname) => (
-          id: id,
-          email: email,
-          nickname: nickname,
-          emailSize: emailSize,
-          upperNickname: upperNickname,
+        (v0, v1, v2, v3, v4) => User(
+          id: v0,
+          email: v1,
+          nickname: v2,
+          emailSize: v3,
+          upperNickname: v4,
         ),
       ),
 );
 
-final class UsersTableSet extends TableSet<models.User, UsersFields> {
-  UsersTableSet(QueryContext db) : super(db, usersTable) {
+final class UserTableSet extends TableSet<User, UserFields> {
+  UserTableSet(QueryContext db) : super(db, userTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.User> create({
+  Future<User> create({
     Change<int> id = const Change.keep(),
     required String email,
     Change<String?> nickname = const Change.keep(),
@@ -119,10 +126,10 @@ final class UsersTableSet extends TableSet<models.User, UsersFields> {
       ...row.nickname.change(nickname),
     ],
   );
-  Query<models.User, UsersFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<User, UserFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension UsersUpdates on Query<models.User, UsersFields> {
+extension UserUpdates on Query<User, UserFields> {
   Future<int> patch({
     Change<String> email = const Change.keep(),
     Change<String?> nickname = const Change.keep(),
@@ -131,27 +138,33 @@ extension UsersUpdates on Query<models.User, UsersFields> {
   ).execute();
 }
 
-final _postsId = Column<int>(
+/// A complete immutable row from "posts".
+final class Post({
+  required final int id,
+  required final int authorId,
+  required final String title,
+});
+final _postId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _postsAuthorId = Column<int>(
+final _postAuthorId = Column<int>(
   "author_id",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _postsTitle = Column<String>(
+final _postTitle = Column<String>(
   "title",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final postsSchema = TableSchema(
+final postSchema = TableSchema(
   "posts",
-  columns: [_postsId, _postsAuthorId, _postsTitle],
+  columns: [_postId, _postAuthorId, _postTitle],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [],
@@ -160,30 +173,30 @@ final postsSchema = TableSchema(
   ],
 );
 
-final class PostsFields extends Fields {
-  PostsFields(super.table);
-  late final id = column(_postsId);
-  late final authorId = column(_postsAuthorId);
-  late final title = column(_postsTitle);
-  Relation<models.User, UsersFields> get author =>
-      Relation(usersTable, parent: [authorId], child: (row) => [row.id]);
+final class PostFields extends Fields {
+  PostFields(super.table);
+  late final id = column(_postId);
+  late final authorId = column(_postAuthorId);
+  late final title = column(_postTitle);
+  Relation<User, UserFields> get author =>
+      Relation(userTable, parent: [authorId], child: (row) => [row.id]);
 }
 
-final postsTable = Table<models.Post, PostsFields>(
-  postsSchema,
-  PostsFields.new,
+final postTable = Table<Post, PostFields>(
+  postSchema,
+  PostFields.new,
   (row) => (
     row.id,
     row.authorId,
     row.title,
-  ).map((id, authorId, title) => (id: id, authorId: authorId, title: title)),
+  ).map((v0, v1, v2) => Post(id: v0, authorId: v1, title: v2)),
 );
 
-final class PostsTableSet extends TableSet<models.Post, PostsFields> {
-  PostsTableSet(QueryContext db) : super(db, postsTable) {
+final class PostTableSet extends TableSet<Post, PostFields> {
+  PostTableSet(QueryContext db) : super(db, postTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Post> create({
+  Future<Post> create({
     Change<int> id = const Change.keep(),
     required int authorId,
     required String title,
@@ -194,10 +207,10 @@ final class PostsTableSet extends TableSet<models.Post, PostsFields> {
       row.title.set(title),
     ],
   );
-  Query<models.Post, PostsFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Post, PostFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension PostsUpdates on Query<models.Post, PostsFields> {
+extension PostUpdates on Query<Post, PostFields> {
   Future<int> patch({
     Change<int> authorId = const Change.keep(),
     Change<String> title = const Change.keep(),
@@ -206,65 +219,76 @@ extension PostsUpdates on Query<models.Post, PostsFields> {
   ).execute();
 }
 
-final _valuesId = Column<int>(
+/// A complete immutable row from "values".
+final class Value({
+  required final int id,
+  required final BigInt wide,
+  required final Uint8List bytes,
+  required final Decimal amount,
+  required final LocalDate day,
+  required final LocalTime time,
+  required final LocalDateTime stamp,
+  required final DateTime instant,
+});
+final _valueId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _valuesWide = Column<BigInt>(
+final _valueWide = Column<BigInt>(
   "wide",
   Codecs.bigint,
   nullable: false,
   generated: false,
 );
-final _valuesBytes = Column<Uint8List>(
+final _valueBytes = Column<Uint8List>(
   "bytes",
   Codecs.bytes,
   nullable: false,
   generated: false,
 );
-final _valuesAmount = Column<Decimal>(
+final _valueAmount = Column<Decimal>(
   "amount",
   Codecs.decimal,
   nullable: false,
   generated: false,
 );
-final _valuesDay = Column<LocalDate>(
+final _valueDay = Column<LocalDate>(
   "day",
   Codecs.date,
   nullable: false,
   generated: false,
 );
-final _valuesTime = Column<LocalTime>(
+final _valueTime = Column<LocalTime>(
   "time",
   Codecs.time,
   nullable: false,
   generated: false,
 );
-final _valuesStamp = Column<LocalDateTime>(
+final _valueStamp = Column<LocalDateTime>(
   "stamp",
   Codecs.localDateTime,
   nullable: false,
   generated: false,
 );
-final _valuesInstant = Column<DateTime>(
+final _valueInstant = Column<DateTime>(
   "instant",
   Codecs.dateTime,
   nullable: false,
   generated: false,
 );
-final valuesSchema = TableSchema(
+final valueSchema = TableSchema(
   "values",
   columns: [
-    _valuesId,
-    _valuesWide,
-    _valuesBytes,
-    _valuesAmount,
-    _valuesDay,
-    _valuesTime,
-    _valuesStamp,
-    _valuesInstant,
+    _valueId,
+    _valueWide,
+    _valueBytes,
+    _valueAmount,
+    _valueDay,
+    _valueTime,
+    _valueStamp,
+    _valueInstant,
   ],
   primaryKey: ["id"],
   uniqueKeys: [],
@@ -272,21 +296,21 @@ final valuesSchema = TableSchema(
   foreignKeys: [],
 );
 
-final class ValuesFields extends Fields {
-  ValuesFields(super.table);
-  late final id = column(_valuesId);
-  late final wide = column(_valuesWide);
-  late final bytes = column(_valuesBytes);
-  late final amount = column(_valuesAmount);
-  late final day = column(_valuesDay);
-  late final time = column(_valuesTime);
-  late final stamp = column(_valuesStamp);
-  late final instant = column(_valuesInstant);
+final class ValueFields extends Fields {
+  ValueFields(super.table);
+  late final id = column(_valueId);
+  late final wide = column(_valueWide);
+  late final bytes = column(_valueBytes);
+  late final amount = column(_valueAmount);
+  late final day = column(_valueDay);
+  late final time = column(_valueTime);
+  late final stamp = column(_valueStamp);
+  late final instant = column(_valueInstant);
 }
 
-final valuesTable = Table<models.Value, ValuesFields>(
-  valuesSchema,
-  ValuesFields.new,
+final valueTable = Table<Value, ValueFields>(
+  valueSchema,
+  ValueFields.new,
   (row) =>
       (
         (row.id, row.wide, row.bytes, row.amount, row.day).map(
@@ -298,7 +322,7 @@ final valuesTable = Table<models.Value, ValuesFields>(
               (time: time, stamp: stamp, instant: instant),
         ),
       ).map(
-        (left, right) => (
+        (left, right) => Value(
           id: left.id,
           wide: left.wide,
           bytes: left.bytes,
@@ -311,11 +335,11 @@ final valuesTable = Table<models.Value, ValuesFields>(
       ),
 );
 
-final class ValuesTableSet extends TableSet<models.Value, ValuesFields> {
-  ValuesTableSet(QueryContext db) : super(db, valuesTable) {
+final class ValueTableSet extends TableSet<Value, ValueFields> {
+  ValueTableSet(QueryContext db) : super(db, valueTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Value> create({
+  Future<Value> create({
     Change<int> id = const Change.keep(),
     required BigInt wide,
     required Uint8List bytes,
@@ -336,11 +360,10 @@ final class ValuesTableSet extends TableSet<models.Value, ValuesFields> {
       row.instant.set(instant),
     ],
   );
-  Query<models.Value, ValuesFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+  Query<Value, ValueFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension ValuesUpdates on Query<models.Value, ValuesFields> {
+extension ValueUpdates on Query<Value, ValueFields> {
   Future<int> patch({
     Change<BigInt> wide = const Change.keep(),
     Change<Uint8List> bytes = const Change.keep(),
@@ -362,61 +385,62 @@ extension ValuesUpdates on Query<models.Value, ValuesFields> {
   ).execute();
 }
 
-final _readingsId = Column<int>(
+/// A complete immutable row from "readings".
+final class Reading({required final int id, required final double value});
+final _readingId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _readingsValue = Column<double>(
+final _readingValue = Column<double>(
   "value",
   Codecs.real,
   nullable: false,
   generated: false,
 );
-final readingsSchema = TableSchema(
+final readingSchema = TableSchema(
   "readings",
-  columns: [_readingsId, _readingsValue],
+  columns: [_readingId, _readingValue],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [],
   foreignKeys: [],
 );
 
-final class ReadingsFields extends Fields {
-  ReadingsFields(super.table);
-  late final id = column(_readingsId);
-  late final value = column(_readingsValue);
+final class ReadingFields extends Fields {
+  ReadingFields(super.table);
+  late final id = column(_readingId);
+  late final value = column(_readingValue);
 
   /// Read-only navigation; no database foreign key or write effects.
-  Relation<models.Reading, ReadingsFields> get peers =>
-      Relation(readingsTable, parent: [value], child: (row) => [row.value]);
+  Relation<Reading, ReadingFields> get peers =>
+      Relation(readingTable, parent: [value], child: (row) => [row.value]);
 
   /// Read-only navigation; no database foreign key or write effects.
-  Relation<models.Reading, ReadingsFields> get sameReading => Relation(
-    readingsTable,
-    parent: [value, id],
-    child: (row) => [row.value, row.id],
+  Relation<Reading, ReadingFields> get sameReading => Relation(
+    readingTable,
+    parent: [id, value],
+    child: (row) => [row.id, row.value],
   );
 }
 
-final readingsTable = Table<models.Reading, ReadingsFields>(
-  readingsSchema,
-  ReadingsFields.new,
-  (row) => (row.id, row.value).map((id, value) => (id: id, value: value)),
+final readingTable = Table<Reading, ReadingFields>(
+  readingSchema,
+  ReadingFields.new,
+  (row) => (row.id, row.value).map((v0, v1) => Reading(id: v0, value: v1)),
 );
 
-final class ReadingsTableSet extends TableSet<models.Reading, ReadingsFields> {
-  ReadingsTableSet(QueryContext db) : super(db, readingsTable) {
+final class ReadingTableSet extends TableSet<Reading, ReadingFields> {
+  ReadingTableSet(QueryContext db) : super(db, readingTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Reading> create({required int id, required double value}) =>
+  Future<Reading> create({required int id, required double value}) =>
       createRow((row) => [row.id.set(id), row.value.set(value)]);
-  Query<models.Reading, ReadingsFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+  Query<Reading, ReadingFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension ReadingsUpdates on Query<models.Reading, ReadingsFields> {
+extension ReadingUpdates on Query<Reading, ReadingFields> {
   Future<int> patch({
     Change<int> id = const Change.keep(),
     Change<double> value = const Change.keep(),
@@ -426,15 +450,15 @@ extension ReadingsUpdates on Query<models.Reading, ReadingsFields> {
 }
 
 final appSchema = List<TableSchema>.unmodifiable([
-  usersSchema,
-  postsSchema,
-  valuesSchema,
-  readingsSchema,
+  userSchema,
+  postSchema,
+  valueSchema,
+  readingSchema,
 ]);
 
 extension AppTables on QueryContext {
-  UsersTableSet get users => UsersTableSet(this);
-  PostsTableSet get posts => PostsTableSet(this);
-  ValuesTableSet get values => ValuesTableSet(this);
-  ReadingsTableSet get readings => ReadingsTableSet(this);
+  UserTableSet get user => UserTableSet(this);
+  PostTableSet get post => PostTableSet(this);
+  ValueTableSet get value => ValueTableSet(this);
+  ReadingTableSet get reading => ReadingTableSet(this);
 }

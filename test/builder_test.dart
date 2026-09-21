@@ -60,8 +60,7 @@ void main() {
     'multiple explicit schema roots resolve shared public types under lib',
     () async {
       const types = '''
-import 'package:orm/schema.dart';
-enum Status { @EnumValue('waiting') pending, done }
+enum Status { pending, done }
 ''';
       final inputs = <String, String>{
         'orm|lib/fixture/types.dart': types,
@@ -70,8 +69,7 @@ enum Status { @EnumValue('waiting') pending, done }
               '''
 import 'package:orm/schema.dart';
 import 'types.dart';
-typedef Row = ({@Id() int id, Status status});
-final rows = entity<Row>(table: '$name');
+final row = model('$name', (id: integer(), status: enumeration(Status.values, labels: {Status.pending: 'waiting', Status.done: 'done'})), primaryKey: (r) => r.id);
 ''',
         'orm|lib/fixture/unrelated.dart': 'const unrelated = 1;',
       };
@@ -95,14 +93,50 @@ final rows = entity<Row>(table: '$name');
     },
   );
 
+  test(
+    'Record roots follow exported and referenced models through build assets',
+    () async {
+      final result = await run(
+        {
+          'orm|lib/fixture/schema.dart':
+              "export 'employee.dart' show employee;",
+          'orm|lib/fixture/employee.dart': '''
+import 'package:orm/schema.dart';
+import 'department.dart';
+enum Role { member, manager }
+final Model employee = model('employees', (
+  id: identity(), role: enumeration(Role.values, defaultValue: Role.member),
+  departmentId: integer(),
+), relations: (e) => (department: references(e.departmentId, () => department),));
+''',
+          'orm|lib/fixture/department.dart': '''
+import 'package:orm/schema.dart';
+import 'employee.dart';
+final department = model('departments', (id: identity(), name: text()), relations: (d) => (employees: referencedBy(() => employee),));
+final unused = model('unused', (bad: 'not a column',));
+''',
+        },
+        {'orm|lib/fixture/schema.dart'},
+      );
+      expect(result.succeeded, true, reason: result.errors.toString());
+      final generated = files.testing.readString(
+        AssetId('orm', 'lib/fixture/schema.orm.dart'),
+      );
+      expect(generated, contains('final class Employee('));
+      expect(generated, contains('final class Department('));
+      expect(generated, isNot(contains('final class Unused(')));
+      expect(generated, contains('package:orm/fixture/employee.dart'));
+    },
+  );
+
   for (final (name, body) in [
     (
       'semantic_error',
-      'typedef Row = ({@Id() int id}); final rows = entity<Row>(); int bad = "wrong";',
+      'final row = model("rows", (id: identity(),)); int bad = "wrong";',
     ),
     (
       'enum_labels',
-      "enum Status { @EnumValue('x') a, @EnumValue('x') b } typedef Row = ({Status status}); final rows = entity<Row>();",
+      "enum Status { a, b } final row = model('rows', (status: enumeration(Status.values, labels: {Status.a: 'x', Status.b: 'x'}),));",
     ),
     ('no_models', 'const empty = 1;'),
     ('part_file', "part of 'root.dart';"),
@@ -136,8 +170,9 @@ final rows = entity<Row>(table: '$name');
         _OnlyRoots({'orm|lib/fixture/schema.dart'}),
       ],
       {
-        'orm|lib/fixture/models.domain': "import 'package:orm/schema.dart'; enum Status { @EnumValue('generated') ready }",
-        'orm|lib/fixture/schema.dart': "import 'package:orm/schema.dart'; import 'models.dart'; typedef Row = ({Status status}); final rows = entity<Row>();",
+        'orm|lib/fixture/models.domain':
+            "const readyLabel = 'generated'; enum Status { ready }",
+        'orm|lib/fixture/schema.dart': "import 'package:orm/schema.dart'; import 'models.dart'; final row = model('rows', (status: enumeration(Status.values, labels: {Status.ready: readyLabel}),));",
       },
       rootPackage: 'orm',
       readerWriter: files,

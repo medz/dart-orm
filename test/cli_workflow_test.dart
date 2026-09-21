@@ -56,7 +56,7 @@ void main() {
         final declaration = await fixture
             .file('lib/schema.dart')
             .readAsString();
-        expect(declaration, contains('final class Task'));
+        expect(declaration, contains('final task = model('));
         final config = await fixture.file('orm.config.dart').readAsString();
         expect(config, contains('package:orm/drivers/sqlite.dart'));
         expect(config, isNot(contains('package:orm/orm.dart')));
@@ -69,8 +69,8 @@ void main() {
         await fixture.write(
           'lib/schema.dart',
           declaration.replaceFirst(
-            'required final String title,',
-            'required final String title,\n  required final String? detail,',
+            'title: text(),',
+            'title: text(),\n  detail: text().nullable(),',
           ),
         );
         expect(
@@ -105,8 +105,8 @@ void main() {
         await fixture.write(
           'lib/schema.dart',
           declaration.replaceFirst(
-            'required final String title,',
-            'required final String title,\n  required final String? detail,\n  required final String? label,',
+            'title: text(),',
+            'title: text(),\n  detail: text().nullable(),\n  label: text().nullable(),',
           ),
         );
         // No explicit generate: create must use the edited model, not the config's

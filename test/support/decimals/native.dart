@@ -10,28 +10,28 @@ Future<void> main() async {
       db.sql,
     ).apply([Migration.create('0001_decimal', appSchema, dialect: db.dialect)]);
     final exact = Decimal.parse('9007199254740993.1234567890123456789');
-    await db.entries.create(amount: exact, bucket: 'a');
-    await db.entries.create(
+    await db.entry.create(amount: exact, bucket: 'a');
+    await db.entry.create(
       amount: Decimal.parse('.0000000000000000001'),
       bucket: 'a',
     );
-    if (await db.entries.select((e) => e.amount.sum()).single() !=
+    if (await db.entry.select((e) => e.amount.sum()).single() !=
         Decimal.parse('9007199254740993.123456789012345679')) {
       throw StateError('Exact sum lost precision');
     }
-    final sorted = await db.entries.orderBy((e) => [e.amount.asc()]).get();
+    final sorted = await db.entry.orderBy((e) => [e.amount.asc()]).get();
     if (sorted.last.amount != exact) throw StateError('Decimal order differs');
-    await db.rates.create(id: Decimal.parse('2'), label: 'two');
+    await db.rate.create(id: Decimal.parse('2'), label: 'two');
     await db.execute(
       SqlCommand("INSERT INTO allocations (rate_id) VALUES ('2.000')"),
     );
-    final children = await db.rates
+    final children = await db.rate
         .select((r) => r.allocations.select((a) => a.rateId).many())
         .single();
     if (children.single != Decimal.parse('2')) {
       throw StateError('Decimal relation keys differ');
     }
-    final window = await db.entries
+    final window = await db.entry
         .orderBy((e) => [e.id.asc()])
         .select(
           (e) =>
@@ -41,7 +41,7 @@ Future<void> main() async {
     if (window.last != Decimal.parse('9007199254740993.123456789012345679')) {
       throw StateError('Window sum differs');
     }
-    final halves = await db.entries
+    final halves = await db.entry
         .orderBy((e) => [e.id.asc()])
         .select(
           (e) => e.amount
@@ -53,18 +53,18 @@ Future<void> main() async {
     if (halves.last != Decimal.parse('4503599627370496.5617283945061728395')) {
       throw StateError('Exact window division differs');
     }
-    final rounded = await db.entries
+    final rounded = await db.entry
         .orderBy((e) => [e.id.asc()])
         .select((e) => e.amount.rounded(2, rounding: .halfEven))
         .get();
     if (rounded.first != Decimal.parse('9007199254740993.12')) {
       throw StateError('Exact SQL rounding differs');
     }
-    final average = await db.entries
+    final average = await db.entry
         .select((e) => e.amount.average(scale: 20, rounding: .halfEven))
         .single();
     if (average != halves.last) throw StateError('Exact SQL average differs');
-    final runningMean = await db.entries
+    final runningMean = await db.entry
         .orderBy((e) => [e.id.asc()])
         .select(
           (e) => e.amount

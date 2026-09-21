@@ -2,44 +2,51 @@
 
 import 'package:orm/sql.dart';
 
-import "schema.dart" as models;
-export "schema.dart" show Moment, Slot, Booking;
-
-final _momentsId = Column<int>(
+/// A complete immutable row from "moments".
+final class Moment({
+  required final int id,
+  required final LocalTime clock,
+  required final LocalDateTime local,
+  required final DateTime instant,
+  required final LocalTime? optional,
+  required final LocalTime defaulted,
+  required final LocalTime rounded,
+});
+final _momentId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _momentsClock = Column<LocalTime>(
+final _momentClock = Column<LocalTime>(
   "clock",
   Codecs.time,
   nullable: false,
   generated: false,
   temporalPrecision: 3,
 );
-final _momentsLocal = Column<LocalDateTime>(
+final _momentLocal = Column<LocalDateTime>(
   "local",
   Codecs.localDateTime,
   nullable: false,
   generated: false,
   temporalPrecision: 3,
 );
-final _momentsInstant = Column<DateTime>(
+final _momentInstant = Column<DateTime>(
   "instant",
   Codecs.dateTime,
   nullable: false,
   generated: false,
   temporalPrecision: 0,
 );
-final _momentsOptional = Column<LocalTime?>(
+final _momentOptional = Column<LocalTime?>(
   "optional",
   Codecs.time.nullable(),
   nullable: true,
   generated: false,
   temporalPrecision: 2,
 );
-final _momentsDefaulted = Column<LocalTime>(
+final _momentDefaulted = Column<LocalTime>(
   "defaulted",
   Codecs.time,
   nullable: false,
@@ -47,7 +54,7 @@ final _momentsDefaulted = Column<LocalTime>(
   defaultSql: "'23:59:59.9995'",
   temporalPrecision: 3,
 );
-final _momentsRounded = Column<LocalTime>(
+final _momentRounded = Column<LocalTime>(
   "rounded",
   Codecs.time,
   nullable: false,
@@ -61,16 +68,16 @@ final _momentsRounded = Column<LocalTime>(
   ),
   temporalPrecision: 0,
 );
-final momentsSchema = TableSchema(
+final momentSchema = TableSchema(
   "moments",
   columns: [
-    _momentsId,
-    _momentsClock,
-    _momentsLocal,
-    _momentsInstant,
-    _momentsOptional,
-    _momentsDefaulted,
-    _momentsRounded,
+    _momentId,
+    _momentClock,
+    _momentLocal,
+    _momentInstant,
+    _momentOptional,
+    _momentDefaulted,
+    _momentRounded,
   ],
   primaryKey: ["id"],
   uniqueKeys: [],
@@ -78,20 +85,20 @@ final momentsSchema = TableSchema(
   foreignKeys: [],
 );
 
-final class MomentsFields extends Fields {
-  MomentsFields(super.table);
-  late final id = column(_momentsId);
-  late final clock = column(_momentsClock);
-  late final local = column(_momentsLocal);
-  late final instant = column(_momentsInstant);
-  late final optional = column(_momentsOptional);
-  late final defaulted = column(_momentsDefaulted);
-  late final rounded = readColumn(_momentsRounded);
+final class MomentFields extends Fields {
+  MomentFields(super.table);
+  late final id = column(_momentId);
+  late final clock = column(_momentClock);
+  late final local = column(_momentLocal);
+  late final instant = column(_momentInstant);
+  late final optional = column(_momentOptional);
+  late final defaulted = column(_momentDefaulted);
+  late final rounded = readColumn(_momentRounded);
 }
 
-final momentsTable = Table<models.Moment, MomentsFields>(
-  momentsSchema,
-  MomentsFields.new,
+final momentTable = Table<Moment, MomentFields>(
+  momentSchema,
+  MomentFields.new,
   (row) =>
       (
         (row.id, row.clock, row.local, row.instant, row.optional).map(
@@ -108,7 +115,7 @@ final momentsTable = Table<models.Moment, MomentsFields>(
           row.rounded,
         ).map((defaulted, rounded) => (defaulted: defaulted, rounded: rounded)),
       ).map(
-        (left, right) => (
+        (left, right) => Moment(
           id: left.id,
           clock: left.clock,
           local: left.local,
@@ -120,11 +127,11 @@ final momentsTable = Table<models.Moment, MomentsFields>(
       ),
 );
 
-final class MomentsTableSet extends TableSet<models.Moment, MomentsFields> {
-  MomentsTableSet(QueryContext db) : super(db, momentsTable) {
+final class MomentTableSet extends TableSet<Moment, MomentFields> {
+  MomentTableSet(QueryContext db) : super(db, momentTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Moment> create({
+  Future<Moment> create({
     Change<int> id = const Change.keep(),
     required LocalTime clock,
     required LocalDateTime local,
@@ -141,11 +148,10 @@ final class MomentsTableSet extends TableSet<models.Moment, MomentsFields> {
       ...row.defaulted.change(defaulted),
     ],
   );
-  Query<models.Moment, MomentsFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+  Query<Moment, MomentFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension MomentsUpdates on Query<models.Moment, MomentsFields> {
+extension MomentUpdates on Query<Moment, MomentFields> {
   Future<int> patch({
     Change<LocalTime> clock = const Change.keep(),
     Change<LocalDateTime> local = const Change.keep(),
@@ -163,56 +169,55 @@ extension MomentsUpdates on Query<models.Moment, MomentsFields> {
   ).execute();
 }
 
-final _slotsTime = Column<LocalTime>(
+/// A complete immutable row from "slots".
+final class Slot({required final LocalTime time, required final String label});
+final _slotTime = Column<LocalTime>(
   "time",
   Codecs.time,
   nullable: false,
   generated: false,
   temporalPrecision: 3,
 );
-final _slotsLabel = Column<String>(
+final _slotLabel = Column<String>(
   "label",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final slotsSchema = TableSchema(
+final slotSchema = TableSchema(
   "slots",
-  columns: [_slotsTime, _slotsLabel],
+  columns: [_slotTime, _slotLabel],
   primaryKey: ["time"],
   uniqueKeys: [],
   indexes: [],
   foreignKeys: [],
 );
 
-final class SlotsFields extends Fields {
-  SlotsFields(super.table);
-  late final time = column(_slotsTime);
-  late final label = column(_slotsLabel);
-  Relation<models.Booking, BookingsFields> get bookings =>
-      Relation(bookingsTable, parent: [time], child: (row) => [row.time]);
+final class SlotFields extends Fields {
+  SlotFields(super.table);
+  late final time = column(_slotTime);
+  late final label = column(_slotLabel);
+  Relation<Booking, BookingFields> get bookings =>
+      Relation(bookingTable, parent: [time], child: (row) => [row.time]);
 }
 
-final slotsTable = Table<models.Slot, SlotsFields>(
-  slotsSchema,
-  SlotsFields.new,
-  (row) =>
-      (row.time, row.label).map((time, label) => (time: time, label: label)),
+final slotTable = Table<Slot, SlotFields>(
+  slotSchema,
+  SlotFields.new,
+  (row) => (row.time, row.label).map((v0, v1) => Slot(time: v0, label: v1)),
 );
 
-final class SlotsTableSet extends TableSet<models.Slot, SlotsFields> {
-  SlotsTableSet(QueryContext db) : super(db, slotsTable) {
+final class SlotTableSet extends TableSet<Slot, SlotFields> {
+  SlotTableSet(QueryContext db) : super(db, slotTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Slot> create({
-    required LocalTime time,
-    required String label,
-  }) => createRow((row) => [row.time.set(time), row.label.set(label)]);
-  Query<models.Slot, SlotsFields> byId(LocalTime time) =>
+  Future<Slot> create({required LocalTime time, required String label}) =>
+      createRow((row) => [row.time.set(time), row.label.set(label)]);
+  Query<Slot, SlotFields> byId(LocalTime time) =>
       where((row) => row.time.eq(time));
 }
 
-extension SlotsUpdates on Query<models.Slot, SlotsFields> {
+extension SlotUpdates on Query<Slot, SlotFields> {
   Future<int> patch({
     Change<LocalTime> time = const Change.keep(),
     Change<String> label = const Change.keep(),
@@ -221,22 +226,24 @@ extension SlotsUpdates on Query<models.Slot, SlotsFields> {
           .execute();
 }
 
-final _bookingsId = Column<int>(
+/// A complete immutable row from "bookings".
+final class Booking({required final int id, required final LocalTime time});
+final _bookingId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _bookingsTime = Column<LocalTime>(
+final _bookingTime = Column<LocalTime>(
   "time",
   Codecs.time,
   nullable: false,
   generated: false,
   temporalPrecision: 3,
 );
-final bookingsSchema = TableSchema(
+final bookingSchema = TableSchema(
   "bookings",
-  columns: [_bookingsId, _bookingsTime],
+  columns: [_bookingId, _bookingTime],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [],
@@ -245,45 +252,44 @@ final bookingsSchema = TableSchema(
   ],
 );
 
-final class BookingsFields extends Fields {
-  BookingsFields(super.table);
-  late final id = column(_bookingsId);
-  late final time = column(_bookingsTime);
-  Relation<models.Slot, SlotsFields> get slot =>
-      Relation(slotsTable, parent: [time], child: (row) => [row.time]);
+final class BookingFields extends Fields {
+  BookingFields(super.table);
+  late final id = column(_bookingId);
+  late final time = column(_bookingTime);
+  Relation<Slot, SlotFields> get slot =>
+      Relation(slotTable, parent: [time], child: (row) => [row.time]);
 }
 
-final bookingsTable = Table<models.Booking, BookingsFields>(
-  bookingsSchema,
-  BookingsFields.new,
-  (row) => (row.id, row.time).map((id, time) => (id: id, time: time)),
+final bookingTable = Table<Booking, BookingFields>(
+  bookingSchema,
+  BookingFields.new,
+  (row) => (row.id, row.time).map((v0, v1) => Booking(id: v0, time: v1)),
 );
 
-final class BookingsTableSet extends TableSet<models.Booking, BookingsFields> {
-  BookingsTableSet(QueryContext db) : super(db, bookingsTable) {
+final class BookingTableSet extends TableSet<Booking, BookingFields> {
+  BookingTableSet(QueryContext db) : super(db, bookingTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Booking> create({
+  Future<Booking> create({
     Change<int> id = const Change.keep(),
     required LocalTime time,
   }) => createRow((row) => [...row.id.change(id), row.time.set(time)]);
-  Query<models.Booking, BookingsFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+  Query<Booking, BookingFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension BookingsUpdates on Query<models.Booking, BookingsFields> {
+extension BookingUpdates on Query<Booking, BookingFields> {
   Future<int> patch({Change<LocalTime> time = const Change.keep()}) =>
       update((row) => [...row.time.change(time)]).execute();
 }
 
 final appSchema = List<TableSchema>.unmodifiable([
-  momentsSchema,
-  slotsSchema,
-  bookingsSchema,
+  momentSchema,
+  slotSchema,
+  bookingSchema,
 ]);
 
 extension AppTables on QueryContext {
-  MomentsTableSet get moments => MomentsTableSet(this);
-  SlotsTableSet get slots => SlotsTableSet(this);
-  BookingsTableSet get bookings => BookingsTableSet(this);
+  MomentTableSet get moment => MomentTableSet(this);
+  SlotTableSet get slot => SlotTableSet(this);
+  BookingTableSet get booking => BookingTableSet(this);
 }

@@ -20,7 +20,7 @@ Build a query with normal Dart control flow. Builder calls return new query
 values; terminal calls execute them:
 
 ```dart
-var query = db.users.where((u) => u.email.like('%@example.com'));
+var query = db.user.where((u) => u.email.like('%@example.com'));
 if (minimumScore != null) {
   query = query.where((u) => u.score.gte(minimumScore));
 }
@@ -57,15 +57,15 @@ Choose distinct root-table columns with a declared unique tie breaker. Nullable
 columns require explicit NULL ordering:
 
 ```dart
-final first = await db.users
+final first = await db.user
     .orderBy((u) => [u.nickname.asc(nulls: .last), u.id.asc()])
     .take(20).get();
 if (first.isNotEmpty) {
   final last = first.last;
-  final token = db.users.cursorToken((u) => [
+  final token = db.user.cursorToken((u) => [
     u.nickname.cursor(last.nickname, nulls: .last), u.id.cursor(last.id),
   ]);
-  final next = await db.users.seekToken(token,
+  final next = await db.user.seekToken(token,
     orderBy: (u) => [u.nickname.asc(nulls: .last), u.id.asc()],
   ).take(20).get();
 }
@@ -85,7 +85,7 @@ projection. This example uses the [generated example schema](https://github.com/
 
 ```dart
 final author = usersTable.alias();
-final rows = await db.posts
+final rows = await db.post
     .join(author, on: (p, a) => p.authorId.equals(a.id))
     .orderBy((p) => [author.fields.email.asc(), p.id.asc()])
     .select((p) => (p.title, author.fields.email).row)
@@ -99,21 +99,21 @@ the joined row's presence independently of its nullable values. Aliases cannot
 be reused across unrelated query scopes or referenced before their join.
 
 To order by a collection count, use
-`db.users.orderBy((u) => [u.posts.count().desc(), u.id.asc()])`. This compiles a
+`db.user.orderBy((u) => [u.posts.count().desc(), u.id.asc()])`. This compiles a
 correlated count without loading posts. Normal nested results still use
 [relationship selections](https://github.com/medz/dart-orm/blob/main/doc/relations.md) and their explicit loading strategies.
 
 ## Grouping, subqueries, CTEs and windows
 
 ```dart
-final totals = db.posts.groupBy((p) => [p.authorId])
+final totals = db.post.groupBy((p) => [p.authorId])
     .having((p) => p.id.count().gt(1))
     .select((p) => (p.authorId, p.id.count()).row)
     .asCte('author_totals');
 final active = await totals.query
     .orderBy((c) => [c.ref((p) => p.authorId).asc()]).get();
 
-final ranks = await db.posts.orderBy((p) => [p.id.asc()])
+final ranks = await db.post.orderBy((p) => [p.id.asc()])
     .select((p) => (p.id, rowNumber(
       partitionBy: [p.authorId], orderBy: [p.createdAt.desc(), p.id.desc()],
     )).row).get();
@@ -141,12 +141,12 @@ application; do not interpolate user input into them.
 Combine scalar expressions or SQL records with matching types:
 
 ```dart
-final names = db.users.select((u) => u.email)
-    .union(db.posts.select((p) => p.title));
+final names = db.user.select((u) => u.email)
+    .union(db.post.select((p) => p.title));
 final List<String> result = await names.get();
 
-final rows = db.users.select((u) => (u.id, u.email).row)
-    .unionAll(db.posts.select((p) => (p.id, p.title).row))
+final rows = db.user.select((u) => (u.id, u.email).row)
+    .unionAll(db.post.select((p) => (p.id, p.title).row))
     .orderBy((row) => [
       row.ref((u) => u.id).asc(),
       row.ref((u) => u.email).asc(),
@@ -181,8 +181,8 @@ Arbitrary Dart mappers and loaded relationships are not SQL set columns:
 
 ```dart
 // Rejected: these mappers have different behavior despite both returning String.
-final upper = db.users.select((u) => u.email.map((v) => v.toUpperCase()));
-final lower = db.posts.select((p) => p.title.map((v) => v.toLowerCase()));
+final upper = db.user.select((u) => u.email.map((v) => v.toUpperCase()));
+final lower = db.post.select((p) => p.title.map((v) => v.toLowerCase()));
 // upper.union(lower) throws QUERY.UNION_SELECTION.
 ```
 
@@ -204,9 +204,9 @@ unselected column, incompatible codec or unsafe nullable reference fails before
 SQL execution. DTO property names are not exported SQL columns.
 
 ```dart
-final recent = db.users.orderBy((u) => [u.id.desc()]).take(10)
+final recent = db.user.orderBy((u) => [u.id.desc()]).take(10)
     .select((u) => u.email)
-    .unionAll(db.posts.orderBy((p) => [p.id.desc()]).take(10)
+    .unionAll(db.post.orderBy((p) => [p.id.desc()]).take(10)
         .select((p) => p.title));
 
 final filtered = recent.where((row) => row.ref((u) => u.email).like('a%'));

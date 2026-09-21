@@ -18,15 +18,14 @@ extension type const UserId(int value) {
   static int _encode(UserId value) => value.value;
 }
 
-typedef User = ({
-  @Id.generated() @UseCodec(UserId.codec) UserId id,
-  String name,
-});
-final users = entity<User>();
+final user = model('users', (
+  id: custom(UserId.codec).identity(),
+  name: text(),
+));
 ```
 
-After generation, `db.users.byId(UserId(1))` accepts the domain ID;
-`db.users.byId(1)` is a static error. Use the same domain ID codec on foreign-key
+After generation, `db.user.byId(UserId(1))` accepts the domain ID;
+`db.user.byId(1)` is a static error. Use the same domain ID codec on foreign-key
 fields. Required integer primary keys can retain database-generated identities.
 
 `Codec<T>.text(decode, encode)` and `Codec<T>.integer(decode, encode)` constrain
@@ -34,39 +33,38 @@ the encoder's return type. The general `Codec<T>(storage, decode, encode)` accep
 the storage tags in the table below. It is the application's responsibility to
 validate the representation and keep encoding deterministic.
 
-`@UseCodec` accepts a **public const variable or public static const field**.
+`custom(codec)` accepts a **public const variable or public static const field**.
 The generator checks the reference's resolved Dart type and reads the constant
 storage tag. It never calls application encoders, decoders or model constructors.
-Private references and inline codec constructors are rejected. A nullable field
-can use a non-nullable codec; the generated client adds `.nullable()` so SQL
-`NULL` bypasses the domain decoder. A nullable codec cannot back a required field.
+Private codec references and inline codec constructors are rejected. Use
+`custom(codec).nullable()` for optional values: SQL `NULL` bypasses a non-nullable
+domain decoder. A codec whose Dart value type is nullable also produces a nullable
+column.
 
 Imported types, extension types, public record aliases and nested generic types
 retain qualified names in generated code. Two different libraries may both
 declare `Email`. Output can be generated into a different directory.
 
-See the complete [domain fixture](https://github.com/medz/dart-orm/blob/main/test/support/codecs/schema.dart) and its
-[types](https://github.com/medz/dart-orm/blob/main/test/support/codecs/types.dart). `Codec.map` remains available when
-constructing table definitions directly at runtime.
+`Codec.map` remains available when constructing table definitions directly.
 
 ## Enums
 
 ```dart
-enum Membership {
-  @EnumValue('pending-payment') pending,
-  active,
-  @EnumValue('closed') cancelled,
-}
+enum Membership { pending, active, cancelled }
 
-typedef Account = ({
-  @Id() int id,
-  Membership membership,
-  Membership? previousMembership,
-});
+final account = model('accounts', (
+  id: identity(),
+  membership: enumeration(Membership.values, labels: {
+    Membership.pending: 'pending-payment',
+    Membership.active: 'active',
+    Membership.cancelled: 'closed',
+  }),
+  previousMembership: enumeration(Membership.values).nullable(),
+));
 ```
 
-Enums use text labels. Without `@EnumValue`, the label is the constant's Dart
-name. Explicit labels allow a Dart rename without changing stored data. Ordinals
+Enums use text labels. Without a `labels` map, the label is the constant's Dart
+name. When supplied, the map must cover every enum constant. Explicit labels allow a Dart rename without changing stored data. Ordinals
 are never stored. Duplicate labels fail generation; an unknown stored label fails
 decoding with `CODEC.ENUM`. The runtime equivalent is `Codecs.enumeration` with
 an explicit enum-to-label map.
@@ -95,10 +93,10 @@ Location decodeLocation(Object? raw) {
 String encodeLocation(Location value) =>
     jsonEncode({'city': value.city, 'zone': value.zone});
 
-typedef Place = ({
-  @Id() int id,
-  @UseCodec(locationCodec) Location? location,
-});
+final place = model('places', (
+  id: identity(),
+  location: custom(locationCodec).nullable(),
+));
 ```
 
 Use `Codecs.json.decode(raw)` inside a custom JSON decoder. SQLite supplies JSON
@@ -109,10 +107,10 @@ passed to the domain decoder; it does not bypass validation as SQL `NULL` does.
 For an arbitrary document with explicit presence:
 
 ```dart
-typedef Event = ({
-  @Id() int id,
-  @UseCodec(Codecs.jsonDocument) SqlJson? payload,
-});
+final event = model('events', (
+  id: identity(),
+  payload: json().nullable(),
+));
 
 // In generated create/patch arguments:
 // null            -> SQL NULL
@@ -129,8 +127,7 @@ shape and reconstruct application types.
 
 Raw PostgreSQL results also use `SqlJson` for non-SQL-null `json`/`jsonb` columns.
 Decode these with `Codecs.json` when consuming portable raw results. JSON values
-as relational keys have not been validated and are outside the current verified
-key support; use scalar IDs for relationships.
+are not supported as relational keys; use scalar IDs for relationships.
 
 ## Physical storage and migrations
 
@@ -157,7 +154,7 @@ normal reviewed migration diff/conversion workflow.
 
 Storage semantics still belong to each database. In particular, SQLite `bigint`
 text retains exact digits but does not provide numeric text ordering/arithmetic.
-Native enum types remain a backend extension. Browser numeric limits and tested
+Native enum types remain a backend extension. Browser numeric limits and
 transport are described in [SQLite web](https://github.com/medz/dart-orm/blob/main/doc/sqlite-web.md). Use `Decimal` for exact
 decimal data.
 
@@ -187,8 +184,8 @@ UTC. The upper bound follows [Dart DateTime's range](https://api.dart.dev/dart-c
 and the lower bound follows PostgreSQL. The PostgreSQL decoder checks bounds
 before adding epoch offsets, so larger native values cannot wrap through int64.
 Raw finite values beyond DateTime's range and infinities remain text; typed
-instant decoding rejects them. These range and precision guarantees are verified
-on native Dart, not JavaScript or browser storage.
+instant decoding rejects them. For browser representation limits, see
+[SQLite Web](https://github.com/medz/dart-orm/blob/main/doc/sqlite-web.md#numeric-and-temporal-boundaries).
 
 Native drivers advertise `Capabilities.temporal`, covering the local types below
 and UTC instants. Borrowed PostgreSQL pools must use `postgresTypeRegistry()` and
@@ -228,24 +225,21 @@ instants, so the shown conversion preserves values; existing infinities or value
 beyond DateTime's range still require separate data review. Old cursor tokens
 carry the old storage tag and cannot be reused under the new ordering contract.
 
-The [migration fixture](https://github.com/medz/dart-orm/blob/main/test/support/instants/m0001_legacy.dart)
-illustrates a fixed timestamp history for upgrade and rollback checks. Plain
-unmanaged SQLite TEXT imports as String; the managed instant collation lets the
-importer infer DateTime without sampling data.
+Unmanaged SQLite TEXT imports as `String`; the managed instant collation lets the
+importer infer `DateTime` without sampling data.
 
 ## Local calendar values
 
 ```dart
-typedef Appointment = ({
-  @Id.generated() int id,
-  LocalDate day,
-  @Default.sql("'12:30'") LocalTime time,
-  LocalDateTime? starts,
-});
-final appointments = entity<Appointment>();
+final appointment = model('appointments', (
+  id: identity(),
+  day: date(),
+  time: time(defaultSql: "'12:30'"),
+  starts: localDateTime().nullable(),
+));
 
 // After generation:
-await db.appointments.create(
+await db.appointment.create(
   day: LocalDate(2024, 2, 29),
   time: Change.set(LocalTime(12, 30)),
   starts: LocalDateTime.parse('2024-02-29 12:30:00.000001'),
@@ -318,19 +312,18 @@ resolved instants.
 ## Temporal precision
 
 ```dart
-typedef Event = ({
-  @Id.generated() int id,
-  @TemporalPrecision(3) LocalTime clock,
-  @TemporalPrecision(3) LocalDateTime appointment,
-  @TemporalPrecision(0) DateTime occurredAt,
-});
-final events = entity<Event>();
+final event = model('events', (
+  id: identity(),
+  clock: time(precision: 3),
+  appointment: localDateTime(precision: 3),
+  occurredAt: dateTime(precision: 0),
+));
 ```
 
-`@TemporalPrecision` accepts 0 through 6 fractional second digits on `LocalTime`,
-`LocalDateTime` and `DateTime`, including nullable fields and domain codecs with
-the corresponding storage tag. Manual `Column` declarations use
-`temporalPrecision: 3`. Date-only and unrelated storage types are rejected.
+`time`, `localDateTime` and `dateTime` accept `precision` from 0 through 6,
+including on nullable columns. Manual `Column` declarations use
+`temporalPrecision: 3`, including for domain codecs with a temporal storage tag.
+Date-only and unrelated storage types do not accept temporal precision.
 Omitting precision retains microseconds. Explicit six and the default have the
 same canonical snapshot and DDL, preserving existing migration checksums.
 
@@ -346,7 +339,7 @@ SQLite defaults, computed expressions and migration copies use the same register
 function. Raw PostgreSQL writes undergo native column coercion; raw SQLite writes
 with excess nonzero digits fail the CHECK instead of silently changing the input.
 External SQLite connections need these ORM functions and collations registered.
-Default/six-digit columns retain their previous validation behavior.
+Default/six-digit columns preserve microseconds without precision rounding.
 
 Rounding matches PostgreSQL's [timestamp implementation](https://github.com/postgres/postgres/blob/REL_18_STABLE/src/backend/utils/adt/timestamp.c)
 and [time implementation](https://github.com/postgres/postgres/blob/REL_18_STABLE/src/backend/utils/adt/date.c):
@@ -360,7 +353,7 @@ Value methods and SQL expressions expose the same explicit operation:
 
 ```dart
 final rounded = LocalTime.parse('12:00:00.1235').withPrecision(3);
-final selected = await db.events
+final selected = await db.event
     .select((e) => e.appointment.withPrecision(0))
     .get();
 ```
@@ -380,28 +373,20 @@ conversion expressions for the selected database. Rounding can merge unique keys
 failure rolls back the data, schema and migration history together. Renames retain
 the precision metadata.
 
-`temporal_precision_test` covers native SQLite/PostgreSQL values, generated writes,
-all seven precisions around the PostgreSQL epoch, defaults/computed values,
-relations, batch/upsert rollback, import, catalog drift and reviewed migration
-rollback. The browser precision scenario additionally checks BC dates, extended
-timestamps and the maximum DateTime boundary through the worker. These checks do
-not establish native Flutter behavior or add timezone conversion support.
-
 ## Signed integer column widths
 
 ```dart
-typedef Counter = ({
-  @Id.generated() @IntegerBits(32) int id,
-  @IntegerBits(16) int small,
-  @IntegerBits(32) int? optional,
-  int total,
-});
-final counters = entity<Counter>();
+final counter = model('counters', (
+  id: integer(bits: 32).identity(),
+  small: integer(bits: 16),
+  optional: integer(bits: 32).nullable(),
+  total: integer(),
+));
 ```
 
-`@IntegerBits` accepts 16, 32 or 64 on fields with integer storage, including
-integer-backed domain codecs. Omitting it means 64. For manual tables, pass
-`integerBits: 16` to `Column`. Explicit 64 and the default have the same serialized
+`integer(bits: ...)` accepts 16, 32 or 64. Omitting it means 64. For manual
+tables, pass `integerBits: 16` to `Column`, including columns with integer-backed
+domain codecs. Explicit 64 and the default have the same serialized
 schema and produce no migration difference.
 
 Width belongs to the column metadata. It does not replace the `int` value codec
@@ -428,7 +413,7 @@ Catalog inspection recognizes the emitted SQLite range checks while ignoring
 quoted defaults and comments. It does not claim to prove equivalence of arbitrary
 handwritten CHECK expressions; those remain unmanaged. Column checks and full
 schema verification both compare the inferred width. Catalog import emits
-`@IntegerBits` for PostgreSQL SMALLINT/INTEGER and recognized SQLite range checks.
+`integer(bits: ...)` for PostgreSQL SMALLINT/INTEGER and recognized SQLite range checks.
 
 Width changes are type changes in migration history. Supply reviewed conversion
 expressions for the selected database, even for widening. PostgreSQL alters the native
@@ -438,24 +423,14 @@ retain the width. Changing an identity column's width preserves generation and, 
 the associated sequence type. Backfills use their saved width metadata when
 verifying the historical schema.
 
-Native JIT and AOT checks include integer values beyond JavaScript's exact-number
-range. Browser int values use the safe-number range; verified wider transport
-uses BigInt. See [SQLite web](https://github.com/medz/dart-orm/blob/main/doc/sqlite-web.md) for the boundaries and browser checks.
-
-## Verification
-
-The generated domain fixture runs against native SQLite and PostgreSQL. Checks
-cover writes, parameters, patches, invalid stored values, JSON scalar/null
-semantics, joined/batched relations, batch/upsert, cursor transport, streaming and
-catalog verification. Generator tests reject mismatched codecs and preserve
-nullable aliases. Negative compilation tests use the actual generated APIs.
-`test/support/codecs/native.dart` also compiles and runs as a native macOS AOT
-program. These checks do not establish browser support.
+Native `int` supports signed 64-bit values. Browser `int` values use the
+safe-number range; use `BigInt` for wider exact transport. See
+[SQLite Web](https://github.com/medz/dart-orm/blob/main/doc/sqlite-web.md) for details.
 
 ## Exact decimals
 
-Use `Decimal` for finite base-ten values, including money. Generated fields use
-`Codecs.decimal` without an annotation. See [exact decimals](https://github.com/medz/dart-orm/blob/main/doc/decimals.md) for
+Use `decimal()` for finite base-ten values, including money. Generated fields
+use the `Decimal` Dart type and `Codecs.decimal`. See [exact decimals](https://github.com/medz/dart-orm/blob/main/doc/decimals.md) for
 construction, arithmetic, numeric keys, SQLite storage requirements and current
 limits. `BigInt` storage does not provide these fractional or SQLite numeric
 ordering semantics.

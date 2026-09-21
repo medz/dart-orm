@@ -6,7 +6,6 @@ import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
-import '../example/teams/schema.dart';
 import '../example/teams/schema.orm.dart';
 
 final day1 = DateTime.utc(2026, 1, 1), day2 = DateTime.utc(2026, 1, 2);
@@ -46,15 +45,15 @@ void main() {
             Migration.create('0001_teams', appSchema, dialect: db.dialect),
           ]);
           await db.transaction((tx) async {
-            await tx.users.insertMany(
+            await tx.user.insertMany(
               [(1, 'Ada'), (2, 'Ben'), (3, 'Cy'), (4, 'Dee')],
               (u, value) => [u.id.set(value.$1), u.name.set(value.$2)],
             ).execute();
-            await tx.teams.insertMany(
+            await tx.team.insertMany(
               [(10, 'Core'), (20, 'Docs'), (30, 'Tools'), (40, 'Empty')],
               (t, value) => [t.id.set(value.$1), t.name.set(value.$2)],
             ).execute();
-            await tx.memberships.insertMany(
+            await tx.membership.insertMany(
               [
                 (10, 1, MembershipRole.owner, day1),
                 (10, 2, MembershipRole.member, day2),
@@ -89,22 +88,22 @@ void main() {
             isEmpty,
           );
           await expectLater(
-            db.memberships.create(teamId: 10, userId: 1, joinedAt: day2),
+            db.membership.create(teamId: 10, userId: 1, joinedAt: day2),
             throwsA(isA<SqlFailure>()),
           );
           await expectLater(
-            db.memberships.create(teamId: 999, userId: 4, joinedAt: day2),
+            db.membership.create(teamId: 999, userId: 4, joinedAt: day2),
             throwsA(isA<SqlFailure>()),
           );
           await expectLater(
-            db.memberships.create(teamId: 40, userId: 999, joinedAt: day2),
+            db.membership.create(teamId: 40, userId: 999, joinedAt: day2),
             throwsA(isA<SqlFailure>()),
           );
-          expect(await db.memberships.count(), 6);
+          expect(await db.membership.count(), 6);
         });
 
         test('forward projection keeps payload, shared targets and per-user limits in two statements', () async {
-          final query = db.users
+          final query = db.user
               .orderBy((u) => [u.id.asc()])
               .select(
                 (u) =>
@@ -166,7 +165,7 @@ void main() {
         });
 
         test('reverse projection applies tie-breaking and offset to each team without changing root pagination', () async {
-          final rows = await db.teams
+          final rows = await db.team
               .orderBy((t) => [t.id.asc()])
               .take(3)
               .select(
@@ -191,7 +190,7 @@ void main() {
           expect(events.map((e) => e.rowCount), [3, 2]);
           events.clear();
           expect(
-            await db.users
+            await db.user
                 .where((u) => u.id.eq(999))
                 .select((u) => u.memberships.many())
                 .get(),
@@ -203,7 +202,7 @@ void main() {
         test(
           'nested team rosters deduplicate shared team keys and batch by level',
           () async {
-            final rows = await db.users
+            final rows = await db.user
                 .orderBy((u) => [u.id.asc()])
                 .select(
                   (u) => (
@@ -267,7 +266,7 @@ void main() {
         test(
           'association predicates and counts stay in one SQL statement',
           () async {
-            final rows = await db.users
+            final rows = await db.user
                 .orderBy((u) => [u.id.asc()])
                 .select(
                   (u) => (
@@ -300,7 +299,7 @@ void main() {
             _LimitedDriver(db.driver),
             onQuery: events.add,
           );
-          final rows = await limited.users
+          final rows = await limited.user
               .orderBy((u) => [u.id.asc()])
               .select(
                 (u) => u.memberships
@@ -325,17 +324,13 @@ void main() {
         test('transaction rollback restores payload changes and new endpoints after an invalid association', () async {
           await expectLater(
             db.transaction((tx) async {
-              await tx.memberships
+              await tx.membership
                   .byId(teamId: 10, userId: 1)
                   .patch(role: .set(MembershipRole.member));
-              await tx.users.create(id: 5, name: 'Eve');
-              await tx.teams.create(id: 50, name: 'New');
-              await tx.memberships.create(
-                teamId: 50,
-                userId: 5,
-                joinedAt: day2,
-              );
-              await tx.memberships.create(
+              await tx.user.create(id: 5, name: 'Eve');
+              await tx.team.create(id: 50, name: 'New');
+              await tx.membership.create(teamId: 50, userId: 5, joinedAt: day2);
+              await tx.membership.create(
                 teamId: 999,
                 userId: 5,
                 joinedAt: day2,
@@ -344,17 +339,17 @@ void main() {
             throwsA(isA<SqlFailure>()),
           );
           expect(
-            (await db.memberships.byId(teamId: 10, userId: 1).single()).role,
+            (await db.membership.byId(teamId: 10, userId: 1).single()).role,
             MembershipRole.owner,
           );
-          expect(await db.users.byId(5).exists(), false);
-          expect(await db.teams.byId(50).exists(), false);
-          expect(await db.memberships.count(), 6);
+          expect(await db.user.byId(5).exists(), false);
+          expect(await db.team.byId(50).exists(), false);
+          expect(await db.membership.count(), 6);
         });
 
         test('composite-key conflict updates preserve membership dates and unlinking keeps endpoints', () async {
           await db.transaction((tx) async {
-            final rows = await tx.memberships
+            final rows = await tx.membership
                 .insert(
                   (m) => [
                     m.teamId.set(10),
@@ -372,18 +367,18 @@ void main() {
                 .returning((m) => (m.role, m.joinedAt).row)
                 .get();
             expect(rows, [(MembershipRole.owner, day2)]);
-            await tx.memberships.byId(teamId: 10, userId: 1).delete().execute();
+            await tx.membership.byId(teamId: 10, userId: 1).delete().execute();
           });
-          expect(await db.users.count(), 4);
-          expect(await db.teams.count(), 4);
-          expect(await db.memberships.count(), 5);
-          await db.teams.byId(20).delete().execute();
-          await db.users.byId(1).delete().execute();
-          expect(await db.memberships.count(), 2);
-          expect(await db.users.count(), 3);
-          expect(await db.teams.count(), 3);
+          expect(await db.user.count(), 4);
+          expect(await db.team.count(), 4);
+          expect(await db.membership.count(), 5);
+          await db.team.byId(20).delete().execute();
+          await db.user.byId(1).delete().execute();
+          expect(await db.membership.count(), 2);
+          expect(await db.user.count(), 3);
+          expect(await db.team.count(), 3);
           expect(
-            (await db.memberships.orderBy((m) => [m.userId.asc()]).get()).map(
+            (await db.membership.orderBy((m) => [m.userId.asc()]).get()).map(
               (m) => (m.teamId, m.userId),
             ),
             [(10, 2), (10, 3)],
@@ -392,7 +387,7 @@ void main() {
 
         test('watch tracks junction payload and opposite endpoint changes after commit', () async {
           final iterator = StreamIterator(
-            db.users
+            db.user
                 .byId(1)
                 .select(
                   (u) => u.memberships
@@ -417,8 +412,8 @@ void main() {
               MembershipRole.owner,
             ));
             await db.transaction((tx) async {
-              await tx.teams.byId(10).patch(name: .set('Kernel'));
-              await tx.memberships
+              await tx.team.byId(10).patch(name: .set('Kernel'));
+              await tx.membership
                   .byId(teamId: 10, userId: 1)
                   .patch(role: .set(MembershipRole.member));
             });
@@ -430,7 +425,7 @@ void main() {
               'Kernel',
               MembershipRole.member,
             ));
-            await db.teams.byId(10).delete().execute();
+            await db.team.byId(10).delete().execute();
             expect(
               await iterator.moveNext().timeout(const Duration(seconds: 5)),
               true,

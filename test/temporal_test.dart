@@ -48,7 +48,7 @@ void main() {
           try {
             if (!enabled) {
               expect(
-                () => db.appointments.select((a) => a.day).compile(),
+                () => db.appointment.select((a) => a.day).compile(),
                 throwsA(
                   isA<OrmException>().having(
                     (e) => e.code,
@@ -69,7 +69,7 @@ void main() {
                     "INSERT INTO appointments VALUES (1, '5874897-12-31', '24:00', '294276-12-31 23:59:59.999999')",
                   ),
                 );
-                final row = await session.appointments.single();
+                final row = await session.appointment.single();
                 expect(row.day, LocalDate(5874897, 12, 31));
                 expect(row.time, LocalTime(24));
                 expect(
@@ -253,18 +253,16 @@ void main() {
         () async {
           await create();
           final day = LocalDate(2024, 2, 29);
-          final row = await db.appointments.create(day: day);
-          expect(row, (
-            id: row.id,
-            day: day,
-            time: LocalTime(12, 30),
-            starts: null,
-          ));
-          final stamp = LocalDateTime.parse('2024-02-29 12:34:56.000001');
-          await db.appointments.byId(row.id).patch(starts: Change.set(stamp));
-          expect((await db.appointments.byId(row.id).single()).starts, stamp);
+          final row = await db.appointment.create(day: day);
           expect(
-            await db.appointments
+            (id: row.id, day: row.day, time: row.time, starts: row.starts),
+            (id: row.id, day: day, time: LocalTime(12, 30), starts: null),
+          );
+          final stamp = LocalDateTime.parse('2024-02-29 12:34:56.000001');
+          await db.appointment.byId(row.id).patch(starts: Change.set(stamp));
+          expect((await db.appointment.byId(row.id).single()).starts, stamp);
+          expect(
+            await db.appointment
                 .select(
                   (a) => (
                     value(day, Codecs.date),
@@ -275,10 +273,10 @@ void main() {
                 .single(),
             (day, LocalTime(24), stamp),
           );
-          await db.appointments
+          await db.appointment
               .byId(row.id)
               .patch(starts: const Change.set(null));
-          expect((await db.appointments.single()).starts, null);
+          expect((await db.appointment.single()).starts, null);
         },
       );
 
@@ -301,7 +299,7 @@ void main() {
           for (var i = 0; i < dates.length; i++) {
             final time = i == 3 ? LocalTime(24) : LocalTime(0, 0, 0, i);
             expect(
-              (await db.appointments.create(
+              (await db.appointment.create(
                 day: dates[i],
                 time: Change.set(time),
                 starts: stamps[i],
@@ -309,7 +307,7 @@ void main() {
               stamps[i],
             );
           }
-          final query = db.appointments.orderBy((a) => [a.id.asc()]);
+          final query = db.appointment.orderBy((a) => [a.id.asc()]);
           expect((await query.get()).map((a) => a.day), dates);
           expect(
             (await query.stream(batchSize: 1).toList()).map((a) => a.starts),
@@ -320,7 +318,7 @@ void main() {
               await s.execute(SqlCommand("SET DateStyle TO 'SQL, DMY'"));
               await s.execute(SqlCommand("SET TIME ZONE 'Pacific/Auckland'"));
               expect(
-                (await s.appointments.orderBy((a) => [a.id.asc()]).get()).map(
+                (await s.appointment.orderBy((a) => [a.id.asc()]).get()).map(
                   (a) => a.starts,
                 ),
                 stamps,
@@ -341,39 +339,39 @@ void main() {
             LocalDate(0, 1, 1),
           ];
           for (final day in dates) {
-            await db.appointments.create(day: day);
+            await db.appointment.create(day: day);
           }
           final ordered = [...dates]..sort();
           expect(
-            await db.appointments
+            await db.appointment
                 .orderBy((a) => [a.day.asc()])
                 .select((a) => a.day)
                 .get(),
             ordered,
           );
           expect(
-            await db.appointments
+            await db.appointment
                 .select((a) => (a.day.min(), a.day.max()).row)
                 .single(),
             (ordered.first, ordered.last),
           );
           expect(
-            await db.appointments
+            await db.appointment
                 .where((a) => a.day.isIn(dates.take(2)))
                 .count(),
             2,
           );
-          final token = db.appointments.cursorToken(
+          final token = db.appointment.cursorToken(
             (a) => [a.day.cursor(ordered[1]), a.id.cursor(4)],
           );
           expect(
-            (await db.appointments
+            (await db.appointment
                     .seekToken(token, orderBy: (a) => [a.day.asc(), a.id.asc()])
                     .get())
                 .map((a) => a.day),
             ordered.skip(2),
           );
-          final rolling = await db.appointments
+          final rolling = await db.appointment
               .orderBy((a) => [a.id.asc()])
               .select(
                 (a) => a.day.min().over(
@@ -391,24 +389,24 @@ void main() {
         () async {
           await create();
           final bc = LocalDate(0, 1, 1);
-          await db.holidays.create(day: bc, label: 'era');
+          await db.holiday.create(day: bc, label: 'era');
           await db.execute(
             SqlCommand("INSERT INTO visits (day) VALUES ('0001-01-01 BC')"),
           );
           expect(
-            await db.holidays
+            await db.holiday
                 .select((h) => h.visits.select((v) => v.day).many())
                 .single(),
             [bc],
           );
           expect(
-            await db.visits
+            await db.visit
                 .select((v) => v.holiday.select((h) => h.label).one())
                 .single(),
             'era',
           );
           await expectLater(
-            db.holidays.create(day: bc, label: 'duplicate'),
+            db.holiday.create(day: bc, label: 'duplicate'),
             throwsA(isA<SqlFailure>()),
           );
           if (backend == 'sqlite') {
@@ -416,12 +414,12 @@ void main() {
               SqlCommand("UPDATE visits SET day = '0000-01-01'"),
             );
             expect(
-              await db.holidays
+              await db.holiday
                   .select((h) => h.visits.select((v) => v.day).many())
                   .single(),
               [bc],
             );
-            final command = db.holidays.byId(bc).compile();
+            final command = db.holiday.byId(bc).compile();
             final plan = await db.execute(
               SqlCommand(
                 'EXPLAIN QUERY PLAN ${command.sql}',
@@ -453,32 +451,32 @@ void main() {
             LocalDateTime.parse('2024-01-01 00:00'),
           ];
           for (var i = 0; i < times.length; i++) {
-            await db.appointments.create(
+            await db.appointment.create(
               day: LocalDate(2024, 1, 1),
               time: Change.set(times[i]),
               starts: stamps[i],
             );
           }
           expect(
-            await db.appointments
+            await db.appointment
                 .orderBy((a) => [a.time.asc()])
                 .select((a) => a.time)
                 .get(),
             [...times]..sort(),
           );
           expect(
-            await db.appointments
+            await db.appointment
                 .orderBy((a) => [a.starts.asc()])
                 .select((a) => a.starts)
                 .get(),
             [...stamps]..sort(),
           );
           expect(
-            await db.appointments.where((a) => a.time.gt(LocalTime(0))).count(),
+            await db.appointment.where((a) => a.time.gt(LocalTime(0))).count(),
             3,
           );
           expect(
-            await db.appointments
+            await db.appointment
                 .select(
                   (a) => (
                     a.time.min(),
@@ -490,12 +488,12 @@ void main() {
                 .single(),
             (times[2], times[0], stamps[2], stamps[0]),
           );
-          final grouped = await db.appointments
+          final grouped = await db.appointment
               .groupBy((a) => [a.day])
               .select((a) => (a.day, a.time.count()).row)
               .single();
           expect(grouped, (LocalDate(2024, 1, 1), 4));
-          final cte = db.appointments
+          final cte = db.appointment
               .select((a) => a.starts)
               .asCte('local_starts');
           expect(
@@ -504,7 +502,7 @@ void main() {
                 .get(),
             [stamps[0]],
           );
-          final query = db.appointments.select((a) => a.time);
+          final query = db.appointment.select((a) => a.time);
           expect(await query.union(query).get(), unorderedEquals(times));
         },
       );
@@ -577,16 +575,16 @@ void main() {
           ),
         );
         await expectLater(
-          db.appointments.select((a) => a.day).get(),
+          db.appointment.select((a) => a.day).get(),
           throwsFormatException,
         );
         await expectLater(
-          db.appointments.select((a) => a.starts).get(),
+          db.appointment.select((a) => a.starts).get(),
           throwsFormatException,
         );
-        await db.appointments.create(day: LocalDate(2024, 1, 1));
+        await db.appointment.create(day: LocalDate(2024, 1, 1));
         expect(
-          await db.appointments
+          await db.appointment
               .where((a) => a.day.eq(LocalDate(2024, 1, 1)))
               .count(),
           1,
@@ -604,7 +602,7 @@ void main() {
           expect(await verifyColumns(db.sql, appSchema), isEmpty);
           final imported = await importSchema(db.sql);
           expect(imported.issues, isEmpty);
-          expect(imported.dart, contains('LocalDateTime'));
+          expect(imported.dart, contains('localDateTime('));
           final directory = await Directory(
             '.dart_tool/orm-temporal-import-$backend',
           ).create(recursive: true);
@@ -627,7 +625,7 @@ void main() {
         () async {
           await create();
           for (final year in [10000, 2, -10, 0]) {
-            await db.holidays.create(
+            await db.holiday.create(
               day: LocalDate(year, 1, 1),
               label: 'pending',
             );
@@ -641,7 +639,7 @@ void main() {
             '0002_backfill',
             [
               Backfill(
-                holidaysSchema,
+                holidaySchema,
                 set: {'label': "'done'"},
                 where: "label = 'pending'",
                 doneWhen: "SELECT NOT EXISTS (SELECT 1 FROM holidays WHERE label = 'pending')",
@@ -653,11 +651,11 @@ void main() {
           );
           await Migrator(db.sql).apply([first, second], maxBackfillBatches: 1);
           expect(
-            (await db.holidays.where((h) => h.label.eq('done')).single()).day,
+            (await db.holiday.where((h) => h.label.eq('done')).single()).day,
             LocalDate(-10, 1, 1),
           );
           await Migrator(db.sql).apply([first, second]);
-          expect(await db.holidays.where((h) => h.label.eq('done')).count(), 4);
+          expect(await db.holiday.where((h) => h.label.eq('done')).count(), 4);
         },
       );
     });

@@ -37,16 +37,15 @@ void main() {
           await Migrator(db.sql).apply([
             Migration.create('0001_initial', appSchema, dialect: db.dialect),
           ]);
-          final row = await db.products.create(price: 10, state: 'draft');
+          final row = await db.product.create(price: 10, state: 'draft');
           expect(row.stock, 0);
           expect(row.discount, isNull);
           for (final action in <Future<Object?> Function()>[
-            () =>
-                db.products.create(stock: .set(-1), price: 10, state: 'draft'),
-            () => db.products.create(price: -1, state: 'draft'),
-            () => db.products.create(price: 10, discount: 11, state: 'draft'),
-            () => db.products.create(price: 10, state: 'unknown'),
-            () => db.products.create(
+            () => db.product.create(stock: .set(-1), price: 10, state: 'draft'),
+            () => db.product.create(price: -1, state: 'draft'),
+            () => db.product.create(price: 10, discount: 11, state: 'draft'),
+            () => db.product.create(price: 10, state: 'unknown'),
+            () => db.product.create(
               price: 10,
               state: 'draft',
               label: '; CHECK (0)',
@@ -54,9 +53,9 @@ void main() {
           ]) {
             await expectLater(action(), throwsA(isA<SqlFailure>()));
           }
-          expect(await db.products.count(), 1);
+          expect(await db.product.count(), 1);
           await expectLater(
-            db.products.byId(row.id).patch(discount: .set(-1)),
+            db.product.byId(row.id).patch(discount: .set(-1)),
             throwsA(anything),
           );
           final info = await inspectTable(db.sql, 'products');
@@ -74,7 +73,7 @@ void main() {
             await Migrator(db.sql).apply([
               Migration.create('0001_initial', appSchema, dialect: db.dialect),
             ]);
-            await db.products.create(price: 10, state: 'draft');
+            await db.product.create(price: 10, state: 'draft');
             final directory = await Directory(
               '.dart_tool/orm-check-import-${dialect.name}',
             ).create(recursive: true);
@@ -86,7 +85,7 @@ void main() {
               final result = await verifySchema(db.sql, generated.snapshot);
               expect(result.differences, isEmpty);
               expect(result.unmanaged, isEmpty);
-              expect(imported.dart, contains('.check('));
+              expect(imported.dart, contains('check('));
               expect(
                 imported.issues.map((i) => i.code),
                 contains('IMPORT.CHECK_SQL'),
@@ -100,7 +99,7 @@ void main() {
                   dialect: db.dialect,
                 ),
               ], expected: snapshot);
-              expect(await db.products.count(), 1);
+              expect(await db.product.count(), 1);
             } finally {
               await directory.delete(recursive: true);
             }

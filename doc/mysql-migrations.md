@@ -121,14 +121,3 @@ constraint names. An imported database can be verified and baselined while
 reporting unmanaged objects; automated checked changes require resolving them
 first. [MySQL column metadata](https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html),
 [MariaDB column metadata](https://mariadb.com/docs/server/reference/system-tables/information-schema/information-schema-tables/information-schema-columns-table)
-
-## Verification
-
-`test/mysql_migration_test.dart` uses `ORM_TEST_MYSQL` and `ORM_TEST_MARIADB` and
-optional matching `_TLS` variables. It creates an isolated disposable database
-per test and therefore needs `CREATE DATABASE` privileges. Tests cover catalog
-round trips, lost DDL acknowledgements, drift rejection, transactional checkpoint
-failures, unknown commit outcomes, lock release, bounded backfill, explicit
-renames, relationships and baseline. A compiled consumer imports generated Dart
-migrations and checks their fingerprints for both engines. An unset
-engine environment variable skips its live tests; static planning tests still run.

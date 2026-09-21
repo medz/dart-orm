@@ -14,16 +14,16 @@ silently lose precision. See [engine-specific boundaries](https://github.com/med
 ```dart
 import 'package:orm/schema.dart';
 
-typedef Invoice = ({
-  @Id.generated() int id,
-  Decimal total,
-  Decimal? discount,
-});
-final invoices = entity<Invoice>();
+final invoice = model('invoices', (
+  id: identity(),
+  total: decimal(),
+  discount: decimal().nullable(),
+));
 
 // After generation:
-await db.invoices.create(total: Decimal.parse('9007199254740993.01'));
-final total = await db.invoices.select((i) => i.total.sum()).single();
+await db.invoice.create(total: Decimal.parse('9007199254740993.01'));
+final total = await db.invoice.select((i) => i.total.sum()).single();
+print(total); // 9007199254740993.01
 ```
 
 Use `Decimal.parse(String)` or `Decimal.fromBigInt(value, scale: 2)`.
@@ -68,14 +68,14 @@ SQL expressions also provide `divide`, `divideExpression` and `rounded`, with th
 same explicit scale and six rounding modes as values:
 
 ```dart
-final installments = await db.invoices.select(
+final installments = await db.invoice.select(
   (i) => i.total.divide(
     Decimal.parse('3'),
     scale: 2,
     rounding: .halfEven,
   ),
 ).get();
-final roundedTotal = await db.invoices.select(
+final roundedTotal = await db.invoice.select(
   (i) => i.total.sum().rounded(2, rounding: .halfEven),
 ).single();
 ```
@@ -110,10 +110,10 @@ Scale is required; the default `exact` rejects a nonzero discarded remainder.
 All six rounding modes work across the full supported scale range.
 
 ```dart
-final average = await db.invoices.select(
+final average = await db.invoice.select(
   (i) => i.total.average(scale: 2, rounding: .halfEven),
 ).single();
-final running = await db.invoices.orderBy((i) => [i.id.asc()]).select(
+final running = await db.invoice.orderBy((i) => [i.id.asc()]).select(
   (i) => i.total.average(scale: 2, rounding: .halfEven).over(
     orderBy: [i.id.asc()],
     frame: .rowsToCurrent,
@@ -142,7 +142,7 @@ Use a scalar subquery when assigning an aggregate result in a mutation.
 To average unique values, deduplicate the input projection first:
 
 ```dart
-final unique = db.invoices.select((i) => i.total).distinct().asCte('unique_totals');
+final unique = db.invoice.select((i) => i.total).distinct().asCte('unique_totals');
 final mean = await unique.query.select(
   (i) => i.ref((source) => source.total).average(scale: 2, rounding: .halfEven),
 ).single();
@@ -162,19 +162,19 @@ an out-of-range Decimal just to divide it back into range.
 Declare column precision independently of the Decimal value codec:
 
 ```dart
-typedef Balance = ({
-  @Id.generated() int id,
-  @DecimalDigits(12, 2) Decimal amount,
-  @DecimalDigits(12, 2) @Default.sql("'1.235'") Decimal initial,
-});
+final balance = model('balances', (
+  id: identity(),
+  amount: decimal(precision: 12, scale: 2),
+  initial: decimal(precision: 12, scale: 2, defaultSql: "'1.235'"),
+));
 ```
 
 Precision is 1..1000 and scale is -1000..1000. Omitting scale means zero.
 These are [PostgreSQL NUMERIC declarations](https://www.postgresql.org/docs/current/datatype-numeric.html):
 negative scale rounds integer digits, and scale may exceed precision. For example,
-`DecimalDigits(3, -2)` stores multiples of 100 through 99900 in magnitude;
-`DecimalDigits(3, 5)` stores up to 0.00999 in magnitude. Negative/excess scales
-require PostgreSQL 15 or newer. Native verification uses PostgreSQL 18.4.
+`decimal(precision: 3, scale: -2)` stores multiples of 100 through 99900 in magnitude;
+`decimal(precision: 3, scale: 5)` stores up to 0.00999 in magnitude. Negative/excess scales
+require PostgreSQL 15 or newer.
 
 ORM writes round ties away from zero and then check the range. `1.235` becomes
 `1.24`, `-1.235` becomes `-1.24`; `999.995` overflows NUMERIC(5,2) after rounding.
@@ -229,7 +229,7 @@ ORM driver registers these per connection; browser support has not been verified
 
 Always bind strings for externally written decimal values. SQLite TEXT affinity
 cannot recover precision already lost in an incoming REAL value. SQL defaults
-should be quoted decimal strings, for example `@Default.sql("'0.10'")`.
+should be quoted decimal strings, for example `decimal(defaultSql: "'0.10'")`.
 Ordinary numeric literals can be evaluated approximately by SQLite first.
 
 Unconstrained decimal columns have no generated finite-value CHECK. PostgreSQL
@@ -253,32 +253,8 @@ text keys `2` and `2.00` become duplicate numeric keys, so the migration fails a
 rolls back data, structure and history together. Repair the data before retrying.
 Historical backfills retain exact decimal keys in their resumable checkpoints.
 
-## Verify precision and measure cost
-
-Use the repository's decimal, division/window and average suites to verify
-storage, arithmetic, rounding, catalog drift and rollback with real SQLite and
-PostgreSQL connections. The Chrome checks cover exact Decimal transport; they do
-not rerun the complete native precision suite. Android acceptance currently has
-no Decimal-specific scenario. MySQL/MariaDB arithmetic limits are described in
-[the engine guide](https://github.com/medz/dart-orm/blob/main/doc/mysql.md).
-
-The repository benchmark fetches and decodes 10000 integer-valued Decimal rows,
-with one warmup and three measured runs per case. It includes ordinary reads,
-division, rounding, average and running aggregates. Build before measuring:
-
-```sh
-dart build cli --target=tool/benchmark_decimal.dart --output=/tmp/orm-decimal-benchmark
-mkdir -p .dart_tool/benchmarks
-/tmp/orm-decimal-benchmark/bundle/bin/benchmark_decimal > .dart_tool/benchmarks/decimal.json
-```
-
-Set `ORM_TEST_POSTGRES` to a disposable local PostgreSQL URL to include that
-backend. The script disables TLS for this local benchmark, creates a uniquely
-named schema and removes it afterward; the account needs schema-creation
-permission. Without the variable it measures SQLite only.
-
-These are single-client end-to-end samples, including compilation of each query,
-database work, transport and decoding. They are not latency percentiles,
-concurrency measurements or estimates for large coefficients and high scales.
-Run separately from tests and builds. Retain database/SDK versions and each sample
-from the JSON report when comparing revisions.
+Decimal storage and arithmetic can cost more than integer or floating-point
+operations. Measure with representative coefficient sizes, scales and result
+counts; small integer-valued Decimals do not model every workload. See
+[performance](https://github.com/medz/dart-orm/blob/main/doc/performance.md) for
+measurement guidance.

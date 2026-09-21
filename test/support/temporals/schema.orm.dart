@@ -2,41 +2,45 @@
 
 import 'package:orm/sql.dart';
 
-import "schema.dart" as models;
-export "schema.dart" show Appointment, Holiday, Visit;
-
-final _appointmentsId = Column<int>(
+/// A complete immutable row from "appointments".
+final class Appointment({
+  required final int id,
+  required final LocalDate day,
+  required final LocalTime time,
+  required final LocalDateTime? starts,
+});
+final _appointmentId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _appointmentsDay = Column<LocalDate>(
+final _appointmentDay = Column<LocalDate>(
   "day",
   Codecs.date,
   nullable: false,
   generated: false,
 );
-final _appointmentsTime = Column<LocalTime>(
+final _appointmentTime = Column<LocalTime>(
   "time",
   Codecs.time,
   nullable: false,
   generated: false,
   defaultSql: "'12:30'",
 );
-final _appointmentsStarts = Column<LocalDateTime?>(
+final _appointmentStarts = Column<LocalDateTime?>(
   "starts",
   Codecs.localDateTime.nullable(),
   nullable: true,
   generated: false,
 );
-final appointmentsSchema = TableSchema(
+final appointmentSchema = TableSchema(
   "appointments",
   columns: [
-    _appointmentsId,
-    _appointmentsDay,
-    _appointmentsTime,
-    _appointmentsStarts,
+    _appointmentId,
+    _appointmentDay,
+    _appointmentTime,
+    _appointmentStarts,
   ],
   primaryKey: ["id"],
   uniqueKeys: [],
@@ -44,28 +48,31 @@ final appointmentsSchema = TableSchema(
   foreignKeys: [],
 );
 
-final class AppointmentsFields extends Fields {
-  AppointmentsFields(super.table);
-  late final id = column(_appointmentsId);
-  late final day = column(_appointmentsDay);
-  late final time = column(_appointmentsTime);
-  late final starts = column(_appointmentsStarts);
+final class AppointmentFields extends Fields {
+  AppointmentFields(super.table);
+  late final id = column(_appointmentId);
+  late final day = column(_appointmentDay);
+  late final time = column(_appointmentTime);
+  late final starts = column(_appointmentStarts);
 }
 
-final appointmentsTable = Table<models.Appointment, AppointmentsFields>(
-  appointmentsSchema,
-  AppointmentsFields.new,
-  (row) => (row.id, row.day, row.time, row.starts).map(
-    (id, day, time, starts) => (id: id, day: day, time: time, starts: starts),
-  ),
+final appointmentTable = Table<Appointment, AppointmentFields>(
+  appointmentSchema,
+  AppointmentFields.new,
+  (row) => (
+    row.id,
+    row.day,
+    row.time,
+    row.starts,
+  ).map((v0, v1, v2, v3) => Appointment(id: v0, day: v1, time: v2, starts: v3)),
 );
 
-final class AppointmentsTableSet
-    extends TableSet<models.Appointment, AppointmentsFields> {
-  AppointmentsTableSet(QueryContext db) : super(db, appointmentsTable) {
+final class AppointmentTableSet
+    extends TableSet<Appointment, AppointmentFields> {
+  AppointmentTableSet(QueryContext db) : super(db, appointmentTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Appointment> create({
+  Future<Appointment> create({
     Change<int> id = const Change.keep(),
     required LocalDate day,
     Change<LocalTime> time = const Change.keep(),
@@ -78,11 +85,11 @@ final class AppointmentsTableSet
       row.starts.set(starts),
     ],
   );
-  Query<models.Appointment, AppointmentsFields> byId(int id) =>
+  Query<Appointment, AppointmentFields> byId(int id) =>
       where((row) => row.id.eq(id));
 }
 
-extension AppointmentsUpdates on Query<models.Appointment, AppointmentsFields> {
+extension AppointmentUpdates on Query<Appointment, AppointmentFields> {
   Future<int> patch({
     Change<LocalDate> day = const Change.keep(),
     Change<LocalTime> time = const Change.keep(),
@@ -96,54 +103,57 @@ extension AppointmentsUpdates on Query<models.Appointment, AppointmentsFields> {
   ).execute();
 }
 
-final _holidaysDay = Column<LocalDate>(
+/// A complete immutable row from "holidays".
+final class Holiday({
+  required final LocalDate day,
+  required final String label,
+});
+final _holidayDay = Column<LocalDate>(
   "day",
   Codecs.date,
   nullable: false,
   generated: false,
 );
-final _holidaysLabel = Column<String>(
+final _holidayLabel = Column<String>(
   "label",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final holidaysSchema = TableSchema(
+final holidaySchema = TableSchema(
   "holidays",
-  columns: [_holidaysDay, _holidaysLabel],
+  columns: [_holidayDay, _holidayLabel],
   primaryKey: ["day"],
   uniqueKeys: [],
   indexes: [],
   foreignKeys: [],
 );
 
-final class HolidaysFields extends Fields {
-  HolidaysFields(super.table);
-  late final day = column(_holidaysDay);
-  late final label = column(_holidaysLabel);
-  Relation<models.Visit, VisitsFields> get visits =>
-      Relation(visitsTable, parent: [day], child: (row) => [row.day]);
+final class HolidayFields extends Fields {
+  HolidayFields(super.table);
+  late final day = column(_holidayDay);
+  late final label = column(_holidayLabel);
+  Relation<Visit, VisitFields> get visits =>
+      Relation(visitTable, parent: [day], child: (row) => [row.day]);
 }
 
-final holidaysTable = Table<models.Holiday, HolidaysFields>(
-  holidaysSchema,
-  HolidaysFields.new,
-  (row) => (row.day, row.label).map((day, label) => (day: day, label: label)),
+final holidayTable = Table<Holiday, HolidayFields>(
+  holidaySchema,
+  HolidayFields.new,
+  (row) => (row.day, row.label).map((v0, v1) => Holiday(day: v0, label: v1)),
 );
 
-final class HolidaysTableSet extends TableSet<models.Holiday, HolidaysFields> {
-  HolidaysTableSet(QueryContext db) : super(db, holidaysTable) {
+final class HolidayTableSet extends TableSet<Holiday, HolidayFields> {
+  HolidayTableSet(QueryContext db) : super(db, holidayTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Holiday> create({
-    required LocalDate day,
-    required String label,
-  }) => createRow((row) => [row.day.set(day), row.label.set(label)]);
-  Query<models.Holiday, HolidaysFields> byId(LocalDate day) =>
+  Future<Holiday> create({required LocalDate day, required String label}) =>
+      createRow((row) => [row.day.set(day), row.label.set(label)]);
+  Query<Holiday, HolidayFields> byId(LocalDate day) =>
       where((row) => row.day.eq(day));
 }
 
-extension HolidaysUpdates on Query<models.Holiday, HolidaysFields> {
+extension HolidayUpdates on Query<Holiday, HolidayFields> {
   Future<int> patch({
     Change<LocalDate> day = const Change.keep(),
     Change<String> label = const Change.keep(),
@@ -152,21 +162,23 @@ extension HolidaysUpdates on Query<models.Holiday, HolidaysFields> {
           .execute();
 }
 
-final _visitsId = Column<int>(
+/// A complete immutable row from "visits".
+final class Visit({required final int id, required final LocalDate day});
+final _visitId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _visitsDay = Column<LocalDate>(
+final _visitDay = Column<LocalDate>(
   "day",
   Codecs.date,
   nullable: false,
   generated: false,
 );
-final visitsSchema = TableSchema(
+final visitSchema = TableSchema(
   "visits",
-  columns: [_visitsId, _visitsDay],
+  columns: [_visitId, _visitDay],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [],
@@ -175,45 +187,44 @@ final visitsSchema = TableSchema(
   ],
 );
 
-final class VisitsFields extends Fields {
-  VisitsFields(super.table);
-  late final id = column(_visitsId);
-  late final day = column(_visitsDay);
-  Relation<models.Holiday, HolidaysFields> get holiday =>
-      Relation(holidaysTable, parent: [day], child: (row) => [row.day]);
+final class VisitFields extends Fields {
+  VisitFields(super.table);
+  late final id = column(_visitId);
+  late final day = column(_visitDay);
+  Relation<Holiday, HolidayFields> get holiday =>
+      Relation(holidayTable, parent: [day], child: (row) => [row.day]);
 }
 
-final visitsTable = Table<models.Visit, VisitsFields>(
-  visitsSchema,
-  VisitsFields.new,
-  (row) => (row.id, row.day).map((id, day) => (id: id, day: day)),
+final visitTable = Table<Visit, VisitFields>(
+  visitSchema,
+  VisitFields.new,
+  (row) => (row.id, row.day).map((v0, v1) => Visit(id: v0, day: v1)),
 );
 
-final class VisitsTableSet extends TableSet<models.Visit, VisitsFields> {
-  VisitsTableSet(QueryContext db) : super(db, visitsTable) {
+final class VisitTableSet extends TableSet<Visit, VisitFields> {
+  VisitTableSet(QueryContext db) : super(db, visitTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Visit> create({
+  Future<Visit> create({
     Change<int> id = const Change.keep(),
     required LocalDate day,
   }) => createRow((row) => [...row.id.change(id), row.day.set(day)]);
-  Query<models.Visit, VisitsFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+  Query<Visit, VisitFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension VisitsUpdates on Query<models.Visit, VisitsFields> {
+extension VisitUpdates on Query<Visit, VisitFields> {
   Future<int> patch({Change<LocalDate> day = const Change.keep()}) =>
       update((row) => [...row.day.change(day)]).execute();
 }
 
 final appSchema = List<TableSchema>.unmodifiable([
-  appointmentsSchema,
-  holidaysSchema,
-  visitsSchema,
+  appointmentSchema,
+  holidaySchema,
+  visitSchema,
 ]);
 
 extension AppTables on QueryContext {
-  AppointmentsTableSet get appointments => AppointmentsTableSet(this);
-  HolidaysTableSet get holidays => HolidaysTableSet(this);
-  VisitsTableSet get visits => VisitsTableSet(this);
+  AppointmentTableSet get appointment => AppointmentTableSet(this);
+  HolidayTableSet get holiday => HolidayTableSet(this);
+  VisitTableSet get visit => VisitTableSet(this);
 }

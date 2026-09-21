@@ -1,21 +1,25 @@
 import 'package:orm/schema.dart';
 
-typedef Wallet = ({
-  @Id.generated() int id,
-  @DecimalDigits(5, 2) Decimal amount,
-  @DecimalDigits(3, -2) Decimal hundreds,
-  @DecimalDigits(3, 5) Decimal fraction,
-  @DecimalDigits(5, 2) @Default.sql("'1.235'") Decimal defaulted,
-  @DecimalDigits(5, 2) Decimal? optional,
-});
-typedef Price = ({@Id() @DecimalDigits(4, 2) Decimal id, String label});
-typedef Receipt = ({
-  @Id.generated() int id,
-  @DecimalDigits(4, 2) Decimal priceId,
-});
-final wallets = entity<Wallet>();
-final prices = entity<Price>();
-final receipts = entity<Receipt>();
-final price = receipts
-    .key((r) => r.priceId)
-    .references(prices.key((p) => p.id), inverse: 'receipts');
+final Model wallet = model("wallets", (
+  id: integer().identity(),
+  amount: decimal(precision: 5, scale: 2),
+  hundreds: decimal(precision: 3, scale: -2),
+  fraction: decimal(precision: 3, scale: 5),
+  defaulted: decimal(defaultSql: "'1.235'", precision: 5, scale: 2),
+  optional: decimal(precision: 5, scale: 2).nullable(),
+));
+
+final Model price = model(
+  "prices",
+  (id: decimal(precision: 4, scale: 2), label: text()),
+  primaryKey: (r) => r.id,
+  relations: (r) =>
+      (receipts: referencedBy(() => receipt, on: (priceId: r.id))),
+);
+
+final Model receipt = model(
+  "receipts",
+  (id: integer().identity(), priceId: decimal(precision: 4, scale: 2)),
+  relations: (r) =>
+      (price: references((id: r.priceId), () => price, onDelete: .restrict)),
+);

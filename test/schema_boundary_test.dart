@@ -92,13 +92,9 @@ void main() {
         final file = File('${directory.path}/schema.dart');
         await file.writeAsString(
           "import 'package:orm/schema.dart';\n${dialect == .sqlite ? '''
-typedef Item = ({int id, @Unique() @Computed.sql('id + 1', storage: ComputedStorage.virtual) int value});
-final items = entity<Item>();
+final item = model('items', (id: integer(), value: integer(unique: true).computed('id + 1', storage: .virtual)));
 ''' : '''
-typedef Item = ({int source, @Id() @Computed.sql('source + 1') int id});
-final items = entity<Item>(table: 'Items');
-final lower = items.check('source > 0', name: 'valid');
-final upper = items.check('source < 10', name: 'VALID');
+final item = model('Items', (source: integer(), id: integer().computed('source + 1')), primaryKey: (i) => i.id, checks: [check('source > 0', name: 'valid'), check('source < 10', name: 'VALID')]);
 '''}",
         );
         final generated = await generateSchema(file.path);

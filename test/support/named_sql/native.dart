@@ -33,7 +33,15 @@ Future<void> main() async {
           day: expected.day,
         )
         .single();
-    if (actual != expected) throw StateError('Named SQL codecs differ');
+    if ((
+          value: actual.value,
+          at: actual.at,
+          amount: actual.amount,
+          day: actual.day,
+        ) !=
+        expected) {
+      throw StateError('Named SQL codecs differ');
+    }
     await db.transaction((tx) async {
       await tx.execute(SqlCommand("INSERT INTO posts VALUES ('a', 2)"));
       if ((await tx.authorStats(minimum: 0, author: 'a').single()).points !=
@@ -42,7 +50,7 @@ Future<void> main() async {
       }
     });
     print(
-      'Named SQL parameters, records, native codecs, streaming and transactions verified.',
+      'Named SQL parameters, rows, native codecs, streaming and transactions verified.',
     );
   } finally {
     await db.close();

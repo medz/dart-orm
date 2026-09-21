@@ -2,67 +2,73 @@
 
 import 'package:orm/sql.dart';
 
-import "schema.dart" as models;
-export "schema.dart" show Note, Comment;
-
-final _notesId = Column<int>(
+/// A complete immutable row from "notes".
+final class Note({
+  required final int id,
+  required final String text,
+  required final bool done,
+  required final DateTime createdAt,
+});
+final _noteId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _notesText = Column<String>(
+final _noteText = Column<String>(
   "body",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final _notesDone = Column<bool>(
+final _noteDone = Column<bool>(
   "done",
   Codecs.boolean,
   nullable: false,
   generated: false,
   defaultSql: "false",
 );
-final _notesCreatedAt = Column<DateTime>(
+final _noteCreatedAt = Column<DateTime>(
   "created_at",
   Codecs.dateTime,
   nullable: false,
   generated: false,
 );
-final notesSchema = TableSchema(
+final noteSchema = TableSchema(
   "notes",
-  columns: [_notesId, _notesText, _notesDone, _notesCreatedAt],
+  columns: [_noteId, _noteText, _noteDone, _noteCreatedAt],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [],
   foreignKeys: [],
 );
 
-final class NotesFields extends Fields {
-  NotesFields(super.table);
-  late final id = column(_notesId);
-  late final text = column(_notesText);
-  late final done = column(_notesDone);
-  late final createdAt = column(_notesCreatedAt);
-  Relation<models.Comment, CommentsFields> get comments =>
-      Relation(commentsTable, parent: [id], child: (row) => [row.noteId]);
+final class NoteFields extends Fields {
+  NoteFields(super.table);
+  late final id = column(_noteId);
+  late final text = column(_noteText);
+  late final done = column(_noteDone);
+  late final createdAt = column(_noteCreatedAt);
+  Relation<Comment, CommentFields> get comments =>
+      Relation(commentTable, parent: [id], child: (row) => [row.noteId]);
 }
 
-final notesTable = Table<models.Note, NotesFields>(
-  notesSchema,
-  NotesFields.new,
-  (row) => (row.id, row.text, row.done, row.createdAt).map(
-    (id, text, done, createdAt) =>
-        (id: id, text: text, done: done, createdAt: createdAt),
-  ),
+final noteTable = Table<Note, NoteFields>(
+  noteSchema,
+  NoteFields.new,
+  (row) => (
+    row.id,
+    row.text,
+    row.done,
+    row.createdAt,
+  ).map((v0, v1, v2, v3) => Note(id: v0, text: v1, done: v2, createdAt: v3)),
 );
 
-final class NotesTableSet extends TableSet<models.Note, NotesFields> {
-  NotesTableSet(QueryContext db) : super(db, notesTable) {
+final class NoteTableSet extends TableSet<Note, NoteFields> {
+  NoteTableSet(QueryContext db) : super(db, noteTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Note> create({
+  Future<Note> create({
     Change<int> id = const Change.keep(),
     required String text,
     Change<bool> done = const Change.keep(),
@@ -75,10 +81,10 @@ final class NotesTableSet extends TableSet<models.Note, NotesFields> {
       row.createdAt.set(createdAt),
     ],
   );
-  Query<models.Note, NotesFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Note, NoteFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension NotesUpdates on Query<models.Note, NotesFields> {
+extension NoteUpdates on Query<Note, NoteFields> {
   Future<int> patch({
     Change<String> text = const Change.keep(),
     Change<bool> done = const Change.keep(),
@@ -92,27 +98,33 @@ extension NotesUpdates on Query<models.Note, NotesFields> {
   ).execute();
 }
 
-final _commentsId = Column<int>(
+/// A complete immutable row from "comments".
+final class Comment({
+  required final int id,
+  required final int noteId,
+  required final String text,
+});
+final _commentId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
 );
-final _commentsNoteId = Column<int>(
+final _commentNoteId = Column<int>(
   "note_id",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _commentsText = Column<String>(
+final _commentText = Column<String>(
   "text",
   Codecs.text,
   nullable: false,
   generated: false,
 );
-final commentsSchema = TableSchema(
+final commentSchema = TableSchema(
   "comments",
-  columns: [_commentsId, _commentsNoteId, _commentsText],
+  columns: [_commentId, _commentNoteId, _commentText],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [],
@@ -121,41 +133,40 @@ final commentsSchema = TableSchema(
   ],
 );
 
-final class CommentsFields extends Fields {
-  CommentsFields(super.table);
-  late final id = column(_commentsId);
-  late final noteId = column(_commentsNoteId);
-  late final text = column(_commentsText);
-  Relation<models.Note, NotesFields> get note =>
-      Relation(notesTable, parent: [noteId], child: (row) => [row.id]);
+final class CommentFields extends Fields {
+  CommentFields(super.table);
+  late final id = column(_commentId);
+  late final noteId = column(_commentNoteId);
+  late final text = column(_commentText);
+  Relation<Note, NoteFields> get note =>
+      Relation(noteTable, parent: [noteId], child: (row) => [row.id]);
 }
 
-final commentsTable = Table<models.Comment, CommentsFields>(
-  commentsSchema,
-  CommentsFields.new,
+final commentTable = Table<Comment, CommentFields>(
+  commentSchema,
+  CommentFields.new,
   (row) => (
     row.id,
     row.noteId,
     row.text,
-  ).map((id, noteId, text) => (id: id, noteId: noteId, text: text)),
+  ).map((v0, v1, v2) => Comment(id: v0, noteId: v1, text: v2)),
 );
 
-final class CommentsTableSet extends TableSet<models.Comment, CommentsFields> {
-  CommentsTableSet(QueryContext db) : super(db, commentsTable) {
+final class CommentTableSet extends TableSet<Comment, CommentFields> {
+  CommentTableSet(QueryContext db) : super(db, commentTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Comment> create({
+  Future<Comment> create({
     Change<int> id = const Change.keep(),
     required int noteId,
     required String text,
   }) => createRow(
     (row) => [...row.id.change(id), row.noteId.set(noteId), row.text.set(text)],
   );
-  Query<models.Comment, CommentsFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+  Query<Comment, CommentFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension CommentsUpdates on Query<models.Comment, CommentsFields> {
+extension CommentUpdates on Query<Comment, CommentFields> {
   Future<int> patch({
     Change<int> noteId = const Change.keep(),
     Change<String> text = const Change.keep(),
@@ -164,9 +175,9 @@ extension CommentsUpdates on Query<models.Comment, CommentsFields> {
           .execute();
 }
 
-final appSchema = List<TableSchema>.unmodifiable([notesSchema, commentsSchema]);
+final appSchema = List<TableSchema>.unmodifiable([noteSchema, commentSchema]);
 
 extension AppTables on QueryContext {
-  NotesTableSet get notes => NotesTableSet(this);
-  CommentsTableSet get comments => CommentsTableSet(this);
+  NoteTableSet get note => NoteTableSet(this);
+  CommentTableSet get comment => CommentTableSet(this);
 }

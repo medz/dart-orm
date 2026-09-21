@@ -39,19 +39,19 @@ Future<Map<String, Object?>> runAcceptance({
       )).matches,
       'Bundled Dart migrations match the browser database',
     );
-    if (await db.notes.count() == 0) {
+    if (await db.note.count() == 0) {
       await db.transaction((tx) async {
-        final note = await tx.notes.create(
+        final note = await tx.note.create(
           text: 'Stored in the browser',
           createdAt: DateTime.now().toUtc(),
         );
-        await tx.comments.create(
+        await tx.comment.create(
           noteId: note.id,
           text: 'Written in the same transaction',
         );
       });
     }
-    final rows = await db.notes
+    final rows = await db.note
         .orderBy((n) => [n.id.asc()])
         .select(
           (n) =>

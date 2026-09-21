@@ -1,32 +1,34 @@
 # Database computed columns
 
-Declare SQL over physical column names. The generated Record includes the result;
+Declare SQL over physical column names. The generated row includes the result;
 creation and patch inputs omit it.
 
 ```dart
-typedef Line = ({
-  @Id.generated() int id,
-  int price,
-  int quantity,
-  String label,
-  @Computed.sql('price * quantity') int total,
-  @Computed.sql('length(label)', postgres: 'char_length(label)',
-      storage: ComputedStorage.virtual) int labelSize,
-});
-final lines = entity<Line>();
+final line = model('lines', (
+  id: identity(),
+  price: integer(),
+  quantity: integer(),
+  label: text(),
+  total: integer().computed('price * quantity'),
+  labelSize: integer().computed(
+    'length(label)',
+    postgres: 'char_length(label)',
+    storage: .virtual,
+  ),
+));
 
-final row = await db.lines.create(price: 4, quantity: 3, label: 'cat');
+final row = await db.line.create(price: 4, quantity: 3, label: 'cat');
 print(row.total); // 12
-await db.lines.byId(row.id).patch(quantity: .set(5)); // total becomes 20
-final totals = await db.lines.select((r) => r.total).get();
+await db.line.byId(row.id).patch(quantity: .set(5)); // total becomes 20
+final totals = await db.line.select((r) => r.total).get();
+print(totals); // [20]
 ```
 
 `ComputedStorage.stored` is the ORM default and computes on writes; `virtual`
 computes on reads. Both modes emit an explicit SQL storage clause. Select based
 on expression cost, read/write frequency and storage needs. PostgreSQL 18 and
 SQLite support both, but PostgreSQL 18 rejects indexes/unique keys on virtual
-columns. Use stored columns for that portable schema. No performance advantage
-is assumed from these correctness tests.
+columns. Use stored columns when the same indexed schema must work on both engines.
 
 Generated computed fields are `ReadField<T>`: they support expressions, ordering,
 selection and relationship keys, but have no `set`, `increment`, `change` or
@@ -78,8 +80,7 @@ the rename, then rebuilds using the target expressions. A renamed computed table
 can be copied twice; related CHECK preparation shares the first copy. Plan this
 I/O and lock time before applying a large migration.
 
-Tests run against PostgreSQL 18.4 and the pinned SQLite engine. PostgreSQL migration
-execution requires server 18 or newer. Unsupported native syntax fails the
+PostgreSQL migration execution requires server 18 or newer. Unsupported native syntax fails the
 migration; there is no silent emulation. Stored expression changes rewrite rows and PostgreSQL
 discards their column statistics, so review post-migration ANALYZE needs.
 [Native ALTER TABLE behavior](https://www.postgresql.org/docs/18/sql-altertable.html).
@@ -94,7 +95,7 @@ This plans SQL without selecting rows; immutable constant functions may run duri
 planning. SQLite compares tokenized SQL and preserves precedence, comments and
 quoted identifiers. Semantically equivalent rewrites are not always recognized.
 
-`db import` emits `@Computed.sql` and a nonblocking `IMPORT.COMPUTED_SQL` review
+`db import` emits `.computed(...)` and a nonblocking `IMPORT.COMPUTED_SQL` review
 note. SQL from one database is not evidence of portability to the other. Managed
 Decimal coercion is unwrapped for declarations and emitted once on regeneration.
 Import does not run application code or sample data values.

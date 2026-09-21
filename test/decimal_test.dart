@@ -41,23 +41,23 @@ void main() {
       ]);
       Future<void> amounts(List<String> values) async {
         for (final v in values) {
-          await db.entries.create(amount: d(v), bucket: 'a');
+          await db.entry.create(amount: d(v), bucket: 'a');
         }
       }
 
       test('generated writes, defaults, patches and projections preserve all digits', () async {
         await create();
         final n = d('9007199254740993.12345678901234567890123456789');
-        final first = await db.entries.create(amount: n, bucket: 'a');
+        final first = await db.entry.create(amount: n, bucket: 'a');
         expect(first.amount, n);
         expect(first.tax, d('.1'));
         expect(first.fee, null);
-        await db.entries
+        await db.entry
             .byId(first.id)
             .patch(fee: Change.set(d('.00000000000000000000000000001')));
-        final row = await db.entries.byId(first.id).single();
+        final row = await db.entry.byId(first.id).single();
         expect(row.fee, d('.00000000000000000000000000001'));
-        final result = await db.entries
+        final result = await db.entry
             .select(
               (e) => (
                 e.amount.plus(d('.00000000000000000000000000001')),
@@ -73,15 +73,13 @@ void main() {
           d('.3'),
           d('9007199254740993.1234567890123456789012345679'),
         ));
-        await db.entries.byId(first.id).patch(fee: const Change.set(null));
+        await db.entry.byId(first.id).patch(fee: const Change.set(null));
         expect(
-          await db.entries
-              .select((e) => e.amount.plusExpression(e.fee))
-              .single(),
+          await db.entry.select((e) => e.amount.plusExpression(e.fee)).single(),
           null,
         );
         expect(
-          await db.entries.select((e) => value(n, Codecs.decimal)).single(),
+          await db.entry.select((e) => value(n, Codecs.decimal)).single(),
           n,
         );
       });
@@ -92,33 +90,31 @@ void main() {
           await create();
           await amounts(['10', '2', '-2', '-10', '.00000000000000000001', '2']);
           expect(
-            await db.entries
+            await db.entry
                 .orderBy((e) => [e.amount.asc()])
                 .select((e) => e.amount)
                 .get(),
             ['-10', '-2', '.00000000000000000001', '2', '2', '10'].map(d),
           );
-          expect(await db.entries.where((e) => e.amount.gt(d('2'))).count(), 1);
+          expect(await db.entry.where((e) => e.amount.gt(d('2'))).count(), 1);
           expect(
-            await db.entries
+            await db.entry
                 .where((e) => e.amount.isIn([d('2.00'), d('-10')]))
                 .count(),
             3,
           );
           expect(
-            await db.entries
+            await db.entry
                 .select((e) => e.amount.count(distinct: true))
                 .single(),
             5,
           );
-          final ordered = db.entries.orderBy(
-            (e) => [e.amount.asc(), e.id.asc()],
-          );
+          final ordered = db.entry.orderBy((e) => [e.amount.asc(), e.id.asc()]);
           final first = (await ordered.take(2).get()).last;
-          final token = db.entries.cursorToken(
+          final token = db.entry.cursorToken(
             (e) => [e.amount.cursor(first.amount), e.id.cursor(first.id)],
           );
-          final rest = await db.entries
+          final rest = await db.entry
               .seekToken(token, orderBy: (e) => [e.amount.asc(), e.id.asc()])
               .get();
           expect(
@@ -132,10 +128,10 @@ void main() {
         'sums, min/max, grouped aggregates and sliding windows stay exact',
         () async {
           await create();
-          expect(await db.entries.select((e) => e.amount.sum()).single(), null);
+          expect(await db.entry.select((e) => e.amount.sum()).single(), null);
           await amounts(['.1', '.2', '.3', '.3']);
           expect(
-            await db.entries
+            await db.entry
                 .select(
                   (e) => (
                     e.amount.sum(),
@@ -148,13 +144,13 @@ void main() {
             (d('.9'), d('.6'), d('.1'), d('.3')),
           );
           expect(
-            await db.entries
+            await db.entry
                 .groupBy((e) => [e.bucket])
                 .select((e) => (e.bucket, e.amount.sum()).row)
                 .single(),
             ('a', d('.9')),
           );
-          final windows = await db.entries
+          final windows = await db.entry
               .orderBy((e) => [e.id.asc()])
               .select(
                 (e) => e.amount.sum().over(
@@ -165,7 +161,7 @@ void main() {
               .get();
           expect(windows, ['.1', '.3', '.6', '.9'].map(d));
           await db.execute(SqlCommand('UPDATE entries SET fee = amount'));
-          expect(await db.entries.select((e) => e.fee.sum()).single(), d('.9'));
+          expect(await db.entry.select((e) => e.fee.sum()).single(), d('.9'));
           if (backend == 'sqlite') {
             final rows = await db.execute(
               SqlCommand(
@@ -183,7 +179,7 @@ void main() {
       test('computed CTEs, union results, subqueries and streaming keep decimal semantics', () async {
         await create();
         await amounts(['2', '10', '-2']);
-        final source = db.entries.select((e) => e.amount.times(d('2')));
+        final source = db.entry.select((e) => e.amount.times(d('2')));
         final cte = source.asCte('doubled');
         expect(
           await cte.query
@@ -191,19 +187,19 @@ void main() {
               .get(),
           [d('20')],
         );
-        final set = db.entries
+        final set = db.entry
             .select((e) => e.amount)
-            .union(db.entries.select((e) => e.amount.plus(d('0'))));
+            .union(db.entry.select((e) => e.amount.plus(d('0'))));
         expect(await set.get(), unorderedEquals(['2', '10', '-2'].map(d)));
         expect(
           await set.stream().toList(),
           unorderedEquals(['2', '10', '-2'].map(d)),
         );
         expect(
-          await db.entries
+          await db.entry
               .where(
                 (e) => e.amount.isInQuery(
-                  db.entries
+                  db.entry
                       .where((e) => e.amount.gt(d('2')))
                       .select((e) => e.amount),
                 ),
@@ -217,19 +213,19 @@ void main() {
         'numeric primary keys, foreign keys, joined and batched relations',
         () async {
           await create();
-          await db.rates.create(id: d('2'), label: 'two');
+          await db.rate.create(id: d('2'), label: 'two');
           await db.execute(
             SqlCommand(
               "INSERT INTO allocations (\"rate_id\") VALUES ('2.000')",
             ),
           );
           expect(
-            await db.allocations
+            await db.allocation
                 .select((a) => a.rate.select((r) => r.label).required())
                 .single(),
             'two',
           );
-          final children = await db.rates
+          final children = await db.rate
               .select((r) => r.allocations.select((a) => a.rateId).many())
               .single();
           expect(children, [d('2')]);
@@ -242,12 +238,12 @@ void main() {
             throwsA(isA<SqlFailure>()),
           );
           await expectLater(
-            db.allocations.create(rateId: d('3')),
+            db.allocation.create(rateId: d('3')),
             throwsA(isA<SqlFailure>()),
           );
-          expect((await db.rates.byId(d('2.000')).single()).label, 'two');
+          expect((await db.rate.byId(d('2.000')).single()).label, 'two');
           if (backend == 'sqlite') {
-            final command = db.rates.byId(d('2')).compile();
+            final command = db.rate.byId(d('2')).compile();
             final plan = await db.execute(
               SqlCommand(
                 'EXPLAIN QUERY PLAN ${command.sql}',
@@ -273,7 +269,7 @@ void main() {
         expect(await verifyColumns(db.sql, appSchema), isEmpty);
         final imported = await importSchema(db.sql);
         expect(imported.issues, isEmpty);
-        expect(imported.dart, contains('Decimal'));
+        expect(imported.dart, contains('decimal('));
         final directory = await Directory(
           '.dart_tool/orm-decimal-import-$backend',
         ).create(recursive: true);
@@ -289,7 +285,7 @@ void main() {
           await directory.delete(recursive: true);
         }
         expect(
-          (await db.entries.single()).amount,
+          (await db.entry.single()).amount,
           d('12345678901234567890.00000000001'),
         );
       });
@@ -297,25 +293,25 @@ void main() {
       test('aggregate intermediate overflow may cancel before a valid final result', () async {
         await create();
         final huge = d('9e131071');
-        await db.entries.create(amount: huge, bucket: 'a');
-        await db.entries.create(amount: huge, bucket: 'a');
-        await db.entries.create(amount: -huge, bucket: 'a');
-        expect(await db.entries.select((e) => e.amount.sum()).single(), huge);
-        await db.entries
+        await db.entry.create(amount: huge, bucket: 'a');
+        await db.entry.create(amount: huge, bucket: 'a');
+        await db.entry.create(amount: -huge, bucket: 'a');
+        expect(await db.entry.select((e) => e.amount.sum()).single(), huge);
+        await db.entry
             .where((e) => e.amount.lt(Decimal.zero))
             .delete()
             .execute();
         await expectLater(
-          db.entries.select((e) => e.amount.sum()).single(),
+          db.entry.select((e) => e.amount.sum()).single(),
           throwsA(isA<SqlFailure>()),
         );
-        expect(await db.entries.count(), 2);
+        expect(await db.entry.count(), 2);
       });
 
       test('historical decimal keys resume backfills without lexical ordering or precision loss', () async {
         await create();
         for (final n in ['10', '2', '-10', '.00000000000000000001']) {
-          await db.rates.create(id: d(n), label: 'pending');
+          await db.rate.create(id: d(n), label: 'pending');
         }
         final first = Migration.create(
           '0001_decimal',
@@ -326,7 +322,7 @@ void main() {
           '0002_backfill',
           [
             Backfill(
-              ratesSchema,
+              rateSchema,
               set: {'label': "'done'"},
               where: "label = 'pending'",
               doneWhen: "SELECT NOT EXISTS (SELECT 1 FROM rates WHERE label = 'pending')",
@@ -337,9 +333,9 @@ void main() {
           dialect: db.dialect,
         );
         await Migrator(db.sql).apply([first, second], maxBackfillBatches: 1);
-        expect(await db.rates.where((r) => r.label.eq('done')).count(), 1);
+        expect(await db.rate.where((r) => r.label.eq('done')).count(), 1);
         await Migrator(db.sql).apply([first, second]);
-        expect(await db.rates.where((r) => r.label.eq('done')).count(), 4);
+        expect(await db.rate.where((r) => r.label.eq('done')).count(), 4);
       });
 
       test('reviewed text-to-decimal migration rejects duplicate numeric keys and rolls back', () async {
@@ -408,7 +404,7 @@ void main() {
             "INSERT INTO entries (amount, bucket) VALUES ('${backend == 'sqlite' ? 'invalid' : 'NaN'}', 'bad')",
           ),
         );
-        await expectLater(db.entries.get(), throwsFormatException);
+        await expectLater(db.entry.get(), throwsFormatException);
         if (backend == 'sqlite') {
           await amounts(['2', '-10', '10']);
           final raw = await db.execute(
@@ -416,12 +412,12 @@ void main() {
           );
           expect(raw.rows.map((r) => r.single), ['-10', '2', '10', 'invalid']);
           await expectLater(
-            db.entries.select((e) => e.amount.sum()).single(),
+            db.entry.select((e) => e.amount.sum()).single(),
             throwsA(isA<SqlFailure>()),
           );
         }
-        await db.entries.where((e) => e.bucket.eq('bad')).delete().execute();
-        expect(await db.entries.where((e) => e.bucket.eq('bad')).count(), 0);
+        await db.entry.where((e) => e.bucket.eq('bad')).delete().execute();
+        expect(await db.entry.where((e) => e.bucket.eq('bad')).count(), 0);
       });
     });
   }
@@ -431,7 +427,7 @@ void main() {
     () async {
       final db = Database(_NoDecimalDriver());
       expect(
-        () => db.entries.select((e) => e.amount).compile(),
+        () => db.entry.select((e) => e.amount).compile(),
         throwsA(
           isA<OrmException>().having(
             (e) => e.code,
@@ -492,7 +488,7 @@ void main() {
       );
       expect((await inspectTable(db.sql, 'custom')).unmanaged, isNotEmpty);
       final imported = await importSchema(db.sql, tables: ['missing']);
-      expect(imported.dart, contains('String amount'));
+      expect(imported.dart, contains('amount: text('));
       await db.execute(
         SqlCommand(
           'CREATE TABLE unicode_names (Ä TEXT COLLATE orm_decimal_v1, ä TEXT)',

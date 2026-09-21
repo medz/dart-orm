@@ -53,7 +53,7 @@ final class ImportedSchema {
   /// Editable Dart model declarations for supported catalog objects.
   final String dart;
 
-  /// Physical table names mapped to their generated Dart entity names.
+  /// Physical table names mapped to their Dart model declaration names.
   final Map<String, String> entities;
 
   /// Physical table and column names mapped to Dart field names.
@@ -307,7 +307,7 @@ Future<ImportedSchema> _importCatalog(
     }
     for (final column in info.columns) {
       final path = '$name.${column.name}';
-      if (_importType(column, db.dialect) == null) {
+      if (_importColumn(column, db.dialect) == null) {
         issues.add(
           SchemaImportIssue(
             'IMPORT.TYPE',
@@ -404,8 +404,8 @@ Future<ImportedSchema> _importCatalog(
 
 // Match physical types exactly. In particular, NUMERIC does not prove BigInt,
 // and SQLite TEXT does not prove an application DateTime, enum, or JSON codec.
-(String, String?)? _importType(ColumnInfo column, SqlDialect dialect) {
-  if (isMysqlDialect(dialect)) return _importMysqlType(column);
+String? _importColumn(ColumnInfo column, SqlDialect dialect) {
+  if (isMysqlDialect(dialect)) return _importMysqlColumn(column);
   return switch ((
     dialect,
     column.temporalPrecision == null
@@ -414,66 +414,59 @@ Future<ImportedSchema> _importCatalog(
   )) {
     (SqlDialect.sqlite, 'TEXT')
         when column.collation?.toLowerCase() == 'orm_decimal_v1' =>
-      ('Decimal', null),
-    (SqlDialect.postgres, 'NUMERIC') => ('Decimal', null),
-    (SqlDialect.postgres, _) when column.decimalPrecision != null => (
-      'Decimal',
-      null,
-    ),
+      'decimal',
+    (SqlDialect.postgres, 'NUMERIC') => 'decimal',
+    (SqlDialect.postgres, _) when column.decimalPrecision != null => 'decimal',
     (SqlDialect.sqlite, 'INTEGER') ||
-    (SqlDialect.postgres, 'SMALLINT' || 'INTEGER' || 'BIGINT') => ('int', null),
+    (SqlDialect.postgres, 'SMALLINT' || 'INTEGER' || 'BIGINT') => 'integer',
     (SqlDialect.sqlite, 'TEXT')
         when column.collation?.toLowerCase() == 'orm_date_v1' =>
-      ('LocalDate', null),
+      'date',
     (SqlDialect.sqlite, 'TEXT')
         when column.collation?.toLowerCase() == 'orm_time_v1' =>
-      ('LocalTime', null),
+      'time',
     (SqlDialect.sqlite, 'TEXT')
         when column.collation?.toLowerCase() == 'orm_local_datetime_v1' =>
-      ('LocalDateTime', null),
+      'localDateTime',
     (SqlDialect.sqlite, 'TEXT')
         when column.collation?.toLowerCase() == 'orm_instant_v1' =>
-      ('DateTime', null),
-    (_, 'TEXT') => ('String', null),
+      'dateTime',
+    (_, 'TEXT') => 'text',
     (SqlDialect.sqlite, 'REAL') ||
-    (SqlDialect.postgres, 'DOUBLE PRECISION') => ('double', null),
-    (SqlDialect.sqlite, 'BLOB') ||
-    (SqlDialect.postgres, 'BYTEA') => ('Uint8List', null),
-    (SqlDialect.postgres, 'BOOLEAN') => ('bool', null),
-    (SqlDialect.postgres, 'TIMESTAMPTZ') => ('DateTime', null),
-    (SqlDialect.postgres, 'DATE') => ('LocalDate', null),
-    (SqlDialect.postgres, 'TIME WITHOUT TIME ZONE') => ('LocalTime', null),
-    (SqlDialect.postgres, 'TIMESTAMP WITHOUT TIME ZONE') => (
-      'LocalDateTime',
-      null,
-    ),
-    (SqlDialect.postgres, 'JSONB') => ('SqlJson', 'Codecs.jsonDocument'),
+    (SqlDialect.postgres, 'DOUBLE PRECISION') => 'real',
+    (SqlDialect.sqlite, 'BLOB') || (SqlDialect.postgres, 'BYTEA') => 'bytes',
+    (SqlDialect.postgres, 'BOOLEAN') => 'boolean',
+    (SqlDialect.postgres, 'TIMESTAMPTZ') => 'dateTime',
+    (SqlDialect.postgres, 'DATE') => 'date',
+    (SqlDialect.postgres, 'TIME WITHOUT TIME ZONE') => 'time',
+    (SqlDialect.postgres, 'TIMESTAMP WITHOUT TIME ZONE') => 'localDateTime',
+    (SqlDialect.postgres, 'JSONB') => 'json',
     _ => null,
   };
 }
 
-(String, String?)? _importMysqlType(ColumnInfo column) {
+String? _importMysqlColumn(ColumnInfo column) {
   final type = column.storageType.toUpperCase();
   // Exact declared storage only: unsigned widths, binary text and arbitrary
   // lengths must not be silently rewritten into the ORM's default types.
   if (type.contains('UNSIGNED') || type.contains('ZEROFILL')) return null;
   if (RegExp(r'^DECIMAL\([0-9]+,[0-9]+\)$').hasMatch(type) &&
       column.decimalPrecision != null) {
-    return ('Decimal', null);
+    return 'decimal';
   }
   final temporal = column.temporalPrecision == null
       ? type
       : type.replaceFirst(RegExp(r'\([0-6]\)'), '');
   return switch (temporal) {
-    'SMALLINT' || 'INT' || 'BIGINT' => ('int', null),
-    'TINYINT(1)' => ('bool', null),
-    'VARCHAR(255)' => ('String', null),
-    'DOUBLE' => ('double', null),
-    'LONGBLOB' => ('Uint8List', null),
-    'DATE' => ('LocalDate', null),
-    'TIME' => ('LocalTime', null),
-    'DATETIME' => ('LocalDateTime', null),
-    'JSON' => ('SqlJson', 'Codecs.jsonDocument'),
+    'SMALLINT' || 'INT' || 'BIGINT' => 'integer',
+    'TINYINT(1)' => 'boolean',
+    'VARCHAR(255)' => 'text',
+    'DOUBLE' => 'real',
+    'LONGBLOB' => 'bytes',
+    'DATE' => 'date',
+    'TIME' => 'time',
+    'DATETIME' => 'localDateTime',
+    'JSON' => 'json',
     _ => null,
   };
 }
@@ -485,6 +478,7 @@ final class _ImportNames {
   final used = <String>{
     ...Keyword.keywords.keys,
     ...databaseMembers,
+    ...generatedTypeNames,
     'column',
     'readColumn',
     'appSchema',
@@ -505,13 +499,27 @@ final class _ImportNames {
     'LocalDate',
     'LocalTime',
     'LocalDateTime',
-    'DecimalDigits',
-    'entity',
-    'Id',
-    'Unique',
-    'ColumnName',
-    'Default',
-    'UseCodec',
+    'Model',
+    'model',
+    'identity',
+    'integer',
+    'text',
+    'boolean',
+    'real',
+    'bigInteger',
+    'decimal',
+    'dateTime',
+    'date',
+    'time',
+    'localDateTime',
+    'bytes',
+    'json',
+    'enumeration',
+    'custom',
+    'index',
+    'check',
+    'references',
+    'referencedBy',
     'Codecs',
   };
   String take(
@@ -538,7 +546,7 @@ final class _ImportNames {
     Set<String> symbols(String v) => {
       v,
       if (entity) ...[
-        '${_importCap(v)}Row',
+        _importCap(v),
         '${v}Schema',
         '${v}Table',
         '${_importCap(v)}Fields',
@@ -582,112 +590,21 @@ ImportedSchema _importDeclarations(
         for (final c in info.columns) c.name: field(info.name, c.name),
       },
   };
-  final b = StringBuffer(
-    '// Imported catalog draft. Review the import report before baselining.\n\n',
-  )..writeln("import 'package:orm/schema.dart';");
-  if (infos.values.any(
-    (t) => t.columns.any((c) => _importType(c, dialect)?.$1 == 'Uint8List'),
-  )) {
-    b.writeln("import 'dart:typed_data';");
-  }
-  for (final info in infos.values) {
-    final entity = entities[info.name]!;
-    b.writeln('\nfinal class ${_importCap(entity)}Row({');
-    for (final c in info.columns) {
-      final type = _importType(c, dialect)!;
-      b.writeln('@ColumnName(${dartLiteral(c.name)})');
-      if (c.integerBits != null && c.integerBits != 64) {
-        b.writeln('@IntegerBits(${c.integerBits})');
-      }
-      if (c.temporalPrecision != null && c.temporalPrecision != 6) {
-        b.writeln('@TemporalPrecision(${c.temporalPrecision})');
-      }
-      if (c.decimalPrecision != null) {
-        b.writeln(
-          '@DecimalDigits(${c.decimalPrecision}, ${c.decimalScale ?? 0})',
-        );
-      }
-      if (generated[info.name]!.contains(c.name)) b.writeln('@Id.generated()');
-      if (c.declarationDefaultSql != null) {
-        b.writeln('@Default.sql(${dartLiteral(c.declarationDefaultSql!)})');
-      }
-      if (c.computed != null) {
-        final computed = c.declarationComputed!;
-        b.writeln(
-          '@Computed.sql(${dartLiteral(computed.expression(dialect))}, storage: ComputedStorage.${computed.storage.name})',
-        );
-        issues.add(
-          SchemaImportIssue(
-            'IMPORT.COMPUTED_SQL',
-            '${info.name}.${c.name}',
-            'Computed SQL was read from ${dialect.name}; review expression portability before using another backend.',
-            blocking: false,
-          ),
-        );
-      }
-      if (type.$2 != null) b.writeln('@UseCodec(${type.$2})');
-      b.writeln(
-        'required final ${type.$1}${c.nullable ? '?' : ''} ${fields[info.name]![c.name]},',
-      );
-    }
-    b.writeln(
-      '});\nfinal $entity = entity<${_importCap(entity)}Row>(table: ${dartLiteral(info.name)});',
-    );
-  }
-  String selector(String table, List<String> columns) {
+  final relations = {for (final info in infos.values) info.name: <String>[]};
+  String selection(String table, List<String> columns) {
     final values = columns.map((c) => 'row.${fields[table]![c]}').toList();
-    return '(row) => ${values.length == 1 ? values.single : '(${values.join(', ')})'}';
+    return values.length == 1 ? values.single : '(${values.join(', ')})';
   }
 
+  String mapping(
+    String local,
+    List<String> columns,
+    String target,
+    List<String> targetColumns,
+  ) =>
+      '(${List.generate(columns.length, (i) => '${fields[target]![targetColumns[i]]}: row.${fields[local]![columns[i]]}').join(', ')},)';
   for (final info in infos.values) {
     final entity = entities[info.name]!;
-    void constraint(String kind, List<String> columns, {String extra = ''}) {
-      final symbol = names.take('$entity${_importCap(kind)}');
-      b.writeln(
-        'final $symbol = $entity.$kind(${selector(info.name, columns)}$extra);',
-      );
-    }
-
-    if (info.primaryKey.isNotEmpty && generated[info.name]!.isEmpty) {
-      constraint('primaryKey', info.primaryKey);
-    }
-    final unique = info.uniqueKeys.toList()
-      ..sort((a, b) => jsonEncode(a).compareTo(jsonEncode(b)));
-    for (final key in unique) {
-      constraint('unique', key);
-    }
-    final indexes = info.indexes.toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-    for (final index in indexes) {
-      constraint(
-        'index',
-        index.columns,
-        extra: ', name: ${dartLiteral(index.name)}, unique: ${index.unique}',
-      );
-    }
-    final checks = info.checks.toList()
-      ..sort(
-        (a, b) =>
-            jsonEncode([a.name, a.expression])
-                .compareTo(jsonEncode([b.name, b.expression])),
-      );
-    for (final check in checks) {
-      final symbol = names.take(check.name ?? '${entity}Check');
-      b.writeln(
-        'final $symbol = $entity.check(${dartLiteral(check.expression)}, '
-        'name: ${check.name == null ? 'null' : dartLiteral(check.name!)});',
-      );
-    }
-    if (checks.isNotEmpty) {
-      issues.add(
-        SchemaImportIssue(
-          'IMPORT.CHECK_SQL',
-          info.name,
-          'CHECK expressions use ${dialect.name} SQL. Review other-dialect overrides before deploying this declaration elsewhere.',
-          blocking: false,
-        ),
-      );
-    }
     final foreign = info.foreignKeys.toList()
       ..sort(
         (a, b) => jsonEncode([a.columns, a.target, a.targetColumns, a.onDelete])
@@ -706,16 +623,16 @@ ImportedSchema _importDeclarations(
           ].any((k) => sameStrings(k, key.targetColumns)) ||
           key.columns.asMap().entries.any(
             (entry) =>
-                _importType(
+                _importColumn(
                   info.columns.singleWhere((c) => c.name == entry.value),
                   dialect,
-                )?.$1 !=
-                _importType(
+                ) !=
+                _importColumn(
                   target.columns.singleWhere(
                     (c) => c.name == key.targetColumns[entry.key],
                   ),
                   dialect,
-                )?.$1,
+                ),
           ) ||
           key.onDelete == 'SET NULL' &&
               key.columns.any(
@@ -743,10 +660,99 @@ ImportedSchema _importDeclarations(
       }
       fieldNames[info.name]!.used.add(relation);
       final inverse = fieldNames[key.target]!.take('${entity}Rows');
-      b.writeln(
-        'final $relation = $entity.key(${selector(info.name, key.columns)}).references(${entities[key.target]}.key(${selector(key.target, key.targetColumns)}), inverse: ${dartLiteral(inverse)}, onDelete: .$action);',
+      relations[info.name]!.add(
+        '$relation: references(${mapping(info.name, key.columns, key.target, key.targetColumns)}, () => ${entities[key.target]}, onDelete: .$action)',
+      );
+      relations[key.target]!.add(
+        '$inverse: referencedBy(() => $entity, on: ${mapping(key.target, key.targetColumns, info.name, key.columns)})',
       );
     }
+  }
+  final b = StringBuffer(
+    '// Imported catalog draft. Review the import report before baselining.\n\n',
+  )..writeln("import 'package:orm/schema.dart';");
+  for (final info in infos.values) {
+    final entity = entities[info.name]!;
+    b.writeln(
+      'final ${relations[info.name]!.isEmpty ? '' : 'Model '}$entity = model(${dartLiteral(info.name)}, (',
+    );
+    for (final c in info.columns) {
+      final helper = _importColumn(c, dialect)!;
+      final options = <String>['name: ${dartLiteral(c.name)}'];
+      if (c.integerBits != null && c.integerBits != 64) {
+        options.add('bits: ${c.integerBits}');
+      }
+      if (c.temporalPrecision != null && c.temporalPrecision != 6) {
+        options.add('precision: ${c.temporalPrecision}');
+      }
+      if (c.decimalPrecision != null) {
+        options.add(
+          'precision: ${c.decimalPrecision}, scale: ${c.decimalScale ?? 0}',
+        );
+      }
+      if (c.declarationDefaultSql != null) {
+        options.add('defaultSql: ${dartLiteral(c.declarationDefaultSql!)}');
+      }
+      var column = '$helper(${options.join(', ')})';
+      if (c.nullable) column += '.nullable()';
+      if (generated[info.name]!.contains(c.name)) column += '.identity()';
+      if (c.computed case final computed?) {
+        column +=
+            '.computed(${dartLiteral(c.declarationComputed!.expression(dialect))}, storage: .${computed.storage.name})';
+        issues.add(
+          SchemaImportIssue(
+            'IMPORT.COMPUTED_SQL',
+            '${info.name}.${c.name}',
+            'Computed SQL was read from ${dialect.name}; review expression portability before using another backend.',
+            blocking: false,
+          ),
+        );
+      }
+      b.writeln('${fields[info.name]![c.name]}: $column,');
+    }
+    b.writeln('),');
+    if (info.primaryKey.isNotEmpty && generated[info.name]!.isEmpty) {
+      b.writeln(
+        'primaryKey: (row) => ${selection(info.name, info.primaryKey)},',
+      );
+    }
+    final unique = info.uniqueKeys.toList()
+      ..sort((a, b) => jsonEncode(a).compareTo(jsonEncode(b)));
+    if (unique.isNotEmpty) {
+      b.writeln(
+        'uniqueKeys: (row) => [${unique.map((k) => selection(info.name, k)).join(', ')}],',
+      );
+    }
+    final indexes = info.indexes.toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    if (indexes.isNotEmpty) {
+      b.writeln(
+        'indexes: (row) => [${indexes.map((i) => 'index(${selection(info.name, i.columns)}, name: ${dartLiteral(i.name)}, unique: ${i.unique})').join(', ')}],',
+      );
+    }
+    final checks = info.checks.toList()
+      ..sort(
+        (a, b) =>
+            jsonEncode([a.name, a.expression])
+                .compareTo(jsonEncode([b.name, b.expression])),
+      );
+    if (checks.isNotEmpty) {
+      b.writeln(
+        'checks: [${checks.map((c) => 'check(${dartLiteral(c.expression)}, name: ${c.name == null ? 'null' : dartLiteral(c.name!)})').join(', ')}],',
+      );
+      issues.add(
+        SchemaImportIssue(
+          'IMPORT.CHECK_SQL',
+          info.name,
+          'CHECK expressions use ${dialect.name} SQL. Review other-dialect overrides before deploying this declaration elsewhere.',
+          blocking: false,
+        ),
+      );
+    }
+    if (relations[info.name]!.isNotEmpty) {
+      b.writeln('relations: (row) => (${relations[info.name]!.join(', ')},),');
+    }
+    b.writeln(');');
   }
   if (infos.isEmpty) {
     b.writeln('// No supported tables were imported. See the import report.');

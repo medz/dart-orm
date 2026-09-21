@@ -9,7 +9,7 @@ Future<void> main() async {
     await Migrator(db.sql).apply([
       Migration.create('0001_precision', appSchema, dialect: db.dialect),
     ]);
-    final row = await db.wallets.create(
+    final row = await db.wallet.create(
       amount: Decimal.parse('1.235'),
       hundreds: Decimal.parse('-12350'),
       fraction: Decimal.parse('.001235'),
@@ -20,9 +20,9 @@ Future<void> main() async {
         row.defaulted != Decimal.parse('1.24')) {
       throw StateError('Decimal column coercion differs');
     }
-    await db.prices.create(id: Decimal.parse('1.234'), label: 'one');
-    await db.receipts.create(priceId: Decimal.parse('1.234'));
-    if (await db.receipts
+    await db.price.create(id: Decimal.parse('1.234'), label: 'one');
+    await db.receipt.create(priceId: Decimal.parse('1.234'));
+    if (await db.receipt
             .select((r) => r.price.select((p) => p.label).required())
             .single() !=
         'one') {
@@ -30,11 +30,11 @@ Future<void> main() async {
     }
     var rejected = false;
     try {
-      await db.prices.create(id: Decimal.parse('99.995'), label: 'overflow');
+      await db.price.create(id: Decimal.parse('99.995'), label: 'overflow');
     } on SqlFailure {
       rejected = true;
     }
-    if (!rejected || await db.prices.count() != 1) {
+    if (!rejected || await db.price.count() != 1) {
       throw StateError('Precision overflow was not rejected');
     }
     final check = await verifySchema(db.sql, SchemaSnapshot(appSchema));

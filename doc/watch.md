@@ -4,7 +4,7 @@
 committed writes:
 
 ```dart
-final subscription = db.users
+final subscription = db.user
     .orderBy((u) => [u.id.asc()])
     .select((u) => u.email)
     .watch()
@@ -13,7 +13,7 @@ final subscription = db.users
       onError: (Object error) => print(error),
     );
 
-await db.users.create(email: 'seven@example.com');
+await db.user.create(email: 'seven@example.com');
 await subscription.cancel();
 ```
 
@@ -32,8 +32,8 @@ queries. Raw operations can explicitly declare effects as described below.
 
 ```dart
 await db.transaction((tx) async {
-  await tx.users.create(email: 'a@example.com');
-  await tx.users.create(email: 'b@example.com');
+  await tx.user.create(email: 'a@example.com');
+  await tx.user.create(email: 'b@example.com');
 }); // One combined invalidation after COMMIT succeeds.
 ```
 
@@ -45,7 +45,7 @@ constraint failures do not publish successful-write notifications.
 If COMMIT's acknowledgement is lost, its outcome may be unknown. The transaction
 still throws `TRANSACTION.COMMIT`, and subscriptions conservatively re-read its
 affected tables. A refreshed result is not evidence that retrying the mutation is
-safe. The PostgreSQL test executes a real commit before injecting this fault.
+safe.
 
 Subscriptions observe invalidation and current data, not an audit log of every
 intermediate state. Several commits may coalesce while a read is running or a
@@ -83,7 +83,7 @@ Add those dependencies explicitly:
 final postCount = sql<int>(
   ['(SELECT COUNT(*) FROM posts)'], [], Codecs.integer,
 );
-final counts = db.users.select((_) => postCount).watch(reads: [postsSchema]);
+final counts = db.user.select((_) => postCount).watch(reads: [postsSchema]);
 ```
 
 Raw commands can declare tables they affect:
@@ -136,16 +136,3 @@ Watch a root database query. Transaction and leased-session queries reject
 subscription with `WATCH.SESSION`: those views expire when their callback returns.
 Also avoid awaiting an outside subscription from code holding the only available
 connection; its next read must wait for that lease to be released.
-
-## Verification
-
-The suite covers both native SQLite and PostgreSQL, including real independent
-SQLite workers and PostgreSQL connections, joined/CTE/relation dependencies,
-savepoint rollback, multi-level cascades, pause, cancellation and database close.
-Controlled completed-read and commit-acknowledgement faults exercise race handling
-against real database state. Negative compilation checks verify subscription
-result types. The native execution example also verifies subscriptions in macOS
-AOT. Real Chrome JavaScript and Dart WASM runs verify worker subscriptions;
-the [native Flutter application](https://github.com/medz/dart-orm/blob/main/doc/flutter.md) also verifies initial delivery,
-committed relation writes, rollback without notification and typed patch refresh
-inside an Android AOT release application.

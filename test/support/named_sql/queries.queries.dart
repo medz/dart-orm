@@ -2,10 +2,12 @@
 
 import 'package:orm/sql.dart';
 
-import "queries.dart" as models;
-export "queries.dart" show AuthorStats, Echo, Constant;
-
 Expr<T> _bindSqlParameter<T>(T input, Codec<T> codec) => value(input, codec);
+final class AuthorStats({
+  required final String author,
+  required final int postCount,
+  required final int points,
+});
 final _sqlColumnAuthorStats_0 = Column<String>(
   "author",
   Codecs.text,
@@ -30,7 +32,7 @@ final class AuthorStatsFields extends Fields {
 }
 
 final _sqlDefinitionAuthorStats =
-    SqlQueryDefinition<models.AuthorStats, AuthorStatsFields>(
+    SqlQueryDefinition<AuthorStats, AuthorStatsFields>(
       Table(
         TableSchema(
           "_orm_sql_author_stats",
@@ -42,8 +44,7 @@ final _sqlDefinitionAuthorStats =
         ),
         AuthorStatsFields.new,
         (row) => (row.author, row.postCount, row.points).map(
-          (author, postCount, points) =>
-              (author: author, postCount: postCount, points: points),
+          (v0, v1, v2) => AuthorStats(author: v0, postCount: v1, points: v2),
         ),
       ),
       {
@@ -59,7 +60,7 @@ final _sqlDefinitionAuthorStats =
     );
 
 extension AuthorStatsSql on QueryContext {
-  Query<models.AuthorStats, AuthorStatsFields> authorStats({
+  Query<AuthorStats, AuthorStatsFields> authorStats({
     required int minimum,
     String? author,
   }) => _sqlDefinitionAuthorStats.bind(this, {
@@ -68,6 +69,12 @@ extension AuthorStatsSql on QueryContext {
   });
 }
 
+final class Echo({
+  required final String value,
+  required final DateTime at,
+  required final Decimal amount,
+  required final LocalDate day,
+});
 final _sqlColumnEcho_0 = Column<String>("value", Codecs.text, nullable: false);
 final _sqlColumnEcho_1 = Column<DateTime>(
   "at",
@@ -89,7 +96,7 @@ final class EchoFields extends Fields {
   late final day = column(_sqlColumnEcho_3);
 }
 
-final _sqlDefinitionEcho = SqlQueryDefinition<models.Echo, EchoFields>(
+final _sqlDefinitionEcho = SqlQueryDefinition<Echo, EchoFields>(
   Table(
     TableSchema(
       "_orm_sql_echo",
@@ -101,10 +108,12 @@ final _sqlDefinitionEcho = SqlQueryDefinition<models.Echo, EchoFields>(
       ],
     ),
     EchoFields.new,
-    (row) => (row.value, row.at, row.amount, row.day).map(
-      (value, at, amount, day) =>
-          (value: value, at: at, amount: amount, day: day),
-    ),
+    (row) => (
+      row.value,
+      row.at,
+      row.amount,
+      row.day,
+    ).map((v0, v1, v2, v3) => Echo(value: v0, at: v1, amount: v2, day: v3)),
   ),
   {
     SqlDialect.sqlite: SqlTemplate(
@@ -119,7 +128,7 @@ final _sqlDefinitionEcho = SqlQueryDefinition<models.Echo, EchoFields>(
 );
 
 extension EchoSql on QueryContext {
-  Query<models.Echo, EchoFields> echo({
+  Query<Echo, EchoFields> echo({
     required String value,
     required DateTime at,
     required Decimal amount,
@@ -132,6 +141,7 @@ extension EchoSql on QueryContext {
   });
 }
 
+final class Constant({required final int n});
 final _sqlColumnConstant_0 = Column<int>("n", Codecs.integer, nullable: false);
 
 final class ConstantFields extends Fields {
@@ -139,30 +149,30 @@ final class ConstantFields extends Fields {
   late final n = column(_sqlColumnConstant_0);
 }
 
-final _sqlDefinitionConstant =
-    SqlQueryDefinition<models.Constant, ConstantFields>(
-      Table(
-        TableSchema("_orm_sql_constant", columns: [_sqlColumnConstant_0]),
-        ConstantFields.new,
-        (row) => row.n.map((v) => (n: v)),
-      ),
-      {
-        SqlDialect.sqlite: SqlTemplate(
-          "SELECT 42 AS n\n",
-          dialect: SqlDialect.sqlite,
-        ),
-        SqlDialect.postgres: SqlTemplate(
-          "SELECT 42 AS n\n",
-          dialect: SqlDialect.postgres,
-        ),
-      },
-    );
+final _sqlDefinitionConstant = SqlQueryDefinition<Constant, ConstantFields>(
+  Table(
+    TableSchema("_orm_sql_constant", columns: [_sqlColumnConstant_0]),
+    ConstantFields.new,
+    (row) => row.n.map((value) => Constant(n: value)),
+  ),
+  {
+    SqlDialect.sqlite: SqlTemplate(
+      "SELECT 42 AS n\n",
+      dialect: SqlDialect.sqlite,
+    ),
+    SqlDialect.postgres: SqlTemplate(
+      "SELECT 42 AS n\n",
+      dialect: SqlDialect.postgres,
+    ),
+  },
+);
 
 extension ConstantSql on QueryContext {
-  Query<models.Constant, ConstantFields> constant() =>
+  Query<Constant, ConstantFields> constant() =>
       _sqlDefinitionConstant.bind(this, {});
 }
 
+final class PostgresOnly({required final int n});
 final _sqlColumnPostgresOnly_0 = Column<int>(
   "n",
   Codecs.integer,
@@ -175,14 +185,14 @@ final class PostgresOnlyFields extends Fields {
 }
 
 final _sqlDefinitionPostgresOnly =
-    SqlQueryDefinition<models.Constant, PostgresOnlyFields>(
+    SqlQueryDefinition<PostgresOnly, PostgresOnlyFields>(
       Table(
         TableSchema(
           "_orm_sql_postgres_only",
           columns: [_sqlColumnPostgresOnly_0],
         ),
         PostgresOnlyFields.new,
-        (row) => row.n.map((v) => (n: v)),
+        (row) => row.n.map((value) => PostgresOnly(n: value)),
       ),
       {
         SqlDialect.postgres: SqlTemplate(
@@ -193,6 +203,6 @@ final _sqlDefinitionPostgresOnly =
     );
 
 extension PostgresOnlySql on QueryContext {
-  Query<models.Constant, PostgresOnlyFields> postgresOnly() =>
+  Query<PostgresOnly, PostgresOnlyFields> postgresOnly() =>
       _sqlDefinitionPostgresOnly.bind(this, {});
 }

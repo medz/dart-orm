@@ -89,8 +89,8 @@ Database-specific restrictions apply only to the selected engine. Ordinary
 single-engine declarations can use `ComputedColumn(sql)` and `CheckSchema(name, sql)`.
 
 Multi-database applications own separate directories, registries and connections.
-Tests for a PostgreSQL application use PostgreSQL for migration acceptance. Switching
-to SQLite is a separate schema/data transfer and baseline operation; it does not
+Use the application's database engine when checking migrations. Switching to
+SQLite is a separate schema/data transfer and baseline operation; it does not
 translate, replay or rewrite the PostgreSQL history. Changing servers or credentials
 within the same engine preserves the history; the destination's applied hashes and
 catalog still need checking.
@@ -353,12 +353,8 @@ nontransactional work and includes progress. A `MIGRATION.STEP` exception retain
 the underlying error as `cause`. A failed lock release discards its connection.
 SQLite rejects `CheckedSql`; its schema rebuild path remains transactional.
 
-Tests terminate real Dart processes immediately after a concurrent DDL succeeds
-and after an ordinary step commits. Both resume from unchanged files without
-replaying committed work. They also exercise INVALID unique indexes, explicit
-repair, definition mismatches, lock timeout and simultaneous runners.
 
-# Existing databases
+## Existing databases
 
 ```dart
 final result = await Migrator(db).baseline(

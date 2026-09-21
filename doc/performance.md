@@ -1,144 +1,84 @@
-# Runtime cost measurements
+# Query performance
 
-Run the same native SQL and result shapes through the public driver and ORM:
+Start with the amount of data and work a query requests: selected columns, returned
+rows, SQL statements and indexes. Measure on the database and platform your
+application uses; the same Dart expression can have different backend costs.
 
-```sh
-ORM_TEST_POSTGRES='postgresql://localhost/orm_bench' dart run tool/benchmark_runtime.dart
+## Select only what you need
+
+A projection selects and decodes only its requested values:
+
+```dart
+final people = await db.employee
+    .orderBy((e) => [e.id.asc()])
+    .take(50)
+    .select((e) => (e.id, e.name).row)
+    .get();
 ```
 
-The PostgreSQL account needs permission to create/drop its own temporary schema.
-The tool removes that schema and its temporary SQLite WAL file when finished.
-It does not alter the application's tables. `--smoke` uses five timing samples
-and writes `.dart_tool/benchmarks/runtime-smoke.json`; it validates the harness and is not
-a performance result. The normal run writes `.dart_tool/benchmarks/runtime.json`.
-Use `--output <path>` to retain separate runs, for example
-`--output .dart_tool/benchmarks/runtime-after.json`.
+Loading a complete row also transfers and decodes columns your view may never use.
+This matters especially for large text, JSON and binary values. `get()` materializes
+the result; use pagination or streaming when callers can process bounded chunks.
+Keyset pagination needs a deterministic unique tie breaker. See
+[queries](https://github.com/medz/dart-orm/blob/main/doc/queries.md) and
+[streaming](https://github.com/medz/dart-orm/blob/main/doc/execution.md).
 
-## Comparison contract
+## Count relationship statements
 
-Both paths use the **same public Driver**: PostgreSQL pooling/protocol/decoding,
-or the native SQLite background isolate and its message transport. The raw path
-calls `driver.run` and `connection.execute` directly, then constructs the same
-Records/lists using the same public codecs. This isolates the query layer above
-the adapter. It is not a comparison against synchronous `package:sqlite3` on the
-main isolate or an independently configured `package:postgres` connection.
+Load related values in the selection rather than making one request per row.
+A to-one relation whose keys prove uniqueness can join the root statement.
+Collections batch parent keys into child queries; nested collections add loading
+stages, and driver parameter limits can split batches.
 
-The raw path reuses captured, precompiled SQL. Its relationship loader derives
-keys from the returned parent rows, fills the same parameter positions, groups
-children and returns unmodifiable child lists. The fixture has a fixed root/key
-count; this baseline is handwritten for that workload, not a general replacement
-for the ORM query planner. Raw SQL, parameter values, statement count and complete
-business results are checked against the corresponding generated ORM query.
-Independent assertions check root count, per-parent ordering/limits and grouped
-counts. All data belongs to the generated [example schema](https://github.com/medz/dart-orm/blob/main/example/schema.dart).
+```dart
+final query = db.employee.select((e) => (
+  e.name,
+  e.manager.select((m) => m.name).one(),
+).row);
+print(query.inspect().toJson());
+```
 
-| Case | Result | Expected SQL result volume |
-| --- | --- | --- |
-| `full_rows` | 100 complete user results; nullable, long Unicode nicknames | 100 rows, one statement |
-| `two_columns` | 100 `(id, email)` Records | 100 rows, one statement |
-| `three_posts` | 100 users with their latest three `(id, title)` posts | 100 parent + 300 child rows, two statements |
-| `aggregate` | Counts for ten score groups | 10 rows, one statement |
+`inspect()` describes planned SQL without executing it. Use `onQuery` to count
+statements actually executed, including child batches. `onAcquire` and `onDecode`
+help separate connection waiting and decoding costs. Their scopes do not add up
+to every part of application latency; see
+[observability](https://github.com/medz/dart-orm/blob/main/doc/observability.md).
 
-The database contains 100 users and 1,000 posts. Field selection reduces returned
-columns; per-parent pagination returns 300 of those posts. This sample does not
-measure arbitrary graph cardinalities, mutation throughput or every codec.
+## Index for access patterns
 
-## Timing and transport
+Declare indexes for frequently combined filters, joins and ordering:
 
-Each backend runs in a separate native JIT process. Query objects, schema,
-connections and database caches are warm. Query object construction is outside
-the timing; ORM SQL compilation on each `get()` is inside it. The default hooks,
-VM service and profiler are disabled in the timing processes.
+```dart
+indexes: (e) => [
+  index((e.departmentId, e.id), name: 'employees_department_id'),
+],
+```
 
-For each case, 20 raw/ORM pairs warm the code before 200 measured pairs. The first
-lane alternates in each measured pair. Both lanes retain their actual duration
-samples, with nearest-rank p50/p95. In the paired timing section, `wallMicros`
-sums measured operation intervals and operations/second is the inverse mean
-duration. It excludes the gaps between those intervals. The separate closed-loop
-concurrency section runs 200 operations per lane across eight clients, and its
-wall time/throughput covers the entire concurrent run. It runs raw then ORM;
-repeat measurements to assess order/load/JIT variability.
+Primary and unique keys already create database access paths. Relationships do
+not automatically add indexes for foreign-key columns. Inspect the database query
+plan before adding an index; indexes cost storage and work on every affected write.
+Use reviewed migrations to add or change them.
 
-SQLite uses one worker connection and a temporary WAL file. PostgreSQL warms all
-four pool slots. These backend configurations serve different purposes; their
-absolute throughputs are not a driver ranking.
+## Keep work bounded
 
-Both PostgreSQL timing scenarios use an external loopback TCP relay. One forwards
-immediately. The other schedules each received chunk after 10 milliseconds in
-each direction, preserving order without serially adding a delay for every chunk.
-An independent byte echo measures the relay's actual round-trip latency and checks
-its byte accounting. The report also measures `SELECT 1` through the complete
-driver. That command can involve multiple protocol round trips: a SQL statement
-count is not a TCP round-trip count.
+Keep transactions short and avoid waiting for unrelated network requests while
+holding a database connection. Batch compatible writes while preserving the
+required transaction boundary. Bound result sizes, relation pagination and retry
+budgets. A timeout does not prove a submitted write rolled back.
 
-This is controlled transport latency on a local database, not a remote database
-deployment. It does not simulate WAN loss, bandwidth limits, TLS or a remote
-server's CPU/storage. The relay and its counters run in the controller process,
-outside the benchmark process's measured heap.
+Custom decoders, result mappers and observation callbacks run in Dart. Keep them
+small; background database execution does not move application callbacks off the
+caller's isolate. Exact decimal operations should be measured with representative
+coefficient sizes and scales.
 
-## Observation and memory scopes
+## Compare equivalent workloads
 
-Separate probes preserve SQL/parameters, returned-row counts and UTF-8 JSON byte
-lengths of the driver rows and normalized result. These JSON lengths describe
-logical payload volume, not native heap sizes or SQLite IPC encoding. PostgreSQL
-also records bytes received/sent by its relay during each probe, including
-protocol messages but excluding TCP/IP headers. Connection setup is already done.
+Compare complete results, SQL, bound parameters, statement counts and transaction
+boundaries before latency. Record absolute time as well as percentage differences.
+A local single-client benchmark does not predict remote, concurrent, browser or
+Flutter performance.
 
-A separate instrumented eight-client run records 64 acquisition samples per lane
-and statement durations. These are driver lease times, including setup inside the
-request; they do not isolate the pool implementation's queue time. The ORM probe
-also records synchronous decode/grouping times. These probes do not contribute to
-the default latency samples.
-
-Memory profiling uses fresh local processes after timing. The external controller
-queries the SDK VM service, requests GC, runs three reads retaining the last result,
-then inspects live heap state. Reports include heap/external memory, selected live
-class counts, RSS before/after and process-lifetime maximum RSS. The latter can
-include startup and previous cases; it is not a per-query peak. Live heap statistics
-cover the isolate group, including SQLite's worker, and are not solely result size.
-
-The SDK's protocol describes allocation accumulators, but
-[Dart 3.13.3's implementation](https://github.com/dart-lang/sdk/blob/3.13.3/runtime/vm/class_table.cc#L263)
-emits current counts/sizes for both the accumulated and current fields. This
-benchmark therefore does not subtract `accumulatedSize` values or describe a live
-heap delta as total allocated bytes. The
-[service implementation](https://github.com/dart-lang/sdk/blob/3.13.3/runtime/vm/service.cc#L4443)
-also establishes the isolate-group scope of its GC/profile operation.
-
-Instead, a separate
-[allocation trace](https://github.com/dart-lang/sdk/blob/3.13.3/runtime/vm/service/service.md#getallocationtraces)
-counts observed creations of selected Record, List, Map and selection-plan classes
-in the main query isolate, and records allocation frames. It excludes untraced
-classes, native allocations and the SQLite worker's allocation traces. Buffer and
-stack limits apply; truncated stack counts are retained. These are observed traces,
-not an exact census of every allocation or a measurement of total allocated bytes.
-Tracing can deoptimize code and changes execution cost; no traced durations are
-used as normal throughput results.
-
-## Interpret a comparison
-
-Compare exact SQL, bound parameters, statement counts and complete business
-results before comparing durations. A faster run with fewer returned rows or a
-different transaction boundary is a different workload.
-
-Use absolute overhead, selected bytes, actual statement counts and measured lease
-waits together. A short local query can have a large percentage overhead while
-remaining short in absolute time. With network delay, protocol round trips can
-dominate; selecting fewer columns does not eliminate those round trips. Allocation
-traces can locate intermediate collections, but do not establish retained memory
-or application throughput.
-
-Retain the report's runtime revision, SDK, OS/CPU, database versions, fixture,
-sample counts and harness hashes. Repeat runs to assess load, scheduling and JIT
-variation. If raw-driver timings or calibrated relay latency also change, do not
-attribute the entire difference to the ORM. A native JIT result says nothing about
-AOT, browser or Flutter performance without a corresponding workload there.
-
-Typed selection decodes values into the requested scalar, Record, DTO or dynamic
-Map. Relationship expansion preserves driver-row ownership. Any optimization must
-retain mapping order, decoder failures, transaction boundaries, cursor cleanup
-and observation events. Statement reuse must also preserve protocol disposal and
-connection ownership; omitting cleanup is not a valid cache.
-
-See [observability](https://github.com/medz/dart-orm/blob/main/doc/observability.md) for the event timing scopes and
-[acceptance](https://github.com/medz/dart-orm/blob/main/doc/acceptance.md) for correctness checks that accompany performance work.
+Measure on representative data with the same SDK, engine configuration and query
+shape. Separate startup from steady-state work, run enough samples to see variation,
+and avoid profiling allocations during ordinary latency measurements. Repository
+contributors can use the [benchmark tools](https://github.com/medz/dart-orm/blob/main/CONTRIBUTING.md#runtime-benchmarks).

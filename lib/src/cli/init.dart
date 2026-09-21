@@ -83,13 +83,11 @@ Future<void> initializeProject(List<String> args, CliOutput output) async {
 
 const _initialSchema = '''import 'package:orm/schema.dart';
 
-final class Task({
-  @Id.generated() required final int id,
-  required final String title,
-  @Default.sql('false') required final bool done,
-});
-
-final tasks = entity<Task>();
+final task = model('tasks', (
+  id: identity(),
+  title: text(),
+  done: boolean(defaultValue: false),
+));
 ''';
 
 String _initialConfig(String engine) {

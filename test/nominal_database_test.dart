@@ -5,7 +5,6 @@ import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
-import 'support/nominal/schema.dart' show Email;
 import 'support/nominal/schema.orm.dart';
 
 void main() {
@@ -54,7 +53,7 @@ void runNominalTests(String name, Future<Database<Backend>> Function() open) {
     test(
       'rows, insert defaults, codecs and patches retain nominal types',
       () async {
-        final Account account = await db.accounts.create(
+        final Account account = await db.account.create(
           email: const Email('a@example.com'),
           a: 2,
           b: 3,
@@ -66,14 +65,14 @@ void runNominalTests(String name, Future<Database<Backend>> Function() open) {
         expect(account.enabled, false);
         expect(account.marker, 'seed');
         expect(account.total, 5);
-        await db.accounts
+        await db.account
             .byId(account.id)
             .patch(label: .set('Account'), enabled: .set(true));
-        final Account updated = await db.accounts.byId(account.id).single();
+        final Account updated = await db.account.byId(account.id).single();
         expect(updated.label, 'Account');
         expect(updated.enabled, true);
-        await db.accounts.byId(account.id).patch(label: .set(null));
-        expect((await db.accounts.byId(account.id).single()).label, isNull);
+        await db.account.byId(account.id).patch(label: .set(null));
+        expect((await db.account.byId(account.id).single()).label, isNull);
       },
     );
 
@@ -81,29 +80,29 @@ void runNominalTests(String name, Future<Database<Backend>> Function() open) {
       'relations return nominal rows while projections retain their own types',
       () async {
         final Account owner = await db.transaction((tx) async {
-          final Account owner = await tx.accounts.create(
+          final Account owner = await tx.account.create(
             email: const Email('owner@example.com'),
             a: 1,
             b: 2,
             c: 3,
           );
-          final Note note = await tx.notes.create(
+          final Note note = await tx.note.create(
             accountId: owner.id,
             body: 'hello',
           );
           expect(note, isA<Note>());
           return owner;
         });
-        final List<Note> children = await db.accounts
+        final List<Note> children = await db.account
             .byId(owner.id)
             .select((a) => a.notes.many())
             .single();
         expect(children.single.body, 'hello');
-        final Account related = await db.notes
+        final Account related = await db.note
             .select((n) => n.account.required())
             .single();
         expect(related.email.value, 'owner@example.com');
-        final ({int id, List<String> notes}) card = await db.accounts
+        final ({int id, List<String> notes}) card = await db.account
             .byId(owner.id)
             .select(
               (a) => (
@@ -114,8 +113,8 @@ void runNominalTests(String name, Future<Database<Backend>> Function() open) {
             .single();
         expect(card.id, owner.id);
         expect(card.notes, ['hello']);
-        await db.accounts.byId(owner.id).delete().execute();
-        expect(await db.notes.count(), 0);
+        await db.account.byId(owner.id).delete().execute();
+        expect(await db.note.count(), 0);
       },
     );
   });

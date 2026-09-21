@@ -1,7 +1,6 @@
 import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
 
-import 'schema.dart';
 import 'schema.orm.dart';
 
 Future<void> main() async {
@@ -19,16 +18,16 @@ Future<void> main() async {
       db.sql,
     ).apply([Migration.create('0001_teams', appSchema, dialect: db.dialect)]);
     await db.transaction((tx) async {
-      await tx.users.create(id: 1, name: 'Ada');
-      await tx.teams.create(id: 10, name: 'Core');
-      await tx.teams.create(id: 20, name: 'Docs');
-      await tx.memberships.create(
+      await tx.user.create(id: 1, name: 'Ada');
+      await tx.team.create(id: 10, name: 'Core');
+      await tx.team.create(id: 20, name: 'Docs');
+      await tx.membership.create(
         teamId: 10,
         userId: 1,
         role: .set(MembershipRole.owner),
         joinedAt: DateTime.utc(2026, 1, 1),
       );
-      await tx.memberships.create(
+      await tx.membership.create(
         teamId: 20,
         userId: 1,
         joinedAt: DateTime.utc(2026, 1, 2),
@@ -37,7 +36,7 @@ Future<void> main() async {
     events.clear();
     acquisitions.clear();
     decodes.clear();
-    final query = db.users.select(
+    final query = db.user.select(
       (u) => (
         u.name,
         u.memberships

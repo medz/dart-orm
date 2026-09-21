@@ -11,7 +11,7 @@ import 'schema.orm.dart';
 
 final db = await sqlite(const SqliteOptions.persistent('app'));
 // Apply the application's reviewed Dart migration history before queries.
-final user = await db.users.create(email: 'seven@example.com');
+final user = await db.user.create(email: 'seven@example.com');
 await db.close();
 ```
 
@@ -111,14 +111,13 @@ coordinate a shared database service across tabs.
 
 `openTimeout` defaults to 15 seconds. Failed startup terminates the failed worker;
 normal close first closes statements, the database and OPFS handles, then terminates
-the worker. Schema migrations run through the same owned connection. The browser
-acceptance test reloads a page with a transaction still open, verifies recovery of
-committed data and rollback of that transaction, then applies a versioned upgrade.
+the worker. Schema migrations run through the same owned connection. Close the
+database before replacing its owner or restarting an active OPFS session.
 
 OPFS data remains subject to the browser's quota, eviction and user-clearing rules.
 The sqlite3 3.6.0 WASM API is explicitly marked experimental, including the future
-stability of VFS storage formats. This adapter's Chromium acceptance is not a
-cross-browser production certification. The implementation follows the package's
+stability of VFS storage formats. Check storage compatibility when upgrading the
+SQLite dependency. The driver uses the package's
 [dedicated-worker OPFS API](https://pub.dev/documentation/sqlite3/latest/wasm/SimpleOpfsFileSystem-class.html).
 
 ## Numeric and temporal boundaries
@@ -144,7 +143,7 @@ Blobs use structured-clone typed arrays. BigInt uses tagged decimal text. Decima
 parameters and SQLite arithmetic use the same exact implementation and registered
 functions as native SQLite. LocalDate, LocalTime and LocalDateTime remain explicit
 calendar values. UTC DateTime encoding uses date/time components, and browser
-decoding avoids a lossy total-microseconds JS number. Acceptance includes BC dates
+decoding avoids a lossy total-microseconds JS number. The codec preserves BC dates
 and microseconds near DateTime's upper bound. Calling SDK arithmetic that loses
 precision before passing a value to the ORM cannot be repaired by the driver.
 
@@ -169,42 +168,14 @@ observe another origin, tab or independent database connection. Named SQL querie
 retain their explicit `reads:` requirement. Same-origin persistence, browser
 storage permission and database ownership are separate from reactive invalidation.
 
-## Reproducible acceptance
+## Browser support and restarts
 
-```sh
-dart run tool/test_browser.dart
-dart run tool/test_browser.dart --wasm
-dart run tool/test_flutter_web.dart /absolute/path/to/flutter
-```
-
-The runner verifies packaged resource fingerprints, copies the matching assets,
-checks generated fixture freshness, compiles the client, starts a local asset
-server, and launches Chrome
-with a disposable profile. Set `CHROME_EXECUTABLE` to override its path. It writes
-`report.js.json` or `report.wasm.json` under `.dart_tool/browser/` and fails if the
-browser reports any failed check. Reports contain the actual browser, Dart SDK, compilation mode and engine
-checksum. Consult [progress](https://github.com/medz/dart-orm/blob/main/doc/progress.md) for the revision and configurations
-most recently verified.
-
-Run these separately from the native full suite: concurrent Dart CLI invocations
-can race while rewriting/codesigning the shared macOS native-asset cache. The
-acceptance checks cover memory migration/catalog checks, FK and CHECK enforcement,
-atomic constraint migration rollback, client defaults with explicit null and
-prepared batch values, stored/virtual computed fields and expression migrations,
-many-to-many payloads and pagination with measured query/row counts, generated
-relations, transactions/savepoints/lifetime, cursors, subscriptions, numeric and
-calendar codecs, unsupported interruption, event-loop responsiveness, startup
-failures, exclusive OPFS ownership, reopening, page reload recovery and upgrades.
-The plain Dart runs do not establish Flutter embedding. Neither runner measures
-throughput or establishes Safari, Firefox, IndexedDB or multi-tab service support.
-
-The unified-entry acceptance adds actual Flutter release builds in JS and WASM,
-with and without cross-origin isolation headers. The app consumes the package's
-unchanged asset declarations and default URI resolution from a nested route.
-It also checks stale worker rejection and WASM integrity failure.
+Chrome JavaScript and WebAssembly are supported configurations. Safari and Firefox
+are not verified. There is no IndexedDB fallback or multi-tab sharing service.
+For Flutter resource setup, see the [Flutter guide](https://github.com/medz/dart-orm/blob/main/doc/flutter.md).
 
 Hot reload retains application state. Flutter Web hot restart, which can abandon
-live JS resources without closing them, is not certified by these release tests;
+live JS resources without closing them, is not a supported OPFS lifecycle transition;
 close the database or refresh the page when restarting a live OPFS session.
 Multi-tab sharing, automatic storage fallback and cross-tab watch propagation
 remain outside this driver. A second owner fails rather than bypassing OPFS locks.

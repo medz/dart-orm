@@ -85,7 +85,7 @@ Future<Map<String, Object?>> runAcceptance({
       final schema = await verifySchema(db.sql, migrations.last.snapshot!);
       check(schema.matches, 'Live schema matches bundled snapshot');
       report['unmanaged'] = schema.unmanaged.map((o) => o.name).toList();
-      final original = await db.notes.byId(1).single();
+      final original = await db.note.byId(1).single();
       check(
         original.text == 'Written by version 1' &&
             original.createdAt == DateTime.utc(2026, 9, 15, 1, 2, 3, 123, 456),
@@ -95,7 +95,7 @@ Future<Map<String, Object?>> runAcceptance({
         original.done == (phase == 'reopen'),
         'New field default / persisted update',
       );
-      final query = db.notes
+      final query = db.note
           .orderBy((n) => [n.id.asc()])
           .select(
             (n) =>
@@ -133,11 +133,11 @@ Future<Map<String, Object?>> runAcceptance({
       check(true, 'Initial watch snapshot delivered to Flutter');
       if (phase == 'upgrade') {
         await db.transaction((tx) async {
-          final note = await tx.notes.create(
+          final note = await tx.note.create(
             text: 'Written by version 2',
             createdAt: DateTime.utc(2026, 9, 15, 2),
           );
-          await tx.comments.create(
+          await tx.comment.create(
             noteId: note.id,
             text: 'Related in one transaction',
           );
@@ -150,7 +150,7 @@ Future<Map<String, Object?>> runAcceptance({
         final rollback = StateError('Expected rollback');
         try {
           await db.transaction((tx) async {
-            await tx.notes.create(
+            await tx.note.create(
               text: 'Must roll back',
               createdAt: DateTime.utc(2026),
             );
@@ -164,7 +164,7 @@ Future<Map<String, Object?>> runAcceptance({
           snapshots.length == count && (await query.get()).length == 3,
           'Rollback neither persisted nor notified',
         );
-        await db.notes.byId(1).patch(done: .set(true));
+        await db.note.byId(1).patch(done: .set(true));
         await waitFor((rows) => rows.first.done);
         check(true, 'Typed patch refreshed watch');
         var ticks = 0;

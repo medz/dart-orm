@@ -4,7 +4,7 @@
 and fetches the next batch when the consumer requests more rows:
 
 ```dart
-await for (final user in db.users
+await for (final user in db.user
     .orderBy((u) => [u.id.asc()])
     .stream(batchSize: 128)) {
   await exportUser(user);
@@ -33,7 +33,7 @@ relationship queries, stream inside a transaction with the required isolation:
 
 ```dart
 await db.transaction((tx) async {
-  await for (final row in tx.users.stream()) {
+  await for (final row in tx.user.stream()) {
     await consume(row);
   }
 }, options: const PostgresTransaction(
@@ -57,10 +57,10 @@ final options = ExecutionOptions(
   timeout: const Duration(seconds: 5),
   cancellation: token,
 );
-final rows = await db.users.select((u) => u.email).get(options: options);
+final rows = await db.user.select((u) => u.email).get(options: options);
 
 await db.transaction((tx) async {
-  await tx.users.create(email: 'within-a-lease@example.com');
+  await tx.user.create(email: 'within-a-lease@example.com');
 }, acquire: const AcquisitionOptions(timeout: Duration(seconds: 2)));
 
 await db.session((session) async {
@@ -118,7 +118,7 @@ final options = ExecutionOptions(
   cancellation: token,
   timeout: const Duration(seconds: 5),
 );
-final pending = db.users.where((u) => u.email.eq(email)).get(options: options);
+final pending = db.user.where((u) => u.email.eq(email)).get(options: options);
 // Another event can call token.cancel().
 final users = await pending;
 ```
@@ -154,13 +154,11 @@ symbol. Such builds reject cancellation/deadlines instead of merely abandoning
 a running future. In particular, the default Linux build of `sqlite3` 3.6.0 hides
 that symbol: statement cancellation, execution deadlines and bounded transaction
 retries are unavailable there. Ordinary reads, writes, transactions and streaming
-remain available. Native macOS JIT and AOT interruption have been verified.
-The native acceptance program checks interruption when available and explicit
-capability rejection otherwise:
+remain available. When distributing a native application, build with its native
+assets:
 
 ```sh
-dart build cli --target=test/support/native_execution.dart --output=/tmp/orm-native-check
-/tmp/orm-native-check/bundle/bin/native_execution
+dart build cli --target=bin/app.dart --output=build/app
 ```
 
 Distribute the complete `bundle` directory, including its native libraries.
@@ -204,9 +202,9 @@ for their scopes, inheritance and limits, and non-executing `query.inspect()`.
 ```dart
 final cancel = CancellationToken();
 await db.transaction((tx) async {
-  await tx.users.create(email: 'one@example.com');
+  await tx.user.create(email: 'one@example.com');
   await tx.savepoint((child) async {
-    await child.users.create(email: 'two@example.com');
+    await child.user.create(email: 'two@example.com');
   });
 },
   acquire: const AcquisitionOptions(timeout: Duration(seconds: 1)),
@@ -293,8 +291,8 @@ describe why statement errors alone cannot establish SQLite transaction state.
 
 ```dart
 final result = await db.transaction((tx) async {
-  final user = await tx.users.byId(userId).single();
-  await tx.users.where((u) => u.id.eq(userId))
+  final user = await tx.user.byId(userId).single();
+  await tx.user.where((u) => u.id.eq(userId))
       .update((u) => [u.nickname.set(user.email)]).execute();
   return user.email;
 },
@@ -347,13 +345,3 @@ This preserves session state and avoids reacquisition on each retry, but holds a
 pool slot while waiting. Keep budgets short under contention. The ORM does not
 reconnect and replay after a transport failure, and external callback effects are
 not rolled back. This API makes no exactly-once guarantee for such effects.
-
-The real-database retry checks include PostgreSQL serialization/deadlock conflicts,
-SQLite WAL snapshot conflicts and DELETE-journal COMMIT lock contention. Additional
-driver-injected failures exercise rollback, budgets and lost acknowledgements.
-Native SQLite retry acceptance also runs without the JIT/test runner:
-
-```sh
-dart build cli --target=test/support/native_retry.dart --output=/tmp/orm-native-retry
-/tmp/orm-native-retry/bundle/bin/native_retry
-```

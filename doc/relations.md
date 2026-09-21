@@ -1,10 +1,24 @@
 # Relationship queries
 
+Declare relation members in your model's `relations` Record. Forward references
+own the foreign key; reverse references belong to the model exposing them:
+
+```dart
+final Model user = model('users', (id: identity(), email: text()),
+  relations: (u) => (posts: referencedBy(() => post),));
+
+final post = model('posts', (id: identity(), title: text(), authorId: integer()),
+  relations: (p) => (author: references(p.authorId, () => user),));
+```
+
+See [schema declarations](https://github.com/medz/dart-orm/blob/main/doc/authoring.md#keys-and-relationships)
+for self references, composite keys and multiple references between the same models.
+
 Generated relation getters describe a query. They do not read data until a
 containing query executes. Select the exact related shape you need:
 
 ```dart
-final cards = await db.posts.select((p) => (
+final cards = await db.post.select((p) => (
   p.title,
   p.author.select((a) => (a.id, a.email)
     .map((id, email) => (id: id, email: email))).required(),
@@ -13,76 +27,76 @@ final cards = await db.posts.select((p) => (
 
 ## Navigation without foreign keys
 
-Use `relatesTo()` for a read-only navigation edge when the database does not
-enforce a foreign key. It uses the same checked key selectors and generated
-query API as `references()`:
+Use `references(..., constraint: false)` for read-only navigation when the
+database does not enforce a foreign key:
 
 ```dart
-typedef Account = ({int tenant, int id, String? label});
-typedef Entry = ({@Id() int id, int? tenant, int? owner});
-final accounts = entity<Account>();
-final entries = entity<Entry>();
-final accountKey = accounts.primaryKey((a) => (a.tenant, a.id));
-final ownerAccount = entries.key((e) => (e.tenant, e.owner))
-    .relatesTo(accounts.key((a) => (a.tenant, a.id)), inverse: 'entries');
+final Model account = model('accounts', (
+  tenant: integer(), id: integer(), label: text().nullable(),
+), primaryKey: (a) => (a.tenant, a.id),
+   relations: (a) => (entries: referencedBy(() => entry),));
+
+final entry = model('entries', (
+  id: identity(), tenant: integer().nullable(), owner: integer().nullable(),
+), relations: (e) => (
+  ownerAccount: references((e.tenant, e.owner), () => account, constraint: false),
+));
 ```
 
-After generation, `e.ownerAccount.one()` returns an optional Account and
-`a.entries.many()` returns a list of Entry records. Normal projections, filters,
-correlated predicates, per-parent pagination, transactions, streams and watches
-apply. Generated getter documentation identifies the unconstrained edge.
+`e.ownerAccount.one()` returns an optional `Account`; `a.entries.many()` returns
+`Entry` rows. These members support the same projections, filters, pagination,
+transactions, streams and subscriptions as constrained references.
 
-Matching rows may be missing, and lookup keys may be nonunique. `relatesTo()`
-does not infer a unique constraint or an index. Only an independently declared
-primary/unique key permits automatic to-one JOIN loading; otherwise `one()`
-uses a batch and checks cardinality. `required()` still reports missing matches.
-SQL equality does not match a composite key containing NULL. The key selectors
-must retain matching Dart and storage types, column order and arity.
+Matching rows may be missing, and lookup keys may be nonunique. No unique
+constraint or index is inferred. A declared primary/unique key permits automatic
+to-one JOIN loading; otherwise `one()` uses a batch and checks cardinality.
+`required()` reports missing matches. SQL equality does not match a composite key
+containing NULL. Source and target keys must have matching types and codecs.
 
-The edge itself exposes query operations. Create or change stored key values
-through the normal table write API, using a transaction when needed. There is no
-implicit connect, disconnect, cascade or existence validation, and `relatesTo()`
-has no `onDelete` option. Deleting a target can leave stored references dangling.
-`watch()` tracks the tables read by a selection, including joined or batched
-targets, without inventing foreign-key write effects.
+Write stored key values through the ordinary table API. A read-only relationship
+provides no cascade, automatic connect/disconnect or existence check. Deleting a
+target can leave dangling references. `watch()` tracks the tables read by the
+selection without introducing foreign-key write effects.
 
-Adding, renaming or removing a query-only edge does not change the physical
-schema snapshot or emit migration DDL. Replacing an existing `references()` with
-`relatesTo()` does change the snapshot: removing that database constraint must
-go through a reviewed migration. Switching back can fail on dangling data; repair
-the data before retrying. Catalog import cannot discover unconstrained navigation
-rules, so declare them explicitly in the imported schema. This API covers
-same-database key equality, including self relations; it does not implement
-cross-database queries or arbitrary relationship predicate declarations.
+Adding or renaming read-only navigation does not alter the physical snapshot.
+Changing a constrained reference to `constraint: false` removes its foreign key
+and requires a reviewed migration. Adding the constraint back can fail on dangling
+data. Catalog import cannot discover these navigation rules; declare them yourself.
+Relationships support same-database key equality, including self references.
 
 ## Many-to-many with business fields
 
-An explicit association table gives each membership its own role and joining time.
-The [teams example](https://github.com/medz/dart-orm/blob/main/example/teams/schema.dart) uses two foreign keys and a
-composite primary key, with no artificial membership ID:
+An association model can carry a role, joining time or other data belonging to
+the relationship:
 
 ```dart
 enum MembershipRole { owner, member }
-typedef Membership = ({
-  int teamId,
-  int userId,
-  @Default.sql("'member'") MembershipRole role,
-  DateTime joinedAt,
-});
-final memberships = entity<Membership>();
-final membershipKey = memberships.primaryKey((m) => (m.teamId, m.userId));
-final team = memberships.key((m) => m.teamId)
-    .references(teams.key((t) => t.id), inverse: 'memberships', onDelete: .cascade);
-final user = memberships.key((m) => m.userId)
-    .references(users.key((u) => u.id), inverse: 'memberships', onDelete: .cascade);
+
+final team = model('teams', (id: identity(), name: text()),
+  relations: (t) => (memberships: referencedBy(() => membership),));
+final user = model('users', (id: identity(), name: text()),
+  relations: (u) => (memberships: referencedBy(() => membership),));
+final Model membership = model(
+  'memberships',
+  (
+    teamId: integer(), userId: integer(),
+    role: enumeration(MembershipRole.values, defaultValue: MembershipRole.member),
+    joinedAt: dateTime(),
+  ),
+  primaryKey: (m) => (m.teamId, m.userId),
+  relations: (m) => (
+    team: references(m.teamId, () => team, onDelete: .cascade),
+    user: references(m.userId, () => user, onDelete: .cascade),
+  ),
+  indexes: (m) => [index((m.userId, m.teamId), name: 'memberships_user_team')],
+);
 ```
 
-`teams` and `users` are separately declared entities. The resulting navigation is
-`user.memberships → membership.team`, or `team.memberships → membership.user`.
-Select the relationship's payload together with the opposite endpoint:
+The navigation is `user.memberships → membership.team` or
+`team.memberships → membership.user`. Select the relationship's payload together with the opposite endpoint:
 
 ```dart
-final cards = await db.users.select((u) => (
+final cards = await db.user.select((u) => (
   u.name,
   u.memberships.orderBy((m) => [m.joinedAt.desc(), m.teamId.desc()]).take(2)
     .select((m) => (m.team.select((t) => t.name).required(), m.role)
@@ -99,12 +113,12 @@ Create and update memberships through their ordinary generated table API:
 
 ```dart
 await db.transaction((tx) async {
-  await tx.memberships.create(teamId: 10, userId: 1,
+  await tx.membership.create(teamId: 10, userId: 1,
       role: .set(MembershipRole.owner), joinedAt: DateTime.now());
-  await tx.memberships.byId(teamId: 20, userId: 1)
+  await tx.membership.byId(teamId: 20, userId: 1)
       .patch(role: .set(MembershipRole.member));
 });
-await db.memberships.byId(teamId: 10, userId: 1).delete().execute();
+await db.membership.byId(teamId: 10, userId: 1).delete().execute();
 ```
 
 The composite key rejects duplicate memberships. Both endpoints must already
@@ -118,33 +132,15 @@ The example declares one index beginning with `user_id` for reverse traversal;
 its primary key already begins with `team_id`. Additional ordering indexes depend
 on measured query patterns, not an index added automatically for every relation.
 
-Real SQLite/PostgreSQL checks establish these statement counts for the fixture,
-within the available parameter capacity:
+Collection loading batches parent keys instead of issuing a query for each parent.
+Within one parameter batch, the membership-card example uses one root statement
+and one child statement; the child joins the team name. An empty root result needs
+no child statement. A nested collection adds another loading stage, and parameter
+limits can split a stage into multiple statements.
 
-| Selection | SQL statements | Rows returned by each statement |
-| --- | --- | --- |
-| Four users, latest two memberships each, joined team names | 2 | 4, 5 |
-| Three teams, second member per team, joined user names | 2 | 3, 2 |
-| Four users, all memberships/teams, each team's complete roster | 3 | 4, 6, 6 |
-| Membership counts, every-member predicate and team-existence predicate | 1 | 4 |
-| Empty root result with a membership selection | 1 | 0 |
-
-Parameter chunking adds statements: with a deliberately limited five-parameter
-driver, a member-role filter and per-user limit execute one root plus two child
-statements. Roster lookups deduplicate shared team keys. These checks establish
-returned volume and statement counts, not throughput, physical database page reads
-or optimizer cost. Snapshot-consistency rules below still apply to multi-statement
-loads. `watch()` observes committed association and selected endpoint changes.
-
-Run the self-contained SQLite example:
-
-```sh
-dart run bin/orm.dart generate example/teams/schema.dart
-dart run example/teams/main.dart
-```
-
-It prints the selected records, SQL statement count and returned row counts. The
-same generated schema is exercised against PostgreSQL by `many_to_many_test.dart`.
+Use [query inspection and observations](https://github.com/medz/dart-orm/blob/main/doc/observability.md)
+to see the actual statements and row counts for your selection. For a complete
+association model, see the [company example](https://github.com/medz/dart-orm/blob/main/example/company/README.md).
 
 ## Single relationships
 
@@ -187,7 +183,7 @@ Each generated getter produces a fresh table occurrence. Use fresh getter calls
 when selecting differently filtered views of the same relationship:
 
 ```dart
-final query = db.posts.select((p) => (
+final query = db.post.select((p) => (
   p.author.where((a) => a.score.gt(10)).one(),
   p.author.where((a) => a.score.lte(10)).one(),
 ).map((high, low) => (high: high, low: low)));
@@ -203,7 +199,7 @@ fresh getters or select a batch strategy for the separate view.
 are empty lists, and an empty root result performs no child queries.
 
 ```dart
-final users = await db.users.orderBy((u) => [u.id.asc()]).take(20)
+final users = await db.user.orderBy((u) => [u.id.asc()]).take(20)
   .select((u) => (u.id, u.posts
     .orderBy((p) => [p.createdAt.desc(), p.id.desc()])
     .take(3).select((p) => p.title).many())

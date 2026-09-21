@@ -2,51 +2,56 @@
 
 import 'package:orm/sql.dart';
 
-import "schema.dart" as models;
-export "schema.dart" show Sample, Owner;
-
-final _samplesId = Column<int>(
+/// A complete immutable row from "samples".
+final class Sample({
+  required final int id,
+  required final int small,
+  required final int medium,
+  required final int large,
+  required final int? optional,
+});
+final _sampleId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: true,
   integerBits: 32,
 );
-final _samplesSmall = Column<int>(
+final _sampleSmall = Column<int>(
   "small",
   Codecs.integer,
   nullable: false,
   generated: false,
   integerBits: 16,
 );
-final _samplesMedium = Column<int>(
+final _sampleMedium = Column<int>(
   "medium",
   Codecs.integer,
   nullable: false,
   generated: false,
   integerBits: 32,
 );
-final _samplesLarge = Column<int>(
+final _sampleLarge = Column<int>(
   "large",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _samplesOptional = Column<int?>(
+final _sampleOptional = Column<int?>(
   "optional",
   Codecs.integer.nullable(),
   nullable: true,
   generated: false,
   integerBits: 16,
 );
-final samplesSchema = TableSchema(
+final sampleSchema = TableSchema(
   "samples",
   columns: [
-    _samplesId,
-    _samplesSmall,
-    _samplesMedium,
-    _samplesLarge,
-    _samplesOptional,
+    _sampleId,
+    _sampleSmall,
+    _sampleMedium,
+    _sampleLarge,
+    _sampleOptional,
   ],
   primaryKey: ["id"],
   uniqueKeys: [],
@@ -54,36 +59,31 @@ final samplesSchema = TableSchema(
   foreignKeys: [],
 );
 
-final class SamplesFields extends Fields {
-  SamplesFields(super.table);
-  late final id = column(_samplesId);
-  late final small = column(_samplesSmall);
-  late final medium = column(_samplesMedium);
-  late final large = column(_samplesLarge);
-  late final optional = column(_samplesOptional);
-  Relation<models.Owner, OwnersFields> get owners =>
-      Relation(ownersTable, parent: [id], child: (row) => [row.sampleId]);
+final class SampleFields extends Fields {
+  SampleFields(super.table);
+  late final id = column(_sampleId);
+  late final small = column(_sampleSmall);
+  late final medium = column(_sampleMedium);
+  late final large = column(_sampleLarge);
+  late final optional = column(_sampleOptional);
+  Relation<Owner, OwnerFields> get owners =>
+      Relation(ownerTable, parent: [id], child: (row) => [row.sampleId]);
 }
 
-final samplesTable = Table<models.Sample, SamplesFields>(
-  samplesSchema,
-  SamplesFields.new,
+final sampleTable = Table<Sample, SampleFields>(
+  sampleSchema,
+  SampleFields.new,
   (row) => (row.id, row.small, row.medium, row.large, row.optional).map(
-    (id, small, medium, large, optional) => (
-      id: id,
-      small: small,
-      medium: medium,
-      large: large,
-      optional: optional,
-    ),
+    (v0, v1, v2, v3, v4) =>
+        Sample(id: v0, small: v1, medium: v2, large: v3, optional: v4),
   ),
 );
 
-final class SamplesTableSet extends TableSet<models.Sample, SamplesFields> {
-  SamplesTableSet(QueryContext db) : super(db, samplesTable) {
+final class SampleTableSet extends TableSet<Sample, SampleFields> {
+  SampleTableSet(QueryContext db) : super(db, sampleTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Sample> create({
+  Future<Sample> create({
     Change<int> id = const Change.keep(),
     required int small,
     required int medium,
@@ -98,11 +98,10 @@ final class SamplesTableSet extends TableSet<models.Sample, SamplesFields> {
       row.optional.set(optional),
     ],
   );
-  Query<models.Sample, SamplesFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+  Query<Sample, SampleFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension SamplesUpdates on Query<models.Sample, SamplesFields> {
+extension SampleUpdates on Query<Sample, SampleFields> {
   Future<int> patch({
     Change<int> small = const Change.keep(),
     Change<int> medium = const Change.keep(),
@@ -118,22 +117,24 @@ extension SamplesUpdates on Query<models.Sample, SamplesFields> {
   ).execute();
 }
 
-final _ownersId = Column<int>(
+/// A complete immutable row from "owners".
+final class Owner({required final int id, required final int sampleId});
+final _ownerId = Column<int>(
   "id",
   Codecs.integer,
   nullable: false,
   generated: false,
 );
-final _ownersSampleId = Column<int>(
+final _ownerSampleId = Column<int>(
   "sample_id",
   Codecs.integer,
   nullable: false,
   generated: false,
   integerBits: 32,
 );
-final ownersSchema = TableSchema(
+final ownerSchema = TableSchema(
   "owners",
-  columns: [_ownersId, _ownersSampleId],
+  columns: [_ownerId, _ownerSampleId],
   primaryKey: ["id"],
   uniqueKeys: [],
   indexes: [],
@@ -142,34 +143,30 @@ final ownersSchema = TableSchema(
   ],
 );
 
-final class OwnersFields extends Fields {
-  OwnersFields(super.table);
-  late final id = column(_ownersId);
-  late final sampleId = column(_ownersSampleId);
-  Relation<models.Sample, SamplesFields> get sample =>
-      Relation(samplesTable, parent: [sampleId], child: (row) => [row.id]);
+final class OwnerFields extends Fields {
+  OwnerFields(super.table);
+  late final id = column(_ownerId);
+  late final sampleId = column(_ownerSampleId);
+  Relation<Sample, SampleFields> get sample =>
+      Relation(sampleTable, parent: [sampleId], child: (row) => [row.id]);
 }
 
-final ownersTable = Table<models.Owner, OwnersFields>(
-  ownersSchema,
-  OwnersFields.new,
-  (row) => (
-    row.id,
-    row.sampleId,
-  ).map((id, sampleId) => (id: id, sampleId: sampleId)),
+final ownerTable = Table<Owner, OwnerFields>(
+  ownerSchema,
+  OwnerFields.new,
+  (row) => (row.id, row.sampleId).map((v0, v1) => Owner(id: v0, sampleId: v1)),
 );
 
-final class OwnersTableSet extends TableSet<models.Owner, OwnersFields> {
-  OwnersTableSet(QueryContext db) : super(db, ownersTable) {
+final class OwnerTableSet extends TableSet<Owner, OwnerFields> {
+  OwnerTableSet(QueryContext db) : super(db, ownerTable) {
     db.registerSchema(appSchema);
   }
-  Future<models.Owner> create({required int id, required int sampleId}) =>
+  Future<Owner> create({required int id, required int sampleId}) =>
       createRow((row) => [row.id.set(id), row.sampleId.set(sampleId)]);
-  Query<models.Owner, OwnersFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+  Query<Owner, OwnerFields> byId(int id) => where((row) => row.id.eq(id));
 }
 
-extension OwnersUpdates on Query<models.Owner, OwnersFields> {
+extension OwnerUpdates on Query<Owner, OwnerFields> {
   Future<int> patch({
     Change<int> id = const Change.keep(),
     Change<int> sampleId = const Change.keep(),
@@ -178,9 +175,9 @@ extension OwnersUpdates on Query<models.Owner, OwnersFields> {
           .execute();
 }
 
-final appSchema = List<TableSchema>.unmodifiable([samplesSchema, ownersSchema]);
+final appSchema = List<TableSchema>.unmodifiable([sampleSchema, ownerSchema]);
 
 extension AppTables on QueryContext {
-  SamplesTableSet get samples => SamplesTableSet(this);
-  OwnersTableSet get owners => OwnersTableSet(this);
+  SampleTableSet get sample => SampleTableSet(this);
+  OwnerTableSet get owner => OwnerTableSet(this);
 }

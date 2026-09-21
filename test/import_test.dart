@@ -74,7 +74,7 @@ void main() {
         final draft = await importSchema(db.sql);
         expect(draft.issues, isEmpty);
         expect(draft.entities, {'accounts': 'accounts', 'notes': 'notes'});
-        expect(draft.dart, contains('@Id.generated()'));
+        expect(draft.dart, contains('.identity()'));
         final client = await generate(draft);
         final snapshot = client.snapshot;
         expect((await verifySchema(db.sql, snapshot)).differences, isEmpty);
@@ -170,6 +170,9 @@ Future<void> main() async {
         final names = [
           r'user-$name',
           'user name',
+          'query',
+          'fields',
+          'expr',
           'class',
           '123',
           '中文',
@@ -343,9 +346,9 @@ Future<void> main() async {
               ),
             );
             final draft = await importSchema(db.sql);
-            expect(draft.dart, contains('String? document'));
-            expect(draft.dart, contains('String? timestamp'));
-            expect(draft.dart, contains('int flag'));
+            expect(draft.dart, contains('document: text('));
+            expect(draft.dart, contains('timestamp: text('));
+            expect(draft.dart, contains('flag: integer('));
             await generate(draft);
           } else {
             await db.execute(
@@ -354,8 +357,8 @@ Future<void> main() async {
               ),
             );
             final draft = await importSchema(db.sql);
-            expect(draft.dart, contains('@UseCodec(Codecs.jsonDocument)'));
-            expect(draft.dart, contains('SqlJson? document'));
+            expect(draft.dart, contains('json('));
+            expect(draft.dart, contains('document: json('));
             final result = await generate(draft);
             expect(
               (await verifySchema(db.sql, result.snapshot)).differences,

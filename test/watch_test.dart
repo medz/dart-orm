@@ -29,14 +29,14 @@ void main() {
         await Migrator(db.sql).apply([
           Migration.create('0001_initial', appSchema, dialect: db.dialect),
         ]);
-        final user = await db.users.create(email: 'before');
-        result = _Snapshots(db.users.select((u) => u.email).watch());
+        final user = await db.user.create(email: 'before');
+        result = _Snapshots(db.user.select((u) => u.email).watch());
         expect(await result.next(), ['before']);
-        await external.users.byId(user.id).patch(email: .set('external'));
+        await external.user.byId(user.id).patch(email: .set('external'));
         await db.execute(SqlCommand('SELECT 1'));
         await Future<void>.delayed(Duration.zero);
         expect(result.rows.length, 1);
-        db.invalidate([usersSchema]);
+        db.invalidate([userSchema]);
         expect(await result.next(), ['external']);
       } finally {
         await result?.close();
@@ -111,19 +111,19 @@ void runTests(
       await Future<void>.delayed(Duration.zero);
     }
 
-    Future<void> post(int author, [String title = 'post']) => db.posts.create(
+    Future<void> post(int author, [String title = 'post']) => db.post.create(
       authorId: author,
       title: title,
       createdAt: DateTime.utc(2026),
     );
 
     test('lazy initial snapshot and relevant table invalidation', () async {
-      final stream = db.users.select((u) => u.email).watch();
+      final stream = db.user.select((u) => u.email).watch();
       await barrier();
       expect(events.where((e) => e.sql.contains('FROM "users"')), isEmpty);
       final result = watch(stream);
       expect(await result.next(), isEmpty);
-      final user = await db.users.create(email: 'first');
+      final user = await db.user.create(email: 'first');
       expect(await result.next(), ['first']);
       events.clear();
       await post(user.id);
@@ -135,9 +135,9 @@ void runTests(
         ),
         isEmpty,
       );
-      await db.users.byId(user.id).patch(email: .set('second'));
+      await db.user.byId(user.id).patch(email: .set('second'));
       expect(await result.next(), ['second']);
-      await db.users.byId(user.id).delete().execute();
+      await db.user.byId(user.id).delete().execute();
       expect(await result.next(), isEmpty);
     });
 
@@ -145,38 +145,38 @@ void runTests(
       'transactions publish one snapshot after commit and none on rollback',
       () async {
         final result = watch(
-          db.users.orderBy((u) => [u.id.asc()]).select((u) => u.email).watch(),
+          db.user.orderBy((u) => [u.id.asc()]).select((u) => u.email).watch(),
         );
         expect(await result.next(), isEmpty);
         await db.transaction((tx) async {
-          await tx.users.create(email: 'a');
-          await tx.users.create(email: 'b');
+          await tx.user.create(email: 'a');
+          await tx.user.create(email: 'b');
           expect(result.rows.length, 1);
         });
         expect(await result.next(), ['a', 'b']);
         await expectLater(
           db.transaction((tx) async {
-            await tx.users.create(email: 'rollback');
+            await tx.user.create(email: 'rollback');
             throw StateError('rollback');
           }),
           throwsStateError,
         );
         await barrier();
         expect(result.rows.length, 2);
-        expect(await db.users.count(), 2);
+        expect(await db.user.count(), 2);
       },
     );
 
     test(
       'savepoint changes merge on release and disappear on rollback',
       () async {
-        final user = await db.users.create(email: 'initial');
-        final result = watch(db.users.select((u) => u.email).watch());
+        final user = await db.user.create(email: 'initial');
+        final result = watch(db.user.select((u) => u.email).watch());
         expect(await result.next(), ['initial']);
         await db.transaction((tx) async {
           await expectLater(
             tx.savepoint((child) async {
-              await child.users.byId(user.id).patch(email: .set('rolled-back'));
+              await child.user.byId(user.id).patch(email: .set('rolled-back'));
               throw StateError('recoverable');
             }),
             throwsStateError,
@@ -189,7 +189,7 @@ void runTests(
           await tx.savepoint((child) async {
             await child.savepoint(
               (nested) =>
-                  nested.users.byId(user.id).patch(email: .set('committed')),
+                  nested.user.byId(user.id).patch(email: .set('committed')),
             );
           });
           expect(result.rows.length, 1);
@@ -201,18 +201,18 @@ void runTests(
     test(
       'failed statements, zero-row writes and conflict no-ops do not refresh',
       () async {
-        final user = await db.users.create(email: 'unique');
-        final result = watch(db.users.select((u) => u.email).watch());
+        final user = await db.user.create(email: 'unique');
+        final result = watch(db.user.select((u) => u.email).watch());
         expect(await result.next(), ['unique']);
-        await expectLater(db.users.create(email: 'unique'), throwsA(anything));
-        await db.users.byId(999).patch(email: .set('absent'));
-        await db.users
+        await expectLater(db.user.create(email: 'unique'), throwsA(anything));
+        await db.user.byId(999).patch(email: .set('absent'));
+        await db.user
             .insert((u) => [u.email.set('unique')])
             .onConflictDoNothing()
             .execute();
         await expectLater(
           db.transaction((tx) async {
-            await tx.users.byId(user.id).patch(email: .set('temporary'));
+            await tx.user.byId(user.id).patch(email: .set('temporary'));
             try {
               await tx.execute(SqlCommand('SELECT broken_column FROM users'));
             } catch (_) {}
@@ -228,16 +228,16 @@ void runTests(
       'batch writes and upsert returning publish committed changes',
       () async {
         final result = watch(
-          db.users.orderBy((u) => [u.id.asc()]).select((u) => u.email).watch(),
+          db.user.orderBy((u) => [u.id.asc()]).select((u) => u.email).watch(),
         );
         expect(await result.next(), isEmpty);
-        final ids = await db.users
+        final ids = await db.user
             .insertMany(['a', 'b', 'c'], (u, email) => [u.email.set(email)])
             .returning((u) => u.id)
             .get();
         expect(ids.length, 3);
         expect(await result.next(), ['a', 'b', 'c']);
-        await db.users
+        await db.user
             .insert((u) => [u.email.set('b'), u.score.set(7)])
             .onConflictUpdate(
               target: (u) => [u.email],
@@ -250,9 +250,9 @@ void runTests(
     );
 
     test('joined and nested batch relations track child writes', () async {
-      final user = await db.users.create(email: 'author');
+      final user = await db.user.create(email: 'author');
       final children = watch(
-        db.users
+        db.user
             .select(
               (u) => u.posts
                   .orderBy((p) => [p.id.asc()])
@@ -272,12 +272,12 @@ void runTests(
         [('post', 'author')],
       ]);
       final authors = watch(
-        db.posts
+        db.post
             .select((p) => p.author.select((u) => u.email).required())
             .watch(),
       );
       expect(await authors.next(), ['author']);
-      await db.users.byId(user.id).patch(email: .set('updated'));
+      await db.user.byId(user.id).patch(email: .set('updated'));
       expect(await authors.next(), ['updated']);
       expect(await children.next(), [
         [('post', 'updated')],
@@ -287,13 +287,13 @@ void runTests(
     test(
       'relation predicates, SQL subqueries and CTE sources are dependencies',
       () async {
-        final user = await db.users.create(email: 'a');
+        final user = await db.user.create(email: 'a');
         final hasPosts = watch(
-          db.users.where((u) => u.posts.any()).select((u) => u.email).watch(),
+          db.user.where((u) => u.posts.any()).select((u) => u.email).watch(),
         );
-        final total = db.posts.select((p) => p.id.count()).scalar();
-        final subquery = watch(db.users.select((u) => total).watch());
-        final cte = db.posts.select((p) => p.title).asCte('titles');
+        final total = db.post.select((p) => p.id.count()).scalar();
+        final subquery = watch(db.user.select((u) => total).watch());
+        final cte = db.post.select((p) => p.title).asCte('titles');
         final titles = watch(cte.query.watch());
         expect(await hasPosts.next(), isEmpty);
         expect(await subquery.next(), [0]);
@@ -306,14 +306,14 @@ void runTests(
     );
 
     test('declared cascade deletion invalidates a child-only query', () async {
-      final user = await db.users.create(email: 'parent');
+      final user = await db.user.create(email: 'parent');
       await post(user.id);
-      final result = watch(db.posts.select((p) => p.title).watch());
+      final result = watch(db.post.select((p) => p.title).watch());
       expect(await result.next(), ['post']);
-      await db.users.byId(user.id).patch(email: .set('no cascade'));
+      await db.user.byId(user.id).patch(email: .set('no cascade'));
       await barrier();
       expect(result.rows.length, 1);
-      await db.users.byId(user.id).delete().execute();
+      await db.user.byId(user.id).delete().execute();
       expect(await result.next(), isEmpty);
     });
 
@@ -387,23 +387,23 @@ void runTests(
     test(
       'explicit JOINs and joined CTE definitions track both physical sources',
       () async {
-        final user = await db.users.create(email: 'a');
+        final user = await db.user.create(email: 'a');
         await post(user.id);
-        final alias = postsTable.alias();
+        final alias = postTable.alias();
         final joined = watch(
-          db.users
+          db.user
               .join(alias, on: (u, p) => u.id.equals(p.authorId))
               .select((_) => alias.fields.title)
               .watch(),
         );
-        final cte = db.posts
+        final cte = db.post
             .select(
               (p) => (p.authorId, p.title).map((id, title) => (id, title)),
             )
             .asCte('post_names');
         final cteAlias = cte.alias();
         final viaCte = watch(
-          db.users
+          db.user
               .join(
                 cteAlias,
                 on: (u, c) => u.id.equals(c.ref((p) => p.authorId)),
@@ -413,38 +413,38 @@ void runTests(
         );
         expect(await joined.next(), ['post']);
         expect(await viaCte.next(), ['post']);
-        await db.posts.byId(1).patch(title: .set('joined'));
+        await db.post.byId(1).patch(title: .set('joined'));
         expect(await joined.next(), ['joined']);
         expect(await viaCte.next(), ['joined']);
       },
     );
 
     test('raw SQL declares changed and read tables; explicit invalidation follows transactions', () async {
-      final user = await db.users.create(email: 'a');
+      final user = await db.user.create(email: 'a');
       final count = sql<int>(
         ['(SELECT COUNT(*) FROM posts)'],
         [],
         Codecs.integer,
       );
       final result = watch(
-        db.users.select((_) => count).watch(reads: [postsSchema]),
+        db.user.select((_) => count).watch(reads: [postSchema]),
       );
       expect(await result.next(), [0]);
       await post(user.id);
       expect(await result.next(), [1]);
       await db.execute(
         SqlCommand('DELETE FROM posts'),
-        changedTables: [postsSchema],
+        changedTables: [postSchema],
       );
       expect(await result.next(), [0]);
       await db.transaction((tx) async {
-        tx.invalidate([postsSchema]);
+        tx.invalidate([postSchema]);
         expect(result.rows.length, 3);
       });
       expect(await result.next(), [0]);
       await expectLater(
         db.transaction((tx) async {
-          tx.invalidate([postsSchema]);
+          tx.invalidate([postSchema]);
           throw StateError('rollback invalidation');
         }),
         throwsStateError,
@@ -456,12 +456,12 @@ void runTests(
     test(
       'paused listeners coalesce writes and stop fetching until resumed',
       () async {
-        final result = watch(db.users.select((u) => u.email).watch());
+        final result = watch(db.user.select((u) => u.email).watch());
         expect(await result.next(), isEmpty);
         result.subscription.pause();
         events.clear();
         for (var i = 0; i < 5; i++) {
-          await db.users.create(email: '$i');
+          await db.user.create(email: '$i');
         }
         await barrier();
         expect(result.rows.length, 1);
@@ -480,17 +480,17 @@ void runTests(
     test(
       'invalidation during a read suppresses the stale snapshot and refetches',
       () async {
-        await db.users.create(email: 'before');
+        await db.user.create(email: 'before');
         final reading = Completer<void>(), release = Completer<void>();
         final intercepted = Database(
           _AfterReadDriver(db.driver, reading, release),
         );
-        final result = watch(intercepted.users.select((u) => u.email).watch());
+        final result = watch(intercepted.user.select((u) => u.email).watch());
         await reading.future;
         // The connection was released after producing the old rows, while the
         // read's Future is deliberately held. A second view shares this driver.
         final other = Database(intercepted.driver);
-        await other.users.byId(1).patch(email: .set('after'));
+        await other.user.byId(1).patch(email: .set('after'));
         release.complete();
         expect(await result.next(), ['after']);
         expect(result.rows.length, 1);
@@ -500,9 +500,9 @@ void runTests(
     test(
       'decoding errors are reported and a later write can recover',
       () async {
-        final user = await db.users.create(email: 'bad');
+        final user = await db.user.create(email: 'bad');
         final result = watch(
-          db.users
+          db.user
               .select(
                 (u) => u.email.map((value) {
                   if (value == 'bad') throw const FormatException('bad value');
@@ -513,7 +513,7 @@ void runTests(
         );
         await result.waitForError();
         expect(result.errors.single, isA<FormatException>());
-        await db.users.byId(user.id).patch(email: .set('good'));
+        await db.user.byId(user.id).patch(email: .set('good'));
         expect(await result.next(), ['good']);
       },
     );
@@ -522,16 +522,16 @@ void runTests(
       'separate subscriptions and views of one driver receive changes',
       () async {
         final other = Database(db.driver);
-        final stream = db.users.select((u) => u.email).watch();
+        final stream = db.user.select((u) => u.email).watch();
         final one = watch(stream);
-        final two = watch(other.users.select((u) => u.email).watch());
+        final two = watch(other.user.select((u) => u.email).watch());
         expect(await one.next(), isEmpty);
         expect(await two.next(), isEmpty);
-        await other.users.create(email: 'shared');
+        await other.user.create(email: 'shared');
         expect(await one.next(), ['shared']);
         expect(await two.next(), ['shared']);
         await one.close();
-        await db.users.byId(1).patch(email: .set('still open'));
+        await db.user.byId(1).patch(email: .set('still open'));
         expect(await two.next(), ['still open']);
         expect(one.rows.length, 2);
       },
@@ -539,14 +539,14 @@ void runTests(
 
     test('watching leased sessions is rejected and cancelled tokens close the stream', () async {
       await db.transaction((tx) async {
-        final result = watch(tx.users.watch());
+        final result = watch(tx.user.watch());
         await result.waitForError();
         expect(result.errors.single, code('WATCH.SESSION'));
         await result.done.future;
       });
       final cancellation = CancellationToken();
       final result = watch(
-        db.users.watch(options: ExecutionOptions(cancellation: cancellation)),
+        db.user.watch(options: ExecutionOptions(cancellation: cancellation)),
       );
       expect(await result.next(), isEmpty);
       cancellation.cancel();
@@ -557,13 +557,13 @@ void runTests(
     test(
       'database close finishes watchers even when a listener is paused',
       () async {
-        final result = watch(db.users.watch());
+        final result = watch(db.user.watch());
         expect(await result.next(), isEmpty);
         result.subscription.pause();
         await db.close().timeout(const Duration(seconds: 2));
         result.subscription.resume();
         await result.done.future;
-        final late = watch(db.users.watch());
+        final late = watch(db.user.watch());
         await late.waitForError();
         expect(late.errors.single, code('SESSION.CLOSED'));
       },
@@ -576,7 +576,7 @@ void runTests(
         );
         return;
       }
-      await db.users.create(email: 'a');
+      await db.user.create(email: 'a');
       final started = Completer<void>();
       final expression = db.dialect == .postgres
           ? sql<int>(['(SELECT 1 FROM pg_sleep(20))'], [], Codecs.integer)
@@ -589,13 +589,13 @@ void runTests(
             );
       // Query observation completes only after execution, so a short timer
       // requests cancellation while the database is doing deliberately long work.
-      final result = watch(db.users.select((_) => expression).watch());
+      final result = watch(db.user.select((_) => expression).watch());
       Timer(const Duration(milliseconds: 40), () => started.complete());
       await started.future;
       await result.close().timeout(const Duration(seconds: 3));
       expect(result.rows, isEmpty);
       expect(result.errors, isEmpty);
-      expect(await db.users.count(), 1);
+      expect(await db.user.count(), 1);
       expect(events.any((e) => e.error != null), true);
     });
 
@@ -605,7 +605,7 @@ void runTests(
         return;
       }
       final rejected = watch(
-        db.users.watch(
+        db.user.watch(
           options: const ExecutionOptions(timeout: Duration(milliseconds: 40)),
         ),
       );
@@ -615,9 +615,9 @@ void runTests(
       expect(events, isEmpty);
       await rejected.close();
 
-      final ordinary = watch(db.users.select((u) => u.email).watch());
+      final ordinary = watch(db.user.select((u) => u.email).watch());
       expect(await ordinary.next(), isEmpty);
-      await db.users.create(email: 'still-watching');
+      await db.user.create(email: 'still-watching');
       expect(await ordinary.next(), ['still-watching']);
       expect(ordinary.errors, isEmpty);
     });
@@ -627,27 +627,27 @@ void runTests(
         'lost commit acknowledgement triggers a conservative re-read',
         () async {
           final uncertain = Database(_CommitAckDriver(db.driver));
-          final result = watch(uncertain.users.select((u) => u.email).watch());
+          final result = watch(uncertain.user.select((u) => u.email).watch());
           expect(await result.next(), isEmpty);
           await expectLater(
-            uncertain.transaction((tx) => tx.users.create(email: 'committed')),
+            uncertain.transaction((tx) => tx.user.create(email: 'committed')),
             throwsA(code('TRANSACTION.COMMIT')),
           );
           expect(await result.next(), ['committed']);
-          expect((await db.users.single()).email, 'committed');
+          expect((await db.user.single()).email, 'committed');
         },
       );
 
       test('independent connections require an explicit external-write notification', () async {
-        final user = await db.users.create(email: 'before');
-        final result = watch(db.users.select((u) => u.email).watch());
+        final user = await db.user.create(email: 'before');
+        final result = watch(db.user.select((u) => u.email).watch());
         expect(await result.next(), ['before']);
         final external = await open((_) {});
         try {
-          await external.users.byId(user.id).patch(email: .set('external'));
+          await external.user.byId(user.id).patch(email: .set('external'));
           await barrier();
           expect(result.rows.length, 1);
-          db.invalidate([usersSchema]);
+          db.invalidate([userSchema]);
           expect(await result.next(), ['external']);
         } finally {
           await external.close();
@@ -658,7 +658,7 @@ void runTests(
 }
 
 Future<void> postIn(Database<Backend> db, int user) async {
-  await db.posts.create(
+  await db.post.create(
     authorId: user,
     title: 'unrelated',
     createdAt: DateTime.utc(2026),

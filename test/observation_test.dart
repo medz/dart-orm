@@ -45,9 +45,9 @@ void main() {
           await Migrator(db.sql).apply([
             Migration.create('0001_teams', appSchema, dialect: db.dialect),
           ]);
-          await db.users.create(id: 1, name: 'Ada');
-          await db.teams.create(id: 10, name: 'Core');
-          await db.memberships.create(
+          await db.user.create(id: 1, name: 'Ada');
+          await db.team.create(id: 10, name: 'Core');
+          await db.membership.create(
             teamId: 10,
             userId: 1,
             joinedAt: DateTime.utc(2026),
@@ -68,7 +68,7 @@ void main() {
             });
             await held.future;
             acquired.clear();
-            final pending = db.users.select((u) => u.name).map((name) {
+            final pending = db.user.select((u) => u.name).map((name) {
               final clock = Stopwatch()..start();
               while (clock.elapsedMilliseconds <
                   20) {} // Deliberate synchronous mapper cost.
@@ -120,7 +120,7 @@ void main() {
               await held.future;
               acquired.clear();
               final token = CancellationToken();
-              final pending = db.users.get(
+              final pending = db.user.get(
                 options: ExecutionOptions(
                   cancellation: cancel ? token : null,
                   acquireTimeout: cancel
@@ -159,10 +159,10 @@ void main() {
 
         test('sessions transactions and savepoints inherit hooks and report reused leases', () async {
           await db.session((session) async {
-            expect(await session.users.select((u) => u.name).single(), 'Ada');
+            expect(await session.user.select((u) => u.name).single(), 'Ada');
             await session.transaction(
               (tx) => tx.savepoint((child) async {
-                expect(await child.users.select((u) => u.id).single(), 1);
+                expect(await child.user.select((u) => u.id).single(), 1);
               }),
             );
           });
@@ -177,7 +177,7 @@ void main() {
         });
 
         test('nested reads attribute decoding to each statement without repeating SQL', () async {
-          final query = db.users.select(
+          final query = db.user.select(
             (u) => (
               u.name,
               u.memberships
@@ -209,7 +209,7 @@ void main() {
           expect(decoded, isEmpty);
           final failure = StateError('mapper failed');
           await expectLater(
-            db.users.map<Object?>((row) => throw failure).get(),
+            db.user.map<Object?>((row) => throw failure).get(),
             throwsA(same(failure)),
           );
           expect(acquired.last.error, isNull);
@@ -221,7 +221,7 @@ void main() {
         test(
           'cursor batches and returning writes produce decoding observations',
           () async {
-            await db.users
+            await db.user
                 .insertMany([
                   2,
                   3,
@@ -234,7 +234,7 @@ void main() {
             statements.clear();
             acquired.clear();
             expect(
-              await db.users
+              await db.user
                   .orderBy((u) => [u.id.asc()])
                   .select((u) => u.id)
                   .stream(batchSize: 2)
@@ -250,7 +250,7 @@ void main() {
               [2, 1],
             );
             decoded.clear();
-            final row = await db.users.create(id: 4, name: 'new');
+            final row = await db.user.create(id: 4, name: 'new');
             expect(row.id, 4);
             expect(decoded.single.inputRows, 1);
             expect(decoded.single.sql, startsWith('INSERT'));
@@ -265,12 +265,12 @@ void main() {
             onDecode: (_) => throw StateError('observer'),
           );
           await observed.transaction(
-            (tx) => tx.users.create(id: 2, name: 'committed'),
+            (tx) => tx.user.create(id: 2, name: 'committed'),
           );
-          expect((await db.users.byId(2).single()).name, 'committed');
+          expect((await db.user.byId(2).single()).name, 'committed');
           final failure = StateError('actual mapper');
           await expectLater(
-            observed.users.map<Object?>((row) => throw failure).get(),
+            observed.user.map<Object?>((row) => throw failure).get(),
             throwsA(same(failure)),
           );
         });

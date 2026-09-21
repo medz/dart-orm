@@ -13,7 +13,7 @@ Future<void> checkTemporalPrecision() async {
     await Migrator(db.sql).apply([
       Migration.create('0001_precision', appSchema, dialect: db.dialect),
     ]);
-    final moment = await db.moments.create(
+    final moment = await db.moment.create(
       clock: LocalTime.parse('23:59:59.9995'),
       local: LocalDateTime.parse('0001-01-01 00:00:00.0005 BC'),
       instant: Codecs.dateTime.decode('1999-12-31 23:59:59.5Z'),
@@ -37,7 +37,7 @@ Future<void> checkTemporalPrecision() async {
       '0001-01-01 00:00:00.0005 BC',
     ]) {
       final valueToRound = LocalDateTime.parse(text);
-      final actual = await db.moments
+      final actual = await db.moment
           .select(
             (_) => value(valueToRound, Codecs.localDateTime).withPrecision(3),
           )
@@ -48,7 +48,7 @@ Future<void> checkTemporalPrecision() async {
       );
     }
     final upper = Codecs.dateTime.decode('275760-09-12 23:59:59.999999+00');
-    final rounded = await db.moments
+    final rounded = await db.moment
         .select((_) => value(upper, Codecs.dateTime).withPrecision(0))
         .single();
     expect(
@@ -56,11 +56,11 @@ Future<void> checkTemporalPrecision() async {
           upper.withPrecision(0) == rounded,
       'Upper instant rounding lost a day or precision',
     );
-    await db.slots.create(time: LocalTime.parse('01:00:00.1235'), label: 'key');
-    final booking = await db.bookings.create(
+    await db.slot.create(time: LocalTime.parse('01:00:00.1235'), label: 'key');
+    final booking = await db.booking.create(
       time: LocalTime.parse('01:00:00.1239'),
     );
-    final label = await db.bookings
+    final label = await db.booking
         .byId(booking.id)
         .select((b) => b.slot.select((s) => s.label).one())
         .single();

@@ -1,17 +1,24 @@
 import 'package:orm/schema.dart';
 
-typedef Entry = ({
-  @Id.generated() int id,
-  Decimal amount,
-  Decimal? fee,
-  @Default.sql("'0.10'") Decimal tax,
-  String bucket,
-});
-typedef Rate = ({@Id() Decimal id, String label});
-typedef Allocation = ({@Id.generated() int id, Decimal rateId});
-final entries = entity<Entry>();
-final rates = entity<Rate>();
-final allocations = entity<Allocation>();
-final rate = allocations
-    .key((a) => a.rateId)
-    .references(rates.key((r) => r.id), inverse: 'allocations');
+final Model entry = model("entries", (
+  id: integer().identity(),
+  amount: decimal(),
+  fee: decimal().nullable(),
+  tax: decimal(defaultSql: "'0.10'"),
+  bucket: text(),
+));
+
+final Model rate = model(
+  "rates",
+  (id: decimal(), label: text()),
+  primaryKey: (r) => r.id,
+  relations: (r) =>
+      (allocations: referencedBy(() => allocation, on: (rateId: r.id))),
+);
+
+final Model allocation = model(
+  "allocations",
+  (id: integer().identity(), rateId: decimal()),
+  relations: (r) =>
+      (rate: references((id: r.rateId), () => rate, onDelete: .restrict)),
+);

@@ -18,7 +18,7 @@ Future<void> main() async {
         local.toUtc()) {
       throw StateError('Local input changed instant');
     }
-    final first = await db.events.create(at: expected);
+    final first = await db.event.create(at: expected);
     final raw =
         (await db.execute(
               SqlCommand('SELECT created FROM events WHERE id = 1'),
@@ -28,16 +28,16 @@ Future<void> main() async {
       throw StateError('Default used process timezone');
     }
     final next = DateTime.utc(2024, 1, 1, 0, 0, 0, 0, 1);
-    await db.events.create(at: next);
-    final ordered = await db.events.orderBy((e) => [e.at.asc()]).get();
+    await db.event.create(at: next);
+    final ordered = await db.event.orderBy((e) => [e.at.asc()]).get();
     if (ordered.first.at != expected || ordered.last.at != next) {
       throw StateError('Microsecond sorting changed');
     }
-    await db.moments.create(at: expected);
+    await db.moment.create(at: expected);
     await db.execute(
       SqlCommand("INSERT INTO links (at) VALUES ('2024-01-01 08:00+08')"),
     );
-    if ((await db.moments
+    if ((await db.moment
                 .select((m) => m.links.select((l) => l.at).many())
                 .single())
             .single !=
