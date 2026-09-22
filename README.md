@@ -14,10 +14,12 @@ query API, with explicit database capabilities and transaction boundaries.
 > replacement for the Prisma-based 5.x client. Read the [release notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md)
 > before upgrading an existing application.
 
-Upgrading from beta.2: replace annotated entities and hand-written row types with
-`model(...)` and regenerate your clients. Keep existing migration history; table
-and column names continue to identify the physical schema. See the
-[beta.3 changes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#600-beta3).
+Upgrading from beta.3: replace Named SQL declarations and generated bindings with
+`Sql` and optional result codecs. PostgreSQL table identities now include their
+schema, including `public`: regenerate clients and snapshots, review the migration,
+and reissue persisted cursor tokens. Generated table replacement deletes data;
+preserving rows requires an explicit data migration. Keep historical migrations
+unchanged. See the [beta.4 changes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#600-beta4).
 
 ## Record schemas
 
