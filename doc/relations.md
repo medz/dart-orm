@@ -25,6 +25,153 @@ final cards = await db.post.select((p) => (
 ).map((title, author) => (title: title, author: author))).get();
 ```
 
+## Filtering parents through relationships
+
+Use `where` to build the relationship's filter, then choose the SQL operation:
+
+| Expression | Meaning for the filtered related rows |
+| --- | --- |
+| `relation.any()` | At least one row exists. |
+| `relation.none()` | No row exists. |
+| `relation.every(predicate)` | Every row makes `predicate` SQL TRUE. |
+| `relation.count()` | Number of rows, returned as an SQL integer expression. |
+
+These operations compile to correlated `EXISTS`, `NOT EXISTS` or `COUNT`
+subqueries inside the containing statement. They do not load related objects or
+issue extra statements. Collection loading with `many()` has separate query costs.
+
+```dart
+final authors = db.user.where((u) => u.posts
+  .where((p) => p.title.like('%Dart%')).any());
+
+final withoutDrafts = db.user.where((u) => u.posts
+  .where((p) => p.title.eq('Draft')).none());
+
+final frequentAuthors = db.user.where((u) => u.posts
+  .where((p) => p.title.like('%Dart%')).count().gte(3));
+```
+
+The placement of `where` determines what it filters:
+
+```dart
+// Only users with a matching post; load all posts for each selected user.
+final authors = await db.user
+  .where((u) => u.posts.where((p) => p.title.like('%Dart%')).any())
+  .select((u) => (u.email, u.posts.many()).row).get();
+
+// Keep every user; include only matching posts in each user's list.
+final users = await db.user.select((u) => (u.email, u.posts
+  .where((p) => p.title.like('%Dart%')).many()).row).get();
+```
+
+An empty filtered list in the second query does not remove its user. To both
+filter users and restrict loaded posts, declare the predicate in both places.
+Filters never propagate implicitly between the root and its selections.
+
+### One matching child or independent matches
+
+Conditions inside one relationship filter must match the same child. Separate
+existence tests may match different children:
+
+```dart
+// One post must contain both words.
+db.user.where((u) => u.posts.where((p) =>
+  p.title.like('%Dart%').and(p.title.like('%SQL%'))).any());
+
+// One post contains Dart; another post may satisfy SQL.
+db.user.where((u) => u.posts.where((p) => p.title.like('%Dart%')).any()
+  .and(u.posts.where((p) => p.title.like('%SQL%')).any()));
+```
+
+Repeated `where` calls combine with AND and return new descriptions. An existing
+relationship variable remains unchanged when a filtered copy is created. Fresh
+getter calls create independent SQL occurrences, including self references and
+multiple edges to the same table. Do not nest the same occurrence inside itself;
+this reports `QUERY.ALIAS`. Fields captured from an unrelated query report
+`QUERY.SCOPE` before execution. A correlated predicate may reference its enclosing
+SQL query's fields. A batch-loaded selection runs in a separate statement and
+cannot capture root fields beyond its declared relationship keys.
+
+### Every, empty relationships and NULL
+
+`every(predicate)` is true for an empty relationship. Require at least one row
+separately when that matters:
+
+```dart
+db.user.where((u) => u.posts.any()
+  .and(u.posts.every((p) => p.title.ne(''))));
+```
+
+SQL FALSE and SQL NULL both fail `every`. In contrast, `where` keeps only rows
+whose condition is SQL TRUE. For example, with a nullable `tag` field,
+`posts.every((p) => p.tag.eq('ready'))` fails if any tag is NULL. The expression
+`posts.where((p) => p.tag.ne('ready')).none()` does not detect that NULL row.
+Use `isNull()` or `isNotNull()` when NULL needs an explicit meaning.
+
+Earlier filters define the set being checked: `posts.where(A).every(B)` means
+all posts matching A must also satisfy B. It is true when no posts match A.
+A nullable foreign key, or any NULL component of a composite foreign key, has no
+matching related row; `any()` is false, `none()` and `every(...)` are true, and
+`count()` is zero. Composite relationships compare all key columns together,
+so matching IDs in different tenants remain separate.
+
+### Nested and many-to-many predicates
+
+Nest the same filtering pattern at each edge. With the association model below,
+this selects users with an owner membership in the Core team:
+
+```dart
+db.user.where((u) => u.memberships.where((m) =>
+  m.role.eq(MembershipRole.owner)
+    .and(m.team.where((t) => t.name.eq('Core')).any())).any());
+```
+
+The association's business fields and the target's fields are checked in their
+own scopes. A self reference such as `employee.manager` uses the same pattern;
+no extra JOIN or object loading is required. Filtered counts can be nested too:
+`team.memberships.where(...).count().gte(2)` remains a scalar SQL expression.
+
+Use these terminal operations before relationship `take` or `skip`; pagination
+reports `RELATION.AGGREGATE`. Ordering does not affect existence or counts.
+Aggregate/window functions directly inside a relationship's WHERE report
+`QUERY.AGGREGATE`; use a separate scalar subquery or a related `count()` for
+aggregate conditions.
+
+## Updating and deleting through relationship filters
+
+The same root `where` works for reads, updates and deletes. Each operation uses
+one statement containing the relationship subqueries:
+
+```dart
+final matched = db.post.where((p) => p.author
+  .where((a) => a.email.like('%@example.com')).any());
+
+final posts = await matched.get();
+final changed = await matched.update((p) => [p.title.set('Archived')]).execute();
+final removed = await matched.delete().execute();
+```
+
+Each execution evaluates the predicate against the database at that time. A read
+followed by a write is not a frozen set of row IDs; use an explicit transaction
+and the appropriate isolation or locking strategy when concurrent changes matter.
+Only the root table is mutated. Foreign-key actions still follow the schema;
+the ORM does not update related objects automatically.
+
+Mutations accept a table and WHERE. Root JOINs, ordering, `take`/`skip`, grouping,
+HAVING, DISTINCT, UNION and CTEs report `MUTATION.QUERY`. For a joined or paginated
+write, explicitly select complete primary keys and mutate by those keys inside
+a transaction. Include every component of a composite key. Mutation RETURNING
+cannot load relationships; read them separately if needed.
+
+MySQL rejects a typed UPDATE/DELETE when a subquery reads the mutation's own
+physical table, including self references and a nested relation that returns to
+the target table. Compilation reports `CAPABILITY.MUTATION_SELF_REFERENCE`
+before execution. Ordinary filters through other tables still work. Select keys
+in an explicit transaction, then mutate by those keys when this restriction
+applies. SQLite, PostgreSQL and MariaDB support these self-referencing predicates.
+See [MySQL's subquery restrictions](https://dev.mysql.com/doc/refman/8.4/en/subquery-restrictions.html).
+The ORM does not automatically split the operation or force subquery materialization.
+
 ## Navigation without foreign keys
 
 Use `references(..., constraint: false)` for read-only navigation when the
@@ -225,11 +372,6 @@ requires explicit ordering and window-function capability. The ORM does not
 fetch every child and discard excess rows in Dart. A collection's selected
 to-one relationships can join into that same child statement. Collections below
 a joined parent load in subsequent batches using the joined parent keys.
-
-`any/none/every/count` compile to correlated SQL and do not materialize related
-objects. `every` is true for an empty collection; a predicate returning SQL
-UNKNOWN counts as unsatisfied. Use `any` as well when an empty relationship
-should be excluded.
 
 `compile()` exposes the root SQL, including selected to-one JOINs. It does not
 pretend to contain the later collection statements. `inspect()` also describes
