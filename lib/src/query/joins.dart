@@ -148,6 +148,7 @@ List<SqlNode> children(SqlNode node) => switch (node) {
   DecimalCast(:final child) => [child],
   DecimalArithmetic(:final left, :final right) => [left, right],
   BinaryNode(:final left, :final right) => [left, right],
+  LikeNode(:final expression, :final pattern) => [expression, pattern],
   UnaryNode(:final child) => [child],
   FunctionNode(:final arguments) => arguments,
   InNode(:final expression, :final values) => [expression, ...values],
@@ -360,6 +361,11 @@ bool sameSqlNode(SqlNode a, SqlNode b) {
       BinaryNode(left: final bl, op: final bo, right: final br),
     ) =>
       ao == bo && sameSqlNode(al, bl) && sameSqlNode(ar, br),
+    (
+      LikeNode(expression: final ae, pattern: final ap),
+      LikeNode(expression: final be, pattern: final bp),
+    ) =>
+      sameSqlNode(ae, be) && sameSqlNode(ap, bp),
     _ => false,
   };
 }

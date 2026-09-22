@@ -237,18 +237,47 @@ extension Predicate on Expr<bool?> {
   );
 }
 
-/// String operations evaluated by the selected database.
-extension TextExpression on Expr<String> {
+/// String operations evaluated by the selected database, preserving SQL NULL.
+///
+/// Matching and case conversion follow database collation and Unicode rules.
+extension TextExpression<T extends String?> on Expr<T> {
   /// Matches a bound SQL LIKE pattern; `%` and `_` remain wildcards.
   Expr<bool?> like(String pattern) => _compare('LIKE', ParameterNode(pattern));
 
-  /// Converts text to lowercase using database rules.
-  Expr<String> lower() =>
-      Expr.internal(FunctionNode('LOWER', [expressionNode]), Codecs.text);
+  /// Matches literal text anywhere, escaping LIKE wildcards `%`, `_` and `!`.
+  ///
+  /// The escaped pattern is bound as a parameter with SQL `ESCAPE '!'`.
+  /// An empty [text] matches every non-NULL string. NULL inputs produce NULL.
+  Expr<bool?> contains(String text) => _literalLike(text, '%', '%');
 
-  /// Converts text to uppercase using database rules.
-  Expr<String> upper() =>
-      Expr.internal(FunctionNode('UPPER', [expressionNode]), Codecs.text);
+  /// Matches a literal prefix; LIKE wildcards in [text] have no special meaning.
+  ///
+  /// An empty prefix matches every non-NULL string. NULL inputs produce NULL.
+  Expr<bool?> startsWith(String text) => _literalLike(text, '', '%');
+
+  /// Matches a literal suffix; LIKE wildcards in [text] have no special meaning.
+  ///
+  /// An empty suffix matches every non-NULL string. NULL inputs produce NULL.
+  Expr<bool?> endsWith(String text) => _literalLike(text, '%', '');
+
+  Expr<bool?> _literalLike(String text, String prefix, String suffix) {
+    final escaped = text
+        .replaceAll('!', '!!')
+        .replaceAll('%', '!%')
+        .replaceAll('_', '!_');
+    return Expr.internal(
+      LikeNode(expressionNode, ParameterNode('$prefix$escaped$suffix')),
+      Codecs.boolean.nullable(),
+    );
+  }
+
+  /// Converts text to lowercase using database rules, preserving nullability.
+  Expr<T> lower() =>
+      Expr.internal(FunctionNode('LOWER', [expressionNode]), codec);
+
+  /// Converts text to uppercase using database rules, preserving nullability.
+  Expr<T> upper() =>
+      Expr.internal(FunctionNode('UPPER', [expressionNode]), codec);
 }
 
 /// SQL arithmetic and aggregation for Dart numeric values.
