@@ -9,7 +9,9 @@ after reading the selected columns. `(u.id, u.email).row` returns a positional
 columns, and its properties are not usable in SQL filters or ordering.
 
 Run the [cookbook](https://github.com/medz/dart-orm/blob/main/example/queries.dart) with `dart run example/queries.dart`.
-It checks nine combined query/schema scenarios on an in-memory SQLite database.
+It runs query/schema scenarios and the filter examples below on an in-memory
+SQLite database, including groups, nullable text, field comparisons, relationship
+scopes and relationship-filtered reads, updates and deletes.
 Set `ORM_EXAMPLE_POSTGRES` to a disposable local PostgreSQL URL to run the same
 checks there. That example explicitly disables TLS for local development, creates
 a uniquely named schema and removes only that schema in `finally`.

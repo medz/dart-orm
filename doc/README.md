@@ -17,8 +17,8 @@ and the [company example](https://github.com/medz/dart-orm/blob/main/example/com
 | Organize files and PostgreSQL database schemas | [Database schemas](https://github.com/medz/dart-orm/blob/main/doc/namespaces.md) |
 | Generate a client and use build_runner | [Generation](https://github.com/medz/dart-orm/blob/main/doc/generation.md) |
 | Choose imports and open a database | [Entrypoints](https://github.com/medz/dart-orm/blob/main/doc/api.md) |
-| Filter, select, join and paginate | [Queries](https://github.com/medz/dart-orm/blob/main/doc/queries.md) |
-| Load related data | [Relationships](https://github.com/medz/dart-orm/blob/main/doc/relations.md) |
+| Compose filters, compare fields, select, join and paginate | [Queries](https://github.com/medz/dart-orm/blob/main/doc/queries.md) |
+| Filter through relationships and load related data | [Relationships](https://github.com/medz/dart-orm/blob/main/doc/relations.md) |
 | Use domain values, enums and JSON | [Types and codecs](https://github.com/medz/dart-orm/blob/main/doc/types.md), [Decimals](https://github.com/medz/dart-orm/blob/main/doc/decimals.md) |
 | Add defaults and database constraints | [Defaults](https://github.com/medz/dart-orm/blob/main/doc/defaults.md), [Computed columns](https://github.com/medz/dart-orm/blob/main/doc/computed.md), [Checks](https://github.com/medz/dart-orm/blob/main/doc/checks.md) |
 

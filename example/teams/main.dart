@@ -33,6 +33,25 @@ Future<void> main() async {
         joinedAt: DateTime.utc(2026, 1, 2),
       );
     });
+    final owners = await db.user
+        .where(
+          (u) => u.memberships
+              .where(
+                (m) => allOf([
+                  m.role.eq(.value(MembershipRole.owner)),
+                  m.team.where((t) => t.name.eq(.value('Core'))).any(),
+                ]),
+              )
+              .any(),
+        )
+        .select((u) => u.name)
+        .get();
+    if (owners.length != 1 || owners.single != 'Ada') {
+      throw StateError(
+        'Nested association filters must select the Core owner.',
+      );
+    }
+    print('Core owners: $owners');
     events.clear();
     acquisitions.clear();
     decodes.clear();

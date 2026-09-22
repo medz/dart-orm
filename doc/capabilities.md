@@ -25,13 +25,18 @@ table forms produce review issues. Import does not recreate an entire database.
 
 | Operation | Behavior | Boundary |
 | --- | --- | --- |
+| Filters | Typed value/field comparisons, nullable text, `allOf`/`anyOf` groups and correlated relationship predicates | SQL NULL semantics apply; empty AND is TRUE and empty OR is FALSE. Text matching follows database collation. |
 | Selection | Scalar, positional/named Record, DTO and runtime field selection | Mappers execute after rows arrive. Runtime field sets return a dynamic map. |
 | Pagination | Offset/limit and typed keyset cursors with unique tie breakers | Offset pages are not snapshots; nullable cursor fields need explicit NULL ordering. |
 | SQL composition | Joins, grouping/HAVING, subqueries, CTEs, windows and UNION | Scope and aggregate rules are validated. INTERSECT/EXCEPT and arbitrary functions require raw SQL. |
 | Relationships | Joined or batched to-one values, batched collections, composite/self keys and per-parent limits | No cross-database navigation or lazy property reads that issue hidden SQL. |
-| Writes | Generated create/patch, omitted versus NULL/default values, expression writes, batches, upsert and RETURNING where supported | No tracked object graph or implicit flush. Computed fields are read-only. |
+| Writes | Generated create/patch, omitted versus NULL/default values, expression writes, batches, upsert and RETURNING where supported | No tracked object graph or implicit flush. Computed fields are read-only. MySQL rejects typed UPDATE/DELETE subqueries reading their own target table before execution. |
 | Transactions | Explicit session ownership, savepoints, rollback and bounded opt-in retries | External side effects are not rolled back or made safe to repeat. Distributed transactions are not supported. |
 | Observation | Query descriptions and acquisition/query/decode events | No general optimizer or result cache. Timings have explicit scopes, not total CPU attribution. |
+
+The [filter guide](https://github.com/medz/dart-orm/blob/main/doc/queries.md#boolean-condition-groups)
+and [relationship write boundaries](https://github.com/medz/dart-orm/blob/main/doc/relations.md#updating-and-deleting-through-relationship-filters)
+explain grouping, predicate scope and engine-specific write restrictions.
 
 Choose `first()`/`single()` when absence is an error and `firstOrNull()`/
 `singleOrNull()` when it is expected. Both single-result variants reject multiple
