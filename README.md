@@ -7,8 +7,8 @@ schema and migrations in Dart. SQLite, PostgreSQL, MySQL and MariaDB share a typ
 query API, with explicit database capabilities and transaction boundaries.
 
 [Get started](#get-started) · [Guides](https://github.com/medz/dart-orm/blob/main/doc/README.md) ·
-[API reference](https://pub.dev/documentation/orm/6.0.0-beta.3/) ·
-[Examples](https://github.com/medz/dart-orm/tree/main/example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.3)
+[API reference](https://pub.dev/documentation/orm/6.0.0-beta.4/) ·
+[Examples](https://github.com/medz/dart-orm/tree/main/example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.4)
 
 > **6.0 beta:** a new implementation requiring Dart 3.13+. This is a breaking
 > replacement for the Prisma-based 5.x client. Read the [release notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md)
@@ -42,7 +42,7 @@ Create a Dart application and add the package:
 ```sh
 dart create -t console my_app
 cd my_app
-dart pub add orm:6.0.0-beta.3
+dart pub add orm:6.0.0-beta.4
 ```
 
 ```sh
@@ -117,8 +117,8 @@ no lazy property reads that quietly issue SQL. See [relationships](https://githu
 and the [query cookbook](https://github.com/medz/dart-orm/blob/main/example/queries.dart).
 
 Transactions use the provided `tx` session. Query subscriptions emit snapshots
-after relevant committed writes. Inspect SQL without connecting, or use raw and
-raw SQL when a query needs database-specific features.
+after relevant committed writes. Inspect SQL without connecting, or use raw SQL
+with optional result codecs when a query needs database-specific features.
 
 ## Choose your database
 
