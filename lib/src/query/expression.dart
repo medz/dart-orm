@@ -23,7 +23,8 @@ sealed class Operand<T> {
   /// A Dart value to parameterize with the receiving expression's codec.
   ///
   /// For equality and inequality, a null value means `IS NULL` or `IS NOT NULL`.
-  /// Null operands in ordered comparisons retain SQL UNKNOWN semantics.
+  /// A literal null bypasses the codec and denotes SQL NULL. Ordered
+  /// comparisons with it retain SQL UNKNOWN semantics.
   const factory Operand.value(T value) = _Value<T>;
 }
 
@@ -60,7 +61,10 @@ class Expr<T> extends Selection<T> implements Operand<T> {
   /// A literal `.value(null)` produces `IS NULL`. Expression operands retain SQL
   /// NULL semantics: a NULL on either side yields SQL UNKNOWN.
   Expr<bool?> eq(Operand<T> other) => other is _Value<T> && other.value == null
-      ? isNull()
+      ? Expr.internal(
+          UnaryNode('IS NULL', expressionNode, postfix: true),
+          Codecs.boolean.nullable(),
+        )
       : _compare('=', _operand(other));
 
   /// Compares with a value or SQL expression using `<>`.
@@ -68,7 +72,10 @@ class Expr<T> extends Selection<T> implements Operand<T> {
   /// A literal `.value(null)` produces `IS NOT NULL`. Expression operands retain
   /// SQL NULL semantics.
   Expr<bool?> ne(Operand<T> other) => other is _Value<T> && other.value == null
-      ? isNotNull()
+      ? Expr.internal(
+          UnaryNode('IS NOT NULL', expressionNode, postfix: true),
+          Codecs.boolean.nullable(),
+        )
       : _compare('<>', _operand(other));
 
   /// Tests whether this expression is greater than [other].
@@ -95,7 +102,7 @@ class Expr<T> extends Selection<T> implements Operand<T> {
   SqlNode _operand(Operand<T> other) => switch (other) {
     Expr<T>() => other.expressionNode,
     _Value<T>() => ParameterNode(
-      codec.encode(other.value),
+      other.value == null ? null : codec.encode(other.value),
       storageType: codec.sqlType,
     ),
   };

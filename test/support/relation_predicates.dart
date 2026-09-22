@@ -149,6 +149,56 @@ void relationPredicateTests(
         );
       });
 
+      test(
+        'comparison unions keep their result codec for nullable runtime inputs',
+        () async {
+          for (final input in <int?>[null, 2]) {
+            final equal = db.event
+                .byId(1)
+                .select((e) => e.reviewer.eq(.value(input)));
+            final unequal = db.event
+                .byId(1)
+                .select((e) => e.reviewer.ne(.value(input)));
+            final baseline = db.event
+                .byId(2)
+                .select((e) => e.reviewer.eq(.value(2)));
+            expect(await equal.unionAll(baseline).get(), [input == 2, null]);
+            expect(await unequal.unionAll(baseline).get(), [
+              input == null,
+              null,
+            ]);
+          }
+          expect(observations, hasLength(4));
+        },
+      );
+
+      test(
+        'ordered literal NULL remains UNKNOWN with a sentinel custom codec',
+        () async {
+          final codec = Codec<int?>(
+            'integer',
+            (stored) => stored as int?,
+            (input) => input ?? -1,
+          );
+          final expression = value<int?>(5, codec);
+          final rows = await db.event
+              .byId(1)
+              .select(
+                (_) => (
+                  expression.gt(.value(null)),
+                  expression.gte(.value(null)),
+                  expression.lt(.value(null)),
+                  expression.lte(.value(null)),
+                  expression.eq(.value(null)),
+                  expression.ne(.value(null)),
+                ).row,
+              )
+              .get();
+          expect(rows, [(null, null, null, null, false, true)]);
+          expect(observations, hasLength(1));
+        },
+      );
+
       test('nested boolean relationship filters select, update and delete the same rows', () async {
         final query = db.event.where(
           (e) => allOf([

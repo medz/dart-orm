@@ -152,6 +152,62 @@ void invalid(UserFields u, PersonFields p, Expr<int?> nullableInt) {
       },
     );
 
+    test(
+      '${dialect.name} nullable comparison inputs keep union codecs stable',
+      () {
+        for (final input in <String?>[null, 'needle']) {
+          final equal = builder
+              .table(users)
+              .select((u) => u.nickname.eq(.value(input)));
+          final unequal = builder
+              .table(users)
+              .select((u) => u.nickname.ne(.value(input)));
+          final baseline = builder
+              .table(users)
+              .select((u) => u.nickname.gt(.value('needle')));
+          expect(equal.union(baseline).compile().sql, contains('UNION'));
+          expect(unequal.union(baseline).compile().sql, contains('UNION'));
+        }
+      },
+    );
+
+    test(
+      '${dialect.name} literal NULL bypasses custom encoding while non-null encodes once',
+      () {
+        var encoded = 0;
+        final codec = Codec<int?>('integer', (stored) => stored as int?, (
+          input,
+        ) {
+          encoded++;
+          return input ?? -1;
+        });
+        final expression = value<int?>(5, codec);
+        encoded = 0;
+        final command = builder
+            .table(users)
+            .select(
+              (_) => (
+                expression.gt(.value(null)),
+                expression.gte(.value(null)),
+                expression.lt(.value(null)),
+                expression.lte(.value(null)),
+                expression.eq(.value(null)),
+                expression.ne(.value(null)),
+              ).row,
+            )
+            .compile();
+        expect(encoded, 0);
+        expect(
+          command.parameters.where((parameter) => parameter == null),
+          hasLength(4),
+        );
+        final nonNull = expression.gt(.value(3));
+        expect(encoded, 1);
+        builder.table(users).select((_) => nonNull).compile();
+        expect(encoded, 1);
+      },
+    );
+
     test('${dialect.name} null literals differ from null SQL expressions', () {
       final command = builder
           .table(users)

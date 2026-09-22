@@ -112,7 +112,8 @@ p.ownerId.eq(owner.id);
 type for contextual `.value(100)`. Reusable inputs can be declared as
 `const Operand<int> minimum = .value(100)`. `Expr<T>` is also an `Operand<T>`;
 comparisons do not accept `Object` or dynamically infer whether a value is a field.
-Custom domain literals use the receiving expression's codec when bound. Field
+Non-null domain literals use the receiving expression's codec when bound.
+A literal null always denotes SQL NULL and bypasses custom encoding. Field
 and expression operands compare SQL storage values directly, without running
 either side's Dart encoder or decoder. Compatible Dart types do not prove that
 custom storage representations or database collations have compatible meanings;
