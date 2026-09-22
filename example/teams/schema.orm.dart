@@ -49,7 +49,7 @@ final class UserTableSet extends TableSet<User, UserFields> {
   }
   Future<User> create({required int id, required String name}) =>
       createRow((row) => [row.id.set(id), row.name.set(name)]);
-  Query<User, UserFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<User, UserFields> byId(int id) => where((row) => row.id.eq(.value(id)));
 }
 
 extension UserUpdates on Query<User, UserFields> {
@@ -104,7 +104,7 @@ final class TeamTableSet extends TableSet<Team, TeamFields> {
   }
   Future<Team> create({required int id, required String name}) =>
       createRow((row) => [row.id.set(id), row.name.set(name)]);
-  Query<Team, TeamFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Team, TeamFields> byId(int id) => where((row) => row.id.eq(.value(id)));
 }
 
 extension TeamUpdates on Query<Team, TeamFields> {
@@ -215,8 +215,12 @@ final class MembershipTableSet extends TableSet<Membership, MembershipFields> {
   Query<Membership, MembershipFields> byId({
     required int teamId,
     required int userId,
-  }) =>
-      where((row) => orm.allOf([row.teamId.eq(teamId), row.userId.eq(userId)]));
+  }) => where(
+    (row) => orm.allOf([
+      row.teamId.eq(.value(teamId)),
+      row.userId.eq(.value(userId)),
+    ]),
+  );
 }
 
 extension MembershipUpdates on Query<Membership, MembershipFields> {

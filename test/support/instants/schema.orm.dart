@@ -79,7 +79,8 @@ final class EventTableSet extends TableSet<Event, EventFields> {
       row.optional.set(optional),
     ],
   );
-  Query<Event, EventFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Event, EventFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension EventUpdates on Query<Event, EventFields> {
@@ -143,7 +144,7 @@ final class MomentTableSet extends TableSet<Moment, MomentFields> {
     Change<String> label = const Change.keep(),
   }) => createRow((row) => [row.at.set(at), ...row.label.change(label)]);
   Query<Moment, MomentFields> byId(DateTime at) =>
-      where((row) => row.at.eq(at));
+      where((row) => row.at.eq(.value(at)));
 }
 
 extension MomentUpdates on Query<Moment, MomentFields> {
@@ -202,7 +203,7 @@ final class LinkTableSet extends TableSet<Link, LinkFields> {
     Change<int> id = const Change.keep(),
     required DateTime at,
   }) => createRow((row) => [...row.id.change(id), row.at.set(at)]);
-  Query<Link, LinkFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Link, LinkFields> byId(int id) => where((row) => row.id.eq(.value(id)));
 }
 
 extension LinkUpdates on Query<Link, LinkFields> {

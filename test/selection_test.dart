@@ -60,7 +60,7 @@ void main() {
                   b = track(u.email, 'email'),
                   c = track(u.nickname, 'nullable'),
                   d = track(u.score, 'score'),
-                  e = track(u.score.gt(1), 'active');
+                  e = track(u.score.gt(.value(1)), 'active');
               List<Object?> done(List<Object?> values) {
                 calls.add('result');
                 return values;

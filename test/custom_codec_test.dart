@@ -138,7 +138,7 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
       'domain validation and bound parameters apply to writes and predicates',
       () async {
         final value = await person(email: "'@x'); DROP TABLE people; --");
-        final query = db.person.where((p) => p.email.eq(value.email));
+        final query = db.person.where((p) => p.email.eq(.value(value.email)));
         final command = query.compile();
         expect(command.sql, isNot(contains(value.email.value)));
         expect(command.parameters, [value.email.value]);

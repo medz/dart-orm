@@ -176,7 +176,8 @@ final class AccountTableSet extends TableSet<Account, AccountFields> {
       row.c.set(c),
     ],
   );
-  Query<Account, AccountFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Account, AccountFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension AccountUpdates on Query<Account, AccountFields> {
@@ -270,7 +271,7 @@ final class NoteTableSet extends TableSet<Note, NoteFields> {
       row.body.set(body),
     ],
   );
-  Query<Note, NoteFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Note, NoteFields> byId(int id) => where((row) => row.id.eq(.value(id)));
 }
 
 extension NoteUpdates on Query<Note, NoteFields> {

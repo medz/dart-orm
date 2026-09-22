@@ -102,7 +102,7 @@ final class TicketTableSet extends TableSet<Ticket, TicketFields> {
     ],
   );
   Query<Ticket, TicketFields> byId(types0.TicketId id) =>
-      where((row) => row.id.eq(id));
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension TicketUpdates on Query<Ticket, TicketFields> {
@@ -160,7 +160,7 @@ final class SequenceRowTableSet
   Future<SequenceRow> create({Change<int> id = const Change.keep()}) =>
       createRow((row) => [...row.id.change(id)]);
   Query<SequenceRow, SequenceRowFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+      where((row) => row.id.eq(.value(id)));
 }
 
 final appSchema = List<TableSchema>.unmodifiable([

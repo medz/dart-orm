@@ -181,7 +181,7 @@ final class LineTableSet extends TableSet<Line, LineFields> {
       row.note.set(note),
     ],
   );
-  Query<Line, LineFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Line, LineFields> byId(int id) => where((row) => row.id.eq(.value(id)));
 }
 
 extension LineUpdates on Query<Line, LineFields> {
@@ -245,7 +245,7 @@ final class BandTableSet extends TableSet<Band, BandFields> {
   }
   Future<Band> create({required int id, required String name}) =>
       createRow((row) => [row.id.set(id), row.name.set(name)]);
-  Query<Band, BandFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Band, BandFields> byId(int id) => where((row) => row.id.eq(.value(id)));
 }
 
 extension BandUpdates on Query<Band, BandFields> {

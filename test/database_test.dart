@@ -45,7 +45,7 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
       expect(user, (id: 1, email: input, nickname: null, score: 0));
       final query = db
           .table(users)
-          .where((u) => u.email.eq(input))
+          .where((u) => u.email.eq(.value(input)))
           .select((u) => u.email);
       expect(query.compile().sql, isNot(contains(input)));
       expect(query.compile().sql, isNot(contains('nickname')));
@@ -54,14 +54,14 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
       expect(emails, [input]);
       await db
           .table(users)
-          .where((u) => u.id.eq(user.id))
+          .where((u) => u.id.eq(.value(user.id)))
           .update((u) => [u.score.increment(2), u.nickname.set('Seven')])
           .execute();
       expect((await db.table(users).single()).score, 2);
       expect(
         await db
             .table(users)
-            .where((u) => u.email.eq(input))
+            .where((u) => u.email.eq(.value(input)))
             .delete()
             .execute(),
         1,
@@ -109,7 +109,7 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
           return u.id;
         });
         expect(
-          () => db.table(users).where((u) => u.id.equals(foreign.id)).compile(),
+          () => db.table(users).where((u) => u.id.eq(foreign.id)).compile(),
           throwsA(isA<OrmException>()),
         );
         expect(
@@ -403,7 +403,7 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
           expect(
             await observed
                 .table(users)
-                .where((u) => u.id.eq(100))
+                .where((u) => u.id.eq(.value(100)))
                 .select((u) => u.posts.many())
                 .get(),
             isEmpty,
@@ -411,7 +411,7 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
           expect(events.length, 1);
           final List<Post> rows = await observed
               .table(users)
-              .where((u) => u.id.eq(4))
+              .where((u) => u.id.eq(.value(4)))
               .select((u) => u.posts.many())
               .single();
           expect(rows, isEmpty);
@@ -423,7 +423,7 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
         () async {
           final rows = await db
               .table(users)
-              .where((u) => u.id.eq(1))
+              .where((u) => u.id.eq(.value(1)))
               .select(
                 (u) => u.posts
                     .orderBy((p) => [p.id.asc()])
@@ -440,13 +440,13 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
           expect(rows, [(title: 'post1', author: 'user0')]);
           final missing = await db
               .table(postsTable)
-              .where((p) => p.id.eq(1))
-              .select((p) => p.author.where((u) => u.id.eq(99)).one())
+              .where((p) => p.id.eq(.value(1)))
+              .select((p) => p.author.where((u) => u.id.eq(.value(99))).one())
               .single();
           expect(missing, null);
           final present = await db
               .table(postsTable)
-              .where((p) => p.id.eq(1))
+              .where((p) => p.id.eq(.value(1)))
               .select(
                 (p) => p.author
                     .select(
@@ -480,7 +480,7 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
         expect(
           await db
               .table(users)
-              .where((u) => u.posts.every((p) => p.tag.eq('even')))
+              .where((u) => u.posts.every((p) => p.tag.eq(.value('even'))))
               .select((u) => u.id)
               .get(),
           [4],
@@ -489,7 +489,10 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
           await db
               .table(users)
               .where(
-                (u) => u.posts.where((p) => p.tag.eq('even')).count().eq(2),
+                (u) => u.posts
+                    .where((p) => p.tag.eq(.value('even')))
+                    .count()
+                    .eq(.value(2)),
               )
               .count(),
           3,
@@ -501,10 +504,10 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
         () async {
           final rows = await db
               .table(users)
-              .where((u) => u.id.eq(1))
+              .where((u) => u.id.eq(.value(1)))
               .select(
                 (u) => u.posts
-                    .where((p) => p.id.gt(1))
+                    .where((p) => p.id.gt(.value(1)))
                     .orderBy((p) => [p.id.asc()])
                     .skip(1)
                     .take(1)

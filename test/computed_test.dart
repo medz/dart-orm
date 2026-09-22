@@ -143,7 +143,7 @@ void main() {
               .returning((r) => r.total)
               .get();
           expect(updated, [35]);
-          expect(await db.line.where((r) => r.total.gt(25)).count(), 2);
+          expect(await db.line.where((r) => r.total.gt(.value(25))).count(), 2);
           await db.band.create(id: 35, name: 'large');
           expect(
             await db.line

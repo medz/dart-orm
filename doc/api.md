@@ -12,7 +12,7 @@ import 'package:orm/sqlite.dart';
 
 final db = await sqlite(const SqliteOptions.file('app.sqlite'));
 try {
-  final tasks = await db.task.where((t) => t.done.eq(false)).get();
+  final tasks = await db.task.where((t) => t.done.eq(.value(false))).get();
   print(tasks);
 } finally {
   await db.close();
@@ -74,7 +74,7 @@ For offline compilation, import `sql.dart` and a generated client:
 
 ```dart
 final command = SqlBuilder(SqlDialect.postgres)
-    .user.where((u) => u.email.eq('seven@example.com'))
+    .user.where((u) => u.email.eq(.value('seven@example.com')))
     .select((u) => u.id)
     .compile();
 // command.sql and separately bound command.parameters; no connection opened.

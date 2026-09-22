@@ -17,13 +17,13 @@ void main() {
       final invalid = [
         'allOf([u.id]);',
         'anyOf([true]);',
-        'u.id.eq(1).and(u.id.eq(2));',
-        'u.id.eq(1).or(u.id.eq(2));',
+        'u.id.eq(.value(1)).and(u.id.eq(.value(2)));',
+        'u.id.eq(.value(1)).or(u.id.eq(.value(2)));',
       ];
       await file.writeAsString('''
 import 'package:orm/sql.dart';
 import '../../test/support/tables.dart';
-Expr<bool?> valid(UserFields u) => allOf([anyOf([u.id.eq(1)]).not()]);
+Expr<bool?> valid(UserFields u) => allOf([anyOf([u.id.eq(.value(1))]).not()]);
 void invalid(UserFields u) {
 ${invalid.join('\n')}
 }

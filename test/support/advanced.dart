@@ -19,7 +19,7 @@ void advancedScenarios(Database<Backend> Function() database) {
           )
           .asCte('post_counts');
       final rows = await counts.query
-          .where((c) => c.ref((p) => p.id.count()).gt(3))
+          .where((c) => c.ref((p) => p.id.count()).gt(.value(3)))
           .orderBy((c) => [c.ref((p) => p.authorId).asc()])
           .get();
       expect(rows, [(id: 1, count: 4), (id: 2, count: 4), (id: 3, count: 4)]);
@@ -30,7 +30,7 @@ void advancedScenarios(Database<Backend> Function() database) {
       final alias = counts.alias();
       final joined = await db
           .table(users)
-          .join(alias, on: (u, c) => u.id.equals(c.ref((p) => p.authorId)))
+          .join(alias, on: (u, c) => u.id.eq(c.ref((p) => p.authorId)))
           .orderBy((u) => [u.id.asc()])
           .select(
             (u) => (
@@ -46,7 +46,7 @@ void advancedScenarios(Database<Backend> Function() database) {
           .table(users)
           .leftJoin(
             post,
-            on: (u, p) => allOf([u.id.equals(p.authorId), p.id.eq(1)]),
+            on: (u, p) => allOf([u.id.eq(p.authorId), p.id.eq(.value(1))]),
           )
           .select((u) => post.optional(post.fields.title))
           .asCte('optional_posts');
@@ -69,8 +69,8 @@ void advancedScenarios(Database<Backend> Function() database) {
     final a = users.alias(), b = users.alias();
     final result = await db
         .table(users)
-        .join(a, on: (u, a) => u.id.equals(a.id))
-        .join(b, on: (u, b) => b.id.equals(a.fields.id))
+        .join(a, on: (u, a) => u.id.eq(a.id))
+        .join(b, on: (u, b) => b.id.eq(a.fields.id))
         .orderBy((u) => [u.id.asc()])
         .select(
           (u) => (
@@ -85,8 +85,8 @@ void advancedScenarios(Database<Backend> Function() database) {
     expect(
       () => db
           .table(users)
-          .join(a, on: (u, a) => a.id.equals(b.fields.id))
-          .join(b, on: (u, b) => u.id.equals(b.id))
+          .join(a, on: (u, a) => a.id.eq(b.fields.id))
+          .join(b, on: (u, b) => u.id.eq(b.id))
           .compile(),
       throwsA(isA<OrmException>()),
     );
@@ -101,7 +101,7 @@ void advancedScenarios(Database<Backend> Function() database) {
           .table(users)
           .leftJoin(
             post,
-            on: (u, p) => allOf([u.id.equals(p.authorId), p.id.eq(1)]),
+            on: (u, p) => allOf([u.id.eq(p.authorId), p.id.eq(.value(1))]),
           )
           .orderBy((u) => [u.id.asc()])
           .select(
@@ -111,7 +111,7 @@ void advancedScenarios(Database<Backend> Function() database) {
       expect(rows, [(tag: null), null, null, null]);
       final missing = await db
           .table(users)
-          .leftJoin(post, on: (u, p) => u.id.equals(p.authorId))
+          .leftJoin(post, on: (u, p) => u.id.eq(p.authorId))
           .where((u) => post.isPresent.not())
           .select((u) => u.id)
           .get();
@@ -119,7 +119,7 @@ void advancedScenarios(Database<Backend> Function() database) {
       expect(
         () => db
             .table(users)
-            .leftJoin(post, on: (u, p) => u.id.equals(p.authorId))
+            .leftJoin(post, on: (u, p) => u.id.eq(p.authorId))
             .select((u) => post.fields.title)
             .compile(),
         throwsA(isA<OrmException>()),
@@ -135,7 +135,7 @@ void advancedScenarios(Database<Backend> Function() database) {
         .select(
           (u) => db
               .table(postsTable)
-              .where((p) => p.authorId.equals(u.id))
+              .where((p) => p.authorId.eq(u.id))
               .select((p) => p.id.count())
               .scalar(),
         )
@@ -152,7 +152,7 @@ void advancedScenarios(Database<Backend> Function() database) {
           .where(
             (u) => db
                 .table(postsTable)
-                .where((p) => p.authorId.equals(u.id))
+                .where((p) => p.authorId.eq(u.id))
                 .existsExpression(),
           )
           .count(),
@@ -160,11 +160,11 @@ void advancedScenarios(Database<Backend> Function() database) {
     );
     final nullable = await db
         .table(users)
-        .where((u) => u.id.eq(4))
+        .where((u) => u.id.eq(.value(4)))
         .select(
           (u) => db
               .table(postsTable)
-              .where((p) => p.authorId.equals(u.id))
+              .where((p) => p.authorId.eq(u.id))
               .select((p) => p.title)
               .take(1)
               .scalar(),
@@ -184,7 +184,7 @@ void advancedScenarios(Database<Backend> Function() database) {
       final counts = await db
           .table(postsTable)
           .groupBy((p) => [p.authorId])
-          .having((p) => p.id.count().gt(3))
+          .having((p) => p.id.count().gt(.value(3)))
           .orderBy((p) => [p.authorId.asc()])
           .select(
             (p) => (
@@ -196,7 +196,7 @@ void advancedScenarios(Database<Backend> Function() database) {
       expect(counts, [(id: 1, count: 4), (id: 2, count: 4), (id: 3, count: 4)]);
       final windowed = await db
           .table(postsTable)
-          .where((p) => p.authorId.eq(1))
+          .where((p) => p.authorId.eq(.value(1)))
           .orderBy((p) => [p.id.asc()])
           .select(
             (p) => (
@@ -223,7 +223,10 @@ void advancedScenarios(Database<Backend> Function() database) {
         throwsA(isA<OrmException>()),
       );
       expect(
-        () => db.table(postsTable).where((p) => p.id.count().gt(1)).compile(),
+        () => db
+            .table(postsTable)
+            .where((p) => p.id.count().gt(.value(1)))
+            .compile(),
         throwsA(isA<OrmException>()),
       );
     },

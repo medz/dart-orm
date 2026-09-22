@@ -194,7 +194,7 @@ Future<void> main() async {
             final cte = ids.asCte('root_ids').alias();
             await rejects(
               () => tx.user
-                  .join(cte, on: (u, c) => u.id.equals(c.ref((u) => u.id)))
+                  .join(cte, on: (u, c) => u.id.eq(c.ref((u) => u.id)))
                   .get(),
               code: 'QUERY.SESSION',
             );
@@ -205,8 +205,8 @@ Future<void> main() async {
           });
           final present = userTable.alias(), absent = userTable.alias();
           final query = isolated.user
-              .leftJoin(present, on: (u, p) => u.id.equals(p.id))
-              .leftJoin(absent, on: (u, a) => a.id.eq(-1));
+              .leftJoin(present, on: (u, p) => u.id.eq(p.id))
+              .leftJoin(absent, on: (u, a) => a.id.eq(.value(-1)));
           await rejects(
             () => query
                 .select((_) => present.optional(absent.fields.email))
@@ -229,7 +229,7 @@ Future<void> main() async {
           );
           await rejects(
             () => isolated.user
-                .where((u) => u.id.count().gt(0))
+                .where((u) => u.id.count().gt(.value(0)))
                 .delete()
                 .execute(),
             code: 'QUERY.AGGREGATE',
@@ -280,7 +280,9 @@ Future<void> main() async {
             'Compiling or executing reran factories',
           );
           expect(
-            await isolated.user.where((u) => u.nickname.eq('guest')).count() ==
+            await isolated.user
+                    .where((u) => u.nickname.eq(.value('guest')))
+                    .count() ==
                 3,
             'Batch defaults were not stored',
           );
@@ -462,7 +464,9 @@ Future<void> main() async {
           }),
         );
         expect(
-          !await db.user.where((u) => u.email.eq('rolled-back')).exists(),
+          !await db.user
+              .where((u) => u.email.eq(.value('rolled-back')))
+              .exists(),
           'Rollback leaked data',
         );
         await rejects(() => escaped!.user.get(), code: 'SESSION.CLOSED');
@@ -474,7 +478,9 @@ Future<void> main() async {
             }),
           );
           expect(
-            !await tx.user.where((u) => u.email.eq('savepoint')).exists(),
+            !await tx.user
+                .where((u) => u.email.eq(.value('savepoint')))
+                .exists(),
             'Savepoint leaked data',
           );
         });

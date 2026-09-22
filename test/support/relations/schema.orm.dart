@@ -139,7 +139,10 @@ final class AccountTableSet extends TableSet<Account, AccountFields> {
     ],
   );
   Query<Account, AccountFields> byId({required int tenant, required int id}) =>
-      where((row) => orm.allOf([row.tenant.eq(tenant), row.id.eq(id)]));
+      where(
+        (row) =>
+            orm.allOf([row.tenant.eq(.value(tenant)), row.id.eq(.value(id))]),
+      );
 }
 
 extension AccountUpdates on Query<Account, AccountFields> {
@@ -293,7 +296,8 @@ final class EventTableSet extends TableSet<Event, EventFields> {
       row.score.set(score),
     ],
   );
-  Query<Event, EventFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Event, EventFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension EventUpdates on Query<Event, EventFields> {

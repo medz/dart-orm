@@ -172,7 +172,7 @@ Future<void> main(List<String> args) async {
         ),
         (
           'predicate_type',
-          "db.row0.where((r) => r.score.eq('wrong'));",
+          "db.row0.where((r) => r.score.eq(.value('wrong')));",
           'argument_type_not_assignable',
           "'wrong'",
         ),

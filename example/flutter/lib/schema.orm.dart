@@ -81,7 +81,7 @@ final class NoteTableSet extends TableSet<Note, NoteFields> {
       row.createdAt.set(createdAt),
     ],
   );
-  Query<Note, NoteFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Note, NoteFields> byId(int id) => where((row) => row.id.eq(.value(id)));
 }
 
 extension NoteUpdates on Query<Note, NoteFields> {
@@ -163,7 +163,8 @@ final class CommentTableSet extends TableSet<Comment, CommentFields> {
   }) => createRow(
     (row) => [...row.id.change(id), row.noteId.set(noteId), row.text.set(text)],
   );
-  Query<Comment, CommentFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Comment, CommentFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension CommentUpdates on Query<Comment, CommentFields> {

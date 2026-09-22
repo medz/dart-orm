@@ -171,7 +171,7 @@ final class PersonTableSet extends TableSet<Person, PersonFields> {
     ],
   );
   Query<Person, PersonFields> byId(types0.PersonId id) =>
-      where((row) => row.id.eq(id));
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension PersonUpdates on Query<Person, PersonFields> {
@@ -265,7 +265,7 @@ final class NoteTableSet extends TableSet<Note, NoteFields> {
       row.body.set(body),
     ],
   );
-  Query<Note, NoteFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Note, NoteFields> byId(int id) => where((row) => row.id.eq(.value(id)));
 }
 
 extension NoteUpdates on Query<Note, NoteFields> {

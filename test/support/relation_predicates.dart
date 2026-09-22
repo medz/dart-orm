@@ -48,6 +48,107 @@ void relationPredicateTests(
       });
       tearDown(() => db.close());
 
+      test('all six field comparisons preserve equality and ordering without parameters', () async {
+        await db.event.byId(1).update((e) => [e.score.set(10)]).execute();
+        await db.event.byId(2).update((e) => [e.score.set(-1)]).execute();
+        observations.clear();
+        final rows = await db.event
+            .orderBy((e) => [e.id.asc()])
+            .select(
+              (e) => (
+                e.score.eq(e.id),
+                e.score.ne(e.id),
+                e.score.gt(e.id),
+                e.score.gte(e.id),
+                e.score.lt(e.id),
+                e.score.lte(e.id),
+              ).row,
+            )
+            .get();
+        expect(rows, [
+          (false, true, true, true, false, false),
+          (false, true, false, false, true, true),
+          for (var i = 3; i <= 10; i++) (true, false, false, true, false, true),
+        ]);
+        expect(observations, hasLength(1));
+        expect(observations.single.parameterCount, 0);
+      });
+
+      test(
+        'nullable field and literal comparisons preserve SQL NULL semantics',
+        () async {
+          final rows = await db.event
+              .orderBy((e) => [e.id.asc()])
+              .select(
+                (e) => (
+                  e.owner.eq(e.reviewer),
+                  e.owner.ne(e.reviewer),
+                  e.owner.eq(.value(null)),
+                  e.owner.ne(.value(null)),
+                  e.owner.gt(.value(null)),
+                  e.owner.lt(e.reviewer),
+                ).row,
+              )
+              .get();
+          expect(rows, [
+            (false, true, false, true, null, true),
+            (null, null, false, true, null, null),
+            (false, true, false, true, null, false),
+            (null, null, false, true, null, null),
+            (false, true, false, true, null, true),
+            (null, null, false, true, null, null),
+            (false, true, false, true, null, false),
+            (null, null, false, true, null, null),
+            (null, null, false, true, null, null),
+            (null, null, true, false, null, null),
+          ]);
+          expect(observations, hasLength(1));
+        },
+      );
+
+      test('field operands in nested groups and relations preserve CRUD target rows', () async {
+        final query = db.event.where(
+          (e) => allOf([
+            e.author
+                .where(
+                  (a) => allOf([
+                    a.tenant.eq(.value(1)),
+                    anyOf([e.score.gt(a.id), a.label.isNull()]),
+                  ]),
+                )
+                .any(),
+            anyOf([e.reviewer.eq(e.owner), e.reviewer.isNull()]),
+            e.score.lt(e.id).not(),
+          ]),
+        );
+        expect(
+          await query.orderBy((e) => [e.id.asc()]).select((e) => e.id).get(),
+          [2, 4],
+        );
+        expect(observations, hasLength(1));
+        observations.clear();
+        expect(
+          await query.update((e) => [e.title.set('matched')]).execute(),
+          2,
+        );
+        expect(observations, hasLength(1));
+        expect(
+          await db.event
+              .where((e) => e.title.eq(.value('matched')))
+              .orderBy((e) => [e.id.asc()])
+              .select((e) => e.id)
+              .get(),
+          [2, 4],
+        );
+        observations.clear();
+        expect(await query.delete().execute(), 2);
+        expect(observations, hasLength(1));
+        expect(
+          await db.event.orderBy((e) => [e.id.asc()]).select((e) => e.id).get(),
+          [1, 3, 5, 6, 7, 8, 9, 10],
+        );
+      });
+
       test('nested boolean relationship filters select, update and delete the same rows', () async {
         final query = db.event.where(
           (e) => allOf([
@@ -56,16 +157,16 @@ void relationPredicateTests(
                   .where(
                     (a) => allOf([
                       anyOf([
-                        a.id.eq(1),
+                        a.id.eq(.value(1)),
                         a.manager.where((m) => m.label.isNull()).any(),
                       ]),
-                      a.tenant.eq(1),
+                      a.tenant.eq(.value(1)),
                     ]),
                   )
                   .any(),
               e.reviewerAccount.where((a) => a.label.isNull()).none(),
             ]),
-            e.title.eq('e4').not(),
+            e.title.eq(.value('e4')).not(),
           ]),
         );
         expect(
@@ -85,7 +186,7 @@ void relationPredicateTests(
         observations.clear();
         expect(
           await db.event
-              .where((e) => e.score.gt(100))
+              .where((e) => e.score.gt(.value(100)))
               .orderBy((e) => [e.id.asc()])
               .select((e) => e.id)
               .get(),
@@ -106,7 +207,7 @@ void relationPredicateTests(
         'self-reference mutation target follows the database capability',
         () async {
           final query = db.account.where(
-            (a) => allOf([a.id.eq(3), a.manager.none()]),
+            (a) => allOf([a.id.eq(.value(3)), a.manager.none()]),
           );
           expect(await query.select((a) => (a.tenant, a.id).row).get(), [
             (1, 3),
@@ -139,7 +240,9 @@ void relationPredicateTests(
           final query = db.event.where(
             (e) => e.author
                 .where(
-                  (a) => a.events.where((other) => other.title.eq('e1')).any(),
+                  (a) => a.events
+                      .where((other) => other.title.eq(.value('e1')))
+                      .any(),
                 )
                 .any(),
           );
@@ -171,7 +274,7 @@ void relationPredicateTests(
 
       test('relation counts that read the mutation target follow the database capability', () async {
         final query = db.account.where(
-          (a) => allOf([a.id.eq(3), a.reports.count().eq(0)]),
+          (a) => allOf([a.id.eq(.value(3)), a.reports.count().eq(.value(0))]),
         );
         expect(await query.select((a) => (a.tenant, a.id).row).get(), [(1, 3)]);
         observations.clear();
@@ -207,14 +310,19 @@ void relationPredicateTests(
         );
         final query = db.account.where(
           (a) => allOf([
-            a.id.eq(3),
+            a.id.eq(.value(3)),
             db
                 .table(anotherAccount)
-                .where((other) => allOf([other.id.eq(1), other.tenant.eq(1)]))
+                .where(
+                  (other) => allOf([
+                    other.id.eq(.value(1)),
+                    other.tenant.eq(.value(1)),
+                  ]),
+                )
                 .select((other) => other.id)
                 .take(1)
                 .scalar()
-                .eq(1),
+                .eq(.value(1)),
           ]),
         );
         expect(await query.select((a) => (a.tenant, a.id).row).get(), [(1, 3)]);
@@ -242,14 +350,16 @@ void relationPredicateTests(
       test('same-child conjunction differs from independent matches', () async {
         final same = db.account.where(
           (a) => a.events
-              .where((e) => allOf([e.score.eq(1), e.title.eq('e2')]))
+              .where(
+                (e) => allOf([e.score.eq(.value(1)), e.title.eq(.value('e2'))]),
+              )
               .any(),
         );
         expect(await same.get(), isEmpty);
         final separate = db.account.where(
           (a) => allOf([
-            a.events.where((e) => e.score.eq(1)).any(),
-            a.events.where((e) => e.title.eq('e2')).any(),
+            a.events.where((e) => e.score.eq(.value(1))).any(),
+            a.events.where((e) => e.title.eq(.value('e2'))).any(),
           ]),
         );
         expect(await separate.select((a) => (a.tenant, a.id).row).get(), [
@@ -262,11 +372,11 @@ void relationPredicateTests(
         final rows = await db.account
             .orderBy((a) => [a.tenant.asc(), a.id.asc()])
             .select((a) {
-              final events = a.events.where((e) => e.score.gte(2));
+              final events = a.events.where((e) => e.score.gte(.value(2)));
               return (
-                events.where((e) => e.title.eq('e1')).any(),
+                events.where((e) => e.title.eq(.value('e1'))).any(),
                 events.any(),
-                events.where((e) => e.score.gte(6)).none(),
+                events.where((e) => e.score.gte(.value(6))).none(),
                 events.count(),
               ).row;
             })
@@ -288,9 +398,9 @@ void relationPredicateTests(
               .orderBy((e) => [e.id.asc()])
               .select(
                 (e) => (
-                  e.author.where((a) => a.tenant.eq(1)).any(),
+                  e.author.where((a) => a.tenant.eq(.value(1))).any(),
                   e.author.none(),
-                  e.reviewerAccount.where((a) => a.id.eq(2)).any(),
+                  e.reviewerAccount.where((a) => a.id.eq(.value(2))).any(),
                 ).row,
               )
               .get();
@@ -317,14 +427,17 @@ void relationPredicateTests(
               .orderBy((a) => [a.tenant.asc(), a.id.asc()])
               .select(
                 (a) => (
-                  a.events.every((e) => e.reviewer.eq(2)),
+                  a.events.every((e) => e.reviewer.eq(.value(2))),
                   a.events
                       .where((e) => e.reviewer.isNotNull())
-                      .every((e) => e.reviewer.eq(2)),
-                  allOf([a.events.any(), a.events.every((e) => e.score.gt(0))]),
+                      .every((e) => e.reviewer.eq(.value(2))),
+                  allOf([
+                    a.events.any(),
+                    a.events.every((e) => e.score.gt(.value(0))),
+                  ]),
                   a.events
-                      .where((e) => e.score.gt(100))
-                      .every((e) => e.title.eq('missing')),
+                      .where((e) => e.score.gt(.value(100)))
+                      .every((e) => e.title.eq(.value('missing'))),
                 ).row,
               )
               .get();
@@ -346,16 +459,16 @@ void relationPredicateTests(
               .where(
                 (a) => allOf([
                   allOf([
-                    a.reports.where((r) => r.label.eq('A2')).any(),
+                    a.reports.where((r) => r.label.eq(.value('A2'))).any(),
                     a.events
                         .where(
                           (e) => e.reviewerAccount
-                              .where((r) => r.label.eq('A2'))
+                              .where((r) => r.label.eq(.value('A2')))
                               .any(),
                         )
                         .any(),
                   ]),
-                  a.reviews.where((e) => e.title.eq('e3')).any(),
+                  a.reviews.where((e) => e.title.eq(.value('e3'))).any(),
                 ]),
               )
               .select((a) => (a.tenant, a.id).row)
@@ -369,7 +482,9 @@ void relationPredicateTests(
         'root filters and collection loading filters have independent scopes',
         () async {
           final rows = await db.account
-              .where((a) => a.events.where((e) => e.title.eq('e1')).any())
+              .where(
+                (a) => a.events.where((e) => e.title.eq(.value('e1'))).any(),
+              )
               .select(
                 (a) => a.events
                     .orderBy((e) => [e.id.asc()])
@@ -386,7 +501,7 @@ void relationPredicateTests(
               .orderBy((a) => [a.tenant.asc(), a.id.asc()])
               .select(
                 (a) => a.events
-                    .where((e) => e.title.eq('e1'))
+                    .where((e) => e.title.eq(.value('e1')))
                     .select((e) => e.title)
                     .many(),
               )
@@ -425,14 +540,19 @@ void relationPredicateTests(
         final rows = await db.user
             .where(
               (u) => u.memberships
-                  .where((m) => m.team.where((t) => t.name.eq('Core')).any())
+                  .where(
+                    (m) => m.team.where((t) => t.name.eq(.value('Core'))).any(),
+                  )
                   .any(),
             )
             .select(
               (u) => (
                 u.name,
                 u.memberships
-                    .where((m) => m.team.where((t) => t.name.eq('Docs')).any())
+                    .where(
+                      (m) =>
+                          m.team.where((t) => t.name.eq(.value('Docs'))).any(),
+                    )
                     .count(),
               ).row,
             )
@@ -446,8 +566,7 @@ void relationPredicateTests(
         await expectLater(
           db.event
               .where(
-                (e) =>
-                    e.author.where((a) => a.id.equals(foreign.fields.id)).any(),
+                (e) => e.author.where((a) => a.id.eq(foreign.fields.id)).any(),
               )
               .get(),
           throwsA(_code('QUERY.SCOPE')),
@@ -464,8 +583,8 @@ void relationPredicateTests(
 
       test('relationship aggregate and window predicates fail before all CRUD execution', () async {
         for (final predicate in <Expr<bool?> Function(AccountFields)>[
-          (a) => a.id.count().gt(0),
-          (a) => rowNumber(orderBy: [a.id.asc()]).gt(0),
+          (a) => a.id.count().gt(.value(0)),
+          (a) => rowNumber(orderBy: [a.id.asc()]).gt(.value(0)),
         ]) {
           final query = db.event.where((e) => e.author.where(predicate).any());
           await expectLater(query.get(), throwsA(_code('QUERY.AGGREGATE')));
@@ -498,8 +617,8 @@ void relationPredicateTests(
             in <Expr<bool?> Function(Relation<Event, EventFields>)>[
               (r) => r.any(),
               (r) => r.none(),
-              (r) => r.every((e) => e.score.gt(0)),
-              (r) => r.count().gt(0),
+              (r) => r.every((e) => e.score.gt(.value(0))),
+              (r) => r.count().gt(.value(0)),
             ]) {
           await expectLater(
             db.account.where((a) => quantifier(a.events.take(1))).get(),
@@ -511,7 +630,7 @@ void relationPredicateTests(
           db.event.take(1),
           db.event.skip(1),
           db.event.orderBy((e) => [e.id.asc()]),
-          db.event.join(joined, on: (e, a) => e.owner.equals(a.id)),
+          db.event.join(joined, on: (e, a) => e.owner.eq(a.id)),
         ];
         for (final query in queries) {
           await expectLater(

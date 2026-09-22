@@ -65,7 +65,7 @@ void main() {
       'db.lines.update((r) => [r.total.increment(1)]);',
       'db.lines.update((r) => [r.total.defaultValue()]);',
       'db.lines.update((r) => [r.total.setExpression(r.price)]);',
-      'db.lines.select((r) => r.total.eq("wrong"));',
+      'db.lines.select((r) => r.total.eq(.value("wrong")));',
     ];
     await file.writeAsString(
       "import 'package:orm/orm.dart';\nimport '../../test/support/computed/schema.orm.dart';\nvoid wrong(Database<Sqlite> db) {\n${invalid.join('\n')}\n}\n",
@@ -198,8 +198,8 @@ void main() {
     final invalid = [
       "db.appointments.create(day: DateTime.utc(2024));",
       "db.appointments.byId(1).patch(starts: const Change.set('2024-01-01'));",
-      "db.appointments.where((a) => a.time.eq(LocalDate(2024, 1, 1)));",
-      "db.appointments.where((a) => a.day.eq('2024-01-01'));",
+      "db.appointments.where((a) => a.time.eq(.value(LocalDate(2024, 1, 1))));",
+      "db.appointments.where((a) => a.day.eq(.value('2024-01-01')));",
       "db.appointments.select((a) => a.day).union(db.appointments.select((a) => a.time));",
     ];
     await file.writeAsString(
@@ -252,7 +252,7 @@ void wrong(Database<Sqlite> db) {
   db.users.create(email: 1);
   db.users.byId('wrong');
   db.users.byId(1).patch(email: const Change<String>.set(null));
-  db.users.select((u) => u.email.eq(1));
+  db.users.select((u) => u.email.eq(.value(1)));
   db.transaction((tx) async {}, options: const PostgresTransaction());
   final Query<int, UserFields> bad = db.users.select((u) => u.email);
   db.users.seekAfter((u) => [u.id.cursor('wrong')]);
@@ -260,8 +260,8 @@ void wrong(Database<Sqlite> db) {
   db.people.byId(1);
   db.people.byId(const PersonId(1)).patch(email: const Change.set('wrong'));
   db.people.byId(const PersonId(1)).patch(membership: const Change.set('active'));
-  db.people.select((p) => p.id.eq(1));
-  db.people.select((p) => p.email.eq('wrong'));
+  db.people.select((p) => p.id.eq(.value(1)));
+  db.people.select((p) => p.email.eq(.value('wrong')));
   db.people.byId(const PersonId(1)).patch(tags: const Change.set([1]));
   db.people.byId(const PersonId(1)).patch(details: const Change.set('raw-json'));
   final Stream<List<int>> wrongWatch = db.users.select((u) => u.email).watch();

@@ -215,10 +215,10 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
     }
 
     Future<int> score() async =>
-        (await db.table(users).where((u) => u.id.eq(1)).single()).score;
+        (await db.table(users).where((u) => u.id.eq(.value(1))).single()).score;
     Future<void> write(Database<Backend> tx) async => tx
         .table(users)
-        .where((u) => u.id.eq(1))
+        .where((u) => u.id.eq(.value(1)))
         .update((u) => [u.score.increment(1)])
         .execute()
         .then((_) {});
@@ -243,7 +243,11 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
           return (
             attempt: callbacks,
             value:
-                (await tx.table(users).where((u) => u.id.eq(1)).single()).score,
+                (await tx
+                        .table(users)
+                        .where((u) => u.id.eq(.value(1)))
+                        .single())
+                    .score,
           );
         }, retry: retry);
         expect(result, (attempt: 2, value: 1));
@@ -678,7 +682,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
             calls++;
             await tx
                 .table(users)
-                .where((u) => u.id.eq(a))
+                .where((u) => u.id.eq(.value(a)))
                 .update((u) => [u.score.increment(1)])
                 .execute();
             if (calls == 1) {
@@ -687,7 +691,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
             }
             await tx
                 .table(users)
-                .where((u) => u.id.eq(b))
+                .where((u) => u.id.eq(.value(b)))
                 .update((u) => [u.score.increment(1)])
                 .execute();
           }, retry: retry);

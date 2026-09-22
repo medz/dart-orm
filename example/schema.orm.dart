@@ -83,7 +83,7 @@ final class UserTableSet extends TableSet<User, UserFields> {
       ...row.score.change(score),
     ],
   );
-  Query<User, UserFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<User, UserFields> byId(int id) => where((row) => row.id.eq(.value(id)));
 }
 
 extension UserUpdates on Query<User, UserFields> {
@@ -183,7 +183,7 @@ final class PostTableSet extends TableSet<Post, PostFields> {
       row.createdAt.set(createdAt),
     ],
   );
-  Query<Post, PostFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Post, PostFields> byId(int id) => where((row) => row.id.eq(.value(id)));
 }
 
 extension PostUpdates on Query<Post, PostFields> {

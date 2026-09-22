@@ -250,7 +250,7 @@ void main() {
           await rows(['2', '3'], bucket: 'b');
           final grouped = db.entry
               .groupBy((e) => [e.bucket])
-              .having((e) => e.amount.average(scale: 1).gt(d('2')))
+              .having((e) => e.amount.average(scale: 1).gt(.value(d('2'))))
               .orderBy((e) => [e.amount.average(scale: 1).desc()])
               .select((e) => (e.bucket, e.amount.average(scale: 1)).row);
           expect(await grouped.get(), [('b', d('2.5'))]);
@@ -258,7 +258,9 @@ void main() {
           expect(
             await cte.query
                 .where(
-                  (e) => e.ref((o) => o.amount.average(scale: 1)).lt(d('3')),
+                  (e) => e
+                      .ref((o) => o.amount.average(scale: 1))
+                      .lt(.value(d('3'))),
                 )
                 .get(),
             [('b', d('2.5'))],
@@ -341,16 +343,17 @@ void main() {
           );
           expect(
             await db.entry
-                .where((e) => e.bucket.eq('a'))
+                .where((e) => e.bucket.eq(.value('a')))
                 .orderBy((e) => [e.id.asc()])
                 .select((e) => mean(e).rounded(0, rounding: .halfEven))
                 .get(),
             [d('1'), d('2'), d('2')],
           );
           final cte = db.entry.select(mean).asCte('running_means');
-          expect(await cte.query.where((e) => e.ref(mean).gt(d('10'))).get(), [
-            d('15'),
-          ]);
+          expect(
+            await cte.query.where((e) => e.ref(mean).gt(.value(d('10')))).get(),
+            [d('15')],
+          );
           expect(
             await db.entry
                 .orderBy((e) => [e.id.asc()])
@@ -360,7 +363,7 @@ void main() {
             ['1', '1.5', '2', '10', '15'].map(d),
           );
           final mixed = await db.entry
-              .where((e) => e.bucket.eq('a'))
+              .where((e) => e.bucket.eq(.value('a')))
               .orderBy((e) => [e.id.asc()])
               .select(
                 (e) => (
@@ -381,7 +384,7 @@ void main() {
               e.amount.average(scale: 1).over(frame: .rowsAll);
           expect(
             await db.entry
-                .where((e) => e.bucket.eq('a'))
+                .where((e) => e.bucket.eq(.value('a')))
                 .orderBy((e) => [complete(e).asc()])
                 .select(complete)
                 .distinct()
@@ -396,12 +399,12 @@ void main() {
         await rows(['1', '0', '0'], bucket: 'b');
         final source = db.entry;
         await db.entry
-            .where((e) => e.bucket.eq('a'))
+            .where((e) => e.bucket.eq(.value('a')))
             .update(
               (e) => [
                 e.fee.setExpression(
                   source
-                      .where((s) => s.bucket.equals(e.bucket))
+                      .where((s) => s.bucket.eq(e.bucket))
                       .select((s) => s.amount.average(scale: 1))
                       .scalar(),
                 ),
@@ -410,7 +413,7 @@ void main() {
             .execute();
         expect(
           await db.entry
-              .where((e) => e.bucket.eq('a'))
+              .where((e) => e.bucket.eq(.value('a')))
               .select((e) => e.fee)
               .get(),
           [d('1.5'), d('1.5')],
@@ -418,10 +421,10 @@ void main() {
         await expectLater(
           db.transaction((tx) async {
             await tx.entry
-                .where((e) => e.bucket.eq('a'))
+                .where((e) => e.bucket.eq(.value('a')))
                 .patch(fee: Change.set(d('99')));
             await tx.entry
-                .where((e) => e.bucket.eq('b'))
+                .where((e) => e.bucket.eq(.value('b')))
                 .select((e) => e.amount.average(scale: 1))
                 .single();
           }),
@@ -429,7 +432,7 @@ void main() {
         );
         expect(
           await db.entry
-              .where((e) => e.bucket.eq('a'))
+              .where((e) => e.bucket.eq(.value('a')))
               .select((e) => e.fee)
               .get(),
           [d('1.5'), d('1.5')],
@@ -507,7 +510,7 @@ void main() {
         expect(
           await db.entry
               .groupBy((e) => [e.bucket])
-              .having((e) => e.amount.sum().lt(d('50')))
+              .having((e) => e.amount.sum().lt(.value(d('50'))))
               .orderBy((e) => [e.bucket.asc()])
               .select(
                 (e) => (
@@ -594,7 +597,7 @@ void main() {
             );
             expect(
               await db.entry
-                  .where((e) => e.id.lt(0))
+                  .where((e) => e.id.lt(.value(0)))
                   .select((e) => next.average(scale: 1))
                   .single(),
               null,

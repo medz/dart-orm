@@ -15,8 +15,8 @@ void main() {
             .table(users)
             .where(
               (u) => allOf([
-                anyOf([u.id.eq(1), u.email.eq("' OR 1=1 --")]),
-                u.score.gte(10),
+                anyOf([u.id.eq(.value(1)), u.email.eq(.value("' OR 1=1 --"))]),
+                u.score.gte(.value(10)),
               ]),
             )
             .select((u) => u.id)
@@ -47,7 +47,7 @@ void main() {
                 (u) => anyOf(
                   values.map((id) {
                     visited++;
-                    return u.id.eq(id);
+                    return u.id.eq(.value(id));
                   }),
                 ),
               );
@@ -63,7 +63,9 @@ void main() {
         expect(
           () => builder
               .table(users)
-              .where((u) => allOf([u.id.eq(1), foreign.id.eq(2)]))
+              .where(
+                (u) => allOf([u.id.eq(.value(1)), foreign.id.eq(.value(2))]),
+              )
               .compile(),
           throwsA(
             isA<OrmException>().having((e) => e.code, 'code', 'QUERY.SCOPE'),
@@ -72,7 +74,9 @@ void main() {
         expect(
           () => builder
               .table(users)
-              .where((u) => anyOf([u.id.eq(1), u.id.count().gt(0)]))
+              .where(
+                (u) => anyOf([u.id.eq(.value(1)), u.id.count().gt(.value(0))]),
+              )
               .compile(),
           throwsA(
             isA<OrmException>().having(

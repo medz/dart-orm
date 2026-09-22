@@ -48,7 +48,7 @@ Future<Map<String, Object?>> queryCookbook(
 
   var query = db.user.where((u) => u.email.like('%@example.com'));
   if (minimumScore != null) {
-    query = query.where((u) => u.score.gte(minimumScore));
+    query = query.where((u) => u.score.gte(.value(minimumScore)));
   }
   final emails = await query
       .orderBy((u) => [u.id.asc()])
@@ -66,7 +66,7 @@ Future<Map<String, Object?>> queryCookbook(
 
   final author = userTable.alias();
   final joined = await db.post
-      .join(author, on: (p, a) => p.authorId.equals(a.id))
+      .join(author, on: (p, a) => p.authorId.eq(a.id))
       .orderBy((p) => [author.fields.email.asc(), p.id.asc()])
       .select((p) => (p.title, author.fields.email).row)
       .get();
@@ -87,7 +87,7 @@ Future<Map<String, Object?>> queryCookbook(
 
   final totals = db.post
       .groupBy((p) => [p.authorId])
-      .having((p) => p.id.count().gt(1))
+      .having((p) => p.id.count().gt(.value(1)))
       .select((p) => (p.authorId, p.id.count()).row)
       .asCte('author_totals');
   final active = await totals.query
@@ -122,7 +122,7 @@ Future<Map<String, Object?>> queryCookbook(
       .orderBy((u) => [u.id.asc()])
       .select(
         (u) => db.post
-            .where((p) => p.authorId.equals(u.id))
+            .where((p) => p.authorId.eq(u.id))
             .select((p) => p.id.count())
             .scalar(),
       )

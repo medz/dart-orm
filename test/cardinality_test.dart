@@ -165,7 +165,7 @@ void main() {
             .table(_table)
             .update((row) => [row.hits.increment(1)])
             .execute();
-        return tx.table(_table).where((row) => row.id.eq(999)).first();
+        return tx.table(_table).where((row) => row.id.eq(.value(999))).first();
       }),
       throwsA(_cardinality),
     );
