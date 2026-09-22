@@ -93,7 +93,7 @@ All names below refer to files under `test/` with the `_test.dart` suffix.
 | Model declarations and generated types | `record_generation`, `record_relations`, `record_database`, `generator`, `generator_dialects`, `types`, `generated_database`, `nominal_database` |
 | Build/watch and project commands | `builder`, `cli`, `cli_workflow`, `import_cli`, `migration_plan_cli` |
 | Projections, mapping and query scope | `database`, `selection`, `query_boundary`, `union`, `plan` |
-| Filter groups, text and comparison types | `predicate_groups`, `predicate_groups_database`, `predicate_groups_types`, `text_expression`, `text_expression_types`, and their `mysql_*` database entrypoints |
+| Filter groups, text and comparison types | `predicate_groups`, `predicate_groups_database`, `predicate_groups_types`, `comparison_operand`, `text_expression`, `text_expression_types`, and their `mysql_*` database entrypoints |
 | Keys, relationships and batched loading | `relation`, `relation_predicate`, `mysql_relation_predicate`, `many_to_many`, `unconstrained_relation` |
 | Values and custom codecs | `integer`, `custom_codec`, `temporal`, `temporal_precision`, `decimal`, `decimal_division`, `decimal_average` |
 | Defaults, generated values and constraints | `client_default`, `computed`, `check` |
