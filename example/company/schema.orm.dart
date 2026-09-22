@@ -54,7 +54,7 @@ final class DepartmentTableSet extends TableSet<Department, DepartmentFields> {
     required String name,
   }) => createRow((row) => [...row.id.change(id), row.name.set(name)]);
   Query<Department, DepartmentFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension DepartmentUpdates on Query<Department, DepartmentFields> {
@@ -225,7 +225,8 @@ final class EmployeeTableSet extends TableSet<Employee, EmployeeFields> {
       row.managerId.set(managerId),
     ],
   );
-  Query<Employee, EmployeeFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Employee, EmployeeFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension EmployeeUpdates on Query<Employee, EmployeeFields> {
@@ -355,7 +356,8 @@ final class ProjectTableSet extends TableSet<Project, ProjectFields> {
       row.ownerId.set(ownerId),
     ],
   );
-  Query<Project, ProjectFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Project, ProjectFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension ProjectUpdates on Query<Project, ProjectFields> {
@@ -475,8 +477,10 @@ final class ProjectMemberTableSet
     required int projectId,
     required int employeeId,
   }) => where(
-    (row) =>
-        orm.allOf([row.projectId.eq(projectId), row.employeeId.eq(employeeId)]),
+    (row) => orm.allOf([
+      row.projectId.eq(.value(projectId)),
+      row.employeeId.eq(.value(employeeId)),
+    ]),
   );
 }
 

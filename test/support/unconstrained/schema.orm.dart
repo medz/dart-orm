@@ -105,7 +105,10 @@ final class AccountTableSet extends TableSet<Account, AccountFields> {
     ],
   );
   Query<Account, AccountFields> byId({required int tenant, required int id}) =>
-      where((row) => orm.allOf([row.tenant.eq(tenant), row.id.eq(id)]));
+      where(
+        (row) =>
+            orm.allOf([row.tenant.eq(.value(tenant)), row.id.eq(.value(id))]),
+      );
 }
 
 extension AccountUpdates on Query<Account, AccountFields> {
@@ -214,7 +217,8 @@ final class EntryTableSet extends TableSet<Entry, EntryFields> {
       row.label.set(label),
     ],
   );
-  Query<Entry, EntryFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Entry, EntryFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension EntryUpdates on Query<Entry, EntryFields> {
@@ -278,7 +282,8 @@ final class ReadingTableSet extends TableSet<Reading, ReadingFields> {
   }
   Future<Reading> create({required int id, required double value}) =>
       createRow((row) => [row.id.set(id), row.value.set(value)]);
-  Query<Reading, ReadingFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Reading, ReadingFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension ReadingUpdates on Query<Reading, ReadingFields> {

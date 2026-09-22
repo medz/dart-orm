@@ -56,7 +56,9 @@ void main() {
               : const SqlResult([]);
           final db = Database(driver);
           final builder = SqlBuilder(dialect);
-          final description = builder.table(_table).where((r) => r.id.eq(1));
+          final description = builder
+              .table(_table)
+              .where((r) => r.id.eq(.value(1)));
           late Query<(int, String?), _Fields> borrowed;
           try {
             await db.transaction((tx) async {
@@ -101,7 +103,7 @@ void main() {
         final joined = _table.alias();
         final source = builder
             .table(_table)
-            .join(joined, on: (a, b) => a.id.equals(b.id))
+            .join(joined, on: (a, b) => a.id.eq(b.id))
             .select((r) => r.name)
             .take(1);
         final command = builder
@@ -191,7 +193,10 @@ void main() {
         final number = BigInt.parse('9007199254740993');
         final command = SqlBuilder(dialect)
             .table(_table)
-            .select((_) => value(number, Codecs.bigint).eq(number + BigInt.one))
+            .select(
+              (_) =>
+                  value(number, Codecs.bigint).eq(.value(number + BigInt.one)),
+            )
             .compile();
         expect(
           'CAST(? AS DECIMAL(65,0))'.allMatches(command.sql),
@@ -348,7 +353,7 @@ void main() {
   test('MySQL JSON comparison parses the encoded JSON parameter', () {
     final command = SqlBuilder(SqlDialect.mysql)
         .table(_table)
-        .where((r) => r.document.eq(const SqlJson({'a': 1})))
+        .where((r) => r.document.eq(.value(const SqlJson({'a': 1}))))
         .compile();
     expect(command.sql, contains('CAST(? AS JSON)'));
     expect(command.parameters, ['{"a":1}']);

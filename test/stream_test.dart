@@ -286,7 +286,7 @@ void runTests(
       await expectLater(
         db
             .table(users)
-            .where((u) => u.id.eq(1))
+            .where((u) => u.id.eq(.value(1)))
             .update((u) => [u.score.setExpression(slowValue)])
             .returning((u) => u.score)
             .single(
@@ -297,7 +297,7 @@ void runTests(
         throwsA(code('OPERATION.TIMEOUT')),
       );
       expect(
-        (await db.table(users).where((u) => u.id.eq(1)).single()).score,
+        (await db.table(users).where((u) => u.id.eq(.value(1))).single()).score,
         1,
       );
     });
@@ -337,7 +337,7 @@ void runTests(
     test('bounded cursor fetches preserve parameters and typed rows', () async {
       expect(db.capabilities.streaming, isTrue);
       final rows = await ids(db)
-          .where((u) => u.id.gt(3))
+          .where((u) => u.id.gt(.value(3)))
           .stream(batchSize: 6)
           .toList();
       expect(rows, List.generate(28, (i) => i + 4));
@@ -446,12 +446,13 @@ void runTests(
           expect(await ids(tx).stream(batchSize: 4).take(2).toList(), [1, 2]);
           await tx
               .table(users)
-              .where((u) => u.id.eq(1))
+              .where((u) => u.id.eq(.value(1)))
               .update((u) => [u.score.set(90)])
               .execute();
         });
         expect(
-          (await db.table(users).where((u) => u.id.eq(1)).single()).score,
+          (await db.table(users).where((u) => u.id.eq(.value(1))).single())
+              .score,
           90,
         );
       },
@@ -463,7 +464,7 @@ void runTests(
         db.transaction((tx) async {
           await tx
               .table(users)
-              .where((u) => u.id.eq(1))
+              .where((u) => u.id.eq(.value(1)))
               .update((u) => [u.score.set(90)])
               .execute();
           final first = Completer<void>();
@@ -477,7 +478,7 @@ void runTests(
       );
       await subscription.cancel();
       expect(
-        (await db.table(users).where((u) => u.id.eq(1)).single()).score,
+        (await db.table(users).where((u) => u.id.eq(.value(1))).single()).score,
         1,
       );
     });
@@ -528,7 +529,7 @@ void runTests(
           db.transaction((tx) async {
             await tx
                 .table(users)
-                .where((u) => u.id.eq(1))
+                .where((u) => u.id.eq(.value(1)))
                 .update((u) => [u.score.set(90)])
                 .execute();
             final token = CancellationToken();
@@ -548,7 +549,8 @@ void runTests(
           throwsA(code('TRANSACTION.FAILED')),
         );
         expect(
-          (await db.table(users).where((u) => u.id.eq(1)).single()).score,
+          (await db.table(users).where((u) => u.id.eq(.value(1))).single())
+              .score,
           1,
         );
       },
@@ -609,7 +611,7 @@ void runTests(
       }
       expect(events, isEmpty);
       expect(
-        (await db.table(users).where((u) => u.id.eq(1)).single()).score,
+        (await db.table(users).where((u) => u.id.eq(.value(1))).single()).score,
         1,
       );
     });

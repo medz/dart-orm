@@ -205,7 +205,7 @@ Future<void> main() => consumer.main();
               .get(),
           [epoch, epoch, next],
         );
-        expect(await db.event.where((e) => e.at.gt(epoch)).count(), 1);
+        expect(await db.event.where((e) => e.at.gt(.value(epoch))).count(), 1);
         expect(await db.event.where((e) => e.at.isIn([epoch])).count(), 2);
         expect(
           await db.event.select((e) => (e.at.min(), e.at.max()).row).single(),
@@ -234,7 +234,9 @@ Future<void> main() => consumer.main();
         final source = db.event.select((e) => e.at),
             cte = source.asCte('times');
         expect(
-          await cte.query.where((c) => c.ref((e) => e.at).gt(epoch)).get(),
+          await cte.query
+              .where((c) => c.ref((e) => e.at).gt(.value(epoch)))
+              .get(),
           [next],
         );
         expect(
@@ -469,11 +471,15 @@ Future<void> main() => consumer.main();
         );
         await Migrator(db.sql).apply([first, second], maxBackfillBatches: 1);
         expect(
-          (await db.moment.where((m) => m.label.eq('done')).single()).at,
+          (await db.moment.where((m) => m.label.eq(.value('done'))).single())
+              .at,
           DateTime.utc(0),
         );
         await Migrator(db.sql).apply([first, second]);
-        expect(await db.moment.where((m) => m.label.eq('done')).count(), 3);
+        expect(
+          await db.moment.where((m) => m.label.eq(.value('done'))).count(),
+          3,
+        );
       });
 
       test('external infinity and out-of-DateTime values fail decoding without wrapping', () async {

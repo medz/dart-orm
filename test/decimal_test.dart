@@ -96,7 +96,10 @@ void main() {
                 .get(),
             ['-10', '-2', '.00000000000000000001', '2', '2', '10'].map(d),
           );
-          expect(await db.entry.where((e) => e.amount.gt(d('2'))).count(), 1);
+          expect(
+            await db.entry.where((e) => e.amount.gt(.value(d('2')))).count(),
+            1,
+          );
           expect(
             await db.entry
                 .where((e) => e.amount.isIn([d('2.00'), d('-10')]))
@@ -183,7 +186,9 @@ void main() {
         final cte = source.asCte('doubled');
         expect(
           await cte.query
-              .where((e) => e.ref((o) => o.amount.times(d('2'))).gt(d('5')))
+              .where(
+                (e) => e.ref((o) => o.amount.times(d('2'))).gt(.value(d('5'))),
+              )
               .get(),
           [d('20')],
         );
@@ -200,7 +205,7 @@ void main() {
               .where(
                 (e) => e.amount.isInQuery(
                   db.entry
-                      .where((e) => e.amount.gt(d('2')))
+                      .where((e) => e.amount.gt(.value(d('2'))))
                       .select((e) => e.amount),
                 ),
               )
@@ -298,7 +303,7 @@ void main() {
         await db.entry.create(amount: -huge, bucket: 'a');
         expect(await db.entry.select((e) => e.amount.sum()).single(), huge);
         await db.entry
-            .where((e) => e.amount.lt(Decimal.zero))
+            .where((e) => e.amount.lt(.value(Decimal.zero)))
             .delete()
             .execute();
         await expectLater(
@@ -333,9 +338,15 @@ void main() {
           dialect: db.dialect,
         );
         await Migrator(db.sql).apply([first, second], maxBackfillBatches: 1);
-        expect(await db.rate.where((r) => r.label.eq('done')).count(), 1);
+        expect(
+          await db.rate.where((r) => r.label.eq(.value('done'))).count(),
+          1,
+        );
         await Migrator(db.sql).apply([first, second]);
-        expect(await db.rate.where((r) => r.label.eq('done')).count(), 4);
+        expect(
+          await db.rate.where((r) => r.label.eq(.value('done'))).count(),
+          4,
+        );
       });
 
       test('reviewed text-to-decimal migration rejects duplicate numeric keys and rolls back', () async {
@@ -416,8 +427,14 @@ void main() {
             throwsA(isA<SqlFailure>()),
           );
         }
-        await db.entry.where((e) => e.bucket.eq('bad')).delete().execute();
-        expect(await db.entry.where((e) => e.bucket.eq('bad')).count(), 0);
+        await db.entry
+            .where((e) => e.bucket.eq(.value('bad')))
+            .delete()
+            .execute();
+        expect(
+          await db.entry.where((e) => e.bucket.eq(.value('bad'))).count(),
+          0,
+        );
       });
     }, tags: backend);
   }

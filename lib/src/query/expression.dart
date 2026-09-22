@@ -9,11 +9,35 @@ import 'query.dart';
 import 'selection.dart';
 import 'table.dart';
 
+/// A typed operand accepted by SQL comparison expressions.
+///
+/// Pass an [Expr] directly to compare SQL expressions. Wrap a Dart value with
+/// `Operand.value`, or contextual `.value(...)`, to bind it using the left-hand
+/// expression's codec. Constructing an operand performs no encoding or I/O.
+/// Expression operands compare SQL storage values without either codec's Dart
+/// encoder or decoder. Ensure their storage representations and collations are
+/// compatible, especially when distinct custom codecs share one Dart type.
+sealed class Operand<T> {
+  const Operand._();
+
+  /// A Dart value to parameterize with the receiving expression's codec.
+  ///
+  /// For equality and inequality, a null value means `IS NULL` or `IS NOT NULL`.
+  /// A literal null bypasses the codec and denotes SQL NULL. Ordered
+  /// comparisons with it retain SQL UNKNOWN semantics.
+  const factory Operand.value(T value) = _Value<T>;
+}
+
+final class _Value<T> extends Operand<T> {
+  final T value;
+  const _Value(this.value) : super._();
+}
+
 /// A typed SQL expression that can also be selected as a result.
 ///
 /// Operators build SQL without executing it. The codec controls bound values and
 /// result decoding; nullable predicates retain SQL three-valued logic.
-class Expr<T> extends Selection<T> {
+class Expr<T> extends Selection<T> implements Operand<T> {
   /// @nodoc
   @internal
   final SqlNode expressionNode;
@@ -32,54 +56,57 @@ class Expr<T> extends Selection<T> {
         _ => node,
       };
 
-  /// Compares with a bound value; null produces SQL `IS NULL`.
-  Expr<bool?> eq(T value) => value == null
+  /// Compares with a value or SQL expression using `=`.
+  ///
+  /// A literal `.value(null)` produces `IS NULL`. Expression operands retain SQL
+  /// NULL semantics: a NULL on either side yields SQL UNKNOWN.
+  Expr<bool?> eq(Operand<T> other) => other is _Value<T> && other.value == null
       ? Expr.internal(
           UnaryNode('IS NULL', expressionNode, postfix: true),
           Codecs.boolean.nullable(),
         )
-      : _compare(
-          '=',
-          ParameterNode(codec.encode(value), storageType: codec.sqlType),
-        );
+      : _compare('=', _operand(other));
 
-  /// Compares with a bound value; null produces SQL `IS NOT NULL`.
-  Expr<bool?> ne(T value) => value == null
+  /// Compares with a value or SQL expression using `<>`.
+  ///
+  /// A literal `.value(null)` produces `IS NOT NULL`. Expression operands retain
+  /// SQL NULL semantics.
+  Expr<bool?> ne(Operand<T> other) => other is _Value<T> && other.value == null
       ? Expr.internal(
           UnaryNode('IS NOT NULL', expressionNode, postfix: true),
           Codecs.boolean.nullable(),
         )
-      : _compare(
-          '<>',
-          ParameterNode(codec.encode(value), storageType: codec.sqlType),
-        );
+      : _compare('<>', _operand(other));
 
-  /// Compares two SQL expressions using `=` and SQL NULL semantics.
-  Expr<bool?> equals(Expr<T> other) => _compare('=', other.expressionNode);
+  /// Tests whether this expression is greater than [other].
+  ///
+  /// Literal operands are encoded by this expression's codec. A SQL NULL on
+  /// either side makes the result SQL UNKNOWN.
+  Expr<bool?> gt(Operand<T> other) => _compare('>', _operand(other));
 
-  /// Tests whether this value is greater than the bound value.
-  Expr<bool?> gt(T value) => _compare(
-    '>',
-    ParameterNode(codec.encode(value), storageType: codec.sqlType),
-  );
+  /// Tests whether this expression is greater than or equal to [other].
+  ///
+  /// SQL NULL on either side makes the result SQL UNKNOWN.
+  Expr<bool?> gte(Operand<T> other) => _compare('>=', _operand(other));
 
-  /// Tests whether this value is greater than or equal to the bound value.
-  Expr<bool?> gte(T value) => _compare(
-    '>=',
-    ParameterNode(codec.encode(value), storageType: codec.sqlType),
-  );
+  /// Tests whether this expression is less than [other].
+  ///
+  /// SQL NULL on either side makes the result SQL UNKNOWN.
+  Expr<bool?> lt(Operand<T> other) => _compare('<', _operand(other));
 
-  /// Tests whether this value is less than the bound value.
-  Expr<bool?> lt(T value) => _compare(
-    '<',
-    ParameterNode(codec.encode(value), storageType: codec.sqlType),
-  );
+  /// Tests whether this expression is less than or equal to [other].
+  ///
+  /// SQL NULL on either side makes the result SQL UNKNOWN.
+  Expr<bool?> lte(Operand<T> other) => _compare('<=', _operand(other));
 
-  /// Tests whether this value is less than or equal to the bound value.
-  Expr<bool?> lte(T value) => _compare(
-    '<=',
-    ParameterNode(codec.encode(value), storageType: codec.sqlType),
-  );
+  SqlNode _operand(Operand<T> other) => switch (other) {
+    Expr<T>() => other.expressionNode,
+    _Value<T>() => ParameterNode(
+      other.value == null ? null : codec.encode(other.value),
+      storageType: codec.sqlType,
+    ),
+  };
+
   Expr<bool?> _compare(String op, SqlNode right) => Expr.internal(
     BinaryNode(expressionNode, op, right),
     Codecs.boolean.nullable(),

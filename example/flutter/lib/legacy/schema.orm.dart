@@ -67,7 +67,7 @@ final class NoteTableSet extends TableSet<Note, NoteFields> {
       row.createdAt.set(createdAt),
     ],
   );
-  Query<Note, NoteFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Note, NoteFields> byId(int id) => where((row) => row.id.eq(.value(id)));
 }
 
 extension NoteUpdates on Query<Note, NoteFields> {

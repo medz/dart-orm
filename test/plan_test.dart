@@ -42,7 +42,9 @@ void main() {
               .table(composite.accountTable)
               .select(
                 (a) => a.events
-                    .where((e) => allOf([e.id.gt(0), e.score.gt(0)]))
+                    .where(
+                      (e) => allOf([e.id.gt(.value(0)), e.score.gt(.value(0))]),
+                    )
                     .orderBy((e) => [e.id.asc()])
                     .take(1)
                     .many(),
@@ -64,13 +66,13 @@ void main() {
         final driver = _NoConnection(dialect), db = Database(driver);
         var decoded = false;
         final query = db.user
-            .where((u) => u.name.eq('bound-secret'))
+            .where((u) => u.name.eq(.value('bound-secret')))
             .select(
               (u) =>
                   (
                     u.name,
                     u.memberships
-                        .where((m) => m.role.eq(MembershipRole.member))
+                        .where((m) => m.role.eq(.value(MembershipRole.member)))
                         .orderBy((m) => [m.joinedAt.desc(), m.teamId.desc()])
                         .take(2)
                         .select(

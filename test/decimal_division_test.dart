@@ -308,14 +308,17 @@ void main() {
                         rounding: .halfEven,
                       ),
                     )
-                    .gt(d('2')),
+                    .gt(.value(d('2'))),
               )
               .get(),
           [d('2.17')],
         );
         expect(
           await db.entry
-              .where((e) => e.amount.rounded(0, rounding: .halfEven).eq(d('2')))
+              .where(
+                (e) =>
+                    e.amount.rounded(0, rounding: .halfEven).eq(.value(d('2'))),
+              )
               .count(),
           1,
         );
@@ -377,7 +380,7 @@ void main() {
             .over(orderBy: [e.id.asc()], frame: .rowsToCurrent)
             .divide(d('2'), scale: 1);
         final query = db.entry
-            .where((e) => e.bucket.eq('a'))
+            .where((e) => e.bucket.eq(.value('a')))
             .orderBy((e) => [running(e).desc()]);
         expect(await query.select(running).get(), [d('4.5'), d('2'), d('.5')]);
         expect(await query.select(running).skip(1).take(1).get(), [d('2')]);
@@ -385,7 +388,7 @@ void main() {
         Expr<Decimal?> total(EntryFields e) =>
             e.amount.sum().over(frame: .rowsAll).divide(d('3'), scale: 0);
         final distinct = db.entry
-            .where((e) => e.bucket.eq('a'))
+            .where((e) => e.bucket.eq(.value('a')))
             .orderBy((e) => [total(e).desc()])
             .select(total)
             .distinct();
@@ -400,7 +403,7 @@ void main() {
         await db.entry.create(amount: d('100'), bucket: 'excluded');
         final result = await db.entry
             .groupBy((e) => [e.bucket])
-            .having((e) => e.amount.sum().lt(d('50')))
+            .having((e) => e.amount.sum().lt(.value(d('50'))))
             .orderBy((e) => [e.bucket.asc()])
             .select(
               (e) => (
@@ -439,12 +442,14 @@ void main() {
                         .over(orderBy: [o.id.asc()], frame: .rowsAll)
                         .divide(d('2'), scale: 1),
                   )
-                  .gt(d('1')),
+                  .gt(.value(d('1'))),
             ),
             throwsA(isA<OrmException>()),
           );
           expect(
-            await cte.query.where((e) => e.ref(running).gt(d('1'))).get(),
+            await cte.query
+                .where((e) => e.ref(running).gt(.value(d('1'))))
+                .get(),
             [d('2')],
           );
           expect(
@@ -475,7 +480,7 @@ void main() {
           final joined = await db.entry
               .leftJoin(
                 alias,
-                on: (e, a) => allOf([e.id.equals(a.id), a.id.eq(1)]),
+                on: (e, a) => allOf([e.id.eq(a.id), a.id.eq(.value(1))]),
               )
               .orderBy((e) => [e.id.asc()])
               .select(

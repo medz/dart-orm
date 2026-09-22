@@ -98,7 +98,8 @@ final class SampleTableSet extends TableSet<Sample, SampleFields> {
       row.optional.set(optional),
     ],
   );
-  Query<Sample, SampleFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Sample, SampleFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension SampleUpdates on Query<Sample, SampleFields> {
@@ -163,7 +164,8 @@ final class OwnerTableSet extends TableSet<Owner, OwnerFields> {
   }
   Future<Owner> create({required int id, required int sampleId}) =>
       createRow((row) => [row.id.set(id), row.sampleId.set(sampleId)]);
-  Query<Owner, OwnerFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Owner, OwnerFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension OwnerUpdates on Query<Owner, OwnerFields> {

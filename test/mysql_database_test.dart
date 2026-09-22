@@ -334,7 +334,7 @@ void main() {
             expect(rows[1].$3!.value, null);
             final matching = await db
                 .table(_table)
-                .where((r) => r.data.eq(const SqlJson({'n': 1})))
+                .where((r) => r.data.eq(.value(const SqlJson({'n': 1}))))
                 .select((r) => r.name)
                 .get();
             expect(matching, ['object']);
@@ -343,7 +343,10 @@ void main() {
                 .select((r) => (r.name, r.data).row)
                 .asCte('docs');
             final throughCte = await cte.query
-                .where((r) => r.ref((f) => f.data).eq(const SqlJson({'n': 1})))
+                .where(
+                  (r) =>
+                      r.ref((f) => f.data).eq(.value(const SqlJson({'n': 1}))),
+                )
                 .get();
             expect(throughCte.single.$1, 'object');
           },
@@ -419,7 +422,9 @@ void main() {
             }
             final names = await db
                 .table(_table)
-                .where((r) => r.big.eq(BigInt.parse('9007199254740993')))
+                .where(
+                  (r) => r.big.eq(.value(BigInt.parse('9007199254740993'))),
+                )
                 .select((r) => r.name)
                 .get();
             expect(names, ['9007199254740993']);
@@ -458,12 +463,12 @@ void main() {
           expect(result.single!.value, {'n': 1});
           final union = await db
               .table(_table)
-              .where((r) => r.name.eq('first'))
+              .where((r) => r.name.eq(.value('first')))
               .select((r) => r.data)
               .union(
                 db
                     .table(_table)
-                    .where((r) => r.name.eq('second'))
+                    .where((r) => r.name.eq(.value('second')))
                     .select((r) => r.data),
               )
               .get();

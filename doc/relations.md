@@ -45,10 +45,10 @@ final authors = db.user.where((u) => u.posts
   .where((p) => p.title.like('%Dart%')).any());
 
 final withoutDrafts = db.user.where((u) => u.posts
-  .where((p) => p.title.eq('Draft')).none());
+  .where((p) => p.title.eq(.value('Draft'))).none());
 
 final frequentAuthors = db.user.where((u) => u.posts
-  .where((p) => p.title.like('%Dart%')).count().gte(3));
+  .where((p) => p.title.like('%Dart%')).count().gte(.value(3)));
 ```
 
 The placement of `where` determines what it filters:
@@ -102,14 +102,14 @@ separately when that matters:
 ```dart
 db.user.where((u) => allOf([
   u.posts.any(),
-  u.posts.every((p) => p.title.ne('')),
+  u.posts.every((p) => p.title.ne(.value(''))),
 ]));
 ```
 
 SQL FALSE and SQL NULL both fail `every`. In contrast, `where` keeps only rows
 whose condition is SQL TRUE. For example, with a nullable `tag` field,
-`posts.every((p) => p.tag.eq('ready'))` fails if any tag is NULL. The expression
-`posts.where((p) => p.tag.ne('ready')).none()` does not detect that NULL row.
+`posts.every((p) => p.tag.eq(.value('ready')))` fails if any tag is NULL. The expression
+`posts.where((p) => p.tag.ne(.value('ready'))).none()` does not detect that NULL row.
 Use `isNull()` or `isNotNull()` when NULL needs an explicit meaning.
 
 Earlier filters define the set being checked: `posts.where(A).every(B)` means
@@ -126,15 +126,15 @@ this selects users with an owner membership in the Core team:
 
 ```dart
 db.user.where((u) => u.memberships.where((m) => allOf([
-  m.role.eq(MembershipRole.owner),
-  m.team.where((t) => t.name.eq('Core')).any(),
+  m.role.eq(.value(MembershipRole.owner)),
+  m.team.where((t) => t.name.eq(.value('Core'))).any(),
 ])).any());
 ```
 
 The association's business fields and the target's fields are checked in their
 own scopes. A self reference such as `employee.manager` uses the same pattern;
 no extra JOIN or object loading is required. Filtered counts can be nested too:
-`team.memberships.where(...).count().gte(2)` remains a scalar SQL expression.
+`team.memberships.where(...).count().gte(.value(2))` remains a scalar SQL expression.
 
 Use these terminal operations before relationship `take` or `skip`; pagination
 reports `RELATION.AGGREGATE`. Ordering does not affect existence or counts.
@@ -336,8 +336,8 @@ when selecting differently filtered views of the same relationship:
 
 ```dart
 final query = db.post.select((p) => (
-  p.author.where((a) => a.score.gt(10)).one(),
-  p.author.where((a) => a.score.lte(10)).one(),
+  p.author.where((a) => a.score.gt(.value(10))).one(),
+  p.author.where((a) => a.score.lte(.value(10))).one(),
 ).map((high, low) => (high: high, low: low)));
 ```
 

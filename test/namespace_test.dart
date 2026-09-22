@@ -329,7 +329,7 @@ void main() {
           final alias = b.alias();
           final joined = await session
               .table(a)
-              .join(alias, on: (left, right) => left.id.equals(right.id))
+              .join(alias, on: (left, right) => left.id.eq(right.id))
               .select(
                 (left) => (left.name, alias.fields.name).map((a, b) => (a, b)),
               )
@@ -349,12 +349,12 @@ void main() {
           await initial.future;
           await db
               .table(b)
-              .where((u) => u.id.eq(1))
+              .where((u) => u.id.eq(.value(1)))
               .update((u) => [u.name.set('Other')])
               .execute();
           await db
               .table(a)
-              .where((u) => u.id.eq(1))
+              .where((u) => u.id.eq(.value(1)))
               .update((u) => [u.name.set('Updated')])
               .execute();
           await changed.future.timeout(const Duration(seconds: 5));

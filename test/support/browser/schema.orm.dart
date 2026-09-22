@@ -126,7 +126,7 @@ final class UserTableSet extends TableSet<User, UserFields> {
       ...row.nickname.change(nickname),
     ],
   );
-  Query<User, UserFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<User, UserFields> byId(int id) => where((row) => row.id.eq(.value(id)));
 }
 
 extension UserUpdates on Query<User, UserFields> {
@@ -207,7 +207,7 @@ final class PostTableSet extends TableSet<Post, PostFields> {
       row.title.set(title),
     ],
   );
-  Query<Post, PostFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Post, PostFields> byId(int id) => where((row) => row.id.eq(.value(id)));
 }
 
 extension PostUpdates on Query<Post, PostFields> {
@@ -360,7 +360,8 @@ final class ValueTableSet extends TableSet<Value, ValueFields> {
       row.instant.set(instant),
     ],
   );
-  Query<Value, ValueFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Value, ValueFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension ValueUpdates on Query<Value, ValueFields> {
@@ -437,7 +438,8 @@ final class ReadingTableSet extends TableSet<Reading, ReadingFields> {
   }
   Future<Reading> create({required int id, required double value}) =>
       createRow((row) => [row.id.set(id), row.value.set(value)]);
-  Query<Reading, ReadingFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Reading, ReadingFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension ReadingUpdates on Query<Reading, ReadingFields> {

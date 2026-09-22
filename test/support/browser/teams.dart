@@ -103,7 +103,7 @@ Future<void> checkTeams() async {
     }
 
     final mixed = db.user
-        .where((u) => u.id.eq(1))
+        .where((u) => u.id.eq(.value(1)))
         .select(
           (u) =>
               (

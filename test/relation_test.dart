@@ -161,7 +161,7 @@ void runTests(
         events.clear();
         expect(
           await limited.event
-              .where((e) => e.id.gt(8))
+              .where((e) => e.id.gt(.value(8)))
               .select((e) => e.author.one(strategy: .batch))
               .get(),
           [null, null],
@@ -181,7 +181,7 @@ void runTests(
             .orderBy((a) => [a.tenant.asc(), a.id.asc()])
             .select(
               (a) => a.events
-                  .where((e) => e.score.gt(0))
+                  .where((e) => e.score.gt(.value(0)))
                   .orderBy((e) => [e.id.desc()])
                   .skip(1)
                   .take(1)
@@ -189,7 +189,7 @@ void runTests(
                     (e) => (
                       e.title,
                       e.author
-                          .where((a) => a.id.gt(0))
+                          .where((a) => a.id.gt(.value(0)))
                           .select((a) => a.tenant)
                           .required(),
                     ).map((title, tenant) => (title: title, tenant: tenant)),
@@ -223,7 +223,7 @@ void runTests(
       'nested self joins and two edges to the same table use distinct aliases',
       () async {
         final rows = await db.event
-            .where((e) => e.id.eq(3))
+            .where((e) => e.id.eq(.value(3)))
             .select(
               (e) => (
                 e.author
@@ -248,7 +248,7 @@ void runTests(
       'batch collection below a joined optional parent loads on the same plan',
       () async {
         final rows = await db.event
-            .where((e) => anyOf([e.id.eq(1), e.id.eq(9)]))
+            .where((e) => anyOf([e.id.eq(.value(1)), e.id.eq(.value(9))]))
             .orderBy((e) => [e.id.asc()])
             .select(
               (e) => e.author
@@ -289,12 +289,13 @@ void runTests(
 
     test('filters and to-one pagination do not drop root rows', () async {
       for (final strategy in [ToOneStrategy.join, ToOneStrategy.batch]) {
-        final query = db.event.where((e) => e.id.eq(3));
+        final query = db.event.where((e) => e.id.eq(.value(3)));
         expect(
           await query
               .select(
-                (e) =>
-                    e.author.where((a) => a.id.eq(99)).one(strategy: strategy),
+                (e) => e.author
+                    .where((a) => a.id.eq(.value(99)))
+                    .one(strategy: strategy),
               )
               .single(),
           isNull,
@@ -315,7 +316,7 @@ void runTests(
           query
               .select(
                 (e) => e.author
-                    .where((a) => a.id.eq(99))
+                    .where((a) => a.id.eq(.value(99)))
                     .required(strategy: strategy),
               )
               .get(),
@@ -391,7 +392,7 @@ void runTests(
     );
 
     test('reusing an identical edge deduplicates its join', () async {
-      final query = db.event.where((e) => e.id.eq(3)).select((e) {
+      final query = db.event.where((e) => e.id.eq(.value(3))).select((e) {
         final author = e.author;
         return (
           author.select((a) => a.id).required(),
@@ -406,8 +407,8 @@ void runTests(
       final query = db.event.select((e) {
         final author = e.author;
         return (
-          author.where((a) => a.id.eq(1)).one(),
-          author.where((a) => a.id.eq(2)).one(),
+          author.where((a) => a.id.eq(.value(1))).one(),
+          author.where((a) => a.id.eq(.value(2))).one(),
         ).map((a, b) => (a, b));
       });
       await expectLater(query.get(), throwsA(code('RELATION.ALIAS')));
@@ -430,7 +431,7 @@ void runTests(
       );
       events.clear();
       final rows = await db.account
-          .where((a) => a.tenant.eq(3))
+          .where((a) => a.tenant.eq(.value(3)))
           .orderBy((a) => [a.id.asc()])
           .select((a) => a.events.select((e) => e.title).many())
           .get();

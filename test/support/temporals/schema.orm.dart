@@ -86,7 +86,7 @@ final class AppointmentTableSet
     ],
   );
   Query<Appointment, AppointmentFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension AppointmentUpdates on Query<Appointment, AppointmentFields> {
@@ -150,7 +150,7 @@ final class HolidayTableSet extends TableSet<Holiday, HolidayFields> {
   Future<Holiday> create({required LocalDate day, required String label}) =>
       createRow((row) => [row.day.set(day), row.label.set(label)]);
   Query<Holiday, HolidayFields> byId(LocalDate day) =>
-      where((row) => row.day.eq(day));
+      where((row) => row.day.eq(.value(day)));
 }
 
 extension HolidayUpdates on Query<Holiday, HolidayFields> {
@@ -209,7 +209,8 @@ final class VisitTableSet extends TableSet<Visit, VisitFields> {
     Change<int> id = const Change.keep(),
     required LocalDate day,
   }) => createRow((row) => [...row.id.change(id), row.day.set(day)]);
-  Query<Visit, VisitFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Visit, VisitFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension VisitUpdates on Query<Visit, VisitFields> {

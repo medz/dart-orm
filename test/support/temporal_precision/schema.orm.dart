@@ -148,7 +148,8 @@ final class MomentTableSet extends TableSet<Moment, MomentFields> {
       ...row.defaulted.change(defaulted),
     ],
   );
-  Query<Moment, MomentFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Moment, MomentFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension MomentUpdates on Query<Moment, MomentFields> {
@@ -214,7 +215,7 @@ final class SlotTableSet extends TableSet<Slot, SlotFields> {
   Future<Slot> create({required LocalTime time, required String label}) =>
       createRow((row) => [row.time.set(time), row.label.set(label)]);
   Query<Slot, SlotFields> byId(LocalTime time) =>
-      where((row) => row.time.eq(time));
+      where((row) => row.time.eq(.value(time)));
 }
 
 extension SlotUpdates on Query<Slot, SlotFields> {
@@ -274,7 +275,8 @@ final class BookingTableSet extends TableSet<Booking, BookingFields> {
     Change<int> id = const Change.keep(),
     required LocalTime time,
   }) => createRow((row) => [...row.id.change(id), row.time.set(time)]);
-  Query<Booking, BookingFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Booking, BookingFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension BookingUpdates on Query<Booking, BookingFields> {

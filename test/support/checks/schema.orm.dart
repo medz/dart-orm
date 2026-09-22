@@ -158,7 +158,8 @@ final class ProductTableSet extends TableSet<Product, ProductFields> {
       row.label.set(label),
     ],
   );
-  Query<Product, ProductFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Product, ProductFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension ProductUpdates on Query<Product, ProductFields> {
@@ -227,7 +228,7 @@ final class LineTableSet extends TableSet<Line, LineFields> {
     required int productId,
   }) =>
       createRow((row) => [...row.id.change(id), row.productId.set(productId)]);
-  Query<Line, LineFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Line, LineFields> byId(int id) => where((row) => row.id.eq(.value(id)));
 }
 
 extension LineUpdates on Query<Line, LineFields> {

@@ -13,7 +13,7 @@ const userCount = 100;
 final _nullableText = Codecs.text.nullable();
 
 Query<Object?, Fields> runtimeQuery(Database<Backend> db, String name) {
-  final users = db.user.where((u) => u.id.gte(firstUser));
+  final users = db.user.where((u) => u.id.gte(.value(firstUser)));
   return switch (name) {
     'full_rows' => users.orderBy((u) => [u.id.asc()]),
     'two_columns' =>

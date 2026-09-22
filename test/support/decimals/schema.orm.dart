@@ -87,7 +87,8 @@ final class EntryTableSet extends TableSet<Entry, EntryFields> {
       row.bucket.set(bucket),
     ],
   );
-  Query<Entry, EntryFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Entry, EntryFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension EntryUpdates on Query<Entry, EntryFields> {
@@ -149,7 +150,8 @@ final class RateTableSet extends TableSet<Rate, RateFields> {
   }
   Future<Rate> create({required Decimal id, required String label}) =>
       createRow((row) => [row.id.set(id), row.label.set(label)]);
-  Query<Rate, RateFields> byId(Decimal id) => where((row) => row.id.eq(id));
+  Query<Rate, RateFields> byId(Decimal id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension RateUpdates on Query<Rate, RateFields> {
@@ -209,7 +211,7 @@ final class AllocationTableSet extends TableSet<Allocation, AllocationFields> {
     required Decimal rateId,
   }) => createRow((row) => [...row.id.change(id), row.rateId.set(rateId)]);
   Query<Allocation, AllocationFields> byId(int id) =>
-      where((row) => row.id.eq(id));
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension AllocationUpdates on Query<Allocation, AllocationFields> {

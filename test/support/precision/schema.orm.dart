@@ -128,7 +128,8 @@ final class WalletTableSet extends TableSet<Wallet, WalletFields> {
       row.optional.set(optional),
     ],
   );
-  Query<Wallet, WalletFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Wallet, WalletFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension WalletUpdates on Query<Wallet, WalletFields> {
@@ -194,7 +195,8 @@ final class PriceTableSet extends TableSet<Price, PriceFields> {
   }
   Future<Price> create({required Decimal id, required String label}) =>
       createRow((row) => [row.id.set(id), row.label.set(label)]);
-  Query<Price, PriceFields> byId(Decimal id) => where((row) => row.id.eq(id));
+  Query<Price, PriceFields> byId(Decimal id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension PriceUpdates on Query<Price, PriceFields> {
@@ -255,7 +257,8 @@ final class ReceiptTableSet extends TableSet<Receipt, ReceiptFields> {
     Change<int> id = const Change.keep(),
     required Decimal priceId,
   }) => createRow((row) => [...row.id.change(id), row.priceId.set(priceId)]);
-  Query<Receipt, ReceiptFields> byId(int id) => where((row) => row.id.eq(id));
+  Query<Receipt, ReceiptFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 extension ReceiptUpdates on Query<Receipt, ReceiptFields> {

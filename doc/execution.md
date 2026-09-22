@@ -118,7 +118,7 @@ final options = ExecutionOptions(
   cancellation: token,
   timeout: const Duration(seconds: 5),
 );
-final pending = db.user.where((u) => u.email.eq(email)).get(options: options);
+final pending = db.user.where((u) => u.email.eq(.value(email))).get(options: options);
 // Another event can call token.cancel().
 final users = await pending;
 ```
@@ -292,7 +292,7 @@ describe why statement errors alone cannot establish SQLite transaction state.
 ```dart
 final result = await db.transaction((tx) async {
   final user = await tx.user.byId(userId).single();
-  await tx.user.where((u) => u.id.eq(userId))
+  await tx.user.where((u) => u.id.eq(.value(userId)))
       .update((u) => [u.nickname.set(user.email)]).execute();
   return user.email;
 },

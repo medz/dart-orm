@@ -84,7 +84,7 @@ Future<void> main() async {
     final Task task = await db.task.create(title: 'Ship something useful');
 
     final List<(int, String)> pending = await db.task
-        .where((t) => t.done.eq(false))
+        .where((t) => t.done.eq(.value(false)))
         .orderBy((t) => [t.id.asc()])
         .select((t) => (t.id, t.title).row)
         .get();

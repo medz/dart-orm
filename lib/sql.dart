@@ -7,6 +7,7 @@
 /// {@category Queries}
 /// {@canonicalFor context.QueryContext}
 /// {@canonicalFor context.SqlBuilder}
+/// {@canonicalFor expression.Operand}
 /// {@canonicalFor expression.Expr}
 /// {@canonicalFor expression.allOf}
 /// {@canonicalFor expression.anyOf}
@@ -85,6 +86,7 @@ export 'schema_model.dart';
 export 'src/query/context.dart' show QueryContext, SqlBuilder;
 export 'src/query/expression.dart'
     show
+        Operand,
         Expr,
         allOf,
         anyOf,

@@ -56,7 +56,7 @@ Future<void> main() async {
       throw StateError('Nullable required projection failed');
     }
     final absent = await db.post
-        .select((p) => p.author.where((a) => a.id.eq(99)).one())
+        .select((p) => p.author.where((a) => a.id.eq(.value(99))).one())
         .single();
     if (absent != null) throw StateError('Optional join failed');
     final rows = await db.user

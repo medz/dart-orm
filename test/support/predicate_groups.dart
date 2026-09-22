@@ -51,10 +51,10 @@ void predicateGroupTests(Future<Database<Backend>> Function() open) {
           (f) => (
             allOf([]),
             anyOf([]),
-            allOf([f.tag.eq('x'), value(true, Codecs.boolean)]),
-            anyOf([f.tag.eq('x'), value(false, Codecs.boolean)]),
-            allOf([f.tag.eq('x'), value(false, Codecs.boolean)]),
-            anyOf([f.tag.eq('x'), value(true, Codecs.boolean)]),
+            allOf([f.tag.eq(.value('x')), value(true, Codecs.boolean)]),
+            anyOf([f.tag.eq(.value('x')), value(false, Codecs.boolean)]),
+            allOf([f.tag.eq(.value('x')), value(false, Codecs.boolean)]),
+            anyOf([f.tag.eq(.value('x')), value(true, Codecs.boolean)]),
           ).row,
         )
         .get();
@@ -77,9 +77,9 @@ void predicateGroupTests(Future<Database<Backend>> Function() open) {
           .table(_table)
           .where(
             (f) => allOf([
-              if (minimumScore > 0) f.score.gte(minimumScore),
-              anyOf([for (final id in included) f.id.eq(id)]),
-              anyOf([f.tag.eq('blocked').not(), f.tag.isNull()]),
+              if (minimumScore > 0) f.score.gte(.value(minimumScore)),
+              anyOf([for (final id in included) f.id.eq(.value(id))]),
+              anyOf([f.tag.eq(.value('blocked')).not(), f.tag.isNull()]),
             ]),
           );
       expect(
@@ -110,8 +110,8 @@ void predicateGroupTests(Future<Database<Backend>> Function() open) {
   test('successive WHERE adds AND around complete OR groups', () async {
     final query = db
         .table(_table)
-        .where((f) => anyOf([f.id.eq(1), f.id.eq(2)]))
-        .where((f) => anyOf([f.score.gt(15), f.tag.eq('y')]));
+        .where((f) => anyOf([f.id.eq(.value(1)), f.id.eq(.value(2))]))
+        .where((f) => anyOf([f.score.gt(.value(15)), f.tag.eq(.value('y'))]));
     expect(await query.select((f) => f.id).get(), [2]);
     expect(await query.where((_) => anyOf([])).count(), 0);
   });

@@ -79,7 +79,10 @@ void main() {
 
   test('typed queries compile without a driver or a runtime session', () {
     final builder = sql.SqlBuilder(raw.SqlDialect.postgres);
-    final query = builder.table(_table).where((row) => row.id.gt(12)).take(5);
+    final query = builder
+        .table(_table)
+        .where((row) => row.id.gt(.value(12)))
+        .take(5);
     final command = query.compile();
     expect(command.sql, contains(r'$1'));
     expect(command.parameters, contains(12));

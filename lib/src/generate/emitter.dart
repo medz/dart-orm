@@ -121,7 +121,9 @@ String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
             (k) => '${positional ? '' : 'required '}${entity.field(k).type} $k',
           )
           .join(', ');
-      final terms = entity.primaryKey.map((k) => '$input.$k.eq($k)').toList();
+      final terms = entity.primaryKey
+          .map((k) => '$input.$k.eq(.value($k))')
+          .toList();
       final predicate = positional
           ? terms.single
           : '$groupsPrefix.allOf([${terms.join(', ')}])';

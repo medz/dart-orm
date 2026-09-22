@@ -473,7 +473,9 @@ void main() {
             [...stamps]..sort(),
           );
           expect(
-            await db.appointment.where((a) => a.time.gt(LocalTime(0))).count(),
+            await db.appointment
+                .where((a) => a.time.gt(.value(LocalTime(0))))
+                .count(),
             3,
           );
           expect(
@@ -499,7 +501,7 @@ void main() {
               .asCte('local_starts');
           expect(
             await cte.query
-                .where((a) => a.ref((s) => s.starts).gt(stamps[3]))
+                .where((a) => a.ref((s) => s.starts).gt(.value(stamps[3])))
                 .get(),
             [stamps[0]],
           );
@@ -586,7 +588,7 @@ void main() {
         await db.appointment.create(day: LocalDate(2024, 1, 1));
         expect(
           await db.appointment
-              .where((a) => a.day.eq(LocalDate(2024, 1, 1)))
+              .where((a) => a.day.eq(.value(LocalDate(2024, 1, 1))))
               .count(),
           1,
         );
@@ -652,11 +654,15 @@ void main() {
           );
           await Migrator(db.sql).apply([first, second], maxBackfillBatches: 1);
           expect(
-            (await db.holiday.where((h) => h.label.eq('done')).single()).day,
+            (await db.holiday.where((h) => h.label.eq(.value('done'))).single())
+                .day,
             LocalDate(-10, 1, 1),
           );
           await Migrator(db.sql).apply([first, second]);
-          expect(await db.holiday.where((h) => h.label.eq('done')).count(), 4);
+          expect(
+            await db.holiday.where((h) => h.label.eq(.value('done'))).count(),
+            4,
+          );
         },
       );
     }, tags: backend);

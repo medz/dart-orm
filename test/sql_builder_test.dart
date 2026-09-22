@@ -31,7 +31,10 @@ void main() {
   for (final dialect in SqlDialect.values) {
     test('$dialect builds independently and rejects execution', () {
       final builder = SqlBuilder(dialect);
-      final query = builder.table(_table).where((r) => r.id.gt(3)).take(2);
+      final query = builder
+          .table(_table)
+          .where((r) => r.id.gt(.value(3)))
+          .take(2);
       expect(query.compile().parameters, [3, 2]);
       expect(query.inspect().reads, ['items']);
       expect(
@@ -46,7 +49,7 @@ void main() {
     test('$dialect positional parameters follow final SQL order', () {
       final query = SqlBuilder(dialect)
           .table(_table)
-          .where((r) => r.id.gt(10))
+          .where((r) => r.id.gt(.value(10)))
           .orderBy((r) => [r.id.plus(5).asc(nulls: NullOrder.last)])
           .select((r) => r.id.plus(2))
           .take(3);

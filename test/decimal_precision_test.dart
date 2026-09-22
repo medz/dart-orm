@@ -109,7 +109,7 @@ void main() {
         );
         expect(
           await db.wallet
-              .where((w) => w.amount.constrained(6, 0).eq(d('1000')))
+              .where((w) => w.amount.constrained(6, 0).eq(.value(d('1000'))))
               .count(),
           2,
         );
@@ -411,7 +411,10 @@ void main() {
           );
           await Migrator(db.sql).apply([first, next], maxBackfillBatches: 1);
           await Migrator(db.sql).apply([first, next]);
-          expect(await db.price.where((p) => p.label.eq('done')).count(), 3);
+          expect(
+            await db.price.where((p) => p.label.eq(.value('done'))).count(),
+            3,
+          );
         },
       );
     }, tags: backend);

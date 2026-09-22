@@ -22,14 +22,14 @@ values; terminal calls execute them:
 ```dart
 var query = db.user.where((u) => u.email.like('%@example.com'));
 if (minimumScore != null) {
-  query = query.where((u) => u.score.gte(minimumScore));
+  query = query.where((u) => u.score.gte(.value(minimumScore)));
 }
 final emails = await query.orderBy((u) => [u.id.asc()])
     .take(20).select((u) => u.email).get(); // List<String>
 ```
 
 Use comparisons with `allOf` and `anyOf` to construct SQL predicates. `.isNull()` and
-`.isNotNull()` test SQL NULL; `.eq(null)` is available only on a nullable field.
+`.isNotNull()` test SQL NULL; `.eq(.value(null))` is available only on a nullable field.
 An empty `isIn([])` is false. Other NULL-containing membership expressions retain
 SQL's three-valued logic, not Dart collection semantics. Values are bound as
 parameters.
@@ -96,6 +96,40 @@ dedicated SQL. Add explicit ordering when the first row or page must be
 deterministic. Use [keyset cursors](#keyset-pagination) for changing large
 datasets; `skip`/`take` provide offset/limit pagination.
 
+## Comparing values and fields
+
+All six comparisons use one typed operand: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`.
+Pass a field or expression directly; wrap a Dart value with `.value(...)`:
+
+```dart
+p.price.gt(.value(100)); // Bound using price's codec.
+p.price.gt(p.cost);     // Both sides remain SQL expressions.
+p.price.lte(p.budget);
+p.ownerId.eq(owner.id);
+```
+
+`Operand.value(100)` is the fully qualified constructor when there is no expected
+type for contextual `.value(100)`. Reusable inputs can be declared as
+`const Operand<int> minimum = .value(100)`. `Expr<T>` is also an `Operand<T>`;
+comparisons do not accept `Object` or dynamically infer whether a value is a field.
+Non-null domain literals use the receiving expression's codec when bound.
+A literal null always denotes SQL NULL and bypasses custom encoding. Field
+and expression operands compare SQL storage values directly, without running
+either side's Dart encoder or decoder. Compatible Dart types do not prove that
+custom storage representations or database collations have compatible meanings;
+ensure those physical comparison semantics suit the query. The former `equals`
+method is removed; use `eq(otherField)`.
+
+A non-null `Expr<int>` accepts `Operand<int>`, including an integer field, but
+rejects nullable integer fields, strings and `.value(null)`. An `Expr<int?>`
+accepts both nullable and non-null integer operands. For nullable fields,
+`eq(.value(null))` and `ne(.value(null))` produce `IS NULL` and `IS NOT NULL`.
+Comparisons against another expression always retain SQL NULL semantics:
+`nullableField.eq(otherNullableField)` is UNKNOWN when either value is NULL,
+even when both are NULL. Ordered comparisons with `.value(null)` also yield
+UNKNOWN. WHERE keeps only TRUE; use explicit null tests or condition groups
+when NULL should match.
+
 ## Boolean condition groups
 
 Use `allOf` for AND, `anyOf` for OR, and `.not()` to negate an expression.
@@ -104,11 +138,11 @@ operate on Dart booleans and do not construct SQL expressions.
 
 ```dart
 final query = db.user.where((u) => allOf([
-  if (minimumScore != null) u.score.gte(minimumScore),
+  if (minimumScore != null) u.score.gte(.value(minimumScore)),
   anyOf([
-    for (final email in permittedEmails) u.email.eq(email),
+    for (final email in permittedEmails) u.email.eq(.value(email)),
   ]),
-  anyOf([u.nickname.eq('blocked').not(), u.nickname.isNull()]),
+  anyOf([u.nickname.eq(.value('blocked')).not(), u.nickname.isNull()]),
 ]));
 ```
 
@@ -163,7 +197,7 @@ projection. This example uses the [generated example schema](https://github.com/
 ```dart
 final author = usersTable.alias();
 final rows = await db.post
-    .join(author, on: (p, a) => p.authorId.equals(a.id))
+    .join(author, on: (p, a) => p.authorId.eq(a.id))
     .orderBy((p) => [author.fields.email.asc(), p.id.asc()])
     .select((p) => (p.title, author.fields.email).row)
     .get(); // List<(String, String)>
@@ -184,7 +218,7 @@ correlated count without loading posts. Normal nested results still use
 
 ```dart
 final totals = db.post.groupBy((p) => [p.authorId])
-    .having((p) => p.id.count().gt(1))
+    .having((p) => p.id.count().gt(.value(1)))
     .select((p) => (p.authorId, p.id.count()).row)
     .asCte('author_totals');
 final active = await totals.query

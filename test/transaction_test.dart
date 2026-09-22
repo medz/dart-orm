@@ -738,14 +738,14 @@ void runTests(
               await source.transaction((tx) async {
                 await tx
                     .table(users)
-                    .where((u) => u.id.eq(first))
+                    .where((u) => u.id.eq(.value(first)))
                     .update((u) => [u.score.increment(1)])
                     .execute();
                 own.complete();
                 await peer.future;
                 await tx
                     .table(users)
-                    .where((u) => u.id.eq(second))
+                    .where((u) => u.id.eq(.value(second)))
                     .update((u) => [u.score.increment(1)])
                     .execute();
               });

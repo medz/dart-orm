@@ -194,7 +194,7 @@ void main() {
           events.clear();
           expect(
             await db.user
-                .where((u) => u.id.eq(999))
+                .where((u) => u.id.eq(.value(999)))
                 .select((u) => u.memberships.many())
                 .get(),
             isEmpty,
@@ -276,11 +276,13 @@ void main() {
                     u.name,
                     u.memberships.count(),
                     u.memberships.every(
-                      (m) => m.role.eq(MembershipRole.member),
+                      (m) => m.role.eq(.value(MembershipRole.member)),
                     ),
                     u.memberships
                         .where(
-                          (m) => m.team.where((t) => t.name.eq('Core')).any(),
+                          (m) => m.team
+                              .where((t) => t.name.eq(.value('Core')))
+                              .any(),
                         )
                         .any(),
                   ).row,
@@ -306,7 +308,7 @@ void main() {
               .orderBy((u) => [u.id.asc()])
               .select(
                 (u) => u.memberships
-                    .where((m) => m.role.eq(MembershipRole.member))
+                    .where((m) => m.role.eq(.value(MembershipRole.member)))
                     .orderBy((m) => [m.joinedAt.desc(), m.teamId.desc()])
                     .take(2)
                     .select((m) => m.team.select((t) => t.name).required())

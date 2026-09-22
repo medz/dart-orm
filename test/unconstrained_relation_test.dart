@@ -81,7 +81,10 @@ void main() {
             );
             // A dangling reference and duplicate lookup keys are valid stored data.
             expect(await db.entry.count(), 7);
-            expect(await db.account.where((a) => a.label.eq('dup')).count(), 3);
+            expect(
+              await db.account.where((a) => a.label.eq(.value('dup'))).count(),
+              3,
+            );
           },
         );
 
@@ -201,7 +204,9 @@ void main() {
           expect(
             await db.entry
                 .byId(1)
-                .select((e) => e.ownerAccount.where((a) => a.id.eq(2)).one())
+                .select(
+                  (e) => e.ownerAccount.where((a) => a.id.eq(.value(2))).one(),
+                )
                 .single(),
             isNull,
           );
@@ -283,7 +288,7 @@ void main() {
                   .byId(1)
                   .select(
                     (e) => e.matchingAccounts
-                        .where((a) => a.id.eq(2))
+                        .where((a) => a.id.eq(.value(2)))
                         .select((a) => a.id)
                         .one(),
                   )
@@ -316,7 +321,7 @@ void main() {
                     e.matchingAccounts.count(),
                     e.matchingAccounts.any(),
                     e.matchingAccounts.none(),
-                    e.matchingAccounts.every((a) => a.id.gte(2)),
+                    e.matchingAccounts.every((a) => a.id.gte(.value(2))),
                   ).row,
                 )
                 .get();

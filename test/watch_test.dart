@@ -396,7 +396,7 @@ void runTests(
         final alias = postTable.alias();
         final joined = watch(
           db.user
-              .join(alias, on: (u, p) => u.id.equals(p.authorId))
+              .join(alias, on: (u, p) => u.id.eq(p.authorId))
               .select((_) => alias.fields.title)
               .watch(),
         );
@@ -408,10 +408,7 @@ void runTests(
         final cteAlias = cte.alias();
         final viaCte = watch(
           db.user
-              .join(
-                cteAlias,
-                on: (u, c) => u.id.equals(c.ref((p) => p.authorId)),
-              )
+              .join(cteAlias, on: (u, c) => u.id.eq(c.ref((p) => p.authorId)))
               .select((_) => cteAlias.fields.ref((p) => p.title))
               .watch(),
         );

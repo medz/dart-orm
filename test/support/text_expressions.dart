@@ -176,7 +176,7 @@ void textExpressionTests(
             await add(id + 1, 'prefix$text');
             await add(id + 2, 'prefix${text}suffix');
             final range = ordered().where(
-              (r) => allOf([r.id.gte(id), r.id.lte(id + 2)]),
+              (r) => allOf([r.id.gte(.value(id)), r.id.lte(.value(id + 2))]),
             );
             expect(await range.where((r) => r.note.startsWith(text)).get(), [
               id,
@@ -218,7 +218,7 @@ void textExpressionTests(
         await add(2, 'second');
         await db
             .table(_table)
-            .where((r) => r.id.eq(2))
+            .where((r) => r.id.eq(.value(2)))
             .update(
               (r) => [r.mappedNullable.set('AbC'), r.customNullable.set('AbC')],
             )
@@ -295,9 +295,10 @@ void textExpressionTests(
             await matching.update((r) => [r.label.set('matched')]).execute(),
             1,
           );
-          expect(await ordered().where((r) => r.label.eq('matched')).get(), [
-            1,
-          ]);
+          expect(
+            await ordered().where((r) => r.label.eq(.value('matched'))).get(),
+            [1],
+          );
           expect(await matching.delete().execute(), 1);
           expect(await ordered().get(), [2, 3]);
         },
@@ -309,7 +310,7 @@ void textExpressionTests(
         final alias = _table.alias();
         final joined = db
             .table(_table)
-            .join(alias, on: (r, a) => r.id.equals(a.id))
+            .join(alias, on: (r, a) => r.id.eq(a.id))
             .where((r) => alias.fields.note.contains('%'));
         expect(await joined.get(), [1]);
         final cte = ordered()
@@ -317,7 +318,7 @@ void textExpressionTests(
             .asCte('text_matches');
         expect(
           await cte.query
-              .where((r) => r.ref((f) => f.note.contains('%')).eq(true))
+              .where((r) => r.ref((f) => f.note.contains('%')).eq(.value(true)))
               .get(),
           [(1, true)],
         );

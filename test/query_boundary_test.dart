@@ -115,7 +115,7 @@ void run(
             tx.table(users).where((_) => rootIds.existsExpression()),
             tx
                 .table(users)
-                .join(cte, on: (u, c) => u.id.equals(c.ref((u) => u.id))),
+                .join(cte, on: (u, c) => u.id.eq(c.ref((u) => u.id))),
           ];
           events.clear();
           for (final query in queries) {
@@ -133,7 +133,7 @@ void run(
           expect(events, isEmpty);
           final localIds = tx
               .table(users)
-              .where((u) => u.email.eq('one'))
+              .where((u) => u.email.eq(.value('one')))
               .select((u) => u.id);
           expect(
             await tx
@@ -161,8 +161,8 @@ void run(
       final present = users.alias(), absent = users.alias();
       final query = db
           .table(users)
-          .leftJoin(present, on: (u, p) => u.id.equals(p.id))
-          .leftJoin(absent, on: (u, a) => a.id.eq(-1));
+          .leftJoin(present, on: (u, p) => u.id.eq(p.id))
+          .leftJoin(absent, on: (u, a) => a.id.eq(.value(-1)));
       expect(
         () => query
             .select((_) => present.optional(absent.fields.email))
@@ -189,7 +189,10 @@ void run(
       final alias = users.alias();
       final source = db
           .table(users)
-          .leftJoin(alias, on: (u, a) => allOf([u.id.equals(a.id), a.id.eq(1)]))
+          .leftJoin(
+            alias,
+            on: (u, a) => allOf([u.id.eq(a.id), a.id.eq(.value(1))]),
+          )
           .select((_) => alias.optional(alias.fields.email))
           .asCte('optional_email');
       expect(await source.query.asCte('rebound_email').query.get(), [
@@ -200,7 +203,7 @@ void run(
 
     test('mutation predicates and assignments reject aggregate/window SQL before execution', () async {
       for (final mutation in [
-        db.table(users).where((u) => u.id.count().gt(0)).delete(),
+        db.table(users).where((u) => u.id.count().gt(.value(0))).delete(),
         db.table(users).update((u) => [u.score.setExpression(u.id.count())]),
         db.table(users).update((u) => [u.score.setExpression(rowNumber())]),
       ]) {

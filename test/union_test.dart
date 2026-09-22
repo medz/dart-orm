@@ -142,19 +142,19 @@ void runTests(
         const hostile = "x' OR 1=1 --";
         final left = db
             .table(users)
-            .where((u) => u.email.ne(hostile))
+            .where((u) => u.email.ne(.value(hostile)))
             .orderBy((u) => [u.id.desc()])
             .take(1)
             .select((u) => u.email);
         final right = db
             .table(postsTable)
-            .where((p) => p.title.ne('post'))
+            .where((p) => p.title.ne(.value('post')))
             .orderBy((p) => [p.id.asc()])
             .take(1)
             .select((p) => p.title);
         final query = left
             .unionAll(right)
-            .where((u) => u.ref((u) => u.email).ne('one'));
+            .where((u) => u.ref((u) => u.email).ne(.value('one')));
         expect(query.compile().sql, isNot(contains(hostile)));
         expect(query.compile().parameters, contains(hostile));
         expect(await query.get(), ['three']);
@@ -166,11 +166,11 @@ void runTests(
     test('repeated SQL expressions preserve positional columns', () async {
       final left = db
           .table(users)
-          .where((u) => u.id.eq(1))
+          .where((u) => u.id.eq(.value(1)))
           .select((u) => (u.id, u.id).row);
       final right = db
           .table(users)
-          .where((u) => u.id.eq(2))
+          .where((u) => u.id.eq(.value(2)))
           .select((u) => (u.id, u.score).row);
       expect(
         await left.unionAll(right).get(),
@@ -187,15 +187,15 @@ void runTests(
       () async {
         final a = db
             .table(users)
-            .where((u) => u.id.eq(1))
+            .where((u) => u.id.eq(.value(1)))
             .select((u) => u.email);
         final b = db
             .table(postsTable)
-            .where((p) => p.id.eq(1))
+            .where((p) => p.id.eq(.value(1)))
             .select((p) => p.title);
         final c = db
             .table(users)
-            .where((u) => u.id.eq(2))
+            .where((u) => u.id.eq(.value(2)))
             .select((u) => u.email);
         expect(
           await a.unionAll(b).union(c).get(),
@@ -232,7 +232,7 @@ void runTests(
             .join(
               joined,
               on: (u, c) =>
-                  u.id.equals(c.ref((u) => u.ref((c) => c.ref((u) => u.id)))),
+                  u.id.eq(c.ref((u) => u.ref((c) => c.ref((u) => u.id)))),
             );
         expect(await source.count(), 5);
       },
@@ -243,7 +243,7 @@ void runTests(
       () async {
         final query = db
             .table(users)
-            .where((u) => u.id.eq(1))
+            .where((u) => u.id.eq(.value(1)))
             .select((u) => u.id)
             .union(db.table(postsTable).select((p) => p.authorId));
         expect(
@@ -275,7 +275,7 @@ void runTests(
       final groups = db
           .table(users)
           .groupBy((u) => [u.score])
-          .having((u) => u.id.count().gt(1))
+          .having((u) => u.id.count().gt(.value(1)))
           .select((u) => (u.score, u.id.count()).row);
       final postGroups = db
           .table(postsTable)
@@ -420,7 +420,7 @@ void runTests(
       final joined = users.alias();
       final left = db
           .table(postsTable)
-          .leftJoin(joined, on: (p, u) => p.id.equals(u.id))
+          .leftJoin(joined, on: (p, u) => p.id.eq(u.id))
           .select((p) => joined.nullable(joined.fields.email));
       final right = db.table(users).select((u) => u.nickname);
       final result = left.unionAll(right);
@@ -435,7 +435,7 @@ void runTests(
       );
       final unsafe = db
           .table(postsTable)
-          .leftJoin(joined, on: (p, u) => p.id.equals(u.id))
+          .leftJoin(joined, on: (p, u) => p.id.eq(u.id))
           .select((p) => joined.fields.email);
       events.clear();
       expect(
@@ -464,7 +464,7 @@ void runTests(
     });
 
     test('all record arities use typed SQL decoding', () async {
-      final base = db.table(users).where((u) => u.id.eq(1));
+      final base = db.table(users).where((u) => u.id.eq(.value(1)));
       final a = base.select((u) => (u.id, u.email, u.nickname).row);
       final b = base.select((u) => (u.id, u.email, u.nickname, u.score).row);
       final c = base.select(
@@ -493,7 +493,7 @@ void runTests(
         expect(iterator.current.length, 4);
         await db
             .table(postsTable)
-            .where((p) => p.id.eq(2))
+            .where((p) => p.id.eq(.value(2)))
             .update((p) => [p.title.set('changed')])
             .execute();
         expect(
@@ -504,7 +504,7 @@ void runTests(
         await db.transaction((tx) async {
           await tx
               .table(users)
-              .where((u) => u.id.eq(2))
+              .where((u) => u.id.eq(.value(2)))
               .update((u) => [u.email.set('committed')])
               .execute();
         });
