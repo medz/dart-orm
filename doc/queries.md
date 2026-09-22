@@ -9,7 +9,9 @@ after reading the selected columns. `(u.id, u.email).row` returns a positional
 columns, and its properties are not usable in SQL filters or ordering.
 
 Run the [cookbook](https://github.com/medz/dart-orm/blob/main/example/queries.dart) with `dart run example/queries.dart`.
-It checks nine combined query/schema scenarios on an in-memory SQLite database.
+It runs query/schema scenarios and the filter examples below on an in-memory
+SQLite database, including groups, nullable text, field comparisons, relationship
+scopes and relationship-filtered reads, updates and deletes.
 Set `ORM_EXAMPLE_POSTGRES` to a disposable local PostgreSQL URL to run the same
 checks there. That example explicitly disables TLS for local development, creates
 a uniquely named schema and removes only that schema in `finally`.
@@ -139,12 +141,14 @@ operate on Dart booleans and do not construct SQL expressions.
 ```dart
 final query = db.user.where((u) => allOf([
   if (minimumScore != null) u.score.gte(.value(minimumScore)),
-  anyOf([
-    for (final email in permittedEmails) u.email.eq(.value(email)),
-  ]),
+  u.email.isIn(permittedEmails),
   anyOf([u.nickname.eq(.value('blocked')).not(), u.nickname.isNull()]),
 ]));
 ```
+
+Use `isIn(values)` when one field is matched against a list of values; reserve
+`anyOf` for alternative predicates. This avoids constructing a long OR chain.
+Both forms still obey the database parameter limit.
 
 The input iterable is consumed once when the group is built; changing a source
 list afterward does not change the query. `allOf([])` is TRUE and `anyOf([])` is
@@ -195,7 +199,7 @@ Use a typed alias when a related field participates in root ordering or a flat
 projection. This example uses the [generated example schema](https://github.com/medz/dart-orm/blob/main/example/schema.dart):
 
 ```dart
-final author = usersTable.alias();
+final author = userTable.alias();
 final rows = await db.post
     .join(author, on: (p, a) => p.authorId.eq(a.id))
     .orderBy((p) => [author.fields.email.asc(), p.id.asc()])

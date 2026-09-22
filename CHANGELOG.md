@@ -1,3 +1,26 @@
+## Unreleased
+
+Breaking filter API refactor: regenerate clients and migrate application queries.
+There are no compatibility aliases. This changes query construction only; keep
+historical migration files unchanged.
+
+- Use `allOf([a, b])` and `anyOf([a, b])` for boolean groups in place of
+  `a.and(b)` and `a.or(b)`. Negation remains `.not()`; successive `where` calls
+  still combine complete predicates with AND.
+- All six comparisons use one typed operand API: replace `field.eq(value)` with
+  `field.eq(.value(value))`, and `field.equals(other)` with `field.eq(other)`.
+  Apply the same literal wrapper to `ne/gt/gte/lt/lte`. Field operands use their
+  SQL expressions directly; literal operands use the compared expression's codec.
+- Empty AND is TRUE and empty OR is FALSE. Nullable text fields support the same
+  predicates as non-null text; literal `contains/startsWith/endsWith` escape SQL
+  wildcards while `like` retains pattern semantics.
+- Relationship filters remain `.where(predicate).any()/none()/count()`. Invalid
+  relationship aggregates/windows and nested occurrence reuse fail before SQL.
+  MySQL self-referencing typed updates/deletes report
+  `CAPABILITY.MUTATION_SELF_REFERENCE`; use explicit key selection when needed.
+- Expand the query cookbook and guides with nested groups, field comparisons,
+  relation scopes, universal predicates, and relationship-filtered CRUD.
+
 ## 6.0.0-beta.4
 
 Breaking SQL API change: replace Named SQL declarations/generated bindings with

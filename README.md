@@ -14,12 +14,10 @@ query API, with explicit database capabilities and transaction boundaries.
 > replacement for the Prisma-based 5.x client. Read the [release notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md)
 > before upgrading an existing application.
 
-Upgrading from beta.3: replace Named SQL declarations and generated bindings with
-`Sql` and optional result codecs. PostgreSQL table identities now include their
-schema, including `public`: regenerate clients and snapshots, review the migration,
-and reissue persisted cursor tokens. Generated table replacement deletes data;
-preserving rows requires an explicit data migration. Keep historical migrations
-unchanged. See the [beta.4 changes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#600-beta4).
+These `main`-branch examples use the unreleased filter API. Regenerate clients
+and follow the [filter migration notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#unreleased).
+For the published 6.0.0-beta.4 package, use its
+[tagged guide](https://github.com/medz/dart-orm/blob/orm-v6.0.0-beta.4/README.md).
 
 ## Record schemas
 
@@ -39,12 +37,18 @@ and the [complete company example](https://github.com/medz/dart-orm/blob/main/ex
 
 ## Get started
 
-Create a Dart application and add the package:
+Create a Dart application and use the repository version for these examples:
 
 ```sh
 dart create -t console my_app
 cd my_app
-dart pub add orm:6.0.0-beta.4
+dart pub add "orm@{git:{url: https://github.com/medz/dart-orm, ref: main}}"
+```
+
+This is an application, so add a top-level entry to its `pubspec.yaml`:
+
+```yaml
+publish_to: none
 ```
 
 ```sh
