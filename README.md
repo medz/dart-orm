@@ -45,6 +45,12 @@ cd my_app
 dart pub add "orm@{git:{url: https://github.com/medz/dart-orm, ref: main}}"
 ```
 
+This is an application, so add a top-level entry to its `pubspec.yaml`:
+
+```yaml
+publish_to: none
+```
+
 ```sh
 dart run orm init --database sqlite
 ```
