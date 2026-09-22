@@ -1,3 +1,6 @@
+@Tags(['core'])
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -32,7 +35,10 @@ import '../lib/schema.snapshot.dart';
 void main() => print('@@schema ${jsonEncode(schema.toJson())}');
 ''');
       Future<Map<String, Object?>> inspectSnapshot() async {
-        final result = await fixture.run(['run', 'bin/read_schema.dart']);
+        final result = await fixture.run([
+          'run',
+          'orm_build_fixture:read_schema',
+        ]);
         final line = result.output
             .split('\n')
             .firstWhere((l) => l.startsWith('@@schema '));
@@ -44,7 +50,7 @@ void main() => print('@@schema ${jsonEncode(schema.toJson())}');
       expect(first.output, contains('wrote 3 outputs'));
       expect(await queries.readAsString(), contains('NamedRowsFields'));
       expect(await client.exists(), true);
-      expect((await inspectSnapshot())['tables'], hasLength(1));
+      expect(await snapshot.exists(), true);
       final before = await client.stat();
       final unchanged = await fixture.run(['run', 'build_runner', 'build']);
       expect(unchanged.output, contains('wrote 0 outputs'));

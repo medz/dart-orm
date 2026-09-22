@@ -171,6 +171,12 @@ void main() {
       },
     );
 
+    // Execution uses the SQLite/PostgreSQL clients; inspection above covers
+    // every SQL dialect.
+    if (dialect != SqlDialect.sqlite && dialect != SqlDialect.postgres) {
+      continue;
+    }
+
     group(
       'plan execution ${dialect.name}',
       () {
@@ -244,6 +250,7 @@ void main() {
               Platform.environment['ORM_TEST_POSTGRES'] == null
           ? 'Set ORM_TEST_POSTGRES.'
           : false,
+      tags: dialect.name,
     );
   }
 }

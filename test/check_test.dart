@@ -524,6 +524,7 @@ void main() {
               Platform.environment['ORM_TEST_POSTGRES'] == null
           ? 'Set ORM_TEST_POSTGRES.'
           : false,
+      tags: dialect.name,
     );
   }
   test('dialect overrides only alter the affected backend and preserve old snapshot JSON', () {

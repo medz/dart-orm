@@ -1,3 +1,6 @@
+@Tags(['sqlite'])
+library;
+
 import 'dart:async';
 import 'dart:io';
 
@@ -33,6 +36,7 @@ void main() {
         await read.close();
       }
     },
+    tags: 'sqlite',
   );
 
   test(
@@ -47,6 +51,7 @@ void main() {
         throwsArgumentError,
       );
     },
+    tags: 'sqlite',
   );
 
   test('all driver close callers wait for active work and shutdown', () async {
@@ -71,5 +76,5 @@ void main() {
     ]);
     await Future.wait([first, second]);
     expect(() => driver.run((_) async {}), throwsA(isA<OrmException>()));
-  });
+  }, tags: 'sqlite');
 }

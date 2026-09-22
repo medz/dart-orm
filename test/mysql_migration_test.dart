@@ -1,3 +1,6 @@
+@Tags(['mysql-suite'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/drivers/mysql.dart';
@@ -169,7 +172,7 @@ void main() {
         'bin/check.dart',
         "import 'package:orm/migrate.dart';\n${imports.join('\n')}\nvoid main() { ${assertions.join('\n')} print('frozen-mysql-history-ok'); }",
       );
-      final result = await fixture.run(['run', 'bin/check.dart']);
+      final result = await fixture.run(['run', 'orm_build_fixture:check']);
       expect(result.output, contains('frozen-mysql-history-ok'));
     } finally {
       await fixture.dispose();
@@ -686,6 +689,7 @@ void main() {
       skip: address == null
           ? 'Set $variable to a disposable database with CREATE DATABASE privileges.'
           : false,
+      tags: engine,
     );
   }
 }

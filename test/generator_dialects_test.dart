@@ -1,8 +1,13 @@
+@Tags(['core'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';
 import 'package:orm/migrate.dart';
 import 'package:test/test.dart';
+
+import '../tool/src/build_fixture.dart';
 
 void main() {
   late Directory directory;
@@ -66,16 +71,8 @@ final mariaOnly = sqlQuery(result: (value: integer(),), parameters: (minimum: in
       expect(generated.dart, contains("import 'package:orm/sql.dart'"));
       expect(generated.dart, contains('extension ResultSql on QueryContext'));
       expect(generated.dart, isNot(contains('Database<')));
-      await writeGeneratedQueries(source.path);
-      final analyzed = await Process.run(Platform.resolvedExecutable, [
-        'analyze',
-        '${directory.path}/queries.queries.dart',
-      ]);
-      expect(
-        analyzed.exitCode,
-        0,
-        reason: '${analyzed.stdout}\n${analyzed.stderr}',
-      );
+      await File('${directory.path}/queries.queries.dart')
+          .writeAsString(generated.dart);
       final consumer = File('${directory.path}/compile.dart');
       await consumer.writeAsString('''
 import 'package:orm/sql.dart';
@@ -95,10 +92,18 @@ void main() {
   }
 }
 ''');
+      final fixture = await BuildFixture.create(
+        ormPath: Directory.current.path,
+      );
+      addTearDown(fixture.dispose);
+      await fixture.write('bin/queries.dart', '''
+import '${consumer.absolute.uri}' as consumer;
+void main() => consumer.main();
+''');
       final compiled = await Process.run(Platform.resolvedExecutable, [
         'run',
-        consumer.path,
-      ]);
+        'orm_build_fixture:queries',
+      ], workingDirectory: fixture.directory.path);
       expect(
         compiled.exitCode,
         0,

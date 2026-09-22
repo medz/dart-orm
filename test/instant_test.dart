@@ -6,6 +6,7 @@ import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
+import '../tool/src/build_fixture.dart';
 import 'support/instants/schema.orm.dart';
 import 'support/instants/m0001_legacy.dart' as historical;
 import 'support/instants/m0001_legacy_postgres.dart' as historical_pg;
@@ -58,9 +59,16 @@ void main() {
   });
 
   test('UTC defaults and local DateTime inputs do not depend on the process timezone', () async {
+    final fixture = await BuildFixture.create(ormPath: Directory.current.path);
+    addTearDown(fixture.dispose);
+    await fixture.write('bin/instants.dart', '''
+import '${File('test/support/instants/native.dart').absolute.uri}' as consumer;
+Future<void> main() => consumer.main();
+''');
     final result = await Process.run(
       Platform.resolvedExecutable,
-      ['run', 'test/support/instants/native.dart'],
+      ['run', 'orm_build_fixture:instants'],
+      workingDirectory: fixture.directory.path,
       environment: {'TZ': 'Asia/Shanghai'},
     );
     expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
@@ -495,6 +503,6 @@ void main() {
           DateTime.utc(2024),
         );
       });
-    });
+    }, tags: backend);
   }
 }

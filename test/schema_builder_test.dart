@@ -1,3 +1,6 @@
+@Tags(['core'])
+library;
+
 import 'dart:io';
 
 import 'package:build/build.dart';
@@ -6,6 +9,7 @@ import 'package:orm/builder.dart';
 import 'package:test/test.dart';
 
 import '../tool/src/build_fixture.dart';
+import 'support/cli.dart';
 
 void main() {
   test(
@@ -62,14 +66,13 @@ targets:
       expect(await client.readAsString(), contains('get user =>'));
       final generated = await client.readAsString(),
           frozen = await snapshot.readAsString();
-      await fixture.run([
-        'run',
-        'orm',
+      final result = await runCli([
         'generate',
-        'lib/fixture/schema',
+        fixture.file('lib/fixture/schema').path,
         '--database',
         'postgres',
       ]);
+      expect(result.exitCode, 0, reason: result.stderr);
       expect(await client.readAsString(), generated);
       expect(await snapshot.readAsString(), frozen);
       watcher = await fixture.watch();

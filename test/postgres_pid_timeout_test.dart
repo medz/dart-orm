@@ -1,3 +1,6 @@
+@Tags(['postgres'])
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -109,47 +112,47 @@ void main() {
         });
       }
 
-      test(
-        'PID discovery and application SQL share one timeout budget',
-        () async {
-          db = SqlDatabase(
-            PostgresDriver(
-              PostgresOptions(url: proxy.url, tls: .disable, maxConnections: 1),
-            ),
+      test('PID discovery and application SQL share one timeout budget', () async {
+        db = SqlDatabase(
+          PostgresDriver(
+            PostgresOptions(url: proxy.url, tls: .disable, maxConnections: 1),
+          ),
+        );
+        await db.session((session) async {
+          // Leave room for transport scheduling under concurrent compilation.
+          // 1s discovering the PID + 1.5s of SQL exceeds the shared 2s budget,
+          // but would succeed if SQL incorrectly received a fresh 2s budget.
+          final pending = session.execute(
+            SqlCommand('SELECT pg_sleep(1.5)'),
+            options: const ExecutionOptions(timeout: Duration(seconds: 2)),
           );
-          await db.session((session) async {
-            final pending = session.execute(
-              SqlCommand('SELECT pg_sleep(0.3)'),
-              options: const ExecutionOptions(
-                timeout: Duration(milliseconds: 400),
-              ),
-            );
-            final expected = expectLater(
-              pending.timeout(const Duration(seconds: 3)),
-              throwsA(_code('OPERATION.TIMEOUT')),
-            );
-            await proxy.blocked.future.timeout(const Duration(seconds: 2));
-            await Future<void>.delayed(const Duration(milliseconds: 250));
-            proxy.release();
-            // Catch inside the lease: package:postgres discards connections if
-            // any error escapes the withConnection callback.
-            await expected;
-          });
-          expect(
-            (await db.execute(SqlCommand('SELECT 42'))).rows.single.single,
-            42,
+          final expected = expectLater(
+            pending.timeout(const Duration(seconds: 5)),
+            throwsA(_code('OPERATION.TIMEOUT')),
           );
-          expect(
-            proxy.pidQueries,
-            1,
-            reason: 'a confirmed cancellation keeps the cached live connection reusable',
-          );
-        },
-      );
+          await proxy.blocked.future.timeout(const Duration(seconds: 2));
+          await Future<void>.delayed(const Duration(seconds: 1));
+          proxy.release();
+          // Catch inside the lease: package:postgres discards connections if
+          // any error escapes the withConnection callback.
+          await expected;
+        });
+        expect(proxy.userQueries, contains('SELECT pg_sleep(1.5)'));
+        expect(
+          (await db.execute(SqlCommand('SELECT 42'))).rows.single.single,
+          42,
+        );
+        expect(
+          proxy.pidQueries,
+          1,
+          reason: 'a confirmed cancellation keeps the cached live connection reusable',
+        );
+      });
     },
     skip: address == null
         ? 'Set ORM_TEST_POSTGRES for real transport regressions.'
         : false,
+    tags: 'postgres',
   );
 }
 

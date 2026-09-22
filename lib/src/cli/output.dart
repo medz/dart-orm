@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 final class CliOutput(final bool json) {
+  int exitCode = 0;
+
   void report(Map<String, Object?> value) {
     if (json) {
       stdout.writeln(const JsonEncoder.withIndent('  ').convert(value));

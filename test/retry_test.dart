@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:async';
 import 'dart:io';
 
@@ -78,6 +81,7 @@ Future<void> main() async {
     skip: sqliteCancellation
         ? false
         : 'Bounded retries require sqlite3_interrupt.',
+    tags: 'sqlite',
   );
   for (final mode in [
     'success',
@@ -181,6 +185,7 @@ Future<void> main() async {
       skip: sqliteCancellation
           ? false
           : 'Bounded retries require sqlite3_interrupt.',
+      tags: 'sqlite',
     );
   }
 }
@@ -701,7 +706,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
         }
       });
     }
-  });
+  }, tags: name);
 }
 
 /// Controlled adapter failure after real SQL, to exercise cleanup/budget paths.

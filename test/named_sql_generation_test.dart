@@ -1,3 +1,6 @@
+@Tags(['core'])
+library;
+
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
@@ -8,6 +11,8 @@ import 'package:orm/generate.dart';
 import 'package:orm/builder.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
+
+import 'support/cli.dart';
 
 void main() {
   late Directory directory;
@@ -222,10 +227,7 @@ void main() {
         "sqlite: 'query.sql'",
         'SELECT COUNT(*) AS n FROM entries',
       );
-      Future<ProcessResult> run(List<String> arguments) => Process.run(
-        Platform.resolvedExecutable,
-        ['run', 'bin/orm.dart', ...arguments],
-      );
+      final run = runCli;
       final generate = await run([
         'queries',
         'generate',

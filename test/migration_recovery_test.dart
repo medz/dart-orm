@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -41,9 +44,14 @@ void main() {
         await db.close();
       }
     },
+    tags: 'sqlite',
   );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url == null) return;
+  group('PostgreSQL recovery', () => runPostgresTests(url), tags: 'postgres');
+}
+
+void runPostgresTests(String url) {
   const schema = 'orm_recovery_tests';
   late Database<Postgres> admin, db;
   final initial = Migration('0001_initial', [
@@ -398,7 +406,7 @@ void main() {
               ? [ExecuteSql(update), index]
               : [index, ExecuteSql(update)],
         );
-        final project = await MigrationProject.create(postgresSchema: schema);
+        final project = await MigrationProject.create(dialect: .postgres);
         try {
           for (final m in [initial, migration]) {
             await project.append(m);
@@ -410,7 +418,7 @@ Future<void> main(List<String> args) => crashMigration(migrationHistory.checked,
 ''');
           final process = await Process.run(Platform.resolvedExecutable, [
             'run',
-            'bin/crash.dart',
+            'orm_build_fixture:crash',
             schema,
             crashAtCommit ? update : index.sql,
             crashAtCommit ? 'commit' : 'statement',

@@ -433,7 +433,7 @@ void main() {
           expect(verification.unmanaged.map((o) => o.kind), contains('check'));
         });
       }
-    });
+    }, tags: backend);
   }
 
   test('analyzer validates width declarations and integer-backed domain codecs', () async {

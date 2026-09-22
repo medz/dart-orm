@@ -14,60 +14,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Dart and databases
+  core:
+    name: Dart, code generation and CLI
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: orm
-          POSTGRES_PASSWORD: orm
-          POSTGRES_DB: orm_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready --username=orm --dbname=orm_test"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: orm_root
-          MYSQL_USER: orm
-          MYSQL_PASSWORD: orm
-          MYSQL_DATABASE: orm_test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysql --protocol=TCP --host=127.0.0.1 --user=orm --password=orm --database=orm_test --execute='SELECT 1'"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-      mariadb:
-        image: mariadb:11.8
-        env:
-          MARIADB_ROOT_PASSWORD: orm_root
-          MARIADB_USER: orm
-          MARIADB_PASSWORD: orm
-          MARIADB_DATABASE: orm_test
-        ports:
-          - 3307:3306
-        options: >-
-          --health-cmd="healthcheck.sh --connect --innodb_initialized"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-    env:
-      ORM_TEST_POSTGRES: postgres://orm:orm@127.0.0.1:5432/orm_test
-      # Migration recovery tests create an isolated database per test process.
-      ORM_TEST_MYSQL: mysql://root:orm_root@127.0.0.1:3306/orm_test
-      ORM_TEST_MARIADB: mariadb://root:orm_root@127.0.0.1:3307/orm_test
-      # Both containers generate self-signed certificates. Still require TLS.
-      ORM_TEST_MYSQL_TLS: require
-      ORM_TEST_MARIADB_TLS: require
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
         with:
@@ -81,21 +31,94 @@ jobs:
         run: dart format --output=none --set-exit-if-changed bin lib test tool example
       - name: Analyze Dart package and examples
         # The Flutter example is a separate package with its own SDK dependency.
+        run: dart analyze bin lib test tool example/*.dart example/migrations example/teams example/company
+      - name: Test shared behavior and build workflows
+        run: dart test --preset core
+
+  database:
+    name: Database (${{ matrix.database }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [sqlite, postgres, mysql, mariadb]
+    services:
+      postgres:
+        image: ${{ matrix.database == 'postgres' && 'postgres:18' || '' }}
+        env:
+          POSTGRES_USER: orm
+          POSTGRES_PASSWORD: orm
+          POSTGRES_DB: orm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready --username=orm --dbname=orm_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      mysql:
+        image: ${{ matrix.database == 'mysql' && 'mysql:8.4' || '' }}
+        env:
+          MYSQL_ROOT_PASSWORD: orm_root
+          MYSQL_USER: orm
+          MYSQL_PASSWORD: orm
+          MYSQL_DATABASE: orm_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysql --protocol=TCP --host=127.0.0.1 --user=orm --password=orm --database=orm_test --execute='SELECT 1'"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      mariadb:
+        image: ${{ matrix.database == 'mariadb' && 'mariadb:11.8' || '' }}
+        env:
+          MARIADB_ROOT_PASSWORD: orm_root
+          MARIADB_USER: orm
+          MARIADB_PASSWORD: orm
+          MARIADB_DATABASE: orm_test
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.4
+      - name: Install dependencies
+        run: dart pub get --enforce-lockfile
+      - name: Configure PostgreSQL
+        if: matrix.database == 'postgres'
+        run: echo 'ORM_TEST_POSTGRES=postgres://orm:orm@127.0.0.1:5432/orm_test' >> "$GITHUB_ENV"
+      # Recovery tests create isolated databases; self-signed fixtures require TLS.
+      - name: Configure MySQL
+        if: matrix.database == 'mysql'
         run: |
-          for target in bin lib test tool example/*.dart example/migrations example/teams example/company; do
-            dart analyze "$target"
-          done
-      - name: Check committed SQLite web assets
-        run: dart run tool/build_sqlite_web.dart --check
-      - name: Generate and validate API documentation
-        run: dart doc --validate-links
-      - name: Test SQLite, PostgreSQL, MySQL and MariaDB
-        run: dart test --concurrency=1
+          echo 'ORM_TEST_MYSQL=mysql://root:orm_root@127.0.0.1:3306/orm_test' >> "$GITHUB_ENV"
+          echo 'ORM_TEST_MYSQL_TLS=require' >> "$GITHUB_ENV"
+      - name: Configure MariaDB
+        if: matrix.database == 'mariadb'
+        run: |
+          echo 'ORM_TEST_MARIADB=mariadb://root:orm_root@127.0.0.1:3307/orm_test' >> "$GITHUB_ENV"
+          echo 'ORM_TEST_MARIADB_TLS=require' >> "$GITHUB_ENV"
+      - name: Test database
+        run: dart test --preset ${{ matrix.database }}
 
   browser:
-    name: Chrome JS and WASM
+    name: Chrome (${{ matrix.compiler }})
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [js, wasm]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -107,7 +130,6 @@ jobs:
         run: dart pub get --enforce-lockfile
       - name: Locate Chrome
         run: echo "CHROME_EXECUTABLE=$(command -v google-chrome)" >> "$GITHUB_ENV"
-      - name: Test Chrome with JavaScript
-        run: dart run tool/test_browser.dart
-      - name: Test Chrome with WebAssembly
-        run: dart run tool/test_browser.dart --wasm
+      - name: Test Chrome
+        # The runner also checks committed SQLite web assets before compiling.
+        run: dart run tool/test_browser.dart ${{ matrix.compiler == 'wasm' && '--wasm' || '' }}

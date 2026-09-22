@@ -1,3 +1,6 @@
+@Tags(['core'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -36,11 +39,6 @@ void main() {
     expect(generated.dart, contains('models.ProjectStatus'));
     expect(generated.snapshotDart, isNot(contains('models.')));
     expect(generated.snapshotDart, isNot(contains('schema.dart')));
-    final result = await Process.run(Platform.resolvedExecutable, [
-      'analyze',
-      'example/company',
-    ]);
-    expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
   });
 
   test(

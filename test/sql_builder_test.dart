@@ -1,3 +1,6 @@
+@Tags(['core'])
+library;
+
 import 'package:orm/sql.dart';
 import 'package:test/test.dart';
 

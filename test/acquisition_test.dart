@@ -89,7 +89,7 @@ void main() {
         await owner;
         await db.close();
       }
-    });
+    }, tags: 'postgres');
     test(
       'PostgreSQL connection establishment timeout does not cap pool waiting',
       () async {
@@ -128,6 +128,7 @@ void main() {
           await db.close();
         }
       },
+      tags: 'postgres',
     );
     runTests('postgres', (observe) async {
       final db = postgres(
@@ -208,7 +209,7 @@ void main() {
         await db.close();
         await pool.close();
       }
-    });
+    }, tags: 'postgres');
   }
 }
 
@@ -563,7 +564,7 @@ void runTests(
         ]);
       },
     );
-  });
+  }, tags: name);
 }
 
 final class _GatedDriver(final Driver<Backend> source)

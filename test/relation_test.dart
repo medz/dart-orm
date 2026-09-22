@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -438,7 +441,7 @@ void runTests(
       expect(events.last.parameterCount, 2400);
       expect(events.last.sql, isNot(contains(' OR ')));
     });
-  });
+  }, tags: name);
 }
 
 final class _LimitedDriver(final Driver<Backend> inner, final int limit)

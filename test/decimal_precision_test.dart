@@ -413,7 +413,7 @@ void main() {
           expect(await db.price.where((p) => p.label.eq('done')).count(), 3);
         },
       );
-    });
+    }, tags: backend);
   }
 
   test('SQLite enforces stored precision and checks default coercion and trusted-schema behavior', () async {
@@ -514,7 +514,7 @@ void main() {
     } finally {
       await db.close();
     }
-  });
+  }, tags: 'sqlite');
 
   test('generation validates precision and scale and retains custom decimal codec types', () async {
     final dir = await Directory('.dart_tool/orm-precision-validation')

@@ -1,7 +1,25 @@
-# These suites launch Dart CLI processes in the same package. On macOS the SDK
-# rewrites/codesigns one shared SQLite native-asset file during their startup.
-# Serialize suites there; explicit concurrent database operations inside tests
-# still run concurrently.
-on_os:
-  mac-os:
-    concurrency: 1
+# Keep the runner's default concurrency. Presets partition CI, not local tests.
+tags:
+  core:
+  database:
+  mysql-suite:
+  sqlite:
+  postgres:
+  mysql:
+  mariadb:
+
+presets:
+  core:
+    exclude_tags: database || sqlite || postgres || mysql || mariadb
+  sqlite:
+    include_tags: sqlite
+    exclude_tags: core || postgres || mysql-suite
+  postgres:
+    include_tags: postgres
+    exclude_tags: core || sqlite || mysql-suite
+  mysql:
+    filename: mysql*_test.dart
+    include_tags: mysql
+  mariadb:
+    filename: mysql*_test.dart
+    include_tags: mariadb

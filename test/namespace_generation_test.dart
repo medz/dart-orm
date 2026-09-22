@@ -1,5 +1,9 @@
+@Tags(['postgres'])
+library;
+
 import 'dart:io';
 
+import 'package:orm/generate.dart';
 import 'package:orm/postgres.dart';
 import 'package:test/test.dart';
 
@@ -33,14 +37,10 @@ import '../auth/users.dart' as auth;
 final user = model('Users', (id: identity(), name: text(), accountId: integer()),
   relations: (u) => (account: references(u.accountId, () => auth.user),));
 ''');
-        await fixture.run([
-          'run',
-          'orm',
-          'generate',
-          'lib/schema',
-          '--database',
-          'postgres',
-        ]);
+        await writeGeneratedSchema(
+          fixture.file('lib/schema').path,
+          dialect: .postgres,
+        );
         await fixture.write('bin/namespaces.dart', r'''
 import 'dart:io';
 import 'package:orm/postgres.dart';
@@ -71,7 +71,7 @@ Future<void> main() async {
 ''');
         final result = await Process.run(
           Platform.resolvedExecutable,
-          ['run', 'bin/namespaces.dart'],
+          ['run', 'orm_build_fixture:namespaces'],
           workingDirectory: fixture.directory.path,
           environment: {
             'ORM_NAMESPACE_TEST_URL': Uri.parse(url)
@@ -97,5 +97,6 @@ Future<void> main() async {
         ? 'Set ORM_TEST_POSTGRES to a disposable PostgreSQL database.'
         : false,
     timeout: const Timeout(Duration(minutes: 3)),
+    tags: 'postgres',
   );
 }

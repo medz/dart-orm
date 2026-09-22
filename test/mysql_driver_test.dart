@@ -1,3 +1,6 @@
+@Tags(['mysql-suite'])
+library;
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -512,6 +515,7 @@ void main() {
       skip: address == null
           ? 'Set $variable to run against a real $engine server.'
           : false,
+      tags: engine,
     );
   }
 }

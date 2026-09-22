@@ -419,7 +419,7 @@ void main() {
         await db.entry.where((e) => e.bucket.eq('bad')).delete().execute();
         expect(await db.entry.where((e) => e.bucket.eq('bad')).count(), 0);
       });
-    });
+    }, tags: backend);
   }
 
   test(
@@ -502,7 +502,7 @@ void main() {
     } finally {
       await db.close();
     }
-  });
+  }, tags: 'sqlite');
 }
 
 final class _NoDecimalDriver implements Driver<Sqlite> {

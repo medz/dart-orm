@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:async';
 import 'dart:io';
 
@@ -45,6 +48,7 @@ void main() {
         await directory.delete(recursive: true);
       }
     },
+    tags: 'sqlite',
   );
   runTests(
     'sqlite',
@@ -654,7 +658,7 @@ void runTests(
         }
       });
     }
-  });
+  }, tags: name);
 }
 
 Future<void> postIn(Database<Backend> db, int user) async {

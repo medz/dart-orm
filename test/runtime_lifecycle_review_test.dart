@@ -1,3 +1,6 @@
+@Tags(['core'])
+library;
+
 import 'dart:async';
 
 import 'package:orm/orm.dart';

@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:async';
 import 'dart:io';
 
@@ -93,6 +96,7 @@ void main() {
           await pool.close();
         }
       },
+      tags: 'postgres',
     );
     test(
       'borrowed pool requires cancellation support and retains ownership',
@@ -121,6 +125,7 @@ void main() {
           await pool.close();
         }
       },
+      tags: 'postgres',
     );
     test(
       'failed cancellation control discards the physical connection',
@@ -161,6 +166,7 @@ void main() {
           await pool.close();
         }
       },
+      tags: 'postgres',
     );
   }
 }
@@ -629,5 +635,5 @@ void runTests(
       );
       expect(events, isEmpty);
     });
-  });
+  }, tags: name);
 }
