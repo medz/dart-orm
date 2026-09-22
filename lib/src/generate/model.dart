@@ -4,9 +4,13 @@ import 'exception.dart';
 bool isMysqlDialect(SqlDialect dialect) =>
     dialect == SqlDialect.mysql || dialect == SqlDialect.mariadb;
 
-// A Database instance member takes precedence over a generated extension getter.
+// Database members and public execution extensions must not collide with getters.
 const databaseMembers = {
   'sql',
+  'raw',
+  'query',
+  'streamSql',
+  'watchSql',
   'driver',
   'onQuery',
   'onAcquire',
@@ -75,9 +79,12 @@ const generatedTypeNames = {
   'Uint8List',
   'Expr',
   'Codec',
-  'SqlQueryDefinition',
+  'Sql',
+  'SqlQuery',
+  'SqlValue',
+  'ResultShape',
+  'ResultColumn',
   'SqlDialect',
-  'SqlTemplate',
 };
 
 final class ModelField {

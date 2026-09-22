@@ -26,7 +26,7 @@ void main() {
       expect(files, isNotEmpty);
       expect(files.any((file) => file.path.endsWith('.orm.dart')), isTrue);
       expect(files.any((file) => file.path.endsWith('.snapshot.dart')), isTrue);
-      expect(files.any((file) => file.path.endsWith('.queries.dart')), isTrue);
+      expect(files.any((file) => file.path.endsWith('.queries.dart')), isFalse);
       for (final file in files) {
         final unit = parseString(
           content: file.readAsStringSync(),
@@ -126,8 +126,7 @@ void main() {
         // Otherwise importing src/query directly could evade the SQL-layer ban.
         String layer(String name) {
           if (name == 'src/schema/model.dart') return 'schema_model.dart';
-          if (name == 'src/schema/declaration.dart' ||
-              name == 'src/schema/queries.dart') {
+          if (name == 'src/schema/declaration.dart') {
             return 'schema.dart';
           }
           for (final (prefix, entry) in [

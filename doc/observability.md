@@ -31,7 +31,7 @@ Each `QueryPlan` contains one statement and its dependent `RelationLoadPlan`s.
 Its immutable lists describe:
 
 - SQL and parameter count, excluding bound parameter values. Literal text in raw
-  or named SQL is retained, so this is not a general SQL redaction mechanism.
+  SQL is retained, so this is not a general SQL redaction mechanism.
 - Physical output slots, including association keys and joined presence markers.
   `codecType` names the logical codec SQL type, not necessarily the database's
   physical storage type. Expressions without direct column origins omit table
@@ -39,7 +39,7 @@ Its immutable lists describe:
 - Explicit and generated relationship joins, with table/CTE source names and
   left/inner join kind. Joins inside subqueries remain visible in the SQL text.
 - Known table reads for this statement, including CTEs and subqueries. Child
-  batch reads belong to their own plans. Raw SQL and named SQL set `opaqueReads`
+  batch reads belong to their own plans. Raw query-builder expressions set `opaqueReads`
   because the compiler does not parse their dependencies.
 - Each batch's parent/child key slots, composite key width, per-parent limit and
   offset, fixed parameter count, and maximum parent keys per chunk.

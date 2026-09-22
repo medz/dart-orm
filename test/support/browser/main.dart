@@ -44,6 +44,63 @@ Future<void> initialize(Database<Sqlite> db) => Migrator(db.sql)
 
 Future<void> main() async {
   try {
+    if (Uri.base.queryParameters['phase'] != 'recover') {
+      await check(
+        'raw SQL typed values, fragments, metadata, streams and checks',
+        () async {
+          final db = await memory();
+          try {
+            final shape = (
+              ResultColumn('n', Codecs.integer),
+              ResultColumn('s', Codecs.text),
+            ).map((n, s) => (n: n, s: s));
+            final query = Sql.parts([
+              'SELECT',
+              Sql.value(SqlValue(7, Codecs.integer)),
+              'AS n,',
+              Sql.value('browser'),
+              'AS s',
+            ]).returns(shape);
+            expect(
+              (await db.query(query)).single == (n: 7, s: 'browser'),
+              'Raw typed row changed',
+            );
+            expect(
+              (await db.streamSql(query, batchSize: 1).toList()).single.n == 7,
+              'Raw stream changed',
+            );
+            expect(
+              (await checkSqlQuery(db.sql, query)).structureChecked,
+              'Native check failed',
+            );
+            await rejects(
+              () => db.query(Sql('SELECT 1 AS n WHERE 0').returns(shape)),
+              code: 'SQL.RESULT',
+            );
+            final floating = Sql(
+              'SELECT :v AS v',
+              parameters: {'v': SqlValue(1e20, Codecs.real)},
+            ).returns(ResultColumn('v', Codecs.real));
+            expect(
+              (await db.query(floating)).single == 1e20,
+              'Raw real intent changed',
+            );
+            final bytes = Uint8List.fromList([0, 255]);
+            final blob = Sql(
+              'SELECT :v AS v',
+              parameters: {'v': SqlValue(bytes, Codecs.bytes)},
+            ).returns(ResultColumn('v', Codecs.bytes));
+            bytes[0] = 7;
+            expect(
+              (await db.query(blob)).single.first == 0,
+              'Raw bytes were not captured',
+            );
+          } finally {
+            await db.close();
+          }
+        },
+      );
+    }
     if (Uri.base.queryParameters['phase'] == 'recover') {
       checks.addAll(
         (jsonDecode(web.window.sessionStorage.getItem('orm_checks')!) as List)

@@ -106,8 +106,6 @@ dart run orm generate lib/schema --database postgres
 dart run orm migration registry migrations --dialect sqlite
 dart run orm db inspect --sqlite app.sqlite --table tasks
 dart run orm db import --sqlite app.sqlite --output lib/imported.dart
-dart run orm queries generate lib/queries.dart
-dart run orm queries check --source lib/queries.dart --sqlite app.sqlite
 dart run orm web-assets web/orm
 ```
 

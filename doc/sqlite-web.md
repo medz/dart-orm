@@ -164,8 +164,8 @@ early cursor release. Do not treat worker termination as proof of a SQL rollback
 or as a replacement for confirmed commit outcomes.
 
 `watch()` merges known writes after commit and emits fresh snapshots. It does not
-observe another origin, tab or independent database connection. Named SQL queries
-retain their explicit `reads:` requirement. Same-origin persistence, browser
+observe another origin, tab or independent database connection. Raw SQL watches use
+`db.watchSql(query, reads: [...])` with explicit physical table dependencies. Same-origin persistence, browser
 storage permission and database ownership are separate from reactive invalidation.
 
 ## Browser support and restarts

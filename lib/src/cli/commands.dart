@@ -102,25 +102,6 @@ Future<int> runExplicitCli(
       });
       return 0;
     }
-    if (command == 'queries generate') {
-      if (arguments.length < 3 ||
-          arguments.length > 4 ||
-          arguments.skip(2).any((a) => a.startsWith('--'))) {
-        throw const FormatException(
-          'queries generate expects a source and optional output path.',
-        );
-      }
-      await writeGeneratedQueries(
-        arguments[2],
-        output: arguments.length == 4 ? arguments[3] : null,
-      );
-      report({
-        'generated': arguments.length == 4
-            ? arguments[3]
-            : p.setExtension(arguments[2], '.queries.dart'),
-      });
-      return 0;
-    }
     final common = {
       'sqlite',
       'postgres-env',
@@ -132,7 +113,6 @@ Future<int> runExplicitCli(
     final flags = switch (command) {
       'db inspect' => {...common, 'table'},
       'db import' => {...common, 'output', 'table'},
-      'queries check' => {...common, 'source', 'output'},
       _ => throw FormatException('Unknown command: $command'),
     };
     final (positionals, options) = parseOptions(
@@ -142,12 +122,6 @@ Future<int> runExplicitCli(
     if (positionals.isNotEmpty) {
       throw const FormatException('Unexpected positional arguments.');
     }
-    final queries = command == 'queries check'
-        ? await checkGeneratedQueries(
-            requiredOption(options, 'source'),
-            output: options['output'],
-          )
-        : null;
     final table = command == 'db inspect'
         ? requiredOption(options, 'table')
         : null;
@@ -177,8 +151,6 @@ Future<int> runExplicitCli(
     final db = await _open(options, readOnly: true);
     try {
       switch (command) {
-        case 'queries check':
-          report({'queries': await checkSqlQueries(db, queries!)});
         case 'db inspect':
           final info = await inspectTable(db, table!);
           report({

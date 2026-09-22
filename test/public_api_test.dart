@@ -38,6 +38,7 @@ void main() {
         Set<String> exports(LibraryElement library) =>
             library.exportNamespace.definedNames2.keys.toSet();
         final runtime = await library('lib/orm.dart');
+        final sql = await library('lib/sql.dart');
         final schema = await library('lib/schema.dart');
         final migrate = await library('lib/migrate.dart');
         final generate = await library('lib/generate.dart');
@@ -137,7 +138,7 @@ void main() {
         );
         expect(exports(migrate), isNot(contains('generateSchema')));
         expect(exports(generate), isNot(contains('ormBuilder')));
-        expect(exports(builder), {'ormBuilder', 'ormQueryBuilder'});
+        expect(exports(builder), {'ormBuilder'});
 
         // Resolve every public library, including newly added entrypoints.
         // A show list is required whenever a facade reaches into src directly.
@@ -214,9 +215,18 @@ void main() {
           isNot(contains('users')),
         ); // Declaration values stay in schema.dart.
         expect(
-          exports(await library('test/support/named_sql/queries.queries.dart')),
-          containsAll(['AuthorStats', 'Echo']),
+          exports(sql),
+          containsAll([
+            'Sql',
+            'SqlQuery',
+            'SqlValue',
+            'ResultShape',
+            'ResultColumn',
+          ]),
         );
+        expect(exports(sql), isNot(contains('SqlTemplate')));
+        expect(exports(schema), isNot(contains('sqlQuery')));
+        expect(exports(generate), isNot(contains('generateQueries')));
 
         final visited = <Uri>{};
         void visit(LibraryElement library) {

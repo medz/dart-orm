@@ -23,12 +23,12 @@ extension QueryStreaming<R, F extends Fields> on Query<R, F> {
       command,
       batchSize: batchSize,
       options: options,
-      decode: (connection, rows, execution) async {
+      decode: (connection, batch, execution) async {
         final expanded = await expandRelations(
           database,
           connection,
           plan,
-          rows,
+          batch.rows,
           options: execution,
         );
         return database.observeDecode(

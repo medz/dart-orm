@@ -31,7 +31,7 @@ and the [company example](https://github.com/medz/dart-orm/blob/main/example/com
 | Use transactions, streaming and timeouts | [Execution](https://github.com/medz/dart-orm/blob/main/doc/execution.md) |
 | Subscribe to changes | [Query subscriptions](https://github.com/medz/dart-orm/blob/main/doc/watch.md) |
 | Inspect SQL and query costs | [Observability](https://github.com/medz/dart-orm/blob/main/doc/observability.md), [Performance](https://github.com/medz/dart-orm/blob/main/doc/performance.md) |
-| Use hand-written SQL | [Named SQL](https://github.com/medz/dart-orm/blob/main/doc/named-sql.md) |
+| Use hand-written SQL | [Raw SQL](https://github.com/medz/dart-orm/blob/main/doc/raw-sql.md) |
 
 ## Choose a platform
 

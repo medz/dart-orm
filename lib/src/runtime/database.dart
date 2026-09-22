@@ -919,7 +919,7 @@ extension SqlDatabaseStreaming on SqlDatabase<Backend> {
     command,
     batchSize: batchSize,
     options: options,
-    decode: (_, rows, _) async => rows,
+    decode: (_, batch, _) async => batch.rows,
   );
 
   /// @nodoc
@@ -930,7 +930,7 @@ extension SqlDatabaseStreaming on SqlDatabase<Backend> {
     required ExecutionOptions options,
     required Future<List<R>> Function(
       SqlConnection,
-      List<List<Object?>>,
+      SqlResult,
       ExecutionOptions,
     )
     decode,
@@ -1062,7 +1062,7 @@ extension SqlDatabaseStreaming on SqlDatabase<Backend> {
                   () => cursor!.fetch(batchSize, options: execution),
                 );
                 if (stopped) break;
-                final rows = await decode(connection, batch.rows, execution);
+                final rows = await decode(connection, batch, execution);
                 for (final row in rows) {
                   await waitForDemand();
                   if (stopped) break;

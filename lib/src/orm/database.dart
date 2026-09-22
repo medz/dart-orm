@@ -246,7 +246,7 @@ class Database<B extends Backend> extends QueryContext {
     required ExecutionOptions options,
     required Future<List<R>> Function(
       SqlConnection,
-      List<List<Object?>>,
+      SqlResult,
       ExecutionOptions,
     )
     decode,

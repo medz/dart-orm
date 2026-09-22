@@ -1,5 +1,18 @@
 ## Unreleased
 
+Breaking SQL API change: replace Named SQL declarations/generated bindings with
+connection-independent `Sql` and optional `ResultShape` codecs. Delete query
+`.queries.dart` outputs and `orm:queries` builder configuration. The old
+`sqlQuery`, `SqlTemplate`, `SqlQueryDefinition` and `queries generate/check`
+commands are removed; schema generation and migration history are unchanged.
+
+- Execute through `db.raw` / `db.query`; reuse fragments, typed values and result
+  mappings across sessions, transactions and explicit database dialects.
+- Validate required result labels even for zero rows; retain typed cursor
+  streaming, committed-change watches and native preparation with `checkSqlQuery`.
+- Use ordinary Dart functions for query parameters and return types, with no
+  query-specific generator or implicit CTE wrapper.
+
 Breaking PostgreSQL schema change: table identities now include the database
 schema, including `public`. Regenerate clients and snapshots and review the
 required migration. Old unqualified snapshots are not automatically normalized;

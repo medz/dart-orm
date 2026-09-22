@@ -12,10 +12,14 @@
 /// {@canonicalFor database.Database}
 /// {@canonicalFor observation.DecodeEvent}
 /// {@canonicalFor watch.WatchQuery}
+/// {@canonicalFor watch.WatchSql}
+/// {@canonicalFor sql_check.SqlCheck}
+/// {@canonicalFor sql_check.checkSqlQuery}
 library;
 
 export 'sql.dart';
 export 'runtime.dart';
 export 'src/orm/database.dart' show Database;
 export 'src/orm/observation.dart' show DecodeEvent;
-export 'src/orm/watch.dart' show WatchQuery;
+export 'src/orm/watch.dart' show WatchQuery, WatchSql;
+export 'src/orm/sql_check.dart' show SqlCheck, checkSqlQuery;

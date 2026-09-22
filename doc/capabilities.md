@@ -27,7 +27,7 @@ table forms produce review issues. Import does not recreate an entire database.
 | --- | --- | --- |
 | Selection | Scalar, positional/named Record, DTO and runtime field selection | Mappers execute after rows arrive. Runtime field sets return a dynamic map. |
 | Pagination | Offset/limit and typed keyset cursors with unique tie breakers | Offset pages are not snapshots; nullable cursor fields need explicit NULL ordering. |
-| SQL composition | Joins, grouping/HAVING, subqueries, CTEs, windows and UNION | Scope and aggregate rules are validated. INTERSECT/EXCEPT and arbitrary functions require raw or named SQL. |
+| SQL composition | Joins, grouping/HAVING, subqueries, CTEs, windows and UNION | Scope and aggregate rules are validated. INTERSECT/EXCEPT and arbitrary functions require raw SQL. |
 | Relationships | Joined or batched to-one values, batched collections, composite/self keys and per-parent limits | No cross-database navigation or lazy property reads that issue hidden SQL. |
 | Writes | Generated create/patch, omitted versus NULL/default values, expression writes, batches, upsert and RETURNING where supported | No tracked object graph or implicit flush. Computed fields are read-only. |
 | Transactions | Explicit session ownership, savepoints, rollback and bounded opt-in retries | External side effects are not rolled back or made safe to repeat. Distributed transactions are not supported. |

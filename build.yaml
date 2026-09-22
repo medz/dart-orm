@@ -7,10 +7,3 @@ builders:
       "$lib$": ["schema.orm.dart", "schema.snapshot.dart"]
     auto_apply: none
     build_to: source
-  queries:
-    import: "package:orm/builder.dart"
-    builder_factories: ["ormQueryBuilder"]
-    build_extensions:
-      ".dart": [".queries.dart"]
-    auto_apply: none
-    build_to: source

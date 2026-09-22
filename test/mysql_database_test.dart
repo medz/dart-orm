@@ -507,14 +507,12 @@ void main() {
               .execute();
           expect((await db.table(_table).single()).$4.toString(), '2');
         });
-        test('named SQL handles MySQL comments, quoted identifiers and repeated values', () async {
-          final template = SqlTemplate(
+        test('raw SQL handles MySQL comments, quoted identifiers and repeated values', () async {
+          final template = Sql(
             "SELECT :n + :n AS `n:quoted`, ':literal' AS s # :ignored\n",
-            dialect: db.dialect,
+            parameters: {'n': 3},
           );
-          final command = template.compile(db.capabilities, {
-            'n': value(3, Codecs.integer),
-          });
+          final command = template.compile(db.capabilities);
           expect(command.parameters, [3, 3]);
           final result = await db.sql.execute(command);
           expect(result.rows.single, [6, ':literal']);
