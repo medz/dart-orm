@@ -133,6 +133,36 @@ void main() {
     },
   );
 
+  test(
+    'qualifying a legacy PostgreSQL snapshot does not recreate its tables',
+    () async {
+      await source('schema.dart', '''
+final user = model('users', (id: identity(),));
+final post = model('posts', (id: identity(), authorId: integer()),
+  relations: (p) => (author: references(p.authorId, () => user),));
+''');
+      final legacy = await generateSchema('${project.path}/schema');
+      final frozen = legacy.snapshotDart;
+      final current = await generateSchema(
+        '${project.path}/schema',
+        dialect: .postgres,
+      );
+      final change = Migration.diff(
+        '0002_qualified',
+        dialect: .postgres,
+        from: legacy.snapshot,
+        to: current.snapshot,
+      );
+      expect(change.steps, isEmpty);
+      expect(
+        change.snapshot!.tables.every((t) => t.namespace == 'public'),
+        true,
+      );
+      expect(legacy.snapshotDart, frozen);
+      expect(legacy.snapshot.tables.every((t) => t.namespace == null), true);
+    },
+  );
+
   for (final dialect in [
     SqlDialect.sqlite,
     SqlDialect.mysql,

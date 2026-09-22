@@ -63,13 +63,31 @@ Migration diffSchema(
   }
   final sourceTables = {for (final t in from.tables) t.identity: t};
   final targetTables = {for (final t in to.tables) t.identity: t};
+  // Earlier PostgreSQL snapshots left the default schema unqualified. Match
+  // those tables to explicit public metadata without rewriting frozen history
+  // or treating qualification as a physical table move. Explicit renames win.
+  final defaultTables = <String, String>{
+    if (dialect == SqlDialect.postgres)
+      for (final table in from.tables)
+        if (table.namespace == null &&
+            !renames.tables.containsKey(table.identity) &&
+            !sourceTables.containsKey('public.${table.name}') &&
+            !renames.tables.containsValue('public.${table.name}') &&
+            targetTables.containsKey('public.${table.name}'))
+          table.identity: 'public.${table.name}',
+  };
+  String tableName(String name) =>
+      renames.tables[name] ?? defaultTables[name] ?? name;
   String quoted(TableSchema table) =>
       quoteQualified(table.name, table.namespace);
   String tableSql(String identity) =>
       quoted(targetTables[identity] ?? sourceTables[identity]!);
   final renameSql = <MigrationStep>[];
   if (dialect == SqlDialect.postgres) {
-    final previousNamespaces = from.tables.map((t) => t.namespace).toSet();
+    final previousNamespaces = {
+      ...from.tables.map((t) => t.namespace),
+      if (defaultTables.isNotEmpty) 'public',
+    };
     final namespaces =
         to.tables
             .map((t) => t.namespace)
@@ -131,9 +149,7 @@ Migration diffSchema(
       );
     }
   }
-  final renamedTables = {
-    for (final t in from.tables) renames.tables[t.identity] ?? t.identity: t,
-  };
+  final renamedTables = {for (final t in from.tables) tableName(t.identity): t};
   for (final entry in renames.columns.entries) {
     final old = renamedTables[entry.key],
         next = to.tables.where((t) => t.identity == entry.key).firstOrNull;
@@ -156,7 +172,6 @@ Migration diffSchema(
       );
     }
   }
-  String tableName(String name) => renames.tables[name] ?? name;
   String columnName(String table, String column) =>
       renames.columns[tableName(table)]?[column] ?? column;
   final computedRenames = from.tables
