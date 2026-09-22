@@ -1,6 +1,7 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
 import 'package:orm/sql.dart';
+import 'package:orm/sql.dart' as orm show allOf;
 
 import "schema.dart" as models;
 export "schema.dart" show MembershipRole;
@@ -214,7 +215,8 @@ final class MembershipTableSet extends TableSet<Membership, MembershipFields> {
   Query<Membership, MembershipFields> byId({
     required int teamId,
     required int userId,
-  }) => where((row) => row.teamId.eq(teamId).and(row.userId.eq(userId)));
+  }) =>
+      where((row) => orm.allOf([row.teamId.eq(teamId), row.userId.eq(userId)]));
 }
 
 extension MembershipUpdates on Query<Membership, MembershipFields> {

@@ -110,7 +110,7 @@ final class Relation<R, F extends Fields> {
   Relation<R, F> where(Expr<bool?> Function(F) predicate) {
     final next = predicate(queryFields);
     return copyQuery(
-      queryState.copy(predicate: queryState.predicate?.and(next) ?? next),
+      queryState.copy(predicate: allOf([?queryState.predicate, next])),
     );
   }
 
@@ -275,16 +275,16 @@ final class _JoinedRelationSelection<R, F extends Fields>(
     );
     Expr<bool?> predicate = match(0);
     for (var i = 1; i < relation.childFields.length; i++) {
-      predicate = predicate.and(match(i));
+      predicate = allOf([predicate, match(i)]);
     }
     if (relation.queryState.predicate case final filter?) {
-      predicate = predicate.and(filter);
+      predicate = allOf([predicate, filter]);
     }
     // A proven unique match has at most one row, so skipping it or taking zero
     // must produce an absent relation, without filtering out the root row.
     if (relation.queryState.limit == 0 ||
         (relation.queryState.offset ?? 0) > 0) {
-      predicate = predicate.and(value(false, Codecs.boolean));
+      predicate = allOf([predicate, value(false, Codecs.boolean)]);
     }
     final existing = plan.joins
         .where((join) => join.alias.fields.table == relation.queryFields.table)
@@ -455,7 +455,9 @@ final class TypedRelationBinding<R, F extends Fields>(
       RelationKeys(relation.childFields, keys),
       Codecs.boolean,
     );
-    if (state.predicate case final filter?) predicate = predicate.and(filter);
+    if (state.predicate case final filter?) {
+      predicate = allOf([predicate, filter]);
+    }
     final paginated = state.limit != null || state.offset != null;
     final sqlPlan = SelectionPlan()
       ..columns.addAll(plan.columns)

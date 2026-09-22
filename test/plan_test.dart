@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:orm/migrate.dart';
 import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
-import 'package:test/test.dart';
+import 'package:test/test.dart' hide allOf, anyOf;
 
 import '../example/teams/schema.orm.dart';
 import 'support/relations/schema.orm.dart' as composite;
@@ -42,7 +42,7 @@ void main() {
               .table(composite.accountTable)
               .select(
                 (a) => a.events
-                    .where((e) => e.id.gt(0).and(e.score.gt(0)))
+                    .where((e) => allOf([e.id.gt(0), e.score.gt(0)]))
                     .orderBy((e) => [e.id.asc()])
                     .take(1)
                     .many(),

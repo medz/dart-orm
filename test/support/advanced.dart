@@ -1,5 +1,5 @@
 import 'package:orm/orm.dart';
-import 'package:test/test.dart';
+import 'package:test/test.dart' hide allOf, anyOf;
 
 import 'tables.dart';
 
@@ -44,7 +44,10 @@ void advancedScenarios(Database<Backend> Function() database) {
       final post = postsTable.alias();
       final optional = db
           .table(users)
-          .leftJoin(post, on: (u, p) => u.id.equals(p.authorId).and(p.id.eq(1)))
+          .leftJoin(
+            post,
+            on: (u, p) => allOf([u.id.equals(p.authorId), p.id.eq(1)]),
+          )
           .select((u) => post.optional(post.fields.title))
           .asCte('optional_posts');
       expect(await optional.query.get(), ['post1', null, null, null]);
@@ -96,7 +99,10 @@ void advancedScenarios(Database<Backend> Function() database) {
       final post = postsTable.alias();
       final rows = await db
           .table(users)
-          .leftJoin(post, on: (u, p) => u.id.equals(p.authorId).and(p.id.eq(1)))
+          .leftJoin(
+            post,
+            on: (u, p) => allOf([u.id.equals(p.authorId), p.id.eq(1)]),
+          )
           .orderBy((u) => [u.id.asc()])
           .select(
             (u) => post.optional(post.fields.tag.map((tag) => (tag: tag))),

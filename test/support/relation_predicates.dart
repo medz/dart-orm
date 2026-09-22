@@ -1,6 +1,6 @@
 import 'package:orm/migrate.dart';
 import 'package:orm/orm.dart';
-import 'package:test/test.dart';
+import 'package:test/test.dart' hide allOf, anyOf;
 
 import '../../example/teams/schema.orm.dart' as teams;
 import 'relations/schema.orm.dart';
@@ -50,16 +50,23 @@ void relationPredicateTests(
 
       test('nested boolean relationship filters select, update and delete the same rows', () async {
         final query = db.event.where(
-          (e) => e.author
-              .where(
-                (a) => a.id
-                    .eq(1)
-                    .or(a.manager.where((m) => m.label.isNull()).any())
-                    .and(a.tenant.eq(1)),
-              )
-              .any()
-              .and(e.reviewerAccount.where((a) => a.label.isNull()).none())
-              .and(e.title.eq('e4').not()),
+          (e) => allOf([
+            allOf([
+              e.author
+                  .where(
+                    (a) => allOf([
+                      anyOf([
+                        a.id.eq(1),
+                        a.manager.where((m) => m.label.isNull()).any(),
+                      ]),
+                      a.tenant.eq(1),
+                    ]),
+                  )
+                  .any(),
+              e.reviewerAccount.where((a) => a.label.isNull()).none(),
+            ]),
+            e.title.eq('e4').not(),
+          ]),
         );
         expect(
           await query.orderBy((e) => [e.id.asc()]).select((e) => e.id).get(),
@@ -99,7 +106,7 @@ void relationPredicateTests(
         'self-reference mutation target follows the database capability',
         () async {
           final query = db.account.where(
-            (a) => a.id.eq(3).and(a.manager.none()),
+            (a) => allOf([a.id.eq(3), a.manager.none()]),
           );
           expect(await query.select((a) => (a.tenant, a.id).row).get(), [
             (1, 3),
@@ -164,7 +171,7 @@ void relationPredicateTests(
 
       test('relation counts that read the mutation target follow the database capability', () async {
         final query = db.account.where(
-          (a) => a.id.eq(3).and(a.reports.count().eq(0)),
+          (a) => allOf([a.id.eq(3), a.reports.count().eq(0)]),
         );
         expect(await query.select((a) => (a.tenant, a.id).row).get(), [(1, 3)]);
         observations.clear();
@@ -199,17 +206,16 @@ void relationPredicateTests(
           accountTable.selectRow,
         );
         final query = db.account.where(
-          (a) => a.id
-              .eq(3)
-              .and(
-                db
-                    .table(anotherAccount)
-                    .where((other) => other.id.eq(1).and(other.tenant.eq(1)))
-                    .select((other) => other.id)
-                    .take(1)
-                    .scalar()
-                    .eq(1),
-              ),
+          (a) => allOf([
+            a.id.eq(3),
+            db
+                .table(anotherAccount)
+                .where((other) => allOf([other.id.eq(1), other.tenant.eq(1)]))
+                .select((other) => other.id)
+                .take(1)
+                .scalar()
+                .eq(1),
+          ]),
         );
         expect(await query.select((a) => (a.tenant, a.id).row).get(), [(1, 3)]);
         observations.clear();
@@ -235,15 +241,16 @@ void relationPredicateTests(
 
       test('same-child conjunction differs from independent matches', () async {
         final same = db.account.where(
-          (a) =>
-              a.events.where((e) => e.score.eq(1).and(e.title.eq('e2'))).any(),
+          (a) => a.events
+              .where((e) => allOf([e.score.eq(1), e.title.eq('e2')]))
+              .any(),
         );
         expect(await same.get(), isEmpty);
         final separate = db.account.where(
-          (a) => a.events
-              .where((e) => e.score.eq(1))
-              .any()
-              .and(a.events.where((e) => e.title.eq('e2')).any()),
+          (a) => allOf([
+            a.events.where((e) => e.score.eq(1)).any(),
+            a.events.where((e) => e.title.eq('e2')).any(),
+          ]),
         );
         expect(await separate.select((a) => (a.tenant, a.id).row).get(), [
           (1, 1),
@@ -314,7 +321,7 @@ void relationPredicateTests(
                   a.events
                       .where((e) => e.reviewer.isNotNull())
                       .every((e) => e.reviewer.eq(2)),
-                  a.events.any().and(a.events.every((e) => e.score.gt(0))),
+                  allOf([a.events.any(), a.events.every((e) => e.score.gt(0))]),
                   a.events
                       .where((e) => e.score.gt(100))
                       .every((e) => e.title.eq('missing')),
@@ -337,19 +344,19 @@ void relationPredicateTests(
         () async {
           final rows = await db.account
               .where(
-                (a) => a.reports
-                    .where((r) => r.label.eq('A2'))
-                    .any()
-                    .and(
-                      a.events
-                          .where(
-                            (e) => e.reviewerAccount
-                                .where((r) => r.label.eq('A2'))
-                                .any(),
-                          )
-                          .any(),
-                    )
-                    .and(a.reviews.where((e) => e.title.eq('e3')).any()),
+                (a) => allOf([
+                  allOf([
+                    a.reports.where((r) => r.label.eq('A2')).any(),
+                    a.events
+                        .where(
+                          (e) => e.reviewerAccount
+                              .where((r) => r.label.eq('A2'))
+                              .any(),
+                        )
+                        .any(),
+                  ]),
+                  a.reviews.where((e) => e.title.eq('e3')).any(),
+                ]),
               )
               .select((a) => (a.tenant, a.id).row)
               .get();

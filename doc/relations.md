@@ -76,11 +76,13 @@ existence tests may match different children:
 ```dart
 // One post must contain both words.
 db.user.where((u) => u.posts.where((p) =>
-  p.title.like('%Dart%').and(p.title.like('%SQL%'))).any());
+  allOf([p.title.like('%Dart%'), p.title.like('%SQL%')])).any());
 
 // One post contains Dart; another post may satisfy SQL.
-db.user.where((u) => u.posts.where((p) => p.title.like('%Dart%')).any()
-  .and(u.posts.where((p) => p.title.like('%SQL%')).any()));
+db.user.where((u) => allOf([
+  u.posts.where((p) => p.title.like('%Dart%')).any(),
+  u.posts.where((p) => p.title.like('%SQL%')).any(),
+]));
 ```
 
 Repeated `where` calls combine with AND and return new descriptions. An existing
@@ -98,8 +100,10 @@ cannot capture root fields beyond its declared relationship keys.
 separately when that matters:
 
 ```dart
-db.user.where((u) => u.posts.any()
-  .and(u.posts.every((p) => p.title.ne(''))));
+db.user.where((u) => allOf([
+  u.posts.any(),
+  u.posts.every((p) => p.title.ne('')),
+]));
 ```
 
 SQL FALSE and SQL NULL both fail `every`. In contrast, `where` keeps only rows
@@ -121,9 +125,10 @@ Nest the same filtering pattern at each edge. With the association model below,
 this selects users with an owner membership in the Core team:
 
 ```dart
-db.user.where((u) => u.memberships.where((m) =>
-  m.role.eq(MembershipRole.owner)
-    .and(m.team.where((t) => t.name.eq('Core')).any())).any());
+db.user.where((u) => u.memberships.where((m) => allOf([
+  m.role.eq(MembershipRole.owner),
+  m.team.where((t) => t.name.eq('Core')).any(),
+])).any());
 ```
 
 The association's business fields and the target's fields are checked in their

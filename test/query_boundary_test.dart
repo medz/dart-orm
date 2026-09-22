@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:orm/migrate.dart';
 import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
-import 'package:test/test.dart';
+import 'package:test/test.dart' hide allOf, anyOf;
 
 import 'support/tables.dart';
 
@@ -189,7 +189,7 @@ void run(
       final alias = users.alias();
       final source = db
           .table(users)
-          .leftJoin(alias, on: (u, a) => u.id.equals(a.id).and(a.id.eq(1)))
+          .leftJoin(alias, on: (u, a) => allOf([u.id.equals(a.id), a.id.eq(1)]))
           .select((_) => alias.optional(alias.fields.email))
           .asCte('optional_email');
       expect(await source.query.asCte('rebound_email').query.get(), [

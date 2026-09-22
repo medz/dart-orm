@@ -6,6 +6,17 @@ import 'types.dart';
 String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
   final b = StringBuffer('// GENERATED CODE - DO NOT MODIFY BY HAND.\n\n')
     ..writeln("import 'package:orm/sql.dart';");
+  var groupsPrefix = 'orm';
+  for (
+    var suffix = 2;
+    schema.any((entity) => entity.primaryKey.contains(groupsPrefix));
+    suffix++
+  ) {
+    groupsPrefix = 'orm$suffix';
+  }
+  if (schema.any((entity) => entity.primaryKey.length > 1)) {
+    b.writeln("import 'package:orm/sql.dart' as $groupsPrefix show allOf;");
+  }
   if (names.usesSource) {
     b.writeln("import ${dartLiteral(import)} as models;");
   }
@@ -110,9 +121,13 @@ String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
             (k) => '${positional ? '' : 'required '}${entity.field(k).type} $k',
           )
           .join(', ');
+      final terms = entity.primaryKey.map((k) => '$input.$k.eq($k)').toList();
+      final predicate = positional
+          ? terms.single
+          : '$groupsPrefix.allOf([${terms.join(', ')}])';
       b.writeln(
         'Query<${entity.rowType}, ${entity.fieldsType}> byId(${positional ? params : '{$params}'}) => '
-        '$where(($input) => ${entity.primaryKey.map((k) => '$input.$k.eq($k)').join('.and(')}${')' * (entity.primaryKey.length - 1)});',
+        '$where(($input) => $predicate);',
       );
     }
     b.writeln('}');

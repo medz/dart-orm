@@ -6,7 +6,7 @@ import 'dart:io';
 import 'package:orm/migrate.dart';
 import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
-import 'package:test/test.dart';
+import 'package:test/test.dart' hide allOf, anyOf;
 
 import 'support/decimals/schema.orm.dart';
 
@@ -473,7 +473,10 @@ void main() {
           expect(result, [d('.5'), d('2')]);
           final alias = entryTable.alias();
           final joined = await db.entry
-              .leftJoin(alias, on: (e, a) => e.id.equals(a.id).and(a.id.eq(1)))
+              .leftJoin(
+                alias,
+                on: (e, a) => allOf([e.id.equals(a.id), a.id.eq(1)]),
+              )
               .orderBy((e) => [e.id.asc()])
               .select(
                 (e) => (
