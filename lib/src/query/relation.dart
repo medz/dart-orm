@@ -102,7 +102,11 @@ final class Relation<R, F extends Fields> {
     querySelection,
   );
 
-  /// Adds a SQL predicate to the related rows, combined with earlier filters.
+  /// Adds a SQL predicate to the related rows, ANDed with earlier filters.
+  ///
+  /// A selected relationship filters its returned children, not its parent rows.
+  /// Use [any], [none], [every], or [count] in the parent query's `where` to
+  /// filter parents. Captured fields must belong to the enclosing SQL scope.
   Relation<R, F> where(Expr<bool?> Function(F) predicate) {
     final next = predicate(queryFields);
     return copyQuery(
@@ -215,17 +219,27 @@ final class Relation<R, F extends Fields> {
 
   /// Builds a correlated SQL EXISTS expression for the filtered relationship.
   ///
-  /// Apply it before [take] or [skip]; paginated relationships are rejected.
+  /// The same related row must satisfy all [where] filters. Separate calls to
+  /// [any] may match different rows. No related rows are loaded and no additional
+  /// statements are executed.
+  ///
+  /// Apply it before [take] or [skip]; paginated relationships are rejected with
+  /// `RELATION.AGGREGATE`. Aggregate/window predicates report `QUERY.AGGREGATE`.
   Expr<bool> any() =>
       Expr.internal(RelationSubqueryNode(this, false), Codecs.boolean);
 
-  /// Builds the negation of [any], without loading the related rows.
+  /// Checks that no related row satisfies the [where] filters.
+  ///
+  /// Equivalent to `any().not()`, without loading related rows.
   Expr<bool?> none() => any().not();
 
   /// Checks that every filtered related row makes [condition] SQL TRUE.
   ///
   /// An empty relationship satisfies this expression. SQL FALSE and SQL NULL
-  /// both count as failures of the condition. Apply it before [take] or [skip].
+  /// both count as failures of the condition. Combine with [any] to require at
+  /// least one matching related row. Earlier [where] filters restrict the rows
+  /// checked; [condition] is the test applied to each of those rows.
+  /// Apply it before [take] or [skip].
   Expr<bool?> every(Expr<bool?> Function(F) condition) {
     final conditionNode = condition(queryFields).expressionNode;
     return where(

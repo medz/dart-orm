@@ -177,6 +177,7 @@ final class SqlWriter {
   final Map<TableRef, String> aliases;
   final List<Object?> parameters = [];
   final Set<TableRef> leftJoins = {};
+  final Set<TableRef> relationSubqueries = {};
   final ReadTables? reads;
   final bool exactDecimal;
   final bool temporal;
@@ -284,10 +285,25 @@ final class RelationSubqueryNode(
         relation.queryState.offset != null) {
       throw const OrmException(
         'RELATION.AGGREGATE',
-        'Apply relation count/any/every before pagination.',
+        'Apply relation count/any/none/every before pagination.',
       );
     }
+    if (relation.queryState.predicate case final predicate?) {
+      if (aggregate(predicate.expressionNode) ||
+          window(predicate.expressionNode)) {
+        throw const OrmException(
+          'QUERY.AGGREGATE',
+          'Relationship predicates cannot contain aggregate or window functions. Use a subquery.',
+        );
+      }
+    }
     final source = relation.queryState.source;
+    if (!w.relationSubqueries.add(source)) {
+      throw const OrmException(
+        'QUERY.ALIAS',
+        'A nested relationship needs a fresh source occurrence.',
+      );
+    }
     w.reads?.tables.add(source.schema);
     final previous = w.aliases[source];
     final alias = 't${w.aliases.length}';
@@ -307,6 +323,7 @@ final class RelationSubqueryNode(
           'SELECT ${count ? 'COUNT(*)' : '1'} FROM ${w.table(source.schema)} AS ${w.quote(alias)} WHERE ${predicates.join(' AND ')}';
       return count ? '($query)' : 'EXISTS ($query)';
     } finally {
+      w.relationSubqueries.remove(source);
       if (previous == null) {
         w.aliases.remove(source);
       } else {

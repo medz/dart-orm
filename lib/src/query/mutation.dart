@@ -5,6 +5,7 @@ import 'context.dart';
 import 'joins.dart';
 import 'nodes.dart';
 import 'query.dart';
+import 'reads.dart';
 import 'selection.dart';
 import 'table.dart';
 
@@ -35,6 +36,11 @@ enum MutationKind { insert, update, delete }
 /// [returning] prepares a typed result. Updates and deletes accept table filters,
 /// not joins, ordering, grouping, or pagination. Client defaults in a prepared
 /// insert are evaluated when it is built and reused if it executes again.
+///
+/// Relationship predicates remain subqueries within one statement. On MySQL,
+/// updates/deletes whose typed subqueries read the target table are rejected
+/// with `CAPABILITY.MUTATION_SELF_REFERENCE` before execution. Select keys in an
+/// explicit transaction, then mutate by those keys when that restriction applies.
 final class Mutation<F extends Fields> {
   /// Query context that owns this mutation's execution and transaction scope.
   final QueryContext database;
@@ -245,10 +251,16 @@ final class Mutation<F extends Fields> {
         'Mutations accept a table and WHERE; select keys for paginated mutations.',
       );
     }
+    final subqueryReads =
+        database.dialect == SqlDialect.mysql &&
+            mutationKind != MutationKind.insert
+        ? ReadTables()
+        : null;
     final w = SqlWriter(
       database.dialect,
       {queryState.source: 't0'},
       database: database,
+      reads: subqueryReads,
       exactDecimal: database.capabilities.exactDecimal,
       temporal: database.capabilities.temporal,
     );
@@ -414,6 +426,17 @@ final class Mutation<F extends Fields> {
       w.unqualified = database.dialect == SqlDialect.sqlite;
       b.write(
         ' RETURNING ${selection.columns.map((e) => e.expressionNode.write(w)).join(', ')}',
+      );
+    }
+    final target = queryState.source.schema;
+    if (subqueryReads?.tables.any(
+          (table) =>
+              table.name == target.name && table.namespace == target.namespace,
+        ) ??
+        false) {
+      throw const OrmException(
+        'CAPABILITY.MUTATION_SELF_REFERENCE',
+        'MySQL cannot update or delete a table read by a subquery. Select keys in an explicit transaction, then mutate by those keys.',
       );
     }
     return w.finish(b.toString());
