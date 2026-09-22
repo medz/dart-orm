@@ -7,6 +7,8 @@ import 'package:orm/generate.dart';
 import 'package:orm/migrate.dart';
 import 'package:test/test.dart';
 
+import '../tool/src/build_fixture.dart';
+
 void main() {
   late Directory directory;
   setUp(() async {
@@ -90,10 +92,18 @@ void main() {
   }
 }
 ''');
+      final fixture = await BuildFixture.create(
+        ormPath: Directory.current.path,
+      );
+      addTearDown(fixture.dispose);
+      await fixture.write('bin/queries.dart', '''
+import '${consumer.absolute.uri}' as consumer;
+void main() => consumer.main();
+''');
       final compiled = await Process.run(Platform.resolvedExecutable, [
         'run',
-        consumer.path,
-      ]);
+        'orm_build_fixture:queries',
+      ], workingDirectory: fixture.directory.path);
       expect(
         compiled.exitCode,
         0,

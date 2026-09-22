@@ -49,7 +49,8 @@ void main() {
       'lib/src/shared.dart': "export '../sqlite_web_worker.dart';",
       'lib/src/sqlite/web.dart': "import 'fallback.dart' if (dart.library.js_interop) 'browser.dart'; import 'web_build.dart';",
       'lib/src/sqlite/fallback.dart': '',
-      'lib/src/sqlite/browser.dart': "import '../shared.dart';",
+      'lib/src/sqlite/browser.dart': "import '../shared.dart'; import './nested/../web_build.dart'; import 'encoded%20name.dart';",
+      'lib/src/sqlite/encoded name.dart': '',
       'lib/src/cli/runner.dart': 'This unrelated source need not even parse.',
     }.entries) {
       final file = File('${root.path}/${entry.key}');
@@ -60,6 +61,7 @@ void main() {
       'lib/sqlite_web_worker.dart',
       'lib/src/shared.dart',
       'lib/src/sqlite/browser.dart',
+      'lib/src/sqlite/encoded name.dart',
       'lib/src/sqlite/fallback.dart',
       'lib/src/sqlite/web.dart',
       'lib/src/worker.dart',

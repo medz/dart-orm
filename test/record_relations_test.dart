@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:orm/generate.dart';
 import 'package:test/test.dart';
 
+import '../tool/src/build_fixture.dart';
+
 const _roles = '''
 final Model person = model('people', (id: identity(), name: text()),
  relations: (p) => (
@@ -240,11 +242,19 @@ final Model member = model('members', (id: identity(), code: text()),
         await writeGeneratedSchema('${fixtures.path}/runtime.dart');
         final script = File('${fixtures.path}/consumer.dart');
         await script.writeAsString(_consumer);
+        final fixture = await BuildFixture.create(
+          ormPath: Directory.current.path,
+        );
+        addTearDown(fixture.dispose);
+        await fixture.write('bin/relations.dart', '''
+import '${script.absolute.uri}' as consumer;
+Future<void> main(List<String> args) => consumer.main(args);
+''');
         final result = await Process.run(Platform.resolvedExecutable, [
           'run',
-          script.path,
+          'orm_build_fixture:relations',
           backend,
-        ]);
+        ], workingDirectory: fixture.directory.path);
         expect(
           result.exitCode,
           0,

@@ -10,6 +10,8 @@ import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
+import '../tool/src/build_fixture.dart';
+
 void main() {
   for (final backend in [
     'sqlite',
@@ -140,15 +142,23 @@ Future<void> main() async {
           0,
           reason: '${analysis.stdout}\n${analysis.stderr}',
         );
+        final fixture = await BuildFixture.create(
+          ormPath: Directory.current.path,
+        );
+        addTearDown(fixture.dispose);
+        await fixture.write('bin/use.dart', '''
+import '${File('${directory.path}/use.dart').absolute.uri}' as consumer;
+Future<void> main() => consumer.main();
+''');
         if (backend == 'sqlite') {
           final compiled = await Process.run(Platform.resolvedExecutable, [
             'build',
             'cli',
             '--target',
-            '${directory.path}/use.dart',
+            'bin/use.dart',
             '--output',
-            '${directory.path}/aot',
-          ]);
+            'aot',
+          ], workingDirectory: fixture.directory.path);
           expect(
             compiled.exitCode,
             0,
@@ -157,13 +167,13 @@ Future<void> main() async {
         }
         final run = backend == 'sqlite'
             ? await Process.run(
-                '${directory.path}/aot/bundle/bin/use',
+                fixture.file('aot/bundle/bin/use').path,
                 const <String>[],
               )
             : await Process.run(Platform.resolvedExecutable, [
                 'run',
-                '${directory.path}/use.dart',
-              ]);
+                'orm_build_fixture:use',
+              ], workingDirectory: fixture.directory.path);
         expect(run.exitCode, 0, reason: '${run.stdout}\n${run.stderr}');
       }, timeout: const Timeout(Duration(minutes: 2)));
 

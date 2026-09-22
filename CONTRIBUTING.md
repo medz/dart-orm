@@ -41,6 +41,9 @@ consumer compilation, configuration reload, AOT packaging and crash recovery.
 Use package entrypoints (`dart run orm` or `dart run orm_build_fixture:migrate`)
 when a Dart subprocess is necessary so it can reuse compiled code. Exercise
 unchanged generated sources in one consumer instead of compiling each assertion.
+Run subprocess consumers from an independent `BuildFixture` package. This keeps
+native-asset copying and macOS signing away from the test runner's loaded SQLite
+library while retaining parallel suites.
 
 ## Documentation and public APIs
 

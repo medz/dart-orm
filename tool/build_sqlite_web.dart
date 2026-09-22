@@ -19,7 +19,7 @@ Future<List<String>> sqliteWebSourcePaths({String root = '.'}) async {
   final pending = ['lib/sqlite_web_worker.dart', 'lib/src/sqlite/web.dart'];
   final sources = <String>{};
   while (pending.isNotEmpty) {
-    final path = p.normalize(pending.removeLast());
+    final path = p.posix.normalize(pending.removeLast());
     if (path == 'lib/src/sqlite/web_build.dart' || !sources.add(path)) continue;
     final unit = parseString(
       content: await File(p.join(root, path)).readAsString(),
@@ -35,7 +35,9 @@ Future<List<String>> sqliteWebSourcePaths({String root = '.'}) async {
         if (uri.scheme == 'package' && uri.path.startsWith('orm/')) {
           pending.add('lib/${uri.path.substring('orm/'.length)}');
         } else if (uri.scheme.isEmpty) {
-          pending.add(p.join(p.dirname(path), uri.toFilePath()));
+          pending.add(
+            p.posix.join(p.posix.dirname(path), uri.toFilePath(windows: false)),
+          );
         }
       }
     }
