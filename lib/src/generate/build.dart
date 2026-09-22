@@ -33,7 +33,7 @@ builder.Builder ormBuilder(builder.BuilderOptions options) {
         'Directory generation needs schema: lib/schema and database: engine.',
       );
     }
-    final root = SchemaLayout.stem(schema);
+    final root = SchemaLayout.stem(schema, paths: p.url);
     if (!p.url.isWithin('lib', root)) {
       throw ArgumentError('Put the schema root under lib/.');
     }
@@ -199,7 +199,12 @@ final class _OrmDirectoryBuilder(final String root, final SqlDialect dialect)
 
   @override
   Future<void> build(builder.BuildStep step) async {
-    final layout = SchemaLayout(root, dialect: dialect, directory: true);
+    final layout = SchemaLayout(
+      root,
+      dialect: dialect,
+      directory: true,
+      paths: p.url,
+    );
     final package = step.inputId.package;
     final sources = <builder.AssetId>[];
     final file = builder.AssetId(package, layout.file);

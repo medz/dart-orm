@@ -8,9 +8,15 @@ final class SchemaLayout {
   final String root;
   final SqlDialect? dialect;
   final bool directory;
+  final p.Context _paths;
 
-  SchemaLayout(String input, {required this.dialect, required this.directory})
-    : root = stem(input) {
+  SchemaLayout(
+    String input, {
+    required this.dialect,
+    required this.directory,
+    p.Context? paths,
+  }) : _paths = paths ?? p.context,
+       root = stem(input, paths: paths) {
     if (directory && dialect == null) {
       throw const GenerationException(
         'Directory generation requires a database engine. Use --database or the project configuration.',
@@ -18,10 +24,11 @@ final class SchemaLayout {
     }
   }
 
-  static String stem(String input) {
-    final normalized = p.normalize(input);
+  static String stem(String input, {p.Context? paths}) {
+    paths ??= p.context;
+    final normalized = paths.normalize(input);
     return normalized.endsWith('.dart')
-        ? p.withoutExtension(normalized)
+        ? paths.withoutExtension(normalized)
         : normalized;
   }
 
@@ -34,17 +41,17 @@ final class SchemaLayout {
       !path.endsWith('.snapshot.dart');
 
   bool includes(String path) {
-    path = p.normalize(path);
+    path = _paths.normalize(path);
     if (path == file) return true;
-    if (!directory || !p.isWithin(root, path) || !declaration(path)) {
+    if (!directory || !_paths.isWithin(root, path) || !declaration(path)) {
       return false;
     }
-    final parts = p.split(p.relative(path, from: root));
+    final parts = _paths.split(_paths.relative(path, from: root));
     return parts.length == (dialect == SqlDialect.postgres ? 2 : 1);
   }
 
   String? namespace(String path) {
-    path = p.normalize(path);
+    path = _paths.normalize(path);
     if (directory && !includes(path)) {
       throw GenerationException(
         'Model declared outside the schema layout: $path. '
@@ -53,6 +60,6 @@ final class SchemaLayout {
     }
     if (dialect != SqlDialect.postgres) return null;
     if (path == file || !directory) return 'public';
-    return p.split(p.relative(path, from: root)).first;
+    return _paths.split(_paths.relative(path, from: root)).first;
   }
 }

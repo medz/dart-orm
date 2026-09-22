@@ -16,7 +16,7 @@ void main() {
       final result = await testBuilder(
         ormBuilder(
           BuilderOptions({
-            'schema': 'lib/fixture/schema',
+            'schema': 'lib/fixture/./schema.dart',
             'database': 'postgres',
           }),
         ),

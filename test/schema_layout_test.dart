@@ -2,9 +2,31 @@ import 'dart:io';
 
 import 'package:orm/generate.dart';
 import 'package:orm/migrate.dart';
+import 'package:orm/src/generate/schema/layout.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
+  test('layout respects native Windows and URL asset path contexts', () {
+    for (final paths in [p.Context(style: p.Style.windows), p.url]) {
+      final layout = SchemaLayout(
+        'lib/fixture/./schema.dart',
+        dialect: .postgres,
+        directory: true,
+        paths: paths,
+      );
+      expect(layout.root, paths.join('lib', 'fixture', 'schema'));
+      expect(layout.includes('lib/fixture/schema/auth/users.dart'), isTrue);
+      expect(layout.namespace('lib/fixture/schema/auth/users.dart'), 'auth');
+      expect(layout.namespace('lib/fixture/schema.dart'), 'public');
+      expect(
+        layout.includes('lib/fixture/schema/auth/deep/users.dart'),
+        isFalse,
+      );
+      expect(layout.includes('lib/other/auth/users.dart'), isFalse);
+    }
+  });
+
   late Directory project;
   setUp(() async {
     project = await Directory('.dart_tool').createTemp('schema-layout-');
