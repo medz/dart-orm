@@ -372,6 +372,28 @@ void shared(
             parameters: {'id': 4},
           );
           expect((await db.raw(pg)).rows.single, [':ignored', 4]);
+          final slices =
+              Sql.parts([
+                'SELECT',
+                Sql(
+                  r'items[:start\:array_length(items, 1)]::text AS tail, '
+                  r'items[\:upper_bound]::text AS head, '
+                  'items[:start : :end]::text AS middle',
+                  parameters: {'start': 2, 'end': 2},
+                ),
+                'FROM (VALUES (ARRAY[10, 20, 30], 2)) AS data(items, upper_bound)',
+              ]).returns(
+                (
+                  ResultColumn('tail', Codecs.text),
+                  ResultColumn('head', Codecs.text),
+                  ResultColumn('middle', Codecs.text),
+                ).map((tail, head, middle) => (tail, head, middle)),
+              );
+          expect(await db.query(slices), [('{20,30}', '{10,20}', '{20}')]);
+          expect(
+            (await checkSqlQuery(db.sql, slices)).storageTypesChecked,
+            true,
+          );
         }
       },
     );

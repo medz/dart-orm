@@ -57,6 +57,8 @@ sealed class Sql {
   /// a value. Use [SqlValue] for domain types and explicit storage codecs.
   /// Raw scalar values retain the driver's type inference; maps/lists require
   /// a codec. Byte buffers and the parameter map are copied at construction.
+  /// In PostgreSQL, escape a literal colon as `\:` outside quotes/comments
+  /// when followed by a name, for example `r'items[1\:array_length(items, 1)]'`.
   factory Sql(String text, {Map<String, Object?> parameters = const {}}) =>
       _TextSql(text, parameters);
 

@@ -47,6 +47,44 @@ void main() {
     },
   );
 
+  test('PostgreSQL literal colons survive nested composition and bindings', () {
+    final caps = SqlBuilder(SqlDialect.postgres).capabilities;
+    final slice = Sql(
+      r'items[:start\:array_length(items, 1)]',
+      parameters: {'start': 2},
+    );
+    final compiled = Sql.parts([
+      'SELECT',
+      Sql.parts([slice]),
+      Sql(
+        r', items[\:upper_bound], items[:start : :end], :array_length',
+        parameters: {'start': 1, 'end': 3, 'array_length': 9},
+      ),
+      r''', E'\\:literal', $tag$\:literal$tag$, "\:column" /* \:comment */''',
+      'FROM data',
+    ]).compile(caps);
+    expect(compiled.sql, contains(r'items[$1:array_length(items, 1)]'));
+    expect(compiled.sql, contains(r'items[:upper_bound], items[$2 : $3], $4'));
+    expect(
+      compiled.sql,
+      contains(
+        r'''E'\\:literal', $tag$\:literal$tag$, "\:column" /* \:comment */''',
+      ),
+    );
+    expect(compiled.parameters, [2, 1, 3, 9]);
+    for (final dialect in [
+      SqlDialect.sqlite,
+      SqlDialect.mysql,
+      SqlDialect.mariadb,
+    ]) {
+      expect(
+        () =>
+            Sql(r'SELECT \:unbound').compile(SqlBuilder(dialect).capabilities),
+        throwsA(isA<OrmException>()),
+      );
+    }
+  });
+
   test(
     'templates reject ambiguous bindings and incomplete or multiple statements',
     () {

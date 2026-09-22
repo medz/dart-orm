@@ -135,6 +135,12 @@ SqlText scanSql(String source, SqlDialect dialect, {bool fragment = false}) {
       i = end + tag.length;
       continue;
     }
+    if (dialect == SqlDialect.postgres && source.startsWith(r'\:', i)) {
+      // Retain the escape until the composed statement's final scan.
+      text.write(fragment ? r'\:' : ':');
+      i += 2;
+      continue;
+    }
     if (c == ':' &&
         (i == 0 || source[i - 1] != ':') &&
         i + 1 < source.length &&

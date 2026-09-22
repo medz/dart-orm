@@ -86,6 +86,11 @@ slots; MySQL/MariaDB duplicate values in positional occurrence order. Fragments
 are separated by newlines and must have complete quotes/comments. One trailing
 semicolon is accepted for the entire statement; multiple statements are rejected.
 Use `:name` placeholders rather than driver-native `$1`, `?` or `@name` syntax.
+PostgreSQL syntax can also contain a literal colon followed by a name, such as
+an array-slice bound. Escape that colon as `\:` outside quotes/comments:
+`Sql(r'SELECT items[1\:array_length(items, 1)] FROM data')`.
+Compilation removes the escape and preserves the native expression. To bind
+both bounds, separate the slice colon with spaces: `items[:start : :end]`.
 Mode-dependent MySQL backslash strings and executable comments are rejected;
 bind string values instead.
 
