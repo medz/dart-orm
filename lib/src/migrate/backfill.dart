@@ -104,9 +104,9 @@ Future<void> verifyBackfill(SqlDatabase<Backend> db, Backfill step) async {
   if (db.dialect == SqlDialect.postgres) {
     final security = await db.execute(
       SqlCommand(
-        r'''SELECT row_security_active(c.oid), pg_table_is_visible(c.oid)
-FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = coalesce($2::text, current_schema()) AND c.relname = $1''',
+        r'''SELECT pg_catalog.row_security_active(c.oid), pg_catalog.pg_table_is_visible(c.oid)
+FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = coalesce($2::text, pg_catalog.current_schema()) AND c.relname = $1''',
         [step.table.name, step.table.namespace],
       ),
     );

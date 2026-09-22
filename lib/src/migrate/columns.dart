@@ -172,13 +172,13 @@ Future<List<ColumnInfo>> inspectColumns(
     SqlCommand(
       '''
 SELECT a.attname, pg_catalog.format_type(a.atttypid, a.atttypmod),
-       NOT a.attnotnull, pg_get_expr(d.adbin, d.adrelid),
+       NOT a.attnotnull, pg_catalog.pg_get_expr(d.adbin, d.adrelid),
        a.attidentity <> '' OR a.attgenerated <> '', a.attgenerated::text
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-WHERE c.relname = \$1 AND n.nspname = coalesce(\$2::text, current_schema()) AND a.attnum > 0 AND NOT a.attisdropped
+WHERE c.relname = \$1 AND n.nspname = coalesce(\$2::text, pg_catalog.current_schema()) AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY a.attnum''',
       [table, namespace],
     ),
@@ -229,7 +229,7 @@ Future<List<String>> verifyColumns(
     var contextMatches = true;
     for (final expected in table.columns) {
       final column = actual.remove(expected.name);
-      final path = '${table.name}.${expected.name}';
+      final path = '${table.identity}.${expected.name}';
       if (column == null) {
         contextMatches = false;
         differences.add('$path is missing');
@@ -259,7 +259,7 @@ Future<List<String>> verifyColumns(
       }
     }
     for (final extra in actual.keys) {
-      differences.add('${table.name}.$extra is unmanaged');
+      differences.add('${table.identity}.$extra is unmanaged');
     }
     differences.addAll(
       await verifyComputed(

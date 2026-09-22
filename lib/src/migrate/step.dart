@@ -133,7 +133,7 @@ final class CheckedSql extends MigrationStep {
     if (index.columns.isEmpty) throw ArgumentError('An index needs columns.');
     final source = postgresLiteral(table), name = postgresLiteral(index.name);
     final scope = namespace == null
-        ? 'current_schema()'
+        ? 'pg_catalog.current_schema()'
         : postgresLiteral(namespace);
     final columns =
         'ARRAY[${index.columns.map(postgresLiteral).join(', ')}]::text[]';
@@ -144,26 +144,26 @@ final class CheckedSql extends MigrationStep {
         namespace: namespace,
       ).replaceFirst('INDEX ', 'INDEX CONCURRENTLY '),
       readyWhen: '''SELECT NOT EXISTS (
-SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = $scope AND c.relname = $name)''',
       doneWhen:
           '''SELECT EXISTS (
-SELECT 1 FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
-JOIN pg_namespace n ON n.oid = c.relnamespace JOIN pg_class t ON t.oid = i.indrelid
-JOIN pg_am am ON am.oid = c.relam
+SELECT 1 FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace JOIN pg_catalog.pg_class t ON t.oid = i.indrelid
+JOIN pg_catalog.pg_am am ON am.oid = c.relam
 WHERE n.nspname = $scope AND c.relname = $name AND t.relname = $source
 AND t.relnamespace = n.oid AND i.indisvalid AND i.indisready AND i.indislive
 AND i.indisunique = ${index.unique} AND NOT i.indisprimary AND NOT i.indisexclusion
 AND i.indexprs IS NULL AND i.indpred IS NULL AND i.indnatts = i.indnkeyatts
 AND am.amname = 'btree' AND c.reloptions IS NULL
-AND NOT EXISTS (SELECT 1 FROM pg_constraint constraint_row WHERE constraint_row.conindid = i.indexrelid AND constraint_row.contype IN ('p', 'u', 'x'))
-AND NOT coalesce((to_jsonb(i)->>'indnullsnotdistinct')::boolean, false)
-AND NOT EXISTS (SELECT 1 FROM unnest(i.indoption) v WHERE v <> 0)
-AND NOT EXISTS (SELECT 1 FROM unnest(i.indclass) v JOIN pg_opclass o ON o.oid = v WHERE NOT o.opcdefault)
-AND NOT EXISTS (SELECT 1 FROM unnest(i.indkey, i.indcollation) k(num, collation_oid)
-  JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.num WHERE k.collation_oid <> a.attcollation)
-AND ARRAY(SELECT a.attname::text FROM unnest(i.indkey) WITH ORDINALITY k(num, ord)
-  JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.num ORDER BY k.ord) = $columns)''',
+AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint constraint_row WHERE constraint_row.conindid = i.indexrelid AND constraint_row.contype IN ('p', 'u', 'x'))
+AND NOT coalesce((pg_catalog.to_jsonb(i)->>'indnullsnotdistinct')::boolean, false)
+AND NOT EXISTS (SELECT 1 FROM pg_catalog.unnest(i.indoption) v WHERE v <> 0)
+AND NOT EXISTS (SELECT 1 FROM pg_catalog.unnest(i.indclass) v JOIN pg_catalog.pg_opclass o ON o.oid = v WHERE NOT o.opcdefault)
+AND NOT EXISTS (SELECT 1 FROM ROWS FROM (pg_catalog.unnest(i.indkey), pg_catalog.unnest(i.indcollation)) k(num, collation_oid)
+  JOIN pg_catalog.pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.num WHERE k.collation_oid <> a.attcollation)
+AND ARRAY(SELECT a.attname::text FROM pg_catalog.unnest(i.indkey) WITH ORDINALITY k(num, ord)
+  JOIN pg_catalog.pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.num ORDER BY k.ord) = $columns)''',
     );
   }
   @override

@@ -52,17 +52,17 @@ Future<void> executeStep(SqlDatabase<Backend> db, MigrationStep step) async {
         SqlCommand(
           r'''
 SELECT c.conname, c.contype::text,
- ARRAY(SELECT a.attname::text FROM unnest(c.conkey) WITH ORDINALITY k(num, ord)
- JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.num ORDER BY k.ord),
+ ARRAY(SELECT a.attname::text FROM pg_catalog.unnest(c.conkey) WITH ORDINALITY k(num, ord)
+ JOIN pg_catalog.pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.num ORDER BY k.ord),
  t.relname,
- ARRAY(SELECT a.attname::text FROM unnest(c.confkey) WITH ORDINALITY k(num, ord)
- JOIN pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = k.num ORDER BY k.ord),
+ ARRAY(SELECT a.attname::text FROM pg_catalog.unnest(c.confkey) WITH ORDINALITY k(num, ord)
+ JOIN pg_catalog.pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = k.num ORDER BY k.ord),
  c.confdeltype::text, tn.nspname
-FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid
-JOIN pg_namespace n ON n.oid = r.relnamespace
-LEFT JOIN pg_class t ON t.oid = c.confrelid
-LEFT JOIN pg_namespace tn ON tn.oid = t.relnamespace
-WHERE n.nspname = coalesce($2::text, current_schema()) AND r.relname = $1''',
+FROM pg_catalog.pg_constraint c JOIN pg_catalog.pg_class r ON r.oid = c.conrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = r.relnamespace
+LEFT JOIN pg_catalog.pg_class t ON t.oid = c.confrelid
+LEFT JOIN pg_catalog.pg_namespace tn ON tn.oid = t.relnamespace
+WHERE n.nspname = coalesce($2::text, pg_catalog.current_schema()) AND r.relname = $1''',
           [step.table, step.namespace],
         ),
       );

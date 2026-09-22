@@ -7,6 +7,9 @@
   cross-schema relationships, migrations and catalog verification explicitly.
 - Reject dotted model table names and conflicting declarations. Keep snapshots
   stable when definitions are split or renamed within the same database schema.
+- PostgreSQL cursor tokens now identify schema-qualified tables, including
+  `public`. Regenerated clients reject tokens issued with the earlier unqualified
+  table identity; applications that persist cursors must reissue them.
 
 ## 6.0.0-beta.3
 

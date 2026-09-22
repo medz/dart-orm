@@ -135,6 +135,85 @@ void main() {
         await db.close();
       });
 
+      test('catalog probes ignore shadow system tables and helper functions', () async {
+        final a = _users(first), b = _users(second);
+        final initial = Migration.create('0001_initial', [
+          a.schema,
+          b.schema,
+        ], dialect: .postgres);
+        await Migrator(db.sql).apply([initial]);
+        await db.table(a).createRow((u) => [u.name.set('Alice')]);
+        await db.execute(
+          SqlCommand(
+            'CREATE TABLE "$second".pg_class AS SELECT * FROM pg_catalog.pg_class WHERE false',
+          ),
+        );
+        await db.execute(
+          SqlCommand(
+            'CREATE FUNCTION "$second".row_security_active(oid) RETURNS boolean LANGUAGE plpgsql AS \$\$ BEGIN RAISE EXCEPTION \'shadow helper called\'; END \$\$',
+          ),
+        );
+        await db.session((session) async {
+          await session.execute(
+            SqlCommand('SET search_path TO "$history", "$second", pg_catalog'),
+          );
+          expect(
+            (await verifySchema(session.sql, initial.snapshot!)).differences,
+            isEmpty,
+          );
+          final index = CheckedSql.createIndex(
+            'Users',
+            a.schema.indexes.single,
+            namespace: first,
+          );
+          expect(
+            (await session.execute(SqlCommand(index.readyWhen)))
+                .rows
+                .single
+                .single,
+            false,
+          );
+          expect(
+            (await session.execute(SqlCommand(index.doneWhen)))
+                .rows
+                .single
+                .single,
+            true,
+          );
+          final fill = Migration.steps(
+            '0002_fill',
+            [
+              Backfill(
+                a.schema,
+                set: {'DisplayName': "'Updated'"},
+                where: '"DisplayName" <> \'Updated\'',
+                doneWhen:
+                    'SELECT NOT EXISTS (SELECT 1 FROM "$first"."Users" WHERE "DisplayName" <> \'Updated\')',
+              ),
+            ],
+            dialect: .postgres,
+            snapshot: initial.snapshot,
+            previous: initial.checksum,
+          );
+          await Migrator(session.sql).apply([initial, fill]);
+          expect((await session.table(a).get()).single.name, 'Updated');
+          expect(
+            await verifyColumns(session.sql, [
+              TableSchema(
+                'Users',
+                namespace: first,
+                columns: [_id, Column('Missing', Codecs.text)],
+                primaryKey: ['Id'],
+              ),
+            ]),
+            [
+              '$first.Users.Missing is missing',
+              '$first.Users.DisplayName is unmanaged',
+            ],
+          );
+        });
+      });
+
       test('same-named tables, SQL scope, cursors, joins and watch remain distinct', () async {
         final a = _users(first), b = _users(second);
         await Migrator(db.sql).apply([
