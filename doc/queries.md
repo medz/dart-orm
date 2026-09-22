@@ -32,7 +32,52 @@ Use `.eq`, `.and` and `.or` to construct SQL predicates. `.isNull()` and
 `.isNotNull()` test SQL NULL; `.eq(null)` is available only on a nullable field.
 An empty `isIn([])` is false. Other NULL-containing membership expressions retain
 SQL's three-valued logic, not Dart collection semantics. Values are bound as
-parameters. `like` treats `%` and `_` as SQL wildcards.
+parameters.
+
+### Nullable text and literal matching
+
+Text operations accept both `String` and `String?` expressions:
+
+```dart
+final matches = db.user.where((u) => u.nickname.contains('50%_off!'));
+final names = await matches.select((u) => u.nickname).get(); // List<String?>
+await matches.update((u) => [u.score.increment(1)]).execute();
+
+final prefixes = db.user.where((u) => u.email.startsWith('sales_'));
+final suffixes = db.user.where((u) => u.email.endsWith('@example.com'));
+final patterns = db.user.where((u) => u.nickname.like('A_%'));
+```
+
+| Method | Meaning of its argument |
+| --- | --- |
+| `contains(text)` | Literal text anywhere in the value |
+| `startsWith(text)` | Literal prefix |
+| `endsWith(text)` | Literal suffix |
+| `like(pattern)` | SQL pattern: `%` matches any sequence and `_` one character |
+
+Literal searches escape `%`, `_` and `!`, bind the resulting pattern, and emit
+`ESCAPE '!'`. Quotes, backslashes and Unicode stay bound data. `like` passes its
+bound pattern through using the database's native pattern and escape rules.
+Empty literal searches match every non-NULL string, including an empty string.
+These are database operations: collation, case sensitivity and Unicode behavior
+follow the selected engine and column configuration.
+
+All four methods return `Expr<bool?>`. A NULL input produces SQL NULL, so it does
+not pass `where`; negating the predicate still does not include NULL values.
+Include `.isNull()` explicitly when those rows should match. `lower()` and
+`upper()` also preserve NULL and the expression's Dart nullability:
+
+```dart
+final List<String> emails = await db.user.select((u) => u.email.lower()).get();
+final List<String?> nicknames = await db.user
+    .select((u) => u.nickname.upper()).get();
+```
+
+These derived text values use the standard text codec. A source field's custom
+or mapped decoder is not reapplied to the SQL conversion result, and SQL NULL
+remains null even when the source decoder maps it to a sentinel string.
+
+### Choosing a result operation
 
 Choose the terminal operation that expresses the expected result count:
 

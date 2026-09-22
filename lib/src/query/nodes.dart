@@ -110,6 +110,15 @@ final class BinaryNode(final SqlNode left, final String op, final SqlNode right)
 
 /// @nodoc
 @internal
+final class LikeNode(final SqlNode expression, final SqlNode pattern)
+    extends SqlNode {
+  @override
+  String writeSql(SqlWriter w) =>
+      "(${expression.write(w)} LIKE ${pattern.write(w)} ESCAPE '!')";
+}
+
+/// @nodoc
+@internal
 final class UnaryNode(
   final String op,
   final SqlNode child, {
