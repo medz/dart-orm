@@ -212,7 +212,7 @@ Future<Map<String, Object?>> queryCookbook(
 
   final matchingParents = await db.user
       .where((u) => u.posts.where((p) => p.title.eq(.value('Z1'))).any())
-      .select((u) => (u.id, u.posts.many()).row)
+      .select((u) => (u.id, u.posts.many()).map((id, posts) => (id, posts)))
       .get();
   final filteredChildren = await db.user
       .orderBy((u) => [u.id.asc()])
@@ -263,7 +263,8 @@ Future<Map<String, Object?>> queryCookbook(
     check(
       before.length == 2 &&
           updated == 2 &&
-          after.length == 2 && after.every((p) => p.title == 'Archived') &&
+          after.length == 2 &&
+          after.every((p) => p.title == 'Archived') &&
           deleted == 2 &&
           await tx.post.count() == 1,
       'The same relationship WHERE filters SELECT, UPDATE and DELETE',
