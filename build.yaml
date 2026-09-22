@@ -4,6 +4,7 @@ builders:
     builder_factories: ["ormBuilder"]
     build_extensions:
       ".dart": [".orm.dart", ".snapshot.dart"]
+      "$lib$": ["schema.orm.dart", "schema.snapshot.dart"]
     auto_apply: none
     build_to: source
   queries:

@@ -65,7 +65,7 @@ final class QueryPlan {
       joins = List.unmodifiable(joins),
       loads = List.unmodifiable(loads),
       reads = List.unmodifiable(
-        reads.tables.map((t) => t.name).toSet().toList()..sort(),
+        reads.tables.map((t) => t.identity).toSet().toList()..sort(),
       ),
       opaqueReads = reads.opaque;
 
@@ -192,9 +192,9 @@ QueryPlan _describeStatement(
   for (final (i, expression) in plan.columns.indexed) {
     final node = unwrapStorage(expression.expressionNode);
     final (table, column) = switch (node) {
-      ColumnNode() => (node.table.schema.name, node.name),
+      ColumnNode() => (node.table.schema.identity, node.name),
       PresenceNode() => (
-        node.alias.fields.table.schema.name,
+        node.alias.fields.table.schema.identity,
         node.alias.presenceMarker,
       ),
       _ => (null, null),
@@ -214,13 +214,13 @@ QueryPlan _describeStatement(
     [
       for (final join in state.joins)
         (
-          table: join.alias.fields.table.schema.name,
+          table: join.alias.fields.table.schema.identity,
           left: join.left,
           relation: false,
         ),
       for (final join in plan.joins)
         (
-          table: join.alias.fields.table.schema.name,
+          table: join.alias.fields.table.schema.identity,
           left: join.left,
           relation: true,
         ),

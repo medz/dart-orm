@@ -31,13 +31,14 @@ String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
       );
     }
     b.writeln(
-      'final ${entity.name}Schema = TableSchema(${dartLiteral(entity.table)}, '
+      'final ${entity.binding}Schema = TableSchema(${dartLiteral(entity.table)}, '
+      '${entity.namespace == null ? '' : 'namespace: ${dartLiteral(entity.namespace!)}, '}'
       'columns: [${entity.fields.map((f) => columnSymbol(entity, f)).join(', ')}], '
       'primaryKey: ${dartStringList(entity.columns(entity.primaryKey))}, '
       'uniqueKeys: [${entity.uniqueKeys.map((k) => dartStringList(entity.columns(k))).join(', ')}], '
       'indexes: [${entity.indexes.map((i) => 'IndexSchema(${dartLiteral(i.name)}, ${dartStringList(entity.columns(i.keys))}, unique: ${i.unique})').join(', ')}], '
       '${entity.checks.isEmpty ? '' : 'checks: [${entity.checks.map((c) => 'CheckSchema.forDialects(${c.name == null ? 'null' : dartLiteral(c.name!)}, sqlite: ${dartLiteral(c.sqlite)}, postgres: ${dartLiteral(c.postgres)}, mysql: ${c.mysql == null ? 'null' : dartLiteral(c.mysql!)}, mariadb: ${c.mariadb == null ? 'null' : dartLiteral(c.mariadb!)})').join(', ')}], '}'
-      'foreignKeys: [${entity.edges.where((e) => e.isForeignKey).map((e) => 'ForeignKey(${dartStringList(entity.columns(e.parentKeys))}, ${dartLiteral(e.target.table)}, ${dartStringList(e.target.columns(e.childKeys))}, onDelete: ${dartLiteral(e.onDelete!)})').join(', ')}]);',
+      'foreignKeys: [${entity.edges.where((e) => e.isForeignKey).map((e) => 'ForeignKey(${dartStringList(entity.columns(e.parentKeys))}, ${dartLiteral(e.target.table)}, ${dartStringList(e.target.columns(e.childKeys))}, onDelete: ${dartLiteral(e.onDelete!)}${e.target.namespace == null ? '' : ', targetNamespace: ${dartLiteral(e.target.namespace!)}'})').join(', ')}]);',
     );
     b.writeln(
       'final class ${entity.fieldsType} extends Fields {\n ${entity.fieldsType}(super.table);',
@@ -55,19 +56,19 @@ String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
       }
       b.writeln(
         'Relation<${edge.target.rowType}, ${edge.target.fieldsType}> get ${edge.name} => '
-        'Relation(${edge.target.name}Table, parent: [${edge.parentKeys.join(', ')}], '
+        'Relation(${edge.target.binding}Table, parent: [${edge.parentKeys.join(', ')}], '
         'child: (row) => [${edge.childKeys.map((k) => 'row.$k').join(', ')}]);',
       );
     }
     b.writeln('}');
     final selection = modelSelection(entity, 'row');
     b.writeln(
-      'final ${entity.name}Table = Table<${entity.rowType}, ${entity.fieldsType}>('
-      '${entity.name}Schema, ${entity.fieldsType}.new, (row) => $selection);',
+      'final ${entity.binding}Table = Table<${entity.rowType}, ${entity.fieldsType}>('
+      '${entity.binding}Schema, ${entity.fieldsType}.new, (row) => $selection);',
     );
     b.writeln(
       'final class ${entity.setType} extends TableSet<${entity.rowType}, ${entity.fieldsType}> {'
-      '${entity.setType}(QueryContext db) : super(db, ${entity.name}Table) { db.registerSchema(appSchema); }',
+      '${entity.setType}(QueryContext db) : super(db, ${entity.binding}Table) { db.registerSchema(appSchema); }',
     );
     var input = 'row';
     final create =
@@ -124,13 +125,35 @@ String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
     }
   }
   b.writeln(
-    'final appSchema = List<TableSchema>.unmodifiable([${schema.map((e) => '${e.name}Schema').join(', ')}]);',
+    'final appSchema = List<TableSchema>.unmodifiable([${schema.map((e) => '${e.binding}Schema').join(', ')}]);',
   );
-  b.writeln('extension AppTables on QueryContext {');
-  for (final e in schema) {
-    b.writeln('${e.setType} get ${e.name} => ${e.setType}(this);');
+  if (schema.first.grouped) {
+    final namespaces = schema.map((e) => e.namespace!).toSet().toList()..sort();
+    for (final namespace in namespaces) {
+      final type =
+          '${namespace[0].toUpperCase()}${namespace.substring(1)}Tables';
+      b.writeln(
+        'final class $type { final QueryContext _context; $type(this._context);',
+      );
+      for (final e in schema.where((e) => e.namespace == namespace)) {
+        b.writeln('${e.setType} get ${e.name} => ${e.setType}(_context);');
+      }
+      b.writeln('}');
+    }
+    b.writeln('extension AppTables on QueryContext {');
+    for (final namespace in namespaces) {
+      final type =
+          '${namespace[0].toUpperCase()}${namespace.substring(1)}Tables';
+      b.writeln('$type get $namespace => $type(this);');
+    }
+    b.writeln('}');
+  } else {
+    b.writeln('extension AppTables on QueryContext {');
+    for (final e in schema) {
+      b.writeln('${e.setType} get ${e.name} => ${e.setType}(this);');
+    }
+    b.writeln('}');
   }
-  b.writeln('}');
   return b.toString();
 }
 

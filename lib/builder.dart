@@ -1,6 +1,7 @@
 /// Optional build_runner factories for model and named SQL generation.
 ///
-/// Select source libraries with `generate_for` in `build.yaml`. Applications
+/// Select libraries with `generate_for`, or configure `schema` and `database`
+/// options to collect a definition directory as one client. Applications
 /// import the generated files; these builders run only during development.
 ///
 /// {@category Tooling}

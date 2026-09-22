@@ -10,11 +10,18 @@ import '../../drivers/sqlite.dart';
 import '../../generate.dart';
 import '../../migrate.dart';
 import '../../runtime.dart';
+import '../generate/schema/layout.dart';
 import '../sqlite/assets_io.dart';
 import 'arguments.dart';
 import 'output.dart';
 
-Future<void> runExplicitCli(List<String> arguments, {bool json = false}) async {
+Future<void> runExplicitCli(
+  List<String> arguments, {
+  bool json = false,
+  SqlDialect? dialect,
+  String defaultSource = 'lib/schema.dart',
+  String? defaultOutput,
+}) async {
   void report(Map<String, Object?> value) => CliOutput(json).report(value);
   try {
     if (arguments.first == 'web-assets') {
@@ -32,21 +39,39 @@ Future<void> runExplicitCli(List<String> arguments, {bool json = false}) async {
       return;
     }
     if (arguments.first == 'generate') {
-      if (arguments.length < 2 ||
-          arguments.length > 3 ||
-          arguments.skip(1).any((a) => a.startsWith('--'))) {
+      final args = arguments.skip(1).toList();
+      final index = args.indexOf('--database');
+      if (index >= 0) {
+        if (args.where((v) => v == '--database').length != 1 ||
+            index + 1 >= args.length ||
+            !SqlDialect.values.any((d) => d.name == args[index + 1])) {
+          throw const FormatException(
+            'Use --database sqlite|postgres|mysql|mariadb once.',
+          );
+        }
+        final selected = SqlDialect.values.byName(args[index + 1]);
+        if (dialect != null && selected != dialect) {
+          throw const FormatException(
+            'Generation engine must match the project migration history.',
+          );
+        }
+        dialect = selected;
+        args.removeRange(index, index + 2);
+      }
+      if (args.length > 2 || args.any((a) => a.startsWith('--'))) {
         throw const FormatException(
-          'generate expects a schema and optional output path.',
+          'generate expects a schema path, optional output and --database engine.',
         );
       }
-      await writeGeneratedSchema(
-        arguments[1],
-        output: arguments.length == 3 ? arguments[2] : null,
-      );
+      final source = args.isEmpty ? defaultSource : args.first;
+      final output = args.length == 2
+          ? args.last
+          : args.isEmpty
+          ? defaultOutput
+          : null;
+      await writeGeneratedSchema(source, output: output, dialect: dialect);
       CliOutput(json).report({
-        'generated': arguments.length == 3
-            ? arguments[2]
-            : p.setExtension(arguments[1], '.orm.dart'),
+        'generated': output ?? '${SchemaLayout.stem(source)}.orm.dart',
       });
       return;
     }

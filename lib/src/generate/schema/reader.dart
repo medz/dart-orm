@@ -1,5 +1,6 @@
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:analyzer/dart/ast/token.dart' show Keyword;
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/type.dart';
 import 'package:analyzer/dart/element/type_system.dart';
@@ -16,8 +17,11 @@ final class SchemaReader(
   final CompilationUnit unit,
   final TypeSystem typeSystem,
   final DartNames names,
-  final List<VariableDeclaration> declarations,
-) {
+  final List<VariableDeclaration> declarations, {
+  final String? Function(VariableDeclaration)? namespaceOf,
+  final List<CompilationUnit> additionalRoots = const [],
+  final bool stableOrder = false,
+}) {
   final _models = <VariableElement, ModelEntity>{};
   final _definitions = <ModelEntity, InvocationExpression>{};
   final _fieldTypes = <ModelField, DartType>{};
@@ -26,6 +30,11 @@ final class SchemaReader(
 
   List<ModelEntity> read() {
     final consumed = <AstNode>{};
+    final namespaces = {
+      for (final variable in declarations)
+        variable: namespaceOf?.call(variable),
+    };
+    final grouped = namespaces.values.any((n) => n != null && n != 'public');
     for (final variable in declarations) {
       final declaration = variable.parent as VariableDeclarationList;
       final element = variable.declaredFragment!.element;
@@ -66,29 +75,48 @@ final class SchemaReader(
         fields.add(field);
       }
       final modelName = element.name!;
-      final row = modelName[0].toUpperCase() + modelName.substring(1);
+      final namespace = namespaces[variable];
+      if (namespace != null &&
+          (!RegExp(r'^[a-zA-Z][a-zA-Z0-9_]*$').hasMatch(namespace) ||
+              databaseMembers.contains(namespace) ||
+              Keyword.keywords[namespace]?.isReservedWord == true)) {
+        failAt(
+          variable,
+          'NAMESPACE',
+          'Schema $namespace cannot be used as a Dart database member.',
+        );
+      }
+      final prefix = grouped
+          ? '${namespace![0].toUpperCase()}${namespace.substring(1)}'
+          : '';
+      final row =
+          '$prefix${modelName[0].toUpperCase()}${modelName.substring(1)}';
       final model = ModelEntity(
         modelName,
         stringValue(positionalArguments(expression).first),
         row,
         fields,
+        namespace: namespace,
+        grouped: grouped,
       );
       _models[element] = model;
       _definitions[model] = expression;
       consumed.add(expression);
     }
     // A nested/list/function declaration must never disappear from the schema.
-    unit.accept(
-      _ModelCalls((call) {
-        if (!consumed.contains(call)) {
-          failAt(
-            call,
-            'MODEL',
-            'Place each model directly in a public final top-level variable.',
-          );
-        }
-      }),
-    );
+    for (final root in [unit, ...additionalRoots]) {
+      root.accept(
+        _ModelCalls((call) {
+          if (!consumed.contains(call)) {
+            failAt(
+              call,
+              'MODEL',
+              'Place each model directly in a public final top-level variable.',
+            );
+          }
+        }),
+      );
+    }
     if (_models.isEmpty) {
       failAt(unit, 'MODEL', 'No model declarations found.');
     }
@@ -118,6 +146,10 @@ final class SchemaReader(
       );
     }
     _validate();
+    if (stableOrder) {
+      return _models.values.toList()
+        ..sort((a, b) => a.identity.compareTo(b.identity));
+    }
     // Preserve local declaration order and existing snapshots. External models
     // have no local source order; use physical identity so Dart renames cannot
     // reorder a barrel's migration snapshot.
@@ -398,10 +430,26 @@ final class SchemaReader(
   void _validate() {
     final tables = <String>{}, indexes = <String>{};
     final symbols = <String>{'appSchema', 'AppTables', ...generatedTypeNames};
+    if (_models.values.first.grouped) {
+      for (final namespace in _models.values.map((m) => m.namespace!).toSet()) {
+        final type =
+            '${namespace[0].toUpperCase()}${namespace.substring(1)}Tables';
+        if (!symbols.add(type)) {
+          failAt(unit, 'NAME', 'Generated schema type $type is ambiguous.');
+        }
+      }
+    }
     for (final model in _models.values) {
       final node = _definitions[model]!;
-      if (!tables.add(model.table)) {
-        failAt(node, 'DUPLICATE', 'Duplicate physical table ${model.table}.');
+      if (!tables.add(model.identity)) {
+        final previous = _models.values.firstWhere(
+          (m) => m != model && m.identity == model.identity,
+        );
+        failAt(
+          node,
+          'DUPLICATE',
+          'Duplicate physical table ${model.identity}; also declared in ${(_definitions[previous]!.root as CompilationUnit).declaredFragment!.element.uri}.',
+        );
       }
       if (model.fields.map((f) => f.column).toSet().length !=
           model.fields.length) {
@@ -416,8 +464,8 @@ final class SchemaReader(
         model.fieldsType,
         model.setType,
         '${model.symbol}Updates',
-        '${model.name}Schema',
-        '${model.name}Table',
+        '${model.binding}Schema',
+        '${model.binding}Table',
         for (final field in model.fields) columnSymbol(model, field),
       ]) {
         if (!symbols.add(symbol)) {
@@ -451,7 +499,7 @@ final class SchemaReader(
         }
       }
       for (final index in model.indexes) {
-        if (!indexes.add(index.name)) {
+        if (!indexes.add('${model.namespace ?? ''}.${index.name}')) {
           failAt(node, 'DUPLICATE', 'Duplicate index name ${index.name}.');
         }
       }

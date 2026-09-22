@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../../generate.dart';
 import '../../migrate_cli.dart';
+import '../generate/schema/layout.dart';
 import 'commands.dart';
 import 'config.dart';
 import 'init.dart';
@@ -12,7 +13,7 @@ import 'output.dart';
 const _help = <String, String>{
   '': '''Usage: dart run orm <command> [--json] [--config orm.config.dart]
   init --database sqlite|postgres|mysql|mariadb
-  generate [schema.dart] [output.orm.dart]
+  generate [schema-path] [output.orm.dart] [--database engine]
   migrate create|check|plan|apply|status|verify|baseline|record|inspect
   migration registry <directory> [--dialect engine]
   db inspect|import <options>
@@ -27,11 +28,12 @@ Creates lib/schema.dart, its generated client/snapshot, a static migration
 registry and orm.config.dart in an existing Dart project. Never replaces files,
 connects to a database or applies DDL. Server URLs are read from DATABASE_URL
 only when a connection command runs.''',
-  'generate':
-      '''Usage: dart run orm generate [schema.dart] [output.orm.dart] [--json]
+  'generate': '''Usage: dart run orm generate [schema-path] [output.orm.dart] [--database engine] [--json]
 Without a path, uses OrmConfig.schema or lib/schema.dart. Generates the client
 and standalone physical snapshot without connecting to a database.
-Use an explicit schema path to recreate a deleted snapshot before loading config.''',
+Directory roots accept lib/schema, lib/schema/ or lib/schema.dart.
+The project history selects the engine; --database selects it without loading config.
+To recreate a missing snapshot: generate lib/schema --database <engine>.''',
   'migrate': '''Usage: dart run orm migrate <command> [--json]
   create <id> [--allow-destructive]  Generate schema, then save a reviewed diff
   check                             Validate fixed Dart migration history
@@ -118,7 +120,9 @@ Future<void> runOrmCli(List<String> arguments, {OrmConfig? config}) async {
       return;
     }
     final projectCommand =
-        args.first == 'migrate' || args.first == 'generate' && args.length == 1;
+        args.first == 'migrate' ||
+        args.first == 'generate' &&
+            (!args.contains('--database') || configPath != null);
     if (config == null && projectCommand) {
       final path = configPath ?? 'orm.config.dart';
       if (await File(path).exists()) {
@@ -136,18 +140,20 @@ Future<void> runOrmCli(List<String> arguments, {OrmConfig? config}) async {
           'Missing $path. Run dart run orm init --database <engine>.',
         );
       }
-      args.add('lib/schema.dart');
+      if (args.length == 1) args.add('lib/schema.dart');
     } else if (configPath != null) {
       throw const FormatException(
-        '--config applies to generate without a path and migrate commands.',
+        '--config applies to generate and migrate commands.',
       );
     }
-    if (config != null && args.first == 'generate' && args.length == 1) {
-      await writeGeneratedSchema(config.schema, output: config.output);
-      output.report({
-        'generated':
-            config.output ?? p.setExtension(config.schema, '.orm.dart'),
-      });
+    if (config != null && args.first == 'generate') {
+      await runExplicitCli(
+        args,
+        json: json,
+        dialect: config.history.dialect,
+        defaultSource: config.schema,
+        defaultOutput: config.output,
+      );
       return;
     }
     if (config != null && args.first == 'migrate') {
@@ -165,9 +171,10 @@ Future<void> runOrmCli(List<String> arguments, {OrmConfig? config}) async {
         final generated = await generateSchema(
           config.schema,
           outputPath: config.output,
+          dialect: config.history.dialect,
         );
         final client =
-            config.output ?? p.setExtension(config.schema, '.orm.dart');
+            config.output ?? '${SchemaLayout.stem(config.schema)}.orm.dart';
         await File(client).parent.create(recursive: true);
         await File(client).writeAsString(generated.dart);
         final snapshotPath = client.endsWith('.orm.dart')

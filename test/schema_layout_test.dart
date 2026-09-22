@@ -1,0 +1,256 @@
+import 'dart:io';
+
+import 'package:orm/generate.dart';
+import 'package:orm/migrate.dart';
+import 'package:test/test.dart';
+
+void main() {
+  late Directory project;
+  setUp(() async {
+    project = await Directory('.dart_tool').createTemp('schema-layout-');
+  });
+  tearDown(() => project.delete(recursive: true));
+
+  Future<void> source(String path, String body) async {
+    final file = File('${project.path}/$path');
+    await file.parent.create(recursive: true);
+    await file.writeAsString("import 'package:orm/schema.dart';\n$body");
+  }
+
+  test(
+    'PG directory namespaces, repeated names and cross-schema references',
+    () async {
+      await source(
+        'schema/auth/users.dart',
+        "final user = model('Users', (id: identity(), displayName: text(name: 'DisplayName')));",
+      );
+      await source(
+        'schema/public/users.dart',
+        "import '../auth/users.dart' as auth;\nfinal user = model('Users', (id: identity(), accountId: integer()), relations: (u) => (account: references(u.accountId, () => auth.user),));",
+      );
+      final result = await generateSchema(
+        '${project.path}/schema',
+        dialect: .postgres,
+      );
+      expect(result.snapshot.tables.map((t) => t.identity), [
+        'auth.Users',
+        'public.Users',
+      ]);
+      expect(
+        result.snapshot.tables.last.foreignKeys.single.targetNamespace,
+        'auth',
+      );
+      expect(result.dart, contains('final class AuthUser('));
+      expect(result.dart, contains('final class PublicUser('));
+      expect(result.dart, contains('get auth =>'));
+      expect(result.dart, contains('get public =>'));
+      await writeGeneratedSchema('${project.path}/schema/', dialect: .postgres);
+      final analysis = await Process.run(Platform.resolvedExecutable, [
+        'analyze',
+        project.path,
+      ]);
+      expect(
+        analysis.exitCode,
+        0,
+        reason: '${analysis.stdout}\n${analysis.stderr}',
+      );
+      final sql = Migration.create(
+        '0001_initial',
+        result.snapshot.tables,
+        dialect: .postgres,
+      ).steps.cast<ExecuteSql>().map((s) => s.sql).join('\n');
+      expect(sql, contains('CREATE TABLE "auth"."Users"'));
+      expect(sql, contains('REFERENCES "auth"."Users"'));
+    },
+  );
+
+  test(
+    'all entry spellings merge the default file and directory once',
+    () async {
+      await source(
+        'schema.dart',
+        "export 'schema/public/users.dart';\nfinal post = model('posts', (id: identity(),));",
+      );
+      await source(
+        'schema/public/users.dart',
+        "final user = model('users', (id: identity(),));",
+      );
+      final checksums = <String>{};
+      for (final suffix in ['schema', 'schema/', 'schema.dart']) {
+        final result = await generateSchema(
+          '${project.path}/$suffix',
+          dialect: .postgres,
+        );
+        checksums.add(result.snapshot.checksum);
+        expect(result.snapshot.tables.map((t) => t.identity), [
+          'public.posts',
+          'public.users',
+        ]);
+        expect(result.dart, contains('get user =>'));
+        expect(result.dart, isNot(contains('get public =>')));
+      }
+      expect(checksums, hasLength(1));
+    },
+  );
+
+  test('directory generation requires an offline engine selection', () async {
+    await source(
+      'schema/users.dart',
+      "final user = model('users', (id: identity(),));",
+    );
+    await expectLater(
+      generateSchema('${project.path}/schema'),
+      throwsA(isA<GenerationException>()),
+    );
+  });
+
+  test(
+    'splitting a targeted file into public preserves the snapshot',
+    () async {
+      const posts = "final post = model('posts', (id: identity(),));";
+      const users = "final user = model('users', (id: identity(),));";
+      await source('schema.dart', '$users\n$posts');
+      final before = await generateSchema(
+        '${project.path}/schema',
+        dialect: .postgres,
+      );
+      await source('schema.dart', users);
+      await source('schema/public/posts.dart', posts);
+      final after = await generateSchema(
+        '${project.path}/schema',
+        dialect: .postgres,
+      );
+      expect(after.snapshot.checksum, before.snapshot.checksum);
+      expect(
+        Migration.diff(
+          '0002_split',
+          dialect: .postgres,
+          from: before.snapshot,
+          to: after.snapshot,
+        ).steps,
+        isEmpty,
+      );
+    },
+  );
+
+  for (final dialect in [
+    SqlDialect.sqlite,
+    SqlDialect.mysql,
+    SqlDialect.mariadb,
+  ]) {
+    test(
+      '${dialect.name} collects direct files without namespaces or recursion',
+      () async {
+        await source(
+          'schema/users.dart',
+          "final user = model('users', (id: identity(),));",
+        );
+        await source(
+          'schema/nested/posts.dart',
+          "final post = model('posts', (id: identity(),));",
+        );
+        final result = await generateSchema(
+          '${project.path}/schema',
+          dialect: dialect,
+        );
+        expect(result.snapshot.tables.map((t) => t.name), ['users']);
+        expect(result.snapshot.tables.single.namespace, isNull);
+      },
+    );
+  }
+
+  test('references cannot pull models through deeper directories', () async {
+    await source(
+      'schema/auth/users.dart',
+      "import 'nested/accounts.dart';\nfinal user = model('users', (id: identity(), accountId: integer()), relations: (u) => (account: references(u.accountId, () => account),));",
+    );
+    await source(
+      'schema/auth/nested/accounts.dart',
+      "final account = model('accounts', (id: identity(),));",
+    );
+    await expectLater(
+      generateSchema('${project.path}/schema', dialect: .postgres),
+      throwsA(
+        isA<GenerationException>().having(
+          (e) => e.toString(),
+          'diagnostic',
+          contains('outside the schema layout'),
+        ),
+      ),
+    );
+  });
+
+  test(
+    'moving declarations within a namespace preserves physical identity',
+    () async {
+      await source(
+        'schema/auth/users.dart',
+        "final user = model('users', (id: identity(),));",
+      );
+      final before = await generateSchema(
+        '${project.path}/schema',
+        dialect: .postgres,
+      );
+      await File('${project.path}/schema/auth/users.dart')
+          .rename('${project.path}/schema/auth/accounts.dart');
+      final after = await generateSchema(
+        '${project.path}/schema',
+        dialect: .postgres,
+      );
+      expect(after.snapshot.checksum, before.snapshot.checksum);
+    },
+  );
+
+  test(
+    'dotted table names fail instead of being interpreted as qualification',
+    () async {
+      await source(
+        'schema.dart',
+        "final user = model('auth.users', (id: identity(),));",
+      );
+      await expectLater(
+        generateSchema('${project.path}/schema.dart', dialect: .postgres),
+        throwsA(
+          isA<OrmException>().having(
+            (e) => e.code,
+            'code',
+            'SCHEMA.IDENTIFIER',
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'PG rejects direct directory files and conflicting physical declarations',
+    () async {
+      await source(
+        'schema/users.dart',
+        "final user = model('users', (id: identity(),));",
+      );
+      await expectLater(
+        generateSchema('${project.path}/schema', dialect: .postgres),
+        throwsA(isA<GenerationException>()),
+      );
+      await File('${project.path}/schema/users.dart').delete();
+      await source(
+        'schema.dart',
+        "final user = model('users', (id: identity(),));",
+      );
+      await source(
+        'schema/public/users.dart',
+        "final user = model('users', (id: identity(),));",
+      );
+      await expectLater(
+        generateSchema('${project.path}/schema', dialect: .postgres),
+        throwsA(
+          isA<GenerationException>().having(
+            (e) => e.toString(),
+            'diagnostic',
+            contains('also declared'),
+          ),
+        ),
+      );
+    },
+  );
+}

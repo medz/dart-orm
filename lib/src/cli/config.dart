@@ -6,7 +6,8 @@ import '../../migrate_cli.dart';
 /// Pass this configuration to the project CLI. The history fixes one database
 /// engine; changing a connection URL does not translate migrations.
 final class OrmConfig {
-  /// Source declaration read by generation and migration creation.
+  /// Declaration file or directory root read by generation and migration creation.
+  /// The history engine selects the directory layout; generation stays offline.
   final String schema;
 
   /// Generated client path, or the schema basename with `.orm.dart` when null.

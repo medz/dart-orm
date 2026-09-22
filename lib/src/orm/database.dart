@@ -101,7 +101,7 @@ class Database<B extends Backend> extends QueryContext {
     final changes = <String, bool>{};
     for (final table in tables) {
       _changes.registerTable(table);
-      changes[table.name] = cascade;
+      changes[table.identity] = cascade;
     }
     if (!inTransaction) {
       _changes.publish(changes);

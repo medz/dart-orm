@@ -97,7 +97,7 @@ extension KeysetQuery<R, F extends Fields> on Query<R, F> {
     _validateCursor(terms.map((t) => t.order).toList());
     final payload = {
       'version': 1,
-      'table': queryState.source.schema.name,
+      'table': queryState.source.schema.identity,
       'order': _cursorShape(terms.map((t) => t.order).toList()),
       'values': [
         for (final term in terms) _encodeCursorValue(term.assignedValue),
@@ -122,7 +122,7 @@ extension KeysetQuery<R, F extends Fields> on Query<R, F> {
         utf8.decode(base64Url.decode(token)),
       ) as Map<String, Object?>;
       if (payload['version'] != 1 ||
-          payload['table'] != queryState.source.schema.name ||
+          payload['table'] != queryState.source.schema.identity ||
           jsonEncode(payload['order']) != jsonEncode(_cursorShape(order))) {
         throw const FormatException(
           'Cursor belongs to another schema or sort order.',

@@ -53,10 +53,14 @@ Future<void> initializeProject(List<String> args, CliOutput output) async {
 
   try {
     await save(source, _initialSchema);
-    final generated = await generateSchema(source, outputPath: client);
+    final dialect = SqlDialect.values.byName(engine);
+    final generated = await generateSchema(
+      source,
+      outputPath: client,
+      dialect: dialect,
+    );
     await save(client, generated.dart);
     await save(snapshot, generated.snapshotDart);
-    final dialect = SqlDialect.values.byName(engine);
     final formatter = DartFormatter(
       languageVersion: DartFormatter.latestLanguageVersion,
     );

@@ -103,6 +103,12 @@ void validateMigrations(
         continue;
       }
       if (step is DropTable) {
+        if (step.namespace != null && dialect != SqlDialect.postgres) {
+          throw const OrmException(
+            'MIGRATION.TARGET',
+            'Database schemas require PostgreSQL.',
+          );
+        }
         if (isMysqlFamily(dialect)) {
           throw const OrmException(
             'MIGRATION.RECOVERY',

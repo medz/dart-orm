@@ -73,7 +73,7 @@ dart run build_runner build
 dart run build_runner watch
 ```
 
-The builder is opt-in and uses the explicit `generate_for` list. Select schema
+For individual libraries, the builder is opt-in and uses the explicit `generate_for` list. Select schema
 libraries containing or exporting `model` declarations. Referenced models
 are included transitively; unrelated imports are not additional schema roots.
 Do not select every
@@ -82,9 +82,39 @@ next to their input files. Import generated clients with prefixes if their
 declaration names overlap.
 
 The output of `lib/schema.dart` is always `lib/schema.orm.dart` and
-`lib/schema.snapshot.dart`. There are no ORM-specific builder options. Use the CLI's
-output argument for other locations. `build_runner` owns its build cache and output
+`lib/schema.snapshot.dart`. Set `options.database: postgres` for a PostgreSQL
+file root, so default tables explicitly belong to `public`. Use the CLI's output
+argument for other locations. `build_runner` owns its build cache and output
 cleanup; do not manually edit that cache or generated source.
+
+## Definition directories
+
+For a directory, select its root and engine through builder options. This runs
+once for the root, without requiring an empty `schema.dart` or a `generate_for`
+entry for each model file:
+
+```yaml
+targets:
+  $default:
+    builders:
+      orm:orm:
+        enabled: true
+        options:
+          schema: lib/schema
+          database: postgres
+```
+
+PostgreSQL collects `lib/schema/{schema}/*.dart`; `sqlite`, `mysql` and `mariadb`
+collect `lib/schema/*.dart`. Both also include a sibling `lib/schema.dart` when
+present. Additional nesting is not recursive. The builder tracks matching file
+additions and deletions as well as imported metadata. Outputs remain
+`lib/schema.orm.dart` and `lib/schema.snapshot.dart`.
+
+The CLI accepts `lib/schema`, `lib/schema/` and `lib/schema.dart` for this same root.
+It reads the engine from the project history, or accepts an explicit
+`--database postgres` when no configuration should be loaded. See
+[database schemas](https://github.com/medz/dart-orm/blob/main/doc/namespaces.md) for
+namespace ownership, name collisions, relationships and migration behavior.
 
 ## What triggers regeneration
 

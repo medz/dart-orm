@@ -150,6 +150,10 @@ final class ModelEntity {
   final String name;
   final String table;
   final String row;
+  final String? namespace;
+  final bool grouped;
+  String get binding => grouped ? '${namespace}_$name' : name;
+  String get identity => namespace == null ? table : '$namespace.$table';
   final List<ModelField> fields;
 
   List<String> primaryKey;
@@ -157,16 +161,22 @@ final class ModelEntity {
   final List<ModelIndex> indexes = [];
   final List<ModelRelation> edges = [];
   final List<CheckSchema> checks = [];
-  ModelEntity(this.name, this.table, this.row, this.fields)
-    : primaryKey = [
-        for (final f in fields)
-          if (f.id) f.name,
-      ],
-      uniqueKeys = [
-        for (final f in fields)
-          if (f.unique) [f.name],
-      ];
-  String get symbol => name[0].toUpperCase() + name.substring(1);
+  ModelEntity(
+    this.name,
+    this.table,
+    this.row,
+    this.fields, {
+    this.namespace,
+    this.grouped = false,
+  }) : primaryKey = [
+         for (final f in fields)
+           if (f.id) f.name,
+       ],
+       uniqueKeys = [
+         for (final f in fields)
+           if (f.unique) [f.name],
+       ];
+  String get symbol => row;
   String get fieldsType => '${symbol}Fields';
   String get setType => '${symbol}TableSet';
   String get rowType => row;
@@ -179,6 +189,7 @@ final class ModelEntity {
   ];
   TableSchema snapshot() => TableSchema(
     table,
+    namespace: namespace,
     columns: [for (final f in fields) f.snapshot()],
     primaryKey: columns(primaryKey),
     uniqueKeys: [for (final key in uniqueKeys) columns(key)],
@@ -194,6 +205,7 @@ final class ModelEntity {
             edge.target.table,
             edge.target.columns(edge.childKeys),
             onDelete: edge.onDelete!,
+            targetNamespace: edge.target.namespace,
           ),
     ],
     checks: checks,
@@ -222,4 +234,4 @@ final class ModelRelation(
 }
 
 String columnSymbol(ModelEntity entity, ModelField field) =>
-    '_${entity.name}${field.name[0].toUpperCase()}${field.name.substring(1)}';
+    '_${entity.binding}${field.name[0].toUpperCase()}${field.name.substring(1)}';

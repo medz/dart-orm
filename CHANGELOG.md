@@ -1,3 +1,13 @@
+## Unreleased
+
+- Discover PostgreSQL models in `schema/{schema}/*.dart` and other supported
+  databases in `schema/*.dart`, alongside an optional default `schema.dart`.
+- Generate schema-grouped clients when PostgreSQL models use a non-default
+  namespace. Preserve mixed-case identifiers and qualify table references,
+  cross-schema relationships, migrations and catalog verification explicitly.
+- Reject dotted model table names and conflicting declarations. Keep snapshots
+  stable when definitions are split or renamed within the same database schema.
+
 ## 6.0.0-beta.3
 
 Breaking schema authoring change: replace annotated entities and hand-written row

@@ -11,7 +11,7 @@ import 'migration.dart' show Migration;
 import 'mysql_schema.dart' show isMysqlFamily, mysqlColumnType;
 import 'recovery.dart' show checkpoint, probe;
 import 'snapshot.dart' show SchemaSnapshot;
-import 'sql_utils.dart' show quoteIdentifier;
+import 'sql_utils.dart' show quoteIdentifier, quoteQualified;
 import 'step.dart' show Backfill;
 
 /// Durable counters and primary-key cursors. Keys use lossless strings (binary
@@ -106,11 +106,12 @@ Future<void> verifyBackfill(SqlDatabase<Backend> db, Backfill step) async {
       SqlCommand(
         r'''SELECT row_security_active(c.oid), pg_table_is_visible(c.oid)
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = current_schema() AND c.relname = $1''',
-        [step.table.name],
+WHERE n.nspname = coalesce($2::text, current_schema()) AND c.relname = $1''',
+        [step.table.name, step.table.namespace],
       ),
     );
-    if (security.rows.single[0] == true || security.rows.single[1] != true) {
+    if (security.rows.single[0] == true ||
+        (step.table.namespace == null && security.rows.single[1] != true)) {
       throw const OrmException(
         'MIGRATION.BACKFILL_SCOPE',
         'The historical table is shadowed or has active row security. Backfill requires an unshadowed table and a role that sees all its rows.',
@@ -151,7 +152,7 @@ Future<bool> backfillChunk(
   budget.check();
   final cursor = _BackfillCursor(step);
   final names = step.table.primaryKey.map(quoteIdentifier).toList(),
-      table = quoteIdentifier(step.table.name);
+      table = quoteQualified(step.table.name, step.table.namespace);
   final columns = names.join(', '), key = _tuple(names);
   phase('scan');
   var progress = saved;
@@ -233,7 +234,7 @@ Future<bool> backfillChunk(
       'UPDATE $table SET ${step.set.entries.map((e) => '${quoteIdentifier(e.key)} = ${e.value}').join(', ')} WHERE $predicate${isMysqlFamily(tx.dialect) ? '' : ' AND (${step.where}) RETURNING $columns'}',
       parameters,
     ),
-    changedTables: [step.table.name],
+    changedTables: [step.table.identity],
   );
   final expected = keys.map(jsonEncode).toSet(),
       actual = (isMysqlFamily(tx.dialect) ? selected.rows : updated.rows)

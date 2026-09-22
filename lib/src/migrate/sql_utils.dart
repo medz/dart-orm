@@ -7,6 +7,10 @@ import 'package:crypto/crypto.dart' show sha256;
 String quoteIdentifier(String identifier) =>
     '"${identifier.replaceAll('"', '""')}"';
 
+String quoteQualified(String name, String? namespace) => namespace == null
+    ? quoteIdentifier(name)
+    : '${quoteIdentifier(namespace)}.${quoteIdentifier(name)}';
+
 String postgresLiteral(String value) {
   var tag = r'$orm$';
   while (value.contains(tag)) {

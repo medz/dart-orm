@@ -45,6 +45,7 @@ final class SchemaSnapshot {
 TableSchema targetTable(TableSchema table, SqlDialect dialect) {
   final target = TableSchema(
     table.name,
+    namespace: table.namespace,
     columns: [
       for (final c in table.columns)
         Column<Object?>(
@@ -112,11 +113,13 @@ Map<String, Object?> indexJson(IndexSchema index) => {
 Map<String, Object?> foreignKeyJson(ForeignKey key) => {
   'columns': key.columns,
   'target': key.target,
+  if (key.targetNamespace != null) 'targetNamespace': key.targetNamespace,
   'targetColumns': key.targetColumns,
   'onDelete': key.onDelete,
 };
 Map<String, Object?> tableJson(TableSchema table) => {
   'name': table.name,
+  if (table.namespace != null) 'namespace': table.namespace,
   'columns': [for (final column in table.columns) columnJson(column)],
   'primaryKey': table.primaryKey,
   'uniqueKeys': table.uniqueKeys,

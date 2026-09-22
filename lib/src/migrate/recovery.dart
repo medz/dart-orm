@@ -203,18 +203,9 @@ Future<R> _withMigrationLock<R>(
   Duration timeout,
   Future<R> Function() action,
 ) async {
-  final schemaKey =
-      (await session.execute(SqlCommand('SELECT hashtext(current_schema())')))
-              .rows
-              .single
-              .single
-          as int?;
-  if (schemaKey == null) {
-    throw const OrmException(
-      'MIGRATION.SCHEMA',
-      'A current PostgreSQL schema is required.',
-    );
-  }
+  // PostgreSQL advisory locks already belong to one database. Serialize its
+  // migration histories because different histories may touch the same schema.
+  const schemaKey = 0;
   final watch = Stopwatch()..start();
   var delay = 10;
   while (true) {
