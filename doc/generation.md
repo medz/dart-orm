@@ -40,6 +40,11 @@ output path:
 dart run orm generate lib/schema.dart lib/generated/database.dart
 ```
 
+For directory generation, the output must not match a schema input path,
+including the optional sibling `schema.dart`. Choose a path outside the layout
+or use an excluded `.orm.dart` filename inside it. Invalid paths are rejected
+before either generated file is written, including on the first run.
+
 The CLI checks source errors and resolves imports using the project's package
 configuration. Use it when a single explicit generation step suits the project.
 

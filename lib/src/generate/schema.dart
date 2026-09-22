@@ -44,7 +44,8 @@ final class GeneratedSchema {
 ///
 /// [outputPath] determines relative imports and defaults to the source basename
 /// with an `.orm.dart` extension. Invalid declarations or output collisions throw
-/// [GenerationException]. Application default factories are never executed.
+/// [GenerationException]. Directory outputs must not be discovered as schema
+/// inputs on later runs. Application default factories are never executed.
 Future<GeneratedSchema> generateSchema(
   String sourcePath, {
   String? outputPath,
@@ -58,6 +59,14 @@ Future<GeneratedSchema> generateSchema(
     directory: await Directory(root).exists(),
   );
   final output = p.normalize(p.absolute(outputPath ?? layout.output));
+  if (layout.directory &&
+      SchemaLayout.declaration(output) &&
+      (layout.includes(output) || p.dirname(output) == root)) {
+    throw const GenerationException(
+      'Generated outputs must not become schema inputs. '
+      'Choose a path outside the schema layout or use an .orm.dart filename.',
+    );
+  }
   final sources = <String>[];
   if (await File(layout.file).exists()) sources.add(layout.file);
   if (layout.directory) {

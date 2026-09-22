@@ -39,6 +39,54 @@ void main() {
     await file.writeAsString("import 'package:orm/schema.dart';\n$body");
   }
 
+  for (final dialect in SqlDialect.values) {
+    test(
+      '${dialect.name} rejects outputs discovered as schema inputs',
+      () async {
+        final directory = dialect == SqlDialect.postgres
+            ? 'schema/public'
+            : 'schema';
+        await source(
+          '$directory/users.dart',
+          "final user = model('users', (id: identity(),));",
+        );
+        for (final output in {
+          'schema.dart',
+          '$directory/client.dart',
+          'schema/client.dart',
+        }) {
+          await expectLater(
+            writeGeneratedSchema(
+              '${project.path}/schema',
+              output: '${project.path}/$output',
+              dialect: dialect,
+            ),
+            throwsA(isA<GenerationException>()),
+          );
+          expect(File('${project.path}/$output').existsSync(), isFalse);
+          expect(
+            File(p.setExtension('${project.path}/$output', '.snapshot.dart'))
+                .existsSync(),
+            isFalse,
+          );
+        }
+        final output = '${project.path}/$directory/client.orm.dart';
+        await writeGeneratedSchema(
+          '${project.path}/schema',
+          output: output,
+          dialect: dialect,
+        );
+        final before = await File(output).readAsString();
+        await writeGeneratedSchema(
+          '${project.path}/schema',
+          output: output,
+          dialect: dialect,
+        );
+        expect(await File(output).readAsString(), before);
+      },
+    );
+  }
+
   test(
     'PG directory namespaces, repeated names and cross-schema references',
     () async {
