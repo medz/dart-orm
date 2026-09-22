@@ -211,6 +211,14 @@ The `relations` callback must return a literal named Record containing direct
 
 ## Split schemas and static boundaries
 
+For automatic file collection, use `schema/{schema}/*.dart` on PostgreSQL or
+`schema/*.dart` on SQLite, MySQL and MariaDB. PostgreSQL directory names establish
+database schema ownership; model declarations remain `model(...)`. Neither
+pattern is recursive. See [database schemas](https://github.com/medz/dart-orm/blob/main/doc/namespaces.md)
+for layouts, generated accessors, cross-schema relationships and single-file coexistence.
+
+A single-file root can also select definitions through Dart exports:
+
 Use ordinary independent Dart libraries. A schema root can export selected models:
 
 ```dart

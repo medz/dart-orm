@@ -266,7 +266,9 @@ class Query<R, F extends Fields> {
     final joins = [...queryState.joins, ...plan.joins];
     if (queryState.union == null &&
         !queryState.ctes.any(
-          (cte) => cte.name == queryState.source.schema.name,
+          (cte) =>
+              queryState.source.schema.namespace == null &&
+              cte.name == queryState.source.schema.name,
         )) {
       w.reads?.tables.add(queryState.source.schema);
     }
@@ -388,7 +390,7 @@ class Query<R, F extends Fields> {
         stage == null ? columns.join(', ') : stage.inputs.join(', '),
       );
       buffer.write(
-        ' FROM ${queryState.union == null ? w.quote(queryState.source.schema.name) : '(${queryState.union!.write(w)})'} AS ${w.quote(rootAlias)}',
+        ' FROM ${queryState.union == null ? w.table(queryState.source.schema) : '(${queryState.union!.write(w)})'} AS ${w.quote(rootAlias)}',
       );
       final visible = {...saved, queryState.source: rootAlias};
       for (final join in joins) {
@@ -403,7 +405,7 @@ class Query<R, F extends Fields> {
           temporal: w.temporal,
         )..leftJoins.addAll(w.leftJoins.where(visible.containsKey));
         join.on.expressionNode.write(check);
-        final table = w.quote(ref.schema.name);
+        final table = w.table(ref.schema);
         final source = join.left
             ? '(SELECT *, 1 AS ${w.quote(join.alias.presenceMarker)} FROM $table)'
             : table;

@@ -3,20 +3,43 @@ import 'package:analyzer/dart/analysis/session.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:build/build.dart' as builder;
+import 'package:glob/glob.dart';
 import 'package:path/path.dart' as p;
 
+import '../../driver.dart' show SqlDialect;
 import 'exception.dart';
 import 'queries.dart';
 import 'schema.dart';
+import 'schema/layout.dart';
 
 /// Factory used by build_runner's build.yaml registration.
 builder.Builder ormBuilder(builder.BuilderOptions options) {
-  if (options.config.isNotEmpty) {
+  if (options.config.keys.any((key) => !{'database', 'schema'}.contains(key))) {
     throw ArgumentError(
-      'ORM has no builder-specific options. Select schema roots with generate_for.',
+      'Use database and schema builder options, or generate_for for individual libraries.',
     );
   }
-  return const _OrmBuilder();
+  final database = options.config['database'];
+  if (database != null && !SqlDialect.values.any((d) => d.name == database)) {
+    throw ArgumentError('database must be sqlite, postgres, mysql or mariadb.');
+  }
+  final dialect = database == null
+      ? null
+      : SqlDialect.values.byName(database as String);
+  final schema = options.config['schema'];
+  if (schema != null) {
+    if (schema is! String || dialect == null) {
+      throw ArgumentError(
+        'Directory generation needs schema: lib/schema and database: engine.',
+      );
+    }
+    final root = SchemaLayout.stem(schema, paths: p.url);
+    if (!p.url.isWithin('lib', root)) {
+      throw ArgumentError('Put the schema root under lib/.');
+    }
+    return _OrmDirectoryBuilder(root, dialect);
+  }
+  return _OrmBuilder(dialect: dialect);
 }
 
 /// Fixed SQL files are read as build assets so their edits invalidate output.
@@ -64,7 +87,8 @@ final class _OrmQueryBuilder implements builder.Builder {
 }
 
 final class _OrmBuilder implements builder.Builder {
-  const _OrmBuilder();
+  final SqlDialect? dialect;
+  const _OrmBuilder({this.dialect});
   @override
   Map<String, List<String>> get buildExtensions => const {
     '.dart': ['.orm.dart', '.snapshot.dart'],
@@ -94,6 +118,9 @@ final class _OrmBuilder implements builder.Builder {
         }
         return p.url.relative(asset.path, from: p.url.dirname(output.path));
       },
+      dialect: dialect,
+      stableOrder: dialect != null,
+      namespaceOf: dialect == SqlDialect.postgres ? (_) => 'public' : null,
       resolve: (library) async {
         final node = await step.resolver.astNodeFor(
           library.firstFragment,
@@ -122,10 +149,12 @@ final class _OrmBuilder implements builder.Builder {
   }
 
   Future<(CompilationUnit, LibraryElement)> _resolveSchema(
-    builder.BuildStep step,
-  ) async {
+    builder.BuildStep step, [
+    builder.AssetId? source,
+  ]) async {
+    final input = source ?? step.inputId;
     for (var attempt = 0; ; attempt++) {
-      final library = await step.resolver.libraryFor(step.inputId);
+      final library = await step.resolver.libraryFor(input);
       final node = await step.resolver.astNodeFor(
         library.firstFragment,
         resolve: true,
@@ -155,5 +184,103 @@ final class _OrmBuilder implements builder.Builder {
         if (attempt >= 2) rethrow;
       }
     }
+  }
+}
+
+final class _OrmDirectoryBuilder(final String root, final SqlDialect dialect)
+    implements builder.Builder {
+  @override
+  Map<String, List<String>> get buildExtensions => {
+    r'$lib$': [
+      '${p.url.relative(root, from: 'lib')}.orm.dart',
+      '${p.url.relative(root, from: 'lib')}.snapshot.dart',
+    ],
+  };
+
+  @override
+  Future<void> build(builder.BuildStep step) async {
+    final layout = SchemaLayout(
+      root,
+      dialect: dialect,
+      directory: true,
+      paths: p.url,
+    );
+    final package = step.inputId.package;
+    final sources = <builder.AssetId>[];
+    final file = builder.AssetId(package, layout.file);
+    if (await step.canRead(file)) sources.add(file);
+    final direct = await step.findAssets(Glob('$root/*.dart')).toList();
+    if (dialect == SqlDialect.postgres &&
+        direct.any((f) => SchemaLayout.declaration(f.path))) {
+      throw GenerationException(
+        'Put PostgreSQL declarations in $root/{schema}/*.dart.',
+      );
+    }
+    sources.addAll(
+      dialect == SqlDialect.postgres
+          ? await step.findAssets(Glob('$root/*/*.dart')).toList()
+          : direct,
+    );
+    sources.removeWhere((f) => !SchemaLayout.declaration(f.path));
+    sources.sort((a, b) => a.path.compareTo(b.path));
+    if (sources.isEmpty) {
+      return; // Deleting the definition removes owned outputs.
+    }
+    final units = <CompilationUnit>[];
+    final paths = <LibraryElement, String>{};
+    final resolver = _OrmBuilder(dialect: dialect);
+    for (final source in sources) {
+      if (!await step.resolver.isLibrary(source)) {
+        throw GenerationException(
+          'Use independent Dart schema libraries: $source',
+        );
+      }
+      final (unit, library) = await resolver._resolveSchema(step, source);
+      units.add(unit);
+      paths[library] = source.path;
+    }
+    final output = builder.AssetId(package, layout.output);
+    final library = units.first.declaredFragment!.element;
+    final result = await generateResolvedSchema(
+      units.first,
+      library,
+      p.url.relative(sources.first.path, from: p.url.dirname(output.path)),
+      (uri) {
+        if (uri.scheme != 'asset') return uri.toString();
+        final asset = builder.AssetId.resolve(uri);
+        return asset.package == package
+            ? p.url.relative(asset.path, from: p.url.dirname(output.path))
+            : 'package:${asset.package}/${p.url.relative(asset.path, from: 'lib')}';
+      },
+      resolve: (owner) async {
+        final node = await step.resolver.astNodeFor(
+          owner.firstFragment,
+          resolve: true,
+        );
+        if (node is! CompilationUnit) {
+          throw GenerationException('Cannot resolve ${owner.uri}.');
+        }
+        return node;
+      },
+      additionalRoots: units.skip(1).toList(),
+      namespaceOf: (variable) {
+        final owner = variable.declaredFragment!.element.library!;
+        final path = paths[owner];
+        if (path == null) {
+          throw GenerationException(
+            'Model declared outside the schema layout: ${owner.uri}',
+          );
+        }
+        return layout.namespace(path);
+      },
+      stableOrder: true,
+      dialect: dialect,
+    );
+    final snapshot = result.snapshotDart;
+    await step.writeAsString(output, result.dart);
+    await step.writeAsString(
+      builder.AssetId(package, '$root.snapshot.dart'),
+      snapshot,
+    );
   }
 }

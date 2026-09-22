@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../../driver.dart';
+import '../../schema_model.dart' show TableSchema;
 import 'context.dart';
 import 'expression.dart';
 import 'joins.dart';
@@ -200,6 +201,18 @@ final class SqlWriter {
         : '"${name.replaceAll('"', '""')}"';
   }
 
+  String table(TableSchema table) {
+    final namespace = table.namespace;
+    if (namespace == null) return quote(table.name);
+    if (dialect != SqlDialect.postgres) {
+      throw const OrmException(
+        'SCHEMA.NAMESPACE',
+        'Database schemas require PostgreSQL.',
+      );
+    }
+    return '${quote(namespace)}.${quote(table.name)}';
+  }
+
   String parameter(Object? value, {String? storageType}) {
     // Codec storage, not string pattern guessing, determines temporal binding.
     if (mysql && value is String && storageType == 'instant') {
@@ -291,7 +304,7 @@ final class RelationSubqueryNode(
           p.expressionNode.write(w),
       ];
       final query =
-          'SELECT ${count ? 'COUNT(*)' : '1'} FROM ${w.quote(source.schema.name)} AS ${w.quote(alias)} WHERE ${predicates.join(' AND ')}';
+          'SELECT ${count ? 'COUNT(*)' : '1'} FROM ${w.table(source.schema)} AS ${w.quote(alias)} WHERE ${predicates.join(' AND ')}';
       return count ? '($query)' : 'EXISTS ($query)';
     } finally {
       if (previous == null) {

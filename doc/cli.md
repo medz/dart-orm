@@ -101,7 +101,8 @@ renames/conversions, baseline and recovery behavior.
 These commands also work without project configuration:
 
 ```sh
-dart run orm generate lib/schema.dart lib/generated/database.dart
+dart run orm generate lib/schema.dart lib/generated/database.dart --database sqlite
+dart run orm generate lib/schema --database postgres
 dart run orm migration registry migrations --dialect sqlite
 dart run orm db inspect --sqlite app.sqlite --table tasks
 dart run orm db import --sqlite app.sqlite --output lib/imported.dart
@@ -116,9 +117,16 @@ verifyFull|require|disable` configures server TLS; `--database-schema` is specif
 to PostgreSQL. Catalog import writes a Dart draft and a separate review report.
 It does not migrate an existing database.
 
-Without a config, `generate` uses `lib/schema.dart`. If a config's generated
-snapshot was deleted, recover with the explicit source command
-`dart run orm generate lib/schema.dart`, which does not load that config.
+Generation uses the project configuration even when a schema path is supplied.
+`--database` selects the engine without loading a configuration, which is useful
+when recreating a deleted snapshot:
+`dart run orm generate lib/schema --database postgres`. When an explicitly loaded
+configuration and engine disagree, generation rejects the mismatch. Without a
+configuration or path, the source defaults to `lib/schema.dart`.
+
+Directory layouts require an engine. `lib/schema`, `lib/schema/` and
+`lib/schema.dart` identify the same root and combine the file and directory when
+both exist. See [database schemas](https://github.com/medz/dart-orm/blob/main/doc/namespaces.md).
 
 ## Help and automation
 

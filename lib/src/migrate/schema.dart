@@ -21,7 +21,7 @@ import 'mysql_schema.dart'
         mysqlCreateSchema,
         mysqlStorageType,
         validateMysqlSchema;
-import 'sql_utils.dart' show quoteIdentifier;
+import 'sql_utils.dart' show quoteIdentifier, quoteQualified;
 import 'sqlite_checks.dart' show sqliteName;
 
 /// Creates a new schema. Applications should execute the resulting SQL through
@@ -30,6 +30,15 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
   if (isMysqlFamily(dialect)) return mysqlCreateSchema(tables, dialect);
   final commands = <SqlCommand>[];
   validateSchema(tables, dialect);
+  if (dialect == SqlDialect.postgres) {
+    final namespaces = tables.map((t) => t.namespace).nonNulls.toSet().toList()
+      ..sort();
+    for (final namespace in namespaces) {
+      commands.add(
+        SqlCommand('CREATE SCHEMA IF NOT EXISTS ${quoteIdentifier(namespace)}'),
+      );
+    }
+  }
   for (final table in tables) {
     commands.add(SqlCommand(createTable(table, dialect)));
   }
@@ -39,7 +48,7 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
       for (final key in table.foreignKeys) {
         commands.add(
           SqlCommand(
-            'ALTER TABLE ${quoteIdentifier(table.name)} ADD ${foreignKey(key)}',
+            'ALTER TABLE ${quoteQualified(table.name, table.namespace)} ADD ${foreignKey(key)}',
           ),
         );
       }
@@ -50,7 +59,7 @@ List<SqlCommand> createSchema(List<TableSchema> tables, SqlDialect dialect) {
       commands.add(
         SqlCommand(
           'CREATE ${index.unique ? 'UNIQUE ' : ''}INDEX ${quoteIdentifier(index.name)} '
-          'ON ${quoteIdentifier(table.name)} (${index.columns.map(quoteIdentifier).join(', ')})',
+          'ON ${quoteQualified(table.name, table.namespace)} (${index.columns.map(quoteIdentifier).join(', ')})',
         ),
       );
     }
@@ -76,8 +85,22 @@ void validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
 
   final names = <String>{};
   final indexes = <String>{};
+  String identity(String name, String? namespace) {
+    identifier(name);
+    if (namespace != null) {
+      identifier(namespace);
+      if (dialect != null && dialect != SqlDialect.postgres) {
+        throw const OrmException(
+          'SCHEMA.NAMESPACE',
+          'Database schemas require PostgreSQL.',
+        );
+      }
+    }
+    return namespace == null ? identifier(name) : '$namespace.$name';
+  }
+
   for (final table in tables) {
-    if (!names.add(identifier(table.name))) {
+    if (!names.add(identity(table.name, table.namespace))) {
       throw const OrmException('SCHEMA.DUPLICATE', 'Duplicate table name.');
     }
   }
@@ -193,7 +216,10 @@ void validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
       );
     }
     for (final index in table.indexes) {
-      final name = identifier(index.name);
+      final component = identifier(index.name);
+      final name = table.namespace == null
+          ? component
+          : '${table.namespace}.$component';
       if (names.contains(name) || !indexes.add(name)) {
         throw const OrmException(
           'SCHEMA.DUPLICATE',
@@ -203,7 +229,7 @@ void validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
     }
     for (final key in table.foreignKeys) {
       foreignKey(key);
-      identifier(key.target);
+      identity(key.target, key.targetNamespace);
       if (key.columns.toSet().length != key.columns.length ||
           key.targetColumns.toSet().length != key.targetColumns.length ||
           key.columns.any(
@@ -257,7 +283,7 @@ String createTable(TableSchema table, SqlDialect dialect, {String? name}) {
     }
   }
 
-  return 'CREATE TABLE ${quoteIdentifier(name ?? table.name)} (${definitions.join(', ')})';
+  return 'CREATE TABLE ${quoteQualified(name ?? table.name, table.namespace)} (${definitions.join(', ')})';
 }
 
 String checkDefinition(CheckSchema check, SqlDialect dialect) =>
@@ -308,9 +334,9 @@ String columnDefinition(Column<Object?> c, SqlDialect dialect) {
   return b.toString();
 }
 
-String createIndexSql(String table, IndexSchema index) =>
+String createIndexSql(String table, IndexSchema index, {String? namespace}) =>
     'CREATE ${index.unique ? 'UNIQUE ' : ''}INDEX ${quoteIdentifier(index.name)} '
-    'ON ${quoteIdentifier(table)} (${index.columns.map(quoteIdentifier).join(', ')})';
+    'ON ${quoteQualified(table, namespace)} (${index.columns.map(quoteIdentifier).join(', ')})';
 
 String foreignKey(ForeignKey key) {
   if (key.columns.isEmpty ||
@@ -327,7 +353,7 @@ String foreignKey(ForeignKey key) {
       'Invalid foreign key declaration.',
     );
   }
-  return 'FOREIGN KEY (${key.columns.map(quoteIdentifier).join(', ')}) REFERENCES ${quoteIdentifier(key.target)} '
+  return 'FOREIGN KEY (${key.columns.map(quoteIdentifier).join(', ')}) REFERENCES ${quoteQualified(key.target, key.targetNamespace)} '
       '(${key.targetColumns.map(quoteIdentifier).join(', ')}) ON DELETE ${key.onDelete}';
 }
 

@@ -1,3 +1,21 @@
+## Unreleased
+
+Breaking PostgreSQL schema change: table identities now include the database
+schema, including `public`. Regenerate clients and snapshots and review the
+required migration. Old unqualified snapshots are not automatically normalized;
+generated table replacement requires explicit destructive opt-in and deletes data.
+
+- Discover PostgreSQL models in `schema/{schema}/*.dart` and other supported
+  databases in `schema/*.dart`, alongside an optional default `schema.dart`.
+- Generate schema-grouped clients when PostgreSQL models use a non-default
+  namespace. Preserve mixed-case identifiers and qualify table references,
+  cross-schema relationships, migrations and catalog verification explicitly.
+- Reject dotted model table names and conflicting declarations. Keep snapshots
+  stable when definitions are split or renamed within the same database schema.
+- PostgreSQL cursor tokens now identify schema-qualified tables, including
+  `public`. Regenerated clients reject tokens issued with the earlier unqualified
+  table identity; applications that persist cursors must reissue them.
+
 ## 6.0.0-beta.3
 
 Breaking schema authoring change: replace annotated entities and hand-written row

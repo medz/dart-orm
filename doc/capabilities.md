@@ -74,6 +74,14 @@ roles, command, mode and expressions plus enabled/forced row-security flags.
 Baseline does not certify grants, every extension, authorization behavior or the
 entire database environment. See [migrations](https://github.com/medz/dart-orm/blob/main/doc/migrations.md) and [importing](https://github.com/medz/dart-orm/blob/main/doc/importing.md).
 
+## Database schemas
+
+PostgreSQL models can belong to named schemas in the same database, including
+cross-schema relationships. The generator records the default `public` schema
+explicitly when PostgreSQL is selected. MySQL/MariaDB database namespaces and
+SQLite attached databases are not exposed by this model layout feature. See
+[database schemas](https://github.com/medz/dart-orm/blob/main/doc/namespaces.md).
+
 ## Connections, platforms and tools
 
 PostgreSQL uses its driver's pool and supports borrowed-pool ownership. SQLite

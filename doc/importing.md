@@ -33,6 +33,13 @@ PostgreSQL uses a read-only, repeatable-read transaction in the selected schema.
 Each invocation uses one catalog snapshot. Existing outer transactions are rejected;
 a borrowed session without an active transaction is allowed.
 
+For a non-default PostgreSQL schema, place the imported file in its matching
+directory, for example `--database-schema auth --output lib/schema/auth/imported.dart`,
+then run `dart run orm generate lib/schema --database postgres`. Import currently
+reads one database schema per invocation. Cross-schema relationships remain
+reported as unmanaged and must be declared against the imported target models
+before generation. See [database schema layouts](https://github.com/medz/dart-orm/blob/main/doc/namespaces.md).
+
 To import one table, use `--table accounts`. For a selected related group, use
 `importSchema(db, tables: ['accounts', 'notes'])` in Dart. Without a selection,
 discovery covers SQLite main, the current PostgreSQL schema or the selected

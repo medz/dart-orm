@@ -2,6 +2,7 @@
 
 import '../../driver.dart' show Backend, SqlCommand, SqlDialect;
 import '../../runtime.dart' show SqlDatabase;
+import '../../values.dart' show OrmException;
 import '../../schema_model.dart'
     show Column, ComputedColumn, ComputedStorage, TableSchema;
 import 'catalog.dart' show normalizeDefault;
@@ -99,8 +100,15 @@ final class ColumnInfo {
 /// Reads storage types, nullability, defaults, and computed-column metadata.
 Future<List<ColumnInfo>> inspectColumns(
   SqlDatabase<Backend> db,
-  String table,
-) async {
+  String table, {
+  String? namespace,
+}) async {
+  if (namespace != null && db.dialect != SqlDialect.postgres) {
+    throw const OrmException(
+      'SCHEMA.NAMESPACE',
+      'Database schemas require PostgreSQL.',
+    );
+  }
   if (isMysqlFamily(db.dialect)) return mysqlColumns(db, table);
   if (db.dialect == SqlDialect.sqlite) {
     final rows = await db.execute(
@@ -164,15 +172,15 @@ Future<List<ColumnInfo>> inspectColumns(
     SqlCommand(
       '''
 SELECT a.attname, pg_catalog.format_type(a.atttypid, a.atttypmod),
-       NOT a.attnotnull, pg_get_expr(d.adbin, d.adrelid),
+       NOT a.attnotnull, pg_catalog.pg_get_expr(d.adbin, d.adrelid),
        a.attidentity <> '' OR a.attgenerated <> '', a.attgenerated::text
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-WHERE c.relname = \$1 AND n.nspname = current_schema() AND a.attnum > 0 AND NOT a.attisdropped
+WHERE c.relname = \$1 AND n.nspname = coalesce(\$2::text, pg_catalog.current_schema()) AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY a.attnum''',
-      [table],
+      [table, namespace],
     ),
   );
   return [
@@ -212,12 +220,16 @@ Future<List<String>> verifyColumns(
 ) async {
   final differences = <String>[];
   for (final table in tables) {
-    final inspected = await inspectColumns(db, table.name);
+    final inspected = await inspectColumns(
+      db,
+      table.name,
+      namespace: table.namespace,
+    );
     final actual = {for (final c in inspected) c.name: c};
     var contextMatches = true;
     for (final expected in table.columns) {
       final column = actual.remove(expected.name);
-      final path = '${table.name}.${expected.name}';
+      final path = '${table.identity}.${expected.name}';
       if (column == null) {
         contextMatches = false;
         differences.add('$path is missing');
@@ -247,7 +259,7 @@ Future<List<String>> verifyColumns(
       }
     }
     for (final extra in actual.keys) {
-      differences.add('${table.name}.$extra is unmanaged');
+      differences.add('${table.identity}.$extra is unmanaged');
     }
     differences.addAll(
       await verifyComputed(

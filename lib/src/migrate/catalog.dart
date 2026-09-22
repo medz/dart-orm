@@ -1,6 +1,7 @@
 import 'dart:convert' show jsonEncode;
 
 import '../../driver.dart' show Backend, SqlCommand, SqlDialect;
+import '../../values.dart' show OrmException;
 import '../../runtime.dart' show SqlDatabase;
 import '../../schema_model.dart' show Column, ForeignKey, IndexSchema;
 import '../../values.dart'
@@ -44,6 +45,9 @@ final class CatalogObject {
 /// [unmanaged] preserves descriptions of objects a migration must not silently
 /// replace, such as custom triggers or unsupported index definitions.
 final class TableInfo {
+  /// PostgreSQL schema explicitly selected for this inspection.
+  final String? namespace;
+
   /// Physical table name used for this inspection.
   final String name;
 
@@ -73,6 +77,7 @@ final class TableInfo {
   /// Supplied lists are retained; use [inspectTable] to obtain live metadata.
   const TableInfo({
     required this.name,
+    this.namespace,
     required this.columns,
     required this.primaryKey,
     required this.uniqueKeys,
@@ -99,9 +104,19 @@ final class SchemaVerification {
 }
 
 /// Reads one physical [table] without changing its schema or data.
-Future<TableInfo> inspectTable(SqlDatabase<Backend> db, String table) async {
+Future<TableInfo> inspectTable(
+  SqlDatabase<Backend> db,
+  String table, {
+  String? namespace,
+}) async {
+  if (namespace != null && db.dialect != SqlDialect.postgres) {
+    throw const OrmException(
+      'SCHEMA.NAMESPACE',
+      'Database schemas require PostgreSQL.',
+    );
+  }
   if (isMysqlFamily(db.dialect)) return mysqlTable(db, table);
-  final columns = await inspectColumns(db, table);
+  final columns = await inspectColumns(db, table, namespace: namespace);
   final primary = <String>[],
       unique = <List<String>>[],
       indexes = <IndexSchema>[];
@@ -233,29 +248,31 @@ Future<TableInfo> inspectTable(SqlDatabase<Backend> db, String table) async {
       SqlCommand(
         r'''
 SELECT c.conname, c.contype::text,
- ARRAY(SELECT a.attname::text FROM unnest(c.conkey) WITH ORDINALITY k(num, ord)
-       JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.num ORDER BY k.ord),
+ ARRAY(SELECT a.attname::text FROM pg_catalog.unnest(c.conkey) WITH ORDINALITY k(num, ord)
+       JOIN pg_catalog.pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.num ORDER BY k.ord),
  t.relname,
- ARRAY(SELECT a.attname::text FROM unnest(c.confkey) WITH ORDINALITY k(num, ord)
-       JOIN pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = k.num ORDER BY k.ord),
+ ARRAY(SELECT a.attname::text FROM pg_catalog.unnest(c.confkey) WITH ORDINALITY k(num, ord)
+       JOIN pg_catalog.pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = k.num ORDER BY k.ord),
  c.confdeltype::text, c.confupdtype::text, c.confmatchtype::text,
- c.condeferrable, c.convalidated, pg_get_constraintdef(c.oid), tn.nspname,
- coalesce((to_jsonb(i)->>'indnullsnotdistinct')::boolean, false),
- pg_get_expr(c.conbin, c.conrelid), c.connoinherit, c.conislocal, c.coninhcount,
- coalesce((to_jsonb(c)->>'conenforced')::boolean, true)
-FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid
-JOIN pg_namespace n ON n.oid = r.relnamespace
-LEFT JOIN pg_class t ON t.oid = c.confrelid
-LEFT JOIN pg_namespace tn ON tn.oid = t.relnamespace
-LEFT JOIN pg_index i ON i.indexrelid = c.conindid
-WHERE n.nspname = current_schema() AND r.relname = $1''',
-        [table],
+ c.condeferrable, c.convalidated, pg_catalog.pg_get_constraintdef(c.oid), tn.nspname,
+ coalesce((pg_catalog.to_jsonb(i)->>'indnullsnotdistinct')::boolean, false),
+ pg_catalog.pg_get_expr(c.conbin, c.conrelid), c.connoinherit, c.conislocal, c.coninhcount,
+ coalesce((pg_catalog.to_jsonb(c)->>'conenforced')::boolean, true)
+FROM pg_catalog.pg_constraint c JOIN pg_catalog.pg_class r ON r.oid = c.conrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = r.relnamespace
+LEFT JOIN pg_catalog.pg_class t ON t.oid = c.confrelid
+LEFT JOIN pg_catalog.pg_namespace tn ON tn.oid = t.relnamespace
+LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.conindid
+WHERE n.nspname = coalesce($2::text, pg_catalog.current_schema()) AND r.relname = $1''',
+        [table, namespace],
       ),
     );
-    final schemaName = (await db.execute(SqlCommand('SELECT current_schema()')))
-        .rows
-        .single
-        .single;
+    final schemaName =
+        namespace ??
+        (await db.execute(SqlCommand('SELECT pg_catalog.current_schema()')))
+            .rows
+            .single
+            .single;
     for (final row in constraints.rows) {
       final kind = row[1] as String,
           keys = (row[2] as List<Object?>).cast<String>();
@@ -276,12 +293,15 @@ WHERE n.nspname = current_schema() AND r.relname = $1''',
           row[7] == 's' &&
           row[8] == false &&
           row[9] == true &&
-          row[11] == schemaName) {
+          (namespace != null || row[11] == schemaName)) {
         foreign.add(
           ForeignKey(
             keys,
             row[3] as String,
             (row[4] as List<Object?>).cast<String>(),
+            targetNamespace: namespace == null && row[11] == schemaName
+                ? null
+                : row[11] as String,
             onDelete: switch (row[5]) {
               'a' => 'NO ACTION',
               'r' => 'RESTRICT',
@@ -309,22 +329,22 @@ WHERE n.nspname = current_schema() AND r.relname = $1''',
       SqlCommand(
         r'''
 SELECT ic.relname, i.indisunique, i.indisvalid AND i.indisready AND i.indislive,
- ARRAY(SELECT a.attname::text FROM unnest(i.indkey) WITH ORDINALITY k(num, ord)
-       LEFT JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.num ORDER BY k.ord),
- pg_get_indexdef(i.indexrelid), i.indexprs IS NULL AND i.indpred IS NULL
+ ARRAY(SELECT a.attname::text FROM pg_catalog.unnest(i.indkey) WITH ORDINALITY k(num, ord)
+       LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.num ORDER BY k.ord),
+ pg_catalog.pg_get_indexdef(i.indexrelid), i.indexprs IS NULL AND i.indpred IS NULL
  AND i.indnatts = i.indnkeyatts AND am.amname = 'btree'
  AND ic.reloptions IS NULL
- AND NOT coalesce((to_jsonb(i)->>'indnullsnotdistinct')::boolean, false)
- AND NOT EXISTS(SELECT 1 FROM unnest(i.indoption) v WHERE v <> 0)
- AND NOT EXISTS(SELECT 1 FROM unnest(i.indclass) v JOIN pg_opclass o ON o.oid = v WHERE NOT o.opcdefault)
- AND NOT EXISTS(SELECT 1 FROM unnest(i.indkey, i.indcollation) k(num, collation_oid)
-   JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.num WHERE k.collation_oid <> a.attcollation)
-FROM pg_index i JOIN pg_class t ON t.oid = i.indrelid
-JOIN pg_namespace n ON n.oid = t.relnamespace JOIN pg_class ic ON ic.oid = i.indexrelid
-JOIN pg_am am ON am.oid = ic.relam
-WHERE n.nspname = current_schema() AND t.relname = $1
-AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.indexrelid AND c.contype IN ('p', 'u', 'x'))''',
-        [table],
+ AND NOT coalesce((pg_catalog.to_jsonb(i)->>'indnullsnotdistinct')::boolean, false)
+ AND NOT EXISTS(SELECT 1 FROM pg_catalog.unnest(i.indoption) v WHERE v <> 0)
+ AND NOT EXISTS(SELECT 1 FROM pg_catalog.unnest(i.indclass) v JOIN pg_catalog.pg_opclass o ON o.oid = v WHERE NOT o.opcdefault)
+ AND NOT EXISTS(SELECT 1 FROM ROWS FROM (pg_catalog.unnest(i.indkey), pg_catalog.unnest(i.indcollation)) k(num, collation_oid)
+   JOIN pg_catalog.pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.num WHERE k.collation_oid <> a.attcollation)
+FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class t ON t.oid = i.indrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = t.relnamespace JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
+JOIN pg_catalog.pg_am am ON am.oid = ic.relam
+WHERE n.nspname = coalesce($2::text, pg_catalog.current_schema()) AND t.relname = $1
+AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint c WHERE c.conindid = i.indexrelid AND c.contype IN ('p', 'u', 'x'))''',
+        [table, namespace],
       ),
     );
     for (final row in list.rows) {
@@ -346,20 +366,20 @@ AND NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conindid = i.indexrelid AN
     final extras = await db.execute(
       SqlCommand(
         r'''
-SELECT 'trigger', t.tgname, pg_get_triggerdef(t.oid)
-FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE c.relname = $1 AND n.nspname = current_schema() AND NOT t.tgisinternal
+SELECT 'trigger', t.tgname, pg_catalog.pg_get_triggerdef(t.oid)
+FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relname = $1 AND n.nspname = coalesce($2::text, pg_catalog.current_schema()) AND NOT t.tgisinternal
 UNION ALL SELECT 'policy', policyname,
- jsonb_build_object('permissive', permissive, 'roles', roles, 'command', cmd,
+ pg_catalog.jsonb_build_object('permissive', permissive, 'roles', roles, 'command', cmd,
    'using', qual, 'withCheck', with_check)::text
-FROM pg_policies WHERE schemaname = current_schema() AND tablename = $1
+FROM pg_catalog.pg_policies WHERE schemaname = coalesce($2::text, pg_catalog.current_schema()) AND tablename = $1
 UNION ALL SELECT 'row_security', c.relname,
- jsonb_build_object('enabled', c.relrowsecurity, 'forced', c.relforcerowsecurity)::text
-FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE c.relname = $1 AND n.nspname = current_schema()
+ pg_catalog.jsonb_build_object('enabled', c.relrowsecurity, 'forced', c.relforcerowsecurity)::text
+FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relname = $1 AND n.nspname = coalesce($2::text, pg_catalog.current_schema())
 AND (c.relrowsecurity OR c.relforcerowsecurity
- OR EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid))''',
-        [table],
+ OR EXISTS (SELECT 1 FROM pg_catalog.pg_policy p WHERE p.polrelid = c.oid))''',
+        [table, namespace],
       ),
     );
     for (final row in extras.rows) {
@@ -370,6 +390,7 @@ AND (c.relrowsecurity OR c.relforcerowsecurity
   }
   return TableInfo(
     name: table,
+    namespace: namespace,
     columns: columns,
     primaryKey: primary,
     uniqueKeys: unique,
@@ -391,13 +412,17 @@ Future<SchemaVerification> verifySchema(
   if (isMysqlFamily(db.dialect)) return mysqlVerifySchema(db, expected);
   final differences = <String>[], unmanaged = <CatalogObject>[];
   for (final table in expected.tables) {
-    final actual = await inspectTable(db, table.name);
+    final actual = await inspectTable(
+      db,
+      table.name,
+      namespace: table.namespace,
+    );
     unmanaged.addAll(actual.unmanaged);
     final columns = {for (final c in actual.columns) c.name: c};
     var checkContextMatches = true;
     for (final column in table.columns) {
       final found = columns.remove(column.name),
-          path = '${table.name}.${column.name}';
+          path = '${table.identity}.${column.name}';
       if (found == null) {
         checkContextMatches = false;
         differences.add('$path is missing');
@@ -445,7 +470,7 @@ Future<SchemaVerification> verifySchema(
       }
     }
     for (final name in columns.keys) {
-      differences.add('${table.name}.$name is unmanaged');
+      differences.add('${table.identity}.$name is unmanaged');
     }
     differences.addAll(
       await verifyComputed(
@@ -457,7 +482,7 @@ Future<SchemaVerification> verifySchema(
     );
     void compare(String kind, Object? desired, Object? found) {
       if (migrationHash(desired) != migrationHash(found)) {
-        differences.add('${table.name} $kind differs');
+        differences.add('${table.identity} $kind differs');
       }
     }
 
@@ -469,16 +494,26 @@ Future<SchemaVerification> verifySchema(
     // Expected SQL may no longer resolve when a referenced column/type drifted.
     // Report that schema drift instead of attempting an invalid EXPLAIN.
     final checkMatches = checkContextMatches
-        ? await matchChecks(db, table.name, table.checks, actual.checks)
+        ? await matchChecks(
+            db,
+            table.name,
+            table.checks,
+            actual.checks,
+            namespace: table.namespace,
+          )
         : List<int?>.filled(table.checks.length, null);
     if (checkMatches.any((i) => i == null) ||
         checkMatches.length != actual.checks.length) {
-      differences.add('${table.name} checks differs');
+      differences.add('${table.identity} checks differs');
       for (var i = 0; i < actual.checks.length; i++) {
         if (!checkMatches.contains(i)) {
           final c = actual.checks[i];
           unmanaged.add(
-            CatalogObject('check', c.name ?? '${table.name}#$i', c.expression),
+            CatalogObject(
+              'check',
+              c.name ?? '${table.identity}#$i',
+              c.expression,
+            ),
           );
         }
       }

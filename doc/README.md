@@ -4,7 +4,8 @@ Define a schema, generate typed models and queries, and evolve your database wit
 reviewed Dart migrations. Start with [schema declarations](https://github.com/medz/dart-orm/blob/main/doc/authoring.md)
 and the [company example](https://github.com/medz/dart-orm/blob/main/example/company/README.md).
 
-> **Version:** These guides describe `6.0.0-beta.3` and its Record schema API.
+> **Version:** These guides follow the repository source. Use the corresponding
+> release tag for the exact behavior of a published package.
 > When upgrading, replace annotated entities with `model(...)` and regenerate
 > clients. Keep existing migration history unchanged.
 
@@ -13,6 +14,7 @@ and the [company example](https://github.com/medz/dart-orm/blob/main/example/com
 | Task | Guide |
 | --- | --- |
 | Define models, columns, keys and relationships | [Schema declarations](https://github.com/medz/dart-orm/blob/main/doc/authoring.md) |
+| Organize files and PostgreSQL database schemas | [Database schemas](https://github.com/medz/dart-orm/blob/main/doc/namespaces.md) |
 | Generate a client and use build_runner | [Generation](https://github.com/medz/dart-orm/blob/main/doc/generation.md) |
 | Choose imports and open a database | [Entrypoints](https://github.com/medz/dart-orm/blob/main/doc/api.md) |
 | Filter, select, join and paginate | [Queries](https://github.com/medz/dart-orm/blob/main/doc/queries.md) |

@@ -318,8 +318,8 @@ final class Mutation<F extends Fields> {
     }
 
     final table = w.mysql && mutationKind == MutationKind.insert
-        ? w.quote(queryState.source.schema.name)
-        : '${w.quote(queryState.source.schema.name)} AS ${w.quote('t0')}';
+        ? w.table(queryState.source.schema)
+        : '${w.table(queryState.source.schema)} AS ${w.quote('t0')}';
     if (w.mysql && mutationKind == MutationKind.insert) {
       w.unqualifiedTable = queryState.source;
     }

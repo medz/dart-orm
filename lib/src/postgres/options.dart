@@ -36,7 +36,9 @@ final class PostgresOptions {
   /// Label exposed by PostgreSQL in connection and activity diagnostics.
   final String applicationName;
 
-  /// Optional, quoted schema used as the connection search path.
+  /// Optional, quoted search path for raw SQL and historical unqualified metadata.
+  /// PostgreSQL-generated models retain their declared namespace (default `public`)
+  /// independently of this setting.
   final String? schema;
 
   /// Creates pool configuration; opening the driver validates its values.

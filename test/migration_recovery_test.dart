@@ -296,9 +296,7 @@ void main() {
       try {
         await blocker.session((held) async {
           await held.execute(
-            SqlCommand(
-              'SELECT pg_advisory_lock(182983479, hashtext(current_schema()))',
-            ),
+            SqlCommand('SELECT pg_advisory_lock(182983479, 0)'),
           );
           try {
             final migrator = Migrator(
@@ -326,9 +324,7 @@ void main() {
             );
           } finally {
             await held.execute(
-              SqlCommand(
-                'SELECT pg_advisory_unlock(182983479, hashtext(current_schema()))',
-              ),
+              SqlCommand('SELECT pg_advisory_unlock(182983479, 0)'),
             );
           }
         });

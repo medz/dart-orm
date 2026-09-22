@@ -72,7 +72,7 @@ final class _QueryWatch<R, F extends Fields> implements ChangeSubscription {
         );
       }
       for (final table in [...reads.tables, ...extraReads]) {
-        tables.add(table.name);
+        tables.add(table.identity);
         changesFor(db.driver).registerTable(table);
       }
       // Subscribe before the initial read so concurrent commits cannot be lost.

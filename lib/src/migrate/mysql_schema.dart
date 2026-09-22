@@ -35,6 +35,7 @@ TableSchema mysqlCopy(
   List<CheckSchema>? checks,
 }) => TableSchema(
   name ?? table.name,
+  namespace: table.namespace,
   columns: columns ?? table.columns,
   primaryKey: primaryKey ?? table.primaryKey,
   uniqueKeys: uniqueKeys ?? table.uniqueKeys,

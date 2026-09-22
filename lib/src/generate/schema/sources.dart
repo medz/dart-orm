@@ -27,18 +27,24 @@ VariableElement? modelVariable(Element? element) {
 Future<List<VariableDeclaration>> schemaSources(
   CompilationUnit root,
   LibraryElement library,
-  Future<CompilationUnit> Function(LibraryElement) resolve,
-) async {
-  final units = <LibraryElement, CompilationUnit>{library: root};
+  Future<CompilationUnit> Function(LibraryElement) resolve, {
+  List<CompilationUnit> additionalRoots = const [],
+}) async {
+  final roots = [root, ...additionalRoots];
+  final units = <LibraryElement, CompilationUnit>{
+    for (final unit in roots) unit.declaredFragment!.element: unit,
+  };
   final result = <VariableElement, VariableDeclaration>{};
-  final exports = library.exportNamespace.definedNames2.values
+  final exports = units.keys
+      .expand((library) => library.exportNamespace.definedNames2.values)
       .map(modelVariable)
       .whereType<VariableElement>()
       .toSet();
   final pending = <VariableElement>[
-    for (final variable in topLevelVariables(root))
-      if (isModel(variable.declaredFragment!.element.type))
-        variable.declaredFragment!.element,
+    for (final unit in roots)
+      for (final variable in topLevelVariables(unit))
+        if (isModel(variable.declaredFragment!.element.type))
+          variable.declaredFragment!.element,
     ...exports,
   ];
   for (var i = 0; i < pending.length; i++) {

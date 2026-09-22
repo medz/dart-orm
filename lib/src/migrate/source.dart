@@ -105,12 +105,12 @@ String _snapshotSource(SchemaSnapshot schema) =>
 
 String _tableSource(TableSchema table) =>
     '''TableSchema(
-  ${_dartValue(table.name)},
+  ${_dartValue(table.name)},${table.namespace == null ? '' : '\n  namespace: ${_dartValue(table.namespace)},'}
   columns: [${table.columns.map(_columnSource).join(', ')}],
   primaryKey: ${_dartValue(table.primaryKey)},
   ${table.uniqueKeys.isEmpty ? '' : 'uniqueKeys: ${_dartValue(table.uniqueKeys)},'}
   ${table.indexes.isEmpty ? '' : 'indexes: [${table.indexes.map((i) => 'IndexSchema(${_dartValue(i.name)}, ${_dartValue(i.columns)}, unique: ${i.unique})').join(', ')}],'}
-  ${table.foreignKeys.isEmpty ? '' : 'foreignKeys: [${table.foreignKeys.map((k) => 'ForeignKey(${_dartValue(k.columns)}, ${_dartValue(k.target)}, ${_dartValue(k.targetColumns)}, onDelete: ${_dartValue(k.onDelete)})').join(', ')}],'}
+  ${table.foreignKeys.isEmpty ? '' : 'foreignKeys: [${table.foreignKeys.map((k) => 'ForeignKey(${_dartValue(k.columns)}, ${_dartValue(k.target)}, ${_dartValue(k.targetColumns)}, onDelete: ${_dartValue(k.onDelete)}${k.targetNamespace == null ? '' : ', targetNamespace: ${_dartValue(k.targetNamespace)}'})').join(', ')}],'}
   ${table.checks.isEmpty ? '' : 'checks: [${table.checks.map(_checkSource).join(', ')}],'}
 )''';
 
@@ -164,9 +164,10 @@ String _stepSource(MigrationStep step) => switch (step) {
   ExecuteSql() => 'ExecuteSql(${_dartValue(step.sql)})',
   CheckedTableSql() =>
     'CheckedTableSql(${_dartValue(step.sql)}, before: ${step.before == null ? 'null' : _tableSource(step.before!)}, after: ${step.after == null ? 'null' : _tableSource(step.after!)})',
-  DropTable() => 'DropTable(${_dartValue(step.table)})',
+  DropTable() =>
+    'DropTable(${_dartValue(step.table)}${step.namespace == null ? '' : ', namespace: ${_dartValue(step.namespace)}'})',
   DropConstraint() =>
-    'DropConstraint(${_dartValue(step.table)}, ${_dartValue(step.constraint)})',
+    'DropConstraint(${_dartValue(step.table)}, ${_dartValue(step.constraint)}${step.namespace == null ? '' : ', namespace: ${_dartValue(step.namespace)}'})',
   RebuildTable() =>
     'RebuildTable(${_tableSource(step.before)}, ${_tableSource(step.after)}, copy: ${_dartValue(step.copy)})',
   CheckedSql() =>

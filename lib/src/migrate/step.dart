@@ -30,13 +30,20 @@ final class ExecuteSql(
 /// A reviewed table removal. The SQLite runner checks foreign keys before commit.
 final class DropTable(
   /// Physical table name to remove; the runner quotes it as an identifier.
-  final String table,
-) extends MigrationStep {
+  final String table, {
+
+  /// PostgreSQL schema containing the table; null preserves historical scope.
+  final String? namespace,
+}) extends MigrationStep {
   /// Records a reviewed table removal without executing it.
   this;
 
   @override
-  Map<String, Object?> toJson() => {'kind': 'dropTable', 'table': table};
+  Map<String, Object?> toJson() => {
+    'kind': 'dropTable',
+    'table': table,
+    if (namespace != null) 'namespace': namespace,
+  };
 }
 
 /// SQLite's copy-and-replace operation. Expressions are trusted migration SQL.
@@ -83,16 +90,20 @@ final class DropConstraint extends MigrationStep {
   /// Physical PostgreSQL table whose matching constraint will be removed.
   final String table;
 
+  /// PostgreSQL schema containing the table; null preserves historical scope.
+  final String? namespace;
+
   /// Immutable constraint signature used to find its actual catalog name.
   final Map<String, Object?> constraint;
 
   /// Freezes a reviewed signature; execution requires exactly one catalog match.
-  DropConstraint(this.table, Map<String, Object?> constraint)
+  DropConstraint(this.table, Map<String, Object?> constraint, {this.namespace})
     : constraint = freezeMigrationValue(constraint) as Map<String, Object?>;
   @override
   Map<String, Object?> toJson() => {
     'kind': 'dropConstraint',
     'table': table,
+    if (namespace != null) 'namespace': namespace,
     'constraint': constraint,
   };
 }
@@ -114,37 +125,45 @@ final class CheckedSql extends MigrationStep {
 
   /// A concurrent, ascending B-tree index with default collation/opclasses.
   /// The completion check compares its definition as well as ready/valid state.
-  factory CheckedSql.createIndex(String table, IndexSchema index) {
+  factory CheckedSql.createIndex(
+    String table,
+    IndexSchema index, {
+    String? namespace,
+  }) {
     if (index.columns.isEmpty) throw ArgumentError('An index needs columns.');
     final source = postgresLiteral(table), name = postgresLiteral(index.name);
+    final scope = namespace == null
+        ? 'pg_catalog.current_schema()'
+        : postgresLiteral(namespace);
     final columns =
         'ARRAY[${index.columns.map(postgresLiteral).join(', ')}]::text[]';
     return CheckedSql(
       createIndexSql(
         table,
         index,
+        namespace: namespace,
       ).replaceFirst('INDEX ', 'INDEX CONCURRENTLY '),
       readyWhen: '''SELECT NOT EXISTS (
-SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = current_schema() AND c.relname = $name)''',
+SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = $scope AND c.relname = $name)''',
       doneWhen:
           '''SELECT EXISTS (
-SELECT 1 FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
-JOIN pg_namespace n ON n.oid = c.relnamespace JOIN pg_class t ON t.oid = i.indrelid
-JOIN pg_am am ON am.oid = c.relam
-WHERE n.nspname = current_schema() AND c.relname = $name AND t.relname = $source
+SELECT 1 FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace JOIN pg_catalog.pg_class t ON t.oid = i.indrelid
+JOIN pg_catalog.pg_am am ON am.oid = c.relam
+WHERE n.nspname = $scope AND c.relname = $name AND t.relname = $source
 AND t.relnamespace = n.oid AND i.indisvalid AND i.indisready AND i.indislive
 AND i.indisunique = ${index.unique} AND NOT i.indisprimary AND NOT i.indisexclusion
 AND i.indexprs IS NULL AND i.indpred IS NULL AND i.indnatts = i.indnkeyatts
 AND am.amname = 'btree' AND c.reloptions IS NULL
-AND NOT EXISTS (SELECT 1 FROM pg_constraint constraint_row WHERE constraint_row.conindid = i.indexrelid AND constraint_row.contype IN ('p', 'u', 'x'))
-AND NOT coalesce((to_jsonb(i)->>'indnullsnotdistinct')::boolean, false)
-AND NOT EXISTS (SELECT 1 FROM unnest(i.indoption) v WHERE v <> 0)
-AND NOT EXISTS (SELECT 1 FROM unnest(i.indclass) v JOIN pg_opclass o ON o.oid = v WHERE NOT o.opcdefault)
-AND NOT EXISTS (SELECT 1 FROM unnest(i.indkey, i.indcollation) k(num, collation_oid)
-  JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.num WHERE k.collation_oid <> a.attcollation)
-AND ARRAY(SELECT a.attname::text FROM unnest(i.indkey) WITH ORDINALITY k(num, ord)
-  JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.num ORDER BY k.ord) = $columns)''',
+AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint constraint_row WHERE constraint_row.conindid = i.indexrelid AND constraint_row.contype IN ('p', 'u', 'x'))
+AND NOT coalesce((pg_catalog.to_jsonb(i)->>'indnullsnotdistinct')::boolean, false)
+AND NOT EXISTS (SELECT 1 FROM pg_catalog.unnest(i.indoption) v WHERE v <> 0)
+AND NOT EXISTS (SELECT 1 FROM pg_catalog.unnest(i.indclass) v JOIN pg_catalog.pg_opclass o ON o.oid = v WHERE NOT o.opcdefault)
+AND NOT EXISTS (SELECT 1 FROM ROWS FROM (pg_catalog.unnest(i.indkey), pg_catalog.unnest(i.indcollation)) k(num, collation_oid)
+  JOIN pg_catalog.pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.num WHERE k.collation_oid <> a.attcollation)
+AND ARRAY(SELECT a.attname::text FROM pg_catalog.unnest(i.indkey) WITH ORDINALITY k(num, ord)
+  JOIN pg_catalog.pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.num ORDER BY k.ord) = $columns)''',
     );
   }
   @override

@@ -146,7 +146,7 @@ Future<List<String>> verifyComputed(
     final found = actual.where((c) => c.name == column.name).firstOrNull;
     final expected = column.computed, observed = found?.computed;
     if (expected == null && observed == null) continue;
-    final path = '${table.name}.${column.name}';
+    final path = '${table.identity}.${column.name}';
     if (!contextMatches ||
         expected == null ||
         observed == null ||
@@ -170,7 +170,12 @@ Future<List<String>> verifyComputed(
           : pair,
     );
   }
-  final signatures = await checkExpressions(db, table.name, expressions);
+  final signatures = await checkExpressions(
+    db,
+    table.name,
+    expressions,
+    namespace: table.namespace,
+  );
   for (var i = 0; i < paths.length; i++) {
     if (signatures[i * 2] != signatures[i * 2 + 1]) {
       differences.add('${paths[i]} computed expression or storage differs');
@@ -181,6 +186,7 @@ Future<List<String>> verifyComputed(
 
 TableSchema materializedColumns(TableSchema table) => TableSchema(
   table.name,
+  namespace: table.namespace,
   columns: [
     for (final c in table.columns)
       Column<Object?>(

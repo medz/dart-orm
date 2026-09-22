@@ -203,18 +203,9 @@ Future<R> _withMigrationLock<R>(
   Duration timeout,
   Future<R> Function() action,
 ) async {
-  final schemaKey =
-      (await session.execute(SqlCommand('SELECT hashtext(current_schema())')))
-              .rows
-              .single
-              .single
-          as int?;
-  if (schemaKey == null) {
-    throw const OrmException(
-      'MIGRATION.SCHEMA',
-      'A current PostgreSQL schema is required.',
-    );
-  }
+  // PostgreSQL advisory locks already belong to one database. Serialize its
+  // migration histories because different histories may touch the same schema.
+  const schemaKey = 0;
   final watch = Stopwatch()..start();
   var delay = 10;
   while (true) {
@@ -222,9 +213,10 @@ Future<R> _withMigrationLock<R>(
     try {
       locked =
           (await session.execute(
-                SqlCommand(r'SELECT pg_try_advisory_lock(182983479, $1)', [
-                  schemaKey,
-                ]),
+                SqlCommand(
+                  r'SELECT pg_catalog.pg_try_advisory_lock(182983479, $1)',
+                  [schemaKey],
+                ),
               )).rows.single.single
               as bool;
     } catch (_) {
@@ -253,7 +245,9 @@ Future<R> _withMigrationLock<R>(
   } finally {
     try {
       final unlocked = await session.execute(
-        SqlCommand(r'SELECT pg_advisory_unlock(182983479, $1)', [schemaKey]),
+        SqlCommand(r'SELECT pg_catalog.pg_advisory_unlock(182983479, $1)', [
+          schemaKey,
+        ]),
       );
       if (unlocked.rows.single.single != true) {
         throw const OrmException(
@@ -711,9 +705,9 @@ Future<bool> hasMigrationTable(SqlDatabase<Backend> db, String table) async {
   final rows = await db.execute(
     SqlCommand(
       r'''SELECT
- EXISTS(SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = current_schema() AND tablename::text = $1),
- coalesce((SELECT n.nspname = current_schema() AND c.relkind IN ('r', 'p') FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-   WHERE c.oid = to_regclass(quote_ident($1))), true)''',
+ EXISTS(SELECT 1 FROM pg_catalog.pg_tables WHERE schemaname = pg_catalog.current_schema() AND tablename::text = $1),
+ coalesce((SELECT n.nspname = pg_catalog.current_schema() AND c.relkind IN ('r', 'p') FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+   WHERE c.oid = pg_catalog.to_regclass(pg_catalog.quote_ident($1))), true)''',
       [table],
     ),
   );

@@ -19,7 +19,7 @@ import 'schema.dart'
         sameStorage;
 import 'snapshot.dart'
     show SchemaSnapshot, columnJson, foreignKeyJson, indexJson;
-import 'sql_utils.dart' show migrationHash, quoteIdentifier;
+import 'sql_utils.dart' show migrationHash, quoteIdentifier, quoteQualified;
 import 'step.dart'
     show DropConstraint, DropTable, ExecuteSql, MigrationStep, RebuildTable;
 
@@ -61,9 +61,32 @@ Migration diffSchema(
       using: using,
     );
   }
+  final sourceTables = {for (final t in from.tables) t.identity: t};
+  final targetTables = {for (final t in to.tables) t.identity: t};
+  String tableName(String name) => renames.tables[name] ?? name;
+  String quoted(TableSchema table) =>
+      quoteQualified(table.name, table.namespace);
+  String tableSql(String identity) =>
+      quoted(targetTables[identity] ?? sourceTables[identity]!);
   final renameSql = <MigrationStep>[];
-  final oldNames = from.tables.map((t) => t.name).toSet();
-  final newNames = to.tables.map((t) => t.name).toSet();
+  if (dialect == SqlDialect.postgres) {
+    final previousNamespaces = from.tables.map((t) => t.namespace).toSet();
+    final namespaces =
+        to.tables
+            .map((t) => t.namespace)
+            .nonNulls
+            .toSet()
+            .difference(previousNamespaces.nonNulls.toSet())
+            .toList()
+          ..sort();
+    for (final namespace in namespaces) {
+      renameSql.add(
+        ExecuteSql('CREATE SCHEMA IF NOT EXISTS ${quoteIdentifier(namespace)}'),
+      );
+    }
+  }
+  final oldNames = from.tables.map((t) => t.identity).toSet();
+  final newNames = to.tables.map((t) => t.identity).toSet();
   void validateRenames(
     Map<String, String> map,
     Set<String> old,
@@ -85,18 +108,36 @@ Migration diffSchema(
 
   validateRenames(renames.tables, oldNames, newNames);
   for (final entry in renames.tables.entries) {
-    renameSql.add(
-      ExecuteSql(
-        'ALTER TABLE ${quoteIdentifier(entry.key)} RENAME TO ${quoteIdentifier(entry.value)}',
-      ),
-    );
+    final old = sourceTables[entry.key]!, next = targetTables[entry.value]!;
+    var namespace = old.namespace;
+    if (old.namespace != next.namespace) {
+      if (dialect != SqlDialect.postgres ||
+          old.namespace == null ||
+          next.namespace == null) {
+        throw const OrmException(
+          'MIGRATION.RENAME',
+          'Schema moves require explicit PostgreSQL source and target namespaces.',
+        );
+      }
+      renameSql.add(
+        ExecuteSql(
+          'ALTER TABLE ${quoted(old)} SET SCHEMA ${quoteIdentifier(next.namespace!)}',
+        ),
+      );
+      namespace = next.namespace;
+    }
+    if (old.name != next.name) {
+      renameSql.add(
+        ExecuteSql(
+          'ALTER TABLE ${quoteQualified(old.name, namespace)} RENAME TO ${quoteIdentifier(next.name)}',
+        ),
+      );
+    }
   }
-  final renamedTables = {
-    for (final t in from.tables) renames.tables[t.name] ?? t.name: t,
-  };
+  final renamedTables = {for (final t in from.tables) tableName(t.identity): t};
   for (final entry in renames.columns.entries) {
     final old = renamedTables[entry.key],
-        next = to.tables.where((t) => t.name == entry.key).firstOrNull;
+        next = to.tables.where((t) => t.identity == entry.key).firstOrNull;
     if (old == null || next == null) {
       throw const OrmException(
         'MIGRATION.RENAME',
@@ -111,20 +152,19 @@ Migration diffSchema(
     for (final rename in entry.value.entries) {
       renameSql.add(
         ExecuteSql(
-          'ALTER TABLE ${quoteIdentifier(entry.key)} RENAME COLUMN ${quoteIdentifier(rename.key)} TO ${quoteIdentifier(rename.value)}',
+          'ALTER TABLE ${tableSql(entry.key)} RENAME COLUMN ${quoteIdentifier(rename.key)} TO ${quoteIdentifier(rename.value)}',
         ),
       );
     }
   }
-  String tableName(String name) => renames.tables[name] ?? name;
   String columnName(String table, String column) =>
       renames.columns[tableName(table)]?[column] ?? column;
   final computedRenames = from.tables
       .where(
         (t) =>
             t.columns.any((c) => c.computed != null) &&
-            (renames.tables.containsKey(t.name) ||
-                (renames.columns[tableName(t.name)]?.isNotEmpty ?? false)),
+            (renames.tables.containsKey(t.identity) ||
+                (renames.columns[tableName(t.identity)]?.isNotEmpty ?? false)),
       )
       .toList();
   // CHECK SQL is deliberately not rewritten as text. Remove it before native
@@ -133,19 +173,20 @@ Migration diffSchema(
       .where(
         (t) =>
             t.checks.isNotEmpty &&
-            (renames.tables.containsKey(t.name) ||
-                (renames.columns[tableName(t.name)]?.isNotEmpty ?? false)),
+            (renames.tables.containsKey(t.identity) ||
+                (renames.columns[tableName(t.identity)]?.isNotEmpty ?? false)),
       )
       .toList();
   final before = {
     for (final table in from.tables)
-      tableName(table.name): TableSchema(
-        tableName(table.name),
+      tableName(table.identity): TableSchema(
+        (targetTables[tableName(table.identity)] ?? table).name,
+        namespace: (targetTables[tableName(table.identity)] ?? table).namespace,
         checks: checkedRenames.contains(table) ? const [] : table.checks,
         columns: [
           for (final c in table.columns)
             Column<Object?>(
-              columnName(table.name, c.name),
+              columnName(table.identity, c.name),
               c.codec,
               nullable: c.nullable,
               generated: c.generated,
@@ -158,32 +199,37 @@ Migration diffSchema(
             ),
         ],
         primaryKey: table.primaryKey
-            .map((c) => columnName(table.name, c))
+            .map((c) => columnName(table.identity, c))
             .toList(),
         uniqueKeys: [
           for (final key in table.uniqueKeys)
-            key.map((c) => columnName(table.name, c)).toList(),
+            key.map((c) => columnName(table.identity, c)).toList(),
         ],
         indexes: [
           for (final index in table.indexes)
             IndexSchema(
               index.name,
-              index.columns.map((c) => columnName(table.name, c)).toList(),
+              index.columns.map((c) => columnName(table.identity, c)).toList(),
               unique: index.unique,
             ),
         ],
         foreignKeys: [
           for (final key in table.foreignKeys)
             ForeignKey(
-              key.columns.map((c) => columnName(table.name, c)).toList(),
-              tableName(key.target),
-              key.targetColumns.map((c) => columnName(key.target, c)).toList(),
+              key.columns.map((c) => columnName(table.identity, c)).toList(),
+              (targetTables[tableName(key.targetIdentity)]?.name ?? key.target),
+              targetNamespace:
+                  targetTables[tableName(key.targetIdentity)]?.namespace ??
+                  key.targetNamespace,
+              key.targetColumns
+                  .map((c) => columnName(key.targetIdentity, c))
+                  .toList(),
               onDelete: key.onDelete,
             ),
         ],
       ),
   };
-  final after = {for (final t in to.tables) t.name: t};
+  final after = targetTables;
   final removedTables = before.keys.toSet().difference(after.keys.toSet());
   final addedTables = after.keys.toSet().difference(before.keys.toSet());
   final shared = before.keys.toSet().intersection(after.keys.toSet());
@@ -299,7 +345,7 @@ Migration diffSchema(
             'kind': 'c',
             'name': check.name,
             'expression': check.expression(dialect),
-          }),
+          }, namespace: table.namespace),
         );
       }
     }
@@ -333,37 +379,50 @@ Migration diffSchema(
     }
 
     for (final old in before.values) {
-      final next = after[old.name];
+      final next = after[old.identity];
       for (final key in old.foreignKeys) {
         final retained =
             next?.foreignKeys.any((k) => _sameForeignKey(k, key)) ?? false;
         if (!retained ||
-            keysChanged(key.target) ||
-            typesChanged(key.target) ||
-            typesChanged(old.name)) {
+            keysChanged(key.targetIdentity) ||
+            typesChanged(key.targetIdentity) ||
+            typesChanged(old.identity)) {
           steps.add(
-            DropConstraint(old.name, {'kind': 'f', ...foreignKeyJson(key)}),
+            DropConstraint(old.name, {
+              'kind': 'f',
+              ...foreignKeyJson(key),
+            }, namespace: old.namespace),
           );
-          if (retained) addedForeignKeys.add((old.name, key));
+          if (retained) addedForeignKeys.add((old.identity, key));
         }
       }
       if (next != null) {
         for (final key in next.foreignKeys) {
           if (!old.foreignKeys.any((k) => _sameForeignKey(k, key))) {
-            addedForeignKeys.add((old.name, key));
+            addedForeignKeys.add((old.identity, key));
           }
         }
       }
     }
   }
   for (final name in removedTables) {
-    steps.add(DropTable(name));
+    steps.add(
+      DropTable(before[name]!.name, namespace: before[name]!.namespace),
+    );
   }
   for (final name in addedTables) {
     final table = after[name]!;
     steps.add(ExecuteSql(createTable(table, dialect)));
     for (final index in table.indexes) {
-      steps.add(ExecuteSql(createIndexSql(name, index)));
+      steps.add(
+        ExecuteSql(
+          createIndexSql(
+            after[name]!.name,
+            index,
+            namespace: after[name]!.namespace,
+          ),
+        ),
+      );
     }
     if (dialect == SqlDialect.postgres) {
       addedForeignKeys.addAll(table.foreignKeys.map((k) => (name, k)));
@@ -372,7 +431,7 @@ Migration diffSchema(
   for (final name in shared) {
     var old = before[name]!;
     if (dialect == SqlDialect.sqlite &&
-        computedRenames.any((t) => tableName(t.name) == name)) {
+        computedRenames.any((t) => tableName(t.identity) == name)) {
       old = materializedColumns(old);
     }
     final next = after[name]!;
@@ -426,24 +485,32 @@ Migration diffSchema(
     if (dialect == SqlDialect.postgres) {
       for (final check in checks.removed) {
         steps.add(
-          DropConstraint(name, {
+          DropConstraint(next.name, {
             'kind': 'c',
             'name': check.name,
             'expression': check.expression(dialect),
-          }),
+          }, namespace: next.namespace),
         );
       }
       if (migrationHash(old.primaryKey) != migrationHash(next.primaryKey) &&
           old.primaryKey.isNotEmpty) {
         steps.add(
-          DropConstraint(name, {'kind': 'p', 'columns': old.primaryKey}),
+          DropConstraint(next.name, {
+            'kind': 'p',
+            'columns': old.primaryKey,
+          }, namespace: next.namespace),
         );
       }
       for (final key in old.uniqueKeys) {
         if (!next.uniqueKeys.any(
           (k) => migrationHash(k) == migrationHash(key),
         )) {
-          steps.add(DropConstraint(name, {'kind': 'u', 'columns': key}));
+          steps.add(
+            DropConstraint(next.name, {
+              'kind': 'u',
+              'columns': key,
+            }, namespace: next.namespace),
+          );
         }
       }
     }
@@ -451,27 +518,31 @@ Migration diffSchema(
       if (!next.indexes.any(
         (i) => migrationHash(indexJson(i)) == migrationHash(indexJson(index)),
       )) {
-        steps.add(ExecuteSql('DROP INDEX ${quoteIdentifier(index.name)}'));
+        steps.add(
+          ExecuteSql(
+            'DROP INDEX ${quoteQualified(index.name, next.namespace)}',
+          ),
+        );
       }
     }
     for (final column in removed) {
       steps.add(
         ExecuteSql(
-          'ALTER TABLE ${quoteIdentifier(name)} DROP COLUMN ${quoteIdentifier(column)}',
+          'ALTER TABLE ${tableSql(name)} DROP COLUMN ${quoteIdentifier(column)}',
         ),
       );
     }
     for (final column in added) {
       steps.add(
         ExecuteSql(
-          'ALTER TABLE ${quoteIdentifier(name)} ADD COLUMN ${columnDefinition(newColumns[column]!, dialect)}',
+          'ALTER TABLE ${tableSql(name)} ADD COLUMN ${columnDefinition(newColumns[column]!, dialect)}',
         ),
       );
     }
     for (final column in changed) {
       final a = oldColumns[column]!, b = newColumns[column]!;
       final prefix =
-          'ALTER TABLE ${quoteIdentifier(name)} ALTER COLUMN ${quoteIdentifier(column)}';
+          'ALTER TABLE ${tableSql(name)} ALTER COLUMN ${quoteIdentifier(column)}';
       final typeChanged = !sameStorage(a, b);
       if (a.computed != null && b.computed == null) {
         steps.add(ExecuteSql('$prefix DROP EXPRESSION'));
@@ -514,7 +585,7 @@ Migration diffSchema(
       if (checks.added.isNotEmpty) {
         steps.add(
           ExecuteSql(
-            'ALTER TABLE ${quoteIdentifier(name)} '
+            'ALTER TABLE ${tableSql(name)} '
             '${checks.added.map((c) => 'ADD ${checkDefinition(c, dialect)}').join(', ')}',
           ),
         );
@@ -523,7 +594,7 @@ Migration diffSchema(
           next.primaryKey.isNotEmpty) {
         steps.add(
           ExecuteSql(
-            'ALTER TABLE ${quoteIdentifier(name)} ADD PRIMARY KEY (${next.primaryKey.map(quoteIdentifier).join(', ')})',
+            'ALTER TABLE ${tableSql(name)} ADD PRIMARY KEY (${next.primaryKey.map(quoteIdentifier).join(', ')})',
           ),
         );
       }
@@ -533,7 +604,7 @@ Migration diffSchema(
         )) {
           steps.add(
             ExecuteSql(
-              'ALTER TABLE ${quoteIdentifier(name)} ADD UNIQUE (${key.map(quoteIdentifier).join(', ')})',
+              'ALTER TABLE ${tableSql(name)} ADD UNIQUE (${key.map(quoteIdentifier).join(', ')})',
             ),
           );
         }
@@ -543,13 +614,21 @@ Migration diffSchema(
       if (!old.indexes.any(
         (i) => migrationHash(indexJson(i)) == migrationHash(indexJson(index)),
       )) {
-        steps.add(ExecuteSql(createIndexSql(name, index)));
+        steps.add(
+          ExecuteSql(
+            createIndexSql(
+              after[name]!.name,
+              index,
+              namespace: after[name]!.namespace,
+            ),
+          ),
+        );
       }
     }
   }
   for (final (name, key) in addedForeignKeys) {
     steps.add(
-      ExecuteSql('ALTER TABLE ${quoteIdentifier(name)} ADD ${foreignKey(key)}'),
+      ExecuteSql('ALTER TABLE ${tableSql(name)} ADD ${foreignKey(key)}'),
     );
   }
   return Migration.steps(

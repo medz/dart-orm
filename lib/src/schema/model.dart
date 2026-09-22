@@ -134,6 +134,14 @@ final class ForeignKey {
   /// Physical name of the referenced table.
   final String target;
 
+  /// PostgreSQL namespace of the target, independent of its table name.
+  /// Null retains an unqualified historical target.
+  final String? targetNamespace;
+
+  /// Stable physical identity for matching references, never parsed as SQL.
+  String get targetIdentity =>
+      targetNamespace == null ? target : '$targetNamespace.$target';
+
   /// Target key columns in the corresponding source-column order.
   final List<String> targetColumns;
 
@@ -146,6 +154,7 @@ final class ForeignKey {
     this.target,
     this.targetColumns, {
     this.onDelete = 'RESTRICT',
+    this.targetNamespace,
   });
 }
 
@@ -219,7 +228,9 @@ final class IndexSchema {
 /// Immutable physical table metadata, independent of Dart model identity.
 ///
 /// The constructor copies collection inputs, including nested key and index
-/// column lists. Schema consumers validate engine support before executing DDL.
+/// column lists, and rejects empty table/schema names and names containing dots
+/// or NUL, including foreign-key targets. Schema consumers validate engine
+/// support before executing DDL.
 ///
 /// ```dart
 /// final accounts = TableSchema(
@@ -232,8 +243,16 @@ final class IndexSchema {
 ///
 /// {@category Schema}
 final class TableSchema {
-  /// Physical table name.
+  /// Non-empty physical table name, without a schema prefix, dots or NUL.
   final String name;
+
+  /// PostgreSQL namespace. Generated PostgreSQL models always specify this,
+  /// including `public`; other engines reject explicit namespaces.
+  /// Null also preserves the meaning and fingerprints of historical metadata.
+  final String? namespace;
+
+  /// Stable physical identity for maps and diagnostics, never parsed as SQL.
+  String get identity => namespace == null ? name : '$namespace.$name';
 
   /// Ordered columns used to render the physical schema.
   final List<Column<Object?>> columns;
@@ -257,8 +276,13 @@ final class TableSchema {
   final List<Column<Object?>> clientDefaults;
 
   /// Copies schema collections without opening or altering a database.
+  ///
+  /// Throws `SCHEMA.IDENTIFIER` for empty table/schema names or names containing
+  /// dots or NUL, including foreign-key targets, before the metadata can be
+  /// bound to queries or change tracking.
   TableSchema(
     this.name, {
+    this.namespace,
     required List<Column<Object?>> columns,
     List<String> primaryKey = const [],
     List<List<String>> uniqueKeys = const [],
@@ -280,6 +304,7 @@ final class TableSchema {
              key.target,
              List.unmodifiable(key.targetColumns),
              onDelete: key.onDelete,
+             targetNamespace: key.targetNamespace,
            ),
        ]),
        checks = List.unmodifiable(checks),
@@ -290,5 +315,21 @@ final class TableSchema {
              List.unmodifiable(index.columns),
              unique: index.unique,
            ),
-       ]);
+       ]) {
+    void checkIdentifier(String name) {
+      if (name.isEmpty || name.contains('.') || name.contains('\u0000')) {
+        throw const OrmException(
+          'SCHEMA.IDENTIFIER',
+          'Table and schema names must be non-empty identifiers, without dots or NUL.',
+        );
+      }
+    }
+
+    checkIdentifier(name);
+    if (namespace != null) checkIdentifier(namespace!);
+    for (final key in this.foreignKeys) {
+      checkIdentifier(key.target);
+      if (key.targetNamespace != null) checkIdentifier(key.targetNamespace!);
+    }
+  }
 }

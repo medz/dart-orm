@@ -47,23 +47,23 @@ final class ChangeHub {
   }
 
   void registerTable(TableSchema table) {
-    if (closed || identical(_tables[table.name], table)) return;
-    final previous = _tables[table.name];
+    if (closed || identical(_tables[table.identity], table)) return;
+    final previous = _tables[table.identity];
     if (previous != null) {
       for (final fk in previous.foreignKeys) {
-        final effects = _deleteEffects[fk.target];
-        effects?.remove(table.name);
-        if (effects?.isEmpty ?? false) _deleteEffects.remove(fk.target);
+        final effects = _deleteEffects[fk.targetIdentity];
+        effects?.remove(table.identity);
+        if (effects?.isEmpty ?? false) _deleteEffects.remove(fk.targetIdentity);
       }
     }
-    _tables[table.name] = table;
+    _tables[table.identity] = table;
     for (final fk in table.foreignKeys) {
       if (!{'CASCADE', 'SET NULL', 'SET DEFAULT'}.contains(fk.onDelete)) {
         continue;
       }
-      final effects = _deleteEffects.putIfAbsent(fk.target, () => {});
-      effects[table.name] =
-          (effects[table.name] ?? false) || fk.onDelete == 'CASCADE';
+      final effects = _deleteEffects.putIfAbsent(fk.targetIdentity, () => {});
+      effects[table.identity] =
+          (effects[table.identity] ?? false) || fk.onDelete == 'CASCADE';
     }
   }
 

@@ -5,7 +5,7 @@ import '../../runtime.dart' show SqlDatabase;
 import '../../schema_model.dart' show CheckSchema, TableSchema;
 import '../../values.dart' show Codecs, OrmException;
 import 'catalog.dart' show inspectTable;
-import 'sql_utils.dart' show quoteIdentifier;
+import 'sql_utils.dart' show quoteIdentifier, quoteQualified;
 import 'sqlite_checks.dart' show sqliteName, sqliteTokens;
 
 /// An enforced, validated row CHECK read from this database's catalog.
@@ -23,6 +23,7 @@ final class CheckInfo {
 TableSchema withChecks(TableSchema table, List<CheckSchema> checks) =>
     TableSchema(
       table.name,
+      namespace: table.namespace,
       columns: table.columns,
       primaryKey: table.primaryKey,
       uniqueKeys: table.uniqueKeys,
@@ -90,8 +91,9 @@ String _checkSignature(String expression) {
 Future<List<String>> checkExpressions(
   SqlDatabase<Backend> db,
   String table,
-  List<String> expressions,
-) async {
+  List<String> expressions, {
+  String? namespace,
+}) async {
   if (db.dialect == SqlDialect.sqlite) {
     return expressions.map(_checkSignature).toList();
   }
@@ -99,7 +101,7 @@ Future<List<String>> checkExpressions(
   final result = await db.execute(
     SqlCommand(
       'EXPLAIN (VERBOSE, FORMAT JSON, COSTS OFF) SELECT '
-      '${expressions.map((e) => '($e\n)').join(', ')} FROM ONLY ${quoteIdentifier(table)}',
+      '${expressions.map((e) => '($e\n)').join(', ')} FROM ONLY ${quoteQualified(table, namespace)}',
     ),
   );
   final json = Codecs.json.decode(result.rows.single.single) as List<Object?>;
@@ -117,13 +119,14 @@ Future<List<int?>> matchChecks(
   SqlDatabase<Backend> db,
   String table,
   List<CheckSchema> expected,
-  List<CheckInfo> actual,
-) async {
+  List<CheckInfo> actual, {
+  String? namespace,
+}) async {
   if (expected.isEmpty) return const [];
   final signatures = await checkExpressions(db, table, [
     ...expected.map((c) => c.expression(db.dialect)),
     ...actual.map((c) => c.expression),
-  ]);
+  ], namespace: namespace);
   final used = <int>{}, matches = <int?>[];
   for (var i = 0; i < expected.length; i++) {
     int? found;
@@ -151,10 +154,17 @@ Future<List<int?>> matchChecks(
 Future<void> dropCheck(
   SqlDatabase<Backend> db,
   String table,
-  CheckSchema check,
-) async {
-  final actual = (await inspectTable(db, table)).checks;
-  final match = (await matchChecks(db, table, [check], actual)).single;
+  CheckSchema check, {
+  String? namespace,
+}) async {
+  final actual = (await inspectTable(db, table, namespace: namespace)).checks;
+  final match = (await matchChecks(
+    db,
+    table,
+    [check],
+    actual,
+    namespace: namespace,
+  )).single;
   if (match == null || actual[match].name == null) {
     throw OrmException(
       'MIGRATION.DRIFT',
@@ -163,7 +173,7 @@ Future<void> dropCheck(
   }
   await db.execute(
     SqlCommand(
-      'ALTER TABLE ${quoteIdentifier(table)} DROP CONSTRAINT ${quoteIdentifier(actual[match].name!)}',
+      'ALTER TABLE ${quoteQualified(table, namespace)} DROP CONSTRAINT ${quoteIdentifier(actual[match].name!)}',
     ),
   );
 }
