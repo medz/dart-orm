@@ -1,5 +1,5 @@
 import 'package:orm/orm.dart';
-import 'package:test/test.dart';
+import 'package:test/test.dart' hide allOf, anyOf;
 
 final _id = Column('id', Codecs.integer);
 final _label = Column('label', Codecs.text);
@@ -176,7 +176,7 @@ void textExpressionTests(
             await add(id + 1, 'prefix$text');
             await add(id + 2, 'prefix${text}suffix');
             final range = ordered().where(
-              (r) => r.id.gte(id).and(r.id.lte(id + 2)),
+              (r) => allOf([r.id.gte(id), r.id.lte(id + 2)]),
             );
             expect(await range.where((r) => r.note.startsWith(text)).get(), [
               id,
