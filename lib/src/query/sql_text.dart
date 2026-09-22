@@ -152,7 +152,7 @@ SqlText scanSql(String source, SqlDialect dialect, {bool fragment = false}) {
       continue;
     }
     if (c == '?' && (dialect == SqlDialect.sqlite || mysql) ||
-        c == '@' && dialect == SqlDialect.sqlite) {
+        (c == '@' || c == ':') && dialect == SqlDialect.sqlite) {
       fail('Use :name parameters');
     }
     if (c == '\u0001' || c == '\u0002') fail('Reserved control character');

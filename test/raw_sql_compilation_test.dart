@@ -81,10 +81,19 @@ void main() {
           throwsArgumentError,
         );
       }
-      for (final sql in ['SELECT ?1', 'SELECT @name']) {
+      for (final sql in [
+        'SELECT ?1',
+        'SELECT @name',
+        'SELECT :1',
+        'SELECT :123abc',
+        'SELECT :é',
+      ]) {
         expect(
           () => Sql(sql).compile(SqlBuilder(SqlDialect.sqlite).capabilities),
-          throwsA(isA<OrmException>()),
+          throwsA(
+            isA<OrmException>().having((e) => e.code, 'code', 'SQL.TEXT'),
+          ),
+          reason: sql,
         );
       }
       expect(
