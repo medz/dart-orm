@@ -141,12 +141,14 @@ operate on Dart booleans and do not construct SQL expressions.
 ```dart
 final query = db.user.where((u) => allOf([
   if (minimumScore != null) u.score.gte(.value(minimumScore)),
-  anyOf([
-    for (final email in permittedEmails) u.email.eq(.value(email)),
-  ]),
+  u.email.isIn(permittedEmails),
   anyOf([u.nickname.eq(.value('blocked')).not(), u.nickname.isNull()]),
 ]));
 ```
+
+Use `isIn(values)` when one field is matched against a list of values; reserve
+`anyOf` for alternative predicates. This avoids constructing a long OR chain.
+Both forms still obey the database parameter limit.
 
 The input iterable is consumed once when the group is built; changing a source
 list afterward does not change the query. `allOf([])` is TRUE and `anyOf([])` is
