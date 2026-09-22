@@ -73,6 +73,10 @@ final List<String?> nicknames = await db.user
     .select((u) => u.nickname.upper()).get();
 ```
 
+These derived text values use the standard text codec. A source field's custom
+or mapped decoder is not reapplied to the SQL conversion result, and SQL NULL
+remains null even when the source decoder maps it to a sentinel string.
+
 ### Choosing a result operation
 
 Choose the terminal operation that expresses the expected result count:

@@ -4,9 +4,44 @@ import 'package:test/test.dart';
 final _id = Column('id', Codecs.integer);
 final _label = Column('label', Codecs.text);
 final _note = Column('note', Codecs.text.nullable(), nullable: true);
+final _mapped = Column(
+  'mapped',
+  Codecs.text.map((v) => v.toUpperCase(), (v) => v),
+  defaultSql: "'AbC'",
+);
+final _custom = Column(
+  'custom',
+  Codec<String>.text((v) => (v as String).toLowerCase(), (v) => v),
+  defaultSql: "'AbC'",
+);
+final _mappedNullable = Column(
+  'mapped_nullable',
+  Codecs.text.nullable().map<String?>(
+    (v) => v?.toUpperCase() ?? 'mapped-null',
+    (v) => v,
+  ),
+  nullable: true,
+);
+final _customNullable = Column(
+  'custom_nullable',
+  Codec<String?>(
+    'text',
+    (v) => v == null ? 'custom-null' : (v as String).toLowerCase(),
+    (v) => v,
+  ),
+  nullable: true,
+);
 final _schema = TableSchema(
   'orm_text_expressions',
-  columns: [_id, _label, _note],
+  columns: [
+    _id,
+    _label,
+    _note,
+    _mapped,
+    _custom,
+    _mappedNullable,
+    _customNullable,
+  ],
   primaryKey: ['id'],
 );
 
@@ -14,6 +49,10 @@ final class _Fields(super.table) extends Fields {
   late final id = column(_id);
   late final label = column(_label);
   late final note = column(_note);
+  late final mapped = column(_mapped);
+  late final custom = column(_custom);
+  late final mappedNullable = column(_mappedNullable);
+  late final customNullable = column(_customNullable);
 }
 
 final _table = Table<int, _Fields>(_schema, _Fields.new, (f) => f.id);
@@ -36,7 +75,9 @@ void textExpressionTests(
         await db.execute(
           SqlCommand(
             'CREATE TABLE orm_text_expressions ('
-            'id BIGINT PRIMARY KEY, label TEXT NOT NULL, note TEXT)',
+            'id BIGINT PRIMARY KEY, label TEXT NOT NULL, note TEXT, '
+            "mapped VARCHAR(80) NOT NULL DEFAULT 'AbC', custom VARCHAR(80) NOT NULL DEFAULT 'AbC', "
+            'mapped_nullable TEXT, custom_nullable TEXT)',
           ),
         );
       });
@@ -171,6 +212,74 @@ void textExpressionTests(
           );
         },
       );
+
+      test('derived case conversion uses plain text decoding for mapped and custom codecs', () async {
+        await add(1, 'first');
+        await add(2, 'second');
+        await db
+            .table(_table)
+            .where((r) => r.id.eq(2))
+            .update(
+              (r) => [r.mappedNullable.set('AbC'), r.customNullable.set('AbC')],
+            )
+            .execute();
+        expect(
+          await ordered()
+              .select(
+                (r) => (
+                  r.mapped,
+                  r.custom,
+                  r.mappedNullable,
+                  r.customNullable,
+                ).row,
+              )
+              .get(),
+          [
+            ('ABC', 'abc', 'mapped-null', 'custom-null'),
+            ('ABC', 'abc', 'ABC', 'abc'),
+          ],
+        );
+        expect(
+          await ordered()
+              .select(
+                (r) => (
+                  r.mapped.lower(),
+                  r.mapped.upper(),
+                  r.custom.lower(),
+                  r.custom.upper(),
+                ).row,
+              )
+              .get(),
+          [('abc', 'ABC', 'abc', 'ABC'), ('abc', 'ABC', 'abc', 'ABC')],
+        );
+        expect(
+          await ordered()
+              .select(
+                (r) => (
+                  r.mappedNullable.lower(),
+                  r.mappedNullable.upper(),
+                  r.customNullable.lower(),
+                  r.customNullable.upper(),
+                ).row,
+              )
+              .get(),
+          [(null, null, null, null), ('abc', 'ABC', 'abc', 'ABC')],
+        );
+        expect(
+          await ordered()
+              .select((r) => r.mapped.lower())
+              .union(ordered().select((r) => r.custom.lower()))
+              .get(),
+          ['abc'],
+        );
+        expect(
+          await ordered()
+              .select((r) => r.mappedNullable.lower())
+              .union(ordered().select((r) => r.customNullable.lower()))
+              .get(),
+          unorderedEquals([null, 'abc']),
+        );
+      });
 
       test(
         'literal filters target reads, updates and deletes consistently',

@@ -272,12 +272,21 @@ extension TextExpression<T extends String?> on Expr<T> {
   }
 
   /// Converts text to lowercase using database rules, preserving nullability.
+  ///
+  /// Decodes the derived value with the standard text codec, without applying
+  /// the source expression's custom or mapped decoder.
   Expr<T> lower() =>
-      Expr.internal(FunctionNode('LOWER', [expressionNode]), codec);
+      Expr.internal(FunctionNode('LOWER', [expressionNode]), _textResultCodec);
 
   /// Converts text to uppercase using database rules, preserving nullability.
+  ///
+  /// Decodes the derived value with the standard text codec, without applying
+  /// the source expression's custom or mapped decoder.
   Expr<T> upper() =>
-      Expr.internal(FunctionNode('UPPER', [expressionNode]), codec);
+      Expr.internal(FunctionNode('UPPER', [expressionNode]), _textResultCodec);
+
+  Codec<T> get _textResultCodec =>
+      (null is T ? Codecs.text.nullable() : Codecs.text) as Codec<T>;
 }
 
 /// SQL arithmetic and aggregation for Dart numeric values.
