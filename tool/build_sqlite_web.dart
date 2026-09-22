@@ -3,12 +3,45 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dart_style/dart_style.dart';
+import 'package:path/path.dart' as p;
 
 const _engineVersion = '3.6.0';
 const _engineHash =
     '13d3f11d05b39ba0618a7115fb41640a5d48b6300f5d3f325f554b42bd6688a4';
+
+// Include both sides of the worker protocol and their transitive ORM imports.
+// CLI, generators and native drivers cannot invalidate this browser bundle.
+Future<List<String>> sqliteWebSourcePaths({String root = '.'}) async {
+  final pending = ['lib/sqlite_web_worker.dart', 'lib/src/sqlite/web.dart'];
+  final sources = <String>{};
+  while (pending.isNotEmpty) {
+    final path = p.normalize(pending.removeLast());
+    if (path == 'lib/src/sqlite/web_build.dart' || !sources.add(path)) continue;
+    final unit = parseString(
+      content: await File(p.join(root, path)).readAsString(),
+      path: path,
+    ).unit;
+    for (final directive in unit.directives.whereType<UriBasedDirective>()) {
+      for (final literal in [
+        directive.uri,
+        if (directive is NamespaceDirective)
+          ...directive.configurations.map((c) => c.uri),
+      ]) {
+        final uri = Uri.parse(literal.stringValue!);
+        if (uri.scheme == 'package' && uri.path.startsWith('orm/')) {
+          pending.add('lib/${uri.path.substring('orm/'.length)}');
+        } else if (uri.scheme.isEmpty) {
+          pending.add(p.join(p.dirname(path), uri.toFilePath()));
+        }
+      }
+    }
+  }
+  return sources.toList()..sort();
+}
 
 /// Maintainer command. Consumers use the published artifacts, without compiling.
 Future<void> main(List<String> args) async {
@@ -29,11 +62,7 @@ Future<void> main(List<String> args) async {
     );
   }
   final sources = [
-    for (final file in Directory('lib').listSync(recursive: true))
-      if (file is File &&
-          file.path.endsWith('.dart') &&
-          !file.path.endsWith('/web_build.dart'))
-        file,
+    for (final path in await sqliteWebSourcePaths()) File(path),
     File('pubspec.yaml'),
     File('pubspec.lock'),
     File('tool/build_sqlite_web.dart'),

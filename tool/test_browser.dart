@@ -6,6 +6,7 @@ import 'package:orm/src/sqlite/assets_io.dart';
 import 'package:orm/src/sqlite/web_build.dart';
 import 'package:orm/generate.dart';
 
+import 'build_sqlite_web.dart' as sqlite_web;
 import 'src/browser_profile.dart';
 
 const engineVersion = '3.6.0';
@@ -20,14 +21,7 @@ Future<void> main(List<String> arguments) async {
   final wasm = arguments.contains('--wasm');
   final assets = Directory('.dart_tool/browser').absolute;
   await assets.create(recursive: true);
-  final checked = await Process.run(Platform.resolvedExecutable, [
-    'run',
-    'tool/build_sqlite_web.dart',
-    '--check',
-  ]);
-  if (checked.exitCode != 0) {
-    throw StateError('${checked.stdout}${checked.stderr}');
-  }
+  await sqlite_web.main(['--check']);
   await copySqliteWebAssets(Directory('${assets.path}/orm'));
   final generated = await generateSchema('test/support/browser/schema.dart');
   if (generated.dart !=
