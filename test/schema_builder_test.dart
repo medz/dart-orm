@@ -49,16 +49,16 @@ targets:
       orm:orm:
         enabled: true
         options:
-          schema: lib/schema
+          schema: lib/fixture/schema
           database: postgres
 ''');
       await fixture.write(
-        'lib/schema/public/users.dart',
+        'lib/fixture/schema/public/users.dart',
         "import 'package:orm/schema.dart'; final user = model('users', (id: identity(),));",
       );
       await fixture.run(['run', 'build_runner', 'build']);
-      final client = fixture.file('lib/schema.orm.dart');
-      final snapshot = fixture.file('lib/schema.snapshot.dart');
+      final client = fixture.file('lib/fixture/schema.orm.dart');
+      final snapshot = fixture.file('lib/fixture/schema.snapshot.dart');
       expect(await client.readAsString(), contains('get user =>'));
       final generated = await client.readAsString(),
           frozen = await snapshot.readAsString();
@@ -66,7 +66,7 @@ targets:
         'run',
         'orm',
         'generate',
-        'lib/schema',
+        'lib/fixture/schema',
         '--database',
         'postgres',
       ]);
@@ -75,7 +75,7 @@ targets:
       watcher = await fixture.watch();
       await watcher.next();
       await fixture.write(
-        'lib/schema/auth/users.dart',
+        'lib/fixture/schema/auth/users.dart',
         "import 'package:orm/schema.dart'; final user = model('users', (id: identity(),));",
       );
       await watcher.next();
@@ -83,11 +83,11 @@ targets:
       expect(await client.readAsString(), contains('PublicUser'));
       final beforeMove = await snapshot.readAsString();
       await fixture
-          .file('lib/schema/auth/users.dart')
-          .rename(fixture.file('lib/schema/auth/accounts.dart').path);
+          .file('lib/fixture/schema/auth/users.dart')
+          .rename(fixture.file('lib/fixture/schema/auth/accounts.dart').path);
       await watcher.next();
       expect(await snapshot.readAsString(), beforeMove);
-      await fixture.file('lib/schema/auth/accounts.dart').delete();
+      await fixture.file('lib/fixture/schema/auth/accounts.dart').delete();
       await watcher.next();
       expect(await client.readAsString(), isNot(contains('AuthUser')));
       expect(await client.readAsString(), contains('get user =>'));
@@ -95,7 +95,7 @@ targets:
       await watcher.quiet();
       await watcher.close();
       watcher = null;
-      await fixture.run(['analyze', 'lib/schema.orm.dart']);
+      await fixture.run(['analyze', 'lib/fixture/schema.orm.dart']);
     } finally {
       await watcher?.close();
       await fixture.dispose();
