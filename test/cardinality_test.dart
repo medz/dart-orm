@@ -1,3 +1,6 @@
+@Tags(['sqlite'])
+library;
+
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
@@ -41,7 +44,7 @@ void main() {
         } else {
           expect(await result, count == 0 ? null : 1);
         }
-      });
+      }, tags: 'sqlite');
 
       test(
         'Returning ${read.name} checks $count rows after the entire write',
@@ -65,6 +68,7 @@ void main() {
             List.filled(count, 1),
           );
         },
+        tags: 'sqlite',
       );
     }
   }
@@ -85,7 +89,7 @@ void main() {
           throwsA(_cardinality),
         );
       }
-    });
+    }, tags: 'sqlite');
 
     test('Returning ${read.name} counts SQL NULL as a row', () async {
       await seed(1);
@@ -111,7 +115,7 @@ void main() {
           [2, 1],
         );
       }
-    });
+    }, tags: 'sqlite');
   }
 
   test('read cardinality respects an explicit limit and offset', () async {
@@ -128,7 +132,7 @@ void main() {
     expect(await query.take(0).singleOrNull(), isNull);
     await expectLater(query.take(0).first(), throwsA(_cardinality));
     await expectLater(query.take(0).single(), throwsA(_cardinality));
-  });
+  }, tags: 'sqlite');
 
   for (final read in [_Read.single, _Read.singleOrNull]) {
     test(
@@ -149,6 +153,7 @@ void main() {
         );
         expect(await db.table(_table).select((row) => row.hits).get(), [0, 0]);
       },
+      tags: 'sqlite',
     );
   }
 
@@ -165,7 +170,7 @@ void main() {
       throwsA(_cardinality),
     );
     expect(await db.table(_table).select((row) => row.hits).single(), 0);
-  });
+  }, tags: 'sqlite');
 }
 
 bool _rejects(_Read read, int count) => switch (read) {

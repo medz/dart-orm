@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -733,7 +736,7 @@ Future<void> main(List<String> args) => crashBackfill(migrationHistory.checked, 
           },
         );
       }
-    });
+    }, tags: backend);
   }
 }
 

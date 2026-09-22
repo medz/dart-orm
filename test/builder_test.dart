@@ -1,3 +1,6 @@
+@Tags(['core'])
+library;
+
 import 'dart:io';
 
 import 'package:build/build.dart';

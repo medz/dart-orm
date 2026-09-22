@@ -230,6 +230,7 @@ void main() {
       skip: engine == 'postgres' && address == null
           ? 'Set ORM_TEST_POSTGRES for PostgreSQL scope checks.'
           : false,
+      tags: engine,
     );
   }
 

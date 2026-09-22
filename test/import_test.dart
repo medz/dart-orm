@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -608,6 +611,6 @@ USING (id > 0) WITH CHECK (id < 100)'''),
           );
         });
       }
-    });
+    }, tags: backend);
   }
 }

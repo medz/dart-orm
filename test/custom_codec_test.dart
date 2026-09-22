@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -324,5 +327,5 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
         initial.checksum,
       );
     });
-  });
+  }, tags: name);
 }

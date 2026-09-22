@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -41,9 +44,14 @@ void main() {
         await db.close();
       }
     },
+    tags: 'sqlite',
   );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url == null) return;
+  group('PostgreSQL recovery', () => runPostgresTests(url), tags: 'postgres');
+}
+
+void runPostgresTests(String url) {
   const schema = 'orm_recovery_tests';
   late Database<Postgres> admin, db;
   final initial = Migration('0001_initial', [

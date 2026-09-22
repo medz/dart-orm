@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -514,7 +517,7 @@ void runTests(
         await iterator.cancel();
       }
     });
-  });
+  }, tags: name);
 }
 
 final class _Label(final String text);

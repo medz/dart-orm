@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -244,5 +247,5 @@ void runRecordTests(
         );
       },
     );
-  });
+  }, tags: name);
 }

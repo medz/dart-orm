@@ -232,7 +232,7 @@ void run(
         expect(events, isEmpty);
       },
     );
-  });
+  }, tags: name);
 }
 
 extension<A, B> on (Selection<A>, Selection<B>) {

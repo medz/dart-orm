@@ -85,6 +85,7 @@ void main() {
             await pool.close();
           }
         },
+        tags: 'postgres',
       );
     }
   }
@@ -658,6 +659,6 @@ void main() {
           expect(await db.holiday.where((h) => h.label.eq('done')).count(), 4);
         },
       );
-    });
+    }, tags: backend);
   }
 }

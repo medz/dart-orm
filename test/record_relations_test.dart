@@ -228,39 +228,48 @@ final Model member = model('members', (id: identity(), code: text()),
     );
   });
 
-  test(
-    'generated multi-role relations query the correct keys on real databases',
-    () async {
-      await generate('runtime', _roles);
-      await writeGeneratedSchema('${fixtures.path}/runtime.dart');
-      final script = File('${fixtures.path}/consumer.dart');
-      await script.writeAsString(_consumer);
-      final result = await Process.run(Platform.resolvedExecutable, [
-        'run',
-        script.path,
-      ]);
-      expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
-      final lines = (result.stdout as String)
-          .split('\n')
-          .where((line) => line.startsWith('{'));
-      final engines = <String>[];
-      for (final line in lines) {
-        final data = jsonDecode(line) as Map;
-        engines.add(data['engine'] as String);
-        expect(data['authored'], ['written']);
-        expect(data['reviewed'], ['reviewed']);
-        expect(data['author'], 'Alice');
-        expect(data['reviewer'], 'Bob');
-        expect(data['clearedReviewer'], null);
-        expect(data['manyQueries'], 2);
-        expect(data['oneQueries'], 1);
-      }
-      expect(engines, contains('sqlite'));
-      if (Platform.environment.containsKey('ORM_TEST_POSTGRES')) {
-        expect(engines, contains('postgres'));
-      }
-    },
-  );
+  for (final backend in [
+    'sqlite',
+    if (Platform.environment.containsKey('ORM_TEST_POSTGRES')) 'postgres',
+  ]) {
+    test(
+      '$backend generated multi-role relations query the correct keys on real databases',
+      () async {
+        await File('${fixtures.path}/runtime.dart')
+            .writeAsString("import 'package:orm/schema.dart';\n$_roles");
+        await writeGeneratedSchema('${fixtures.path}/runtime.dart');
+        final script = File('${fixtures.path}/consumer.dart');
+        await script.writeAsString(_consumer);
+        final result = await Process.run(Platform.resolvedExecutable, [
+          'run',
+          script.path,
+          backend,
+        ]);
+        expect(
+          result.exitCode,
+          0,
+          reason: '${result.stdout}\n${result.stderr}',
+        );
+        final lines = (result.stdout as String)
+            .split('\n')
+            .where((line) => line.startsWith('{'));
+        final engines = <String>[];
+        for (final line in lines) {
+          final data = jsonDecode(line) as Map;
+          engines.add(data['engine'] as String);
+          expect(data['authored'], ['written']);
+          expect(data['reviewed'], ['reviewed']);
+          expect(data['author'], 'Alice');
+          expect(data['reviewer'], 'Bob');
+          expect(data['clearedReviewer'], null);
+          expect(data['manyQueries'], 2);
+          expect(data['oneQueries'], 1);
+        }
+        expect(engines, [backend]);
+      },
+      tags: backend,
+    );
+  }
 }
 
 const _consumer = r'''
@@ -271,9 +280,12 @@ import 'package:orm/sqlite.dart';
 import 'package:orm/postgres.dart';
 import 'runtime.orm.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   final events = <QueryEvent>[];
-  await verify(await sqlite(const SqliteOptions.memory(), onQuery: events.add), events);
+  if (args.single == 'sqlite') {
+    await verify(await sqlite(const SqliteOptions.memory(), onQuery: events.add), events);
+    return;
+  }
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url == null) return;
   final admin = postgres(PostgresOptions(url: Uri.parse(url), tls: PostgresTls.disable));

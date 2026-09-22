@@ -475,7 +475,7 @@ void main() {
           }
         },
       );
-    });
+    }, tags: backend);
   }
 
   test('value rounding keeps extended ranges and rejects overflow/invalid precision', () {

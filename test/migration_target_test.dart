@@ -415,7 +415,7 @@ void main() {
         );
         await db.close();
       }
-    });
+    }, tags: 'postgres');
   }
 }
 

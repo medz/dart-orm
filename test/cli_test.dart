@@ -168,7 +168,7 @@ void main() {
       code: 1,
     );
     expect(await file.readAsString(), saved);
-  });
+  }, tags: 'sqlite');
 
   test(
     'baseline retains existing rows and read-only connections reject writes',
@@ -208,6 +208,7 @@ void main() {
         await read.close();
       }
     },
+    tags: 'sqlite',
   );
 
   for (final dialect in SqlDialect.values) {
@@ -319,6 +320,6 @@ void main() {
         }
         await admin.close();
       }
-    });
+    }, tags: 'postgres');
   }
 }

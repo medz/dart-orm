@@ -1,3 +1,6 @@
+@Tags(['mysql-suite'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/mysql.dart';
@@ -520,6 +523,7 @@ void main() {
       skip: address == null
           ? 'Set $variable for live database validation.'
           : false,
+      tags: engine,
     );
   }
 }

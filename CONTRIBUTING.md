@@ -25,6 +25,15 @@ Use dedicated test servers and accounts with those privileges.
 Server TLS defaults to `verifyFull`. Self-signed local fixtures can explicitly
 set `ORM_TEST_MYSQL_TLS=require` and `ORM_TEST_MARIADB_TLS=require`.
 Run `dart test` with the default suite concurrency for the complete native matrix.
+CI runs `dart test --preset core` once for shared behavior and build/CLI workflows,
+and `--preset sqlite`, `postgres`, `mysql` and `mariadb` on separate Linux runners.
+Each server job supplies only its own database URL and service. Chrome JS and
+WASM have separate jobs. Keep database groups tagged with their engine; leave
+shared assertions untagged in mixed files. Entire shared-only suites use `core`,
+entire database-only suites use `database` (or their sole engine), and MySQL-family
+suites also use `mysql-suite`. These suite tags exclude irrelevant files before
+compilation. Presets never lower the runner's default concurrency.
+
 Test command behavior in process with the helpers in `test/support/cli.dart`.
 Use absolute fixture paths and capture output with `IOOverrides`; never change
 the shared VM's working directory or exit code. Keep subprocesses for generated

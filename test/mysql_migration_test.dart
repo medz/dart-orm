@@ -1,3 +1,6 @@
+@Tags(['mysql-suite'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/drivers/mysql.dart';
@@ -686,6 +689,7 @@ void main() {
       skip: address == null
           ? 'Set $variable to a disposable database with CREATE DATABASE privileges.'
           : false,
+      tags: engine,
     );
   }
 }

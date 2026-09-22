@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/postgres.dart';
@@ -39,6 +42,7 @@ void main() {
               Platform.environment['ORM_TEST_POSTGRES'] == null
           ? 'Set ORM_TEST_POSTGRES.'
           : false,
+      tags: dialect.name,
     );
   }
 }

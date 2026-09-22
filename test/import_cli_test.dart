@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -150,6 +153,7 @@ void main() {
         }
       },
       timeout: const Timeout(Duration(minutes: 3)),
+      tags: backend,
     );
   }
 }

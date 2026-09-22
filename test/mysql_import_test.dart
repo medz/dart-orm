@@ -1,3 +1,6 @@
+@Tags(['database', 'mysql-suite'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/drivers/mysql.dart';
@@ -179,6 +182,7 @@ final probe = sqlQuery(result: (value: integer(),), parameters: (minimum: intege
         });
       },
       skip: address == null ? 'Set $variable to a disposable database.' : false,
+      tags: engine,
     );
   }
 }

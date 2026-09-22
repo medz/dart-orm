@@ -392,6 +392,7 @@ void main() {
               Platform.environment['ORM_TEST_POSTGRES'] == null
           ? 'Set ORM_TEST_POSTGRES for native PostgreSQL checks.'
           : false,
+      tags: dialect.name,
     );
   }
 }

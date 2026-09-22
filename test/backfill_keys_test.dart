@@ -174,7 +174,7 @@ void main() {
         );
         expect(data.rows.map((r) => r.single), everyElement(1));
       });
-    });
+    }, tags: backend);
   }
   test('invalid key, assignments and completion declarations fail before execution', () {
     TableSchema schema(

@@ -1,3 +1,6 @@
+@Tags(['core'])
+library;
+
 import 'package:orm/migrate.dart';
 import 'package:orm/src/cli/migration.dart';
 import 'package:orm/runtime.dart';

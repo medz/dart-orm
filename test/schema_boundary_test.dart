@@ -175,6 +175,7 @@ final item = model('Items', (source: integer(), id: integer().computed('source +
               Platform.environment['ORM_TEST_POSTGRES'] == null
           ? 'Set ORM_TEST_POSTGRES.'
           : false,
+      tags: dialect.name,
     );
   }
 }

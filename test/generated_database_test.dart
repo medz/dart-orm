@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -230,5 +233,5 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
         expect((await Migrator(db.sql).history()).length, 1);
       },
     );
-  });
+  }, tags: name);
 }

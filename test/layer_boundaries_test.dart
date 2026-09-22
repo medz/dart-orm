@@ -1,3 +1,6 @@
+@Tags(['core'])
+library;
+
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';

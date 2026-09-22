@@ -1,3 +1,6 @@
+@Tags(['core'])
+library;
+
 import 'package:orm/orm.dart';
 import 'package:test/test.dart';
 

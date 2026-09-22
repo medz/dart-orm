@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:async';
 import 'dart:io';
 
@@ -595,7 +598,7 @@ void runDatabaseTests(String name, Future<Database<Backend>> Function() open) {
         );
       },
     );
-  });
+  }, tags: name);
 }
 
 final class _LimitedDriver(final Driver<Backend> inner, final int limit)

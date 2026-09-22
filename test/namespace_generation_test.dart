@@ -1,3 +1,6 @@
+@Tags(['postgres'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -94,5 +97,6 @@ Future<void> main() async {
         ? 'Set ORM_TEST_POSTGRES to a disposable PostgreSQL database.'
         : false,
     timeout: const Timeout(Duration(minutes: 3)),
+    tags: 'postgres',
   );
 }

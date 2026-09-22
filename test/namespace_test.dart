@@ -478,5 +478,6 @@ void main() {
     skip: url == null
         ? 'Set ORM_TEST_POSTGRES to a disposable PostgreSQL database.'
         : false,
+    tags: 'postgres',
   );
 }

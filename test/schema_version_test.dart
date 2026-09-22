@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -76,7 +79,7 @@ void main() {
       await reader.close();
       await directory.delete(recursive: true);
     }
-  });
+  }, tags: 'sqlite');
 }
 
 void runTests(String name, Future<Database<Backend>> Function() open) {
@@ -396,7 +399,7 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
         }
       });
     }
-  });
+  }, tags: name);
 }
 
 final class _ReadHook(

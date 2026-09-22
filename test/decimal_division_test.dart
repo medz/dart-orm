@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -566,6 +569,6 @@ void main() {
           );
         });
       }
-    });
+    }, tags: backend);
   }
 }

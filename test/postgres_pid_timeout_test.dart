@@ -1,3 +1,6 @@
+@Tags(['postgres'])
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -149,6 +152,7 @@ void main() {
     skip: address == null
         ? 'Set ORM_TEST_POSTGRES for real transport regressions.'
         : false,
+    tags: 'postgres',
   );
 }
 

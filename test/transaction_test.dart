@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:async';
 import 'dart:io';
 
@@ -92,6 +95,7 @@ void main() {
         await directory.delete(recursive: true);
       }
     },
+    tags: 'sqlite',
   );
   test(
     'SQLite deadline while BEGIN waits for a writer preserves its connection',
@@ -149,6 +153,7 @@ void main() {
         await directory.delete(recursive: true);
       }
     },
+    tags: 'sqlite',
   );
 }
 
@@ -808,7 +813,7 @@ void runTests(
         );
       }
     }
-  });
+  }, tags: name);
 }
 
 final class _AfterCommitDriver(final Driver<Backend> source, this.after)

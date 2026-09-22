@@ -575,5 +575,5 @@ void runMigrations(String backend, Future<Database<Backend>> Function() open) {
         expect((await Migrator(db.sql).history()).length, 1);
       });
     }
-  });
+  }, tags: backend);
 }

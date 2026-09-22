@@ -1,0 +1,25 @@
+# Keep the runner's default concurrency. Presets partition CI, not local tests.
+tags:
+  core:
+  database:
+  mysql-suite:
+  sqlite:
+  postgres:
+  mysql:
+  mariadb:
+
+presets:
+  core:
+    exclude_tags: database || sqlite || postgres || mysql || mariadb
+  sqlite:
+    include_tags: sqlite
+    exclude_tags: core || postgres || mysql-suite
+  postgres:
+    include_tags: postgres
+    exclude_tags: core || sqlite || mysql-suite
+  mysql:
+    filename: mysql*_test.dart
+    include_tags: mysql
+  mariadb:
+    filename: mysql*_test.dart
+    include_tags: mariadb

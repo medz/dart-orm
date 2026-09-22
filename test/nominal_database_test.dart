@@ -1,3 +1,6 @@
+@Tags(['database'])
+library;
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -117,5 +120,5 @@ void runNominalTests(String name, Future<Database<Backend>> Function() open) {
         expect(await db.note.count(), 0);
       },
     );
-  });
+  }, tags: name);
 }
