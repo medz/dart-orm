@@ -228,8 +228,9 @@ final class IndexSchema {
 /// Immutable physical table metadata, independent of Dart model identity.
 ///
 /// The constructor copies collection inputs, including nested key and index
-/// column lists, and rejects dotted table/schema names, including foreign-key
-/// targets. Schema consumers validate engine support before executing DDL.
+/// column lists, and rejects empty table/schema names and names containing dots
+/// or NUL, including foreign-key targets. Schema consumers validate engine
+/// support before executing DDL.
 ///
 /// ```dart
 /// final accounts = TableSchema(
@@ -242,7 +243,7 @@ final class IndexSchema {
 ///
 /// {@category Schema}
 final class TableSchema {
-  /// Physical table name, without a schema prefix or dots.
+  /// Non-empty physical table name, without a schema prefix, dots or NUL.
   final String name;
 
   /// PostgreSQL namespace. Generated PostgreSQL models always specify this,
@@ -276,8 +277,9 @@ final class TableSchema {
 
   /// Copies schema collections without opening or altering a database.
   ///
-  /// Throws `SCHEMA.IDENTIFIER` for dotted table/schema names or foreign-key
-  /// targets, before the metadata can be bound to queries or change tracking.
+  /// Throws `SCHEMA.IDENTIFIER` for empty table/schema names or names containing
+  /// dots or NUL, including foreign-key targets, before the metadata can be
+  /// bound to queries or change tracking.
   TableSchema(
     this.name, {
     this.namespace,
@@ -314,18 +316,20 @@ final class TableSchema {
              unique: index.unique,
            ),
        ]) {
-    void checkIdentity(String name, String? namespace) {
-      if (name.contains('.') || namespace != null && namespace.contains('.')) {
+    void checkIdentifier(String name) {
+      if (name.isEmpty || name.contains('.') || name.contains('\u0000')) {
         throw const OrmException(
           'SCHEMA.IDENTIFIER',
-          'Table and schema names must be separate identifiers, without dots.',
+          'Table and schema names must be non-empty identifiers, without dots or NUL.',
         );
       }
     }
 
-    checkIdentity(name, namespace);
+    checkIdentifier(name);
+    if (namespace != null) checkIdentifier(namespace!);
     for (final key in this.foreignKeys) {
-      checkIdentity(key.target, key.targetNamespace);
+      checkIdentifier(key.target);
+      if (key.targetNamespace != null) checkIdentifier(key.targetNamespace!);
     }
   }
 }

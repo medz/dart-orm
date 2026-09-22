@@ -111,7 +111,8 @@ on a later `SET search_path` or an identically named temporary table.
 
 Do not write `model('auth.Users', ...)`: dotted table names are rejected.
 Manual `TableSchema` definitions apply the same rule to table names, namespaces
-and foreign-key targets when constructed. Column names use snake_case unless
+and foreign-key targets when constructed, and also reject empty names and NUL
+characters. Column names use snake_case unless
 their helper specifies `name:`. Explicit physical
 names retain their spelling and quotes are escaped for the selected dialect;
 quoting does not change the database's own rules for case equality.

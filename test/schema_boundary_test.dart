@@ -11,9 +11,13 @@ void main() {
     'schema rejects malformed names, keys and local FK definitions offline',
     () {
       final id = Column('id', Codecs.integer);
+      for (final name in ['', 'bad\u0000name']) {
+        expect(
+          () => TableSchema(name, columns: [id]),
+          throwsA(isA<OrmException>()),
+        );
+      }
       for (final table in [
-        TableSchema('', columns: [id]),
-        TableSchema('bad\u0000name', columns: [id]),
         TableSchema('items', columns: [Column('', Codecs.integer)]),
         TableSchema('items', columns: [id], uniqueKeys: [[]]),
         TableSchema('items', columns: [id], primaryKey: ['id', 'id']),
