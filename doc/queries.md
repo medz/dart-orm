@@ -199,7 +199,7 @@ Use a typed alias when a related field participates in root ordering or a flat
 projection. This example uses the [generated example schema](https://github.com/medz/dart-orm/blob/main/example/schema.dart):
 
 ```dart
-final author = usersTable.alias();
+final author = userTable.alias();
 final rows = await db.post
     .join(author, on: (p, a) => p.authorId.eq(a.id))
     .orderBy((p) => [author.fields.email.asc(), p.id.asc()])
