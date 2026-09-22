@@ -1,5 +1,10 @@
 ## Unreleased
 
+Breaking PostgreSQL schema change: table identities now include the database
+schema, including `public`. Regenerate clients and snapshots and review the
+required migration. Old unqualified snapshots are not automatically normalized;
+generated table replacement requires explicit destructive opt-in and deletes data.
+
 - Discover PostgreSQL models in `schema/{schema}/*.dart` and other supported
   databases in `schema/*.dart`, alongside an optional default `schema.dart`.
 - Generate schema-grouped clients when PostgreSQL models use a non-default

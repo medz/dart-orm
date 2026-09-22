@@ -135,6 +135,51 @@ void main() {
         await db.close();
       });
 
+      test(
+        'unqualified snapshots require explicit destructive replacement',
+        () async {
+          final old = TableSchema(
+            'Users',
+            columns: [_id, _name],
+            primaryKey: ['Id'],
+          );
+          final initial = Migration.create('0001_initial', [
+            old,
+          ], dialect: .postgres);
+          await Migrator(db.sql).apply([initial]);
+          await db.execute(
+            SqlCommand(
+              'INSERT INTO "Users" ("DisplayName") VALUES (\'Old row\')',
+            ),
+          );
+          final target = SchemaSnapshot([_userSchema(first)]);
+          expect(
+            () => Migration.diff(
+              '0002_replace',
+              dialect: .postgres,
+              from: initial.snapshot!,
+              to: target,
+            ),
+            throwsA(isA<OrmException>()),
+          );
+          final replace = Migration.diff(
+            '0002_replace',
+            dialect: .postgres,
+            from: initial.snapshot!,
+            to: target,
+            previous: initial.checksum,
+            allowDestructive: true,
+          );
+          await Migrator(db.sql).apply([initial, replace]);
+          expect((await verifySchema(db.sql, target)).matches, true);
+          expect(await db.table(_users(first)).get(), isEmpty);
+          expect(
+            (await inspectTable(db.sql, 'Users', namespace: history)).columns,
+            isEmpty,
+          );
+        },
+      );
+
       test('catalog probes ignore shadow system tables and helper functions', () async {
         final a = _users(first), b = _users(second);
         final initial = Migration.create('0001_initial', [

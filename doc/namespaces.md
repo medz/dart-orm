@@ -95,12 +95,12 @@ or renaming a file within one schema does not change the physical snapshot.
 Moving a model to another schema changes its database identity and requires a
 reviewed migration. Existing migration definitions and fingerprints stay frozen.
 
-When upgrading older PostgreSQL snapshots, unqualified tables match same-named
-`public` tables during diffing. Adding explicit qualification alone does not
-recreate tables, move data or rewrite historical files. This default-schema
-transition does not infer a custom `search_path`: projects that previously used
-another schema must record its explicit physical namespace in a new reviewed
-migration snapshot before adopting directory generation.
+PostgreSQL namespace identity is a breaking change. Older unqualified snapshots
+are not automatically matched to `public` tables. Regenerate the client and
+snapshot, then review the migration before applying it. A generated replacement
+plan requires `--allow-destructive` and recreates the affected tables, deleting
+their rows. Projects that need to retain data must author and review that data
+migration explicitly. Historical migration files must not be rewritten.
 
 ## SQL names and migration ownership
 

@@ -4,6 +4,7 @@ The current implementation is documented in `doc/README.md` and public Dartdoc.
 Old code and upstream architecture are retired.
 
 - Keep one product package. Add abstractions only to support real use cases.
+- During beta, do not add old API or schema compatibility unless explicitly requested.
 - Use independent Dart libraries; never use `part` or `part of`.
 - Keep implementation in `lib/src/` and public entrypoints as explicit exports.
 - Document public behavior, ownership and failure boundaries with Dartdoc.

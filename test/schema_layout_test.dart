@@ -134,7 +134,7 @@ void main() {
   );
 
   test(
-    'qualifying a legacy PostgreSQL snapshot does not recreate its tables',
+    'replacing unqualified PostgreSQL snapshots requires destructive opt-in',
     () async {
       await source('schema.dart', '''
 final user = model('users', (id: identity(),));
@@ -142,24 +142,58 @@ final post = model('posts', (id: identity(), authorId: integer()),
   relations: (p) => (author: references(p.authorId, () => user),));
 ''');
       final legacy = await generateSchema('${project.path}/schema');
-      final frozen = legacy.snapshotDart;
       final current = await generateSchema(
         '${project.path}/schema',
         dialect: .postgres,
+      );
+      expect(
+        () => Migration.diff(
+          '0002_qualified',
+          dialect: .postgres,
+          from: legacy.snapshot,
+          to: current.snapshot,
+        ),
+        throwsA(
+          isA<OrmException>().having(
+            (e) => e.code,
+            'code',
+            'MIGRATION.DESTRUCTIVE',
+          ),
+        ),
+      );
+      expect(
+        () => Migration.diff(
+          '0002_renamed',
+          dialect: .postgres,
+          from: legacy.snapshot,
+          to: current.snapshot,
+          renames: SchemaRenames(
+            tables: {'users': 'public.users', 'posts': 'public.posts'},
+          ),
+        ),
+        throwsA(
+          isA<OrmException>().having((e) => e.code, 'code', 'MIGRATION.RENAME'),
+        ),
       );
       final change = Migration.diff(
         '0002_qualified',
         dialect: .postgres,
         from: legacy.snapshot,
         to: current.snapshot,
+        allowDestructive: true,
       );
-      expect(change.steps, isEmpty);
+      expect(change.steps.whereType<DropTable>().map((s) => s.table).toSet(), {
+        'users',
+        'posts',
+      });
+      expect(
+        change.steps.whereType<ExecuteSql>().map((s) => s.sql).join('\n'),
+        contains('CREATE TABLE "public"."users"'),
+      );
       expect(
         change.snapshot!.tables.every((t) => t.namespace == 'public'),
         true,
       );
-      expect(legacy.snapshotDart, frozen);
-      expect(legacy.snapshot.tables.every((t) => t.namespace == null), true);
     },
   );
 
