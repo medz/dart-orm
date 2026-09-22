@@ -5,9 +5,9 @@ reviewed Dart migrations. Start with [schema declarations](https://github.com/me
 and the [company example](https://github.com/medz/dart-orm/blob/main/example/company/README.md).
 
 > **Version:** These guides follow the repository source. Use the corresponding
-> release tag for the exact behavior of a published package.
-> When upgrading, replace annotated entities with `model(...)` and regenerate
-> clients. Keep existing migration history unchanged.
+> release tag for the exact behavior of a published package. The filter API here
+> is unreleased; see the [migration notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#unreleased)
+> and regenerate clients. Keep existing migration history unchanged.
 
 ## Define and query
 
