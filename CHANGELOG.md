@@ -1,4 +1,4 @@
-## Unreleased
+## 6.0.0-beta.4
 
 Breaking SQL API change: replace Named SQL declarations/generated bindings with
 connection-independent `Sql` and optional `ResultShape` codecs. Delete query
