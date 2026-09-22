@@ -8,6 +8,8 @@
 /// {@canonicalFor context.QueryContext}
 /// {@canonicalFor context.SqlBuilder}
 /// {@canonicalFor expression.Expr}
+/// {@canonicalFor expression.allOf}
+/// {@canonicalFor expression.anyOf}
 /// {@canonicalFor expression.value}
 /// {@canonicalFor expression.sql}
 /// {@canonicalFor expression.Predicate}
@@ -84,6 +86,8 @@ export 'src/query/context.dart' show QueryContext, SqlBuilder;
 export 'src/query/expression.dart'
     show
         Expr,
+        allOf,
+        anyOf,
         value,
         sql,
         Predicate,

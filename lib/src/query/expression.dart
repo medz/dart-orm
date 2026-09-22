@@ -216,20 +216,37 @@ Expr<T> sql<T>(List<String> parts, List<Expr<Object?>> values, Codec<T> codec) {
   );
 }
 
-/// Boolean composition using SQL's three-valued NULL semantics.
+/// Requires every predicate to be SQL TRUE; an empty group is TRUE.
+///
+/// The iterable is consumed once when this expression is built. SQL NULL
+/// retains its three-valued meaning. Use collection `if` and `for` elements
+/// to construct dynamic groups, and [anyOf] for alternatives.
+Expr<bool?> allOf(Iterable<Expr<bool?>> predicates) =>
+    _predicateGroup(predicates, 'AND', true);
+
+/// Requires at least one predicate to be SQL TRUE; an empty group is FALSE.
+///
+/// The iterable is consumed once when this expression is built. SQL NULL
+/// retains its three-valued meaning. Nest this with [allOf] to express groups.
+Expr<bool?> anyOf(Iterable<Expr<bool?>> predicates) =>
+    _predicateGroup(predicates, 'OR', false);
+
+Expr<bool?> _predicateGroup(
+  Iterable<Expr<bool?>> predicates,
+  String operator,
+  bool empty,
+) {
+  final iterator = predicates.iterator;
+  if (!iterator.moveNext()) return value(empty, Codecs.boolean);
+  var node = iterator.current.expressionNode;
+  while (iterator.moveNext()) {
+    node = BinaryNode(node, operator, iterator.current.expressionNode);
+  }
+  return Expr.internal(node, Codecs.boolean.nullable());
+}
+
+/// Boolean negation using SQL's three-valued NULL semantics.
 extension Predicate on Expr<bool?> {
-  /// Requires both predicates to be true.
-  Expr<bool?> and(Expr<bool?> other) => Expr.internal(
-    BinaryNode(expressionNode, 'AND', other.expressionNode),
-    Codecs.boolean.nullable(),
-  );
-
-  /// Requires either predicate to be true.
-  Expr<bool?> or(Expr<bool?> other) => Expr.internal(
-    BinaryNode(expressionNode, 'OR', other.expressionNode),
-    Codecs.boolean.nullable(),
-  );
-
   /// Negates this predicate; SQL NULL remains unknown.
   Expr<bool?> not() => Expr.internal(
     UnaryNode('NOT', expressionNode),

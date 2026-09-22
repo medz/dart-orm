@@ -107,7 +107,7 @@ class Query<R, F extends Fields> {
   Query<R, F> where(Expr<bool?> Function(F) condition) {
     final next = condition(queryFields);
     return copyQuery(
-      queryState.copy(predicate: queryState.predicate?.and(next) ?? next),
+      queryState.copy(predicate: allOf([?queryState.predicate, next])),
     );
   }
 

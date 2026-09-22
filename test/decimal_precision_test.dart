@@ -5,6 +5,7 @@ import 'package:orm/migrate.dart';
 import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
+import 'package:test/test.dart' as matchers show allOf;
 
 import 'support/precision/schema.orm.dart';
 import 'support/precision/schema.snapshot.dart' as physical;
@@ -209,7 +210,7 @@ void main() {
         expect(draft.issues, isEmpty);
         expect(
           draft.dart,
-          allOf(contains('precision: 3'), contains('scale: -2')),
+          matchers.allOf(contains('precision: 3'), contains('scale: -2')),
         );
         final dir = await Directory('.dart_tool/orm-precision-import-$backend')
             .create(recursive: true);

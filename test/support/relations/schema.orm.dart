@@ -1,6 +1,7 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
 import 'package:orm/sql.dart';
+import 'package:orm/sql.dart' as orm show allOf;
 
 /// A complete immutable row from "accounts".
 final class Account({
@@ -138,7 +139,7 @@ final class AccountTableSet extends TableSet<Account, AccountFields> {
     ],
   );
   Query<Account, AccountFields> byId({required int tenant, required int id}) =>
-      where((row) => row.tenant.eq(tenant).and(row.id.eq(id)));
+      where((row) => orm.allOf([row.tenant.eq(tenant), row.id.eq(id)]));
 }
 
 extension AccountUpdates on Query<Account, AccountFields> {

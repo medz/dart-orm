@@ -226,7 +226,7 @@ ${local ? "final root = model('root_table', (id: identity(),));" : ''}
     () async {
       await generate(
         'callback_names',
-        "final Model entry = model('entries', (row: integer(), row2: text(), value: text(), models: text(), createRow: text(), update: text(), where: integer()), primaryKey: (e) => (e.row, e.where));",
+        "final Model entry = model('entries', (row: integer(), row2: text(), value: text(), models: text(), createRow: text(), update: text(), where: integer(), allOf: integer(), orm: integer(), orm2: integer()), primaryKey: (e) => (e.row, e.where, e.allOf, e.orm, e.orm2));",
       );
       await writeGeneratedSchema('${fixtures.path}/callback_names.dart');
       final analysis = await Process.run(Platform.resolvedExecutable, [

@@ -6,7 +6,7 @@ import 'dart:io';
 import 'package:orm/migrate.dart';
 import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
-import 'package:test/test.dart';
+import 'package:test/test.dart' hide allOf, anyOf;
 
 import 'support/relations/schema.orm.dart';
 
@@ -248,7 +248,7 @@ void runTests(
       'batch collection below a joined optional parent loads on the same plan',
       () async {
         final rows = await db.event
-            .where((e) => e.id.eq(1).or(e.id.eq(9)))
+            .where((e) => anyOf([e.id.eq(1), e.id.eq(9)]))
             .orderBy((e) => [e.id.asc()])
             .select(
               (e) => e.author

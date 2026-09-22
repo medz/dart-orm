@@ -1,6 +1,7 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
 import 'package:orm/sql.dart';
+import 'package:orm/sql.dart' as orm show allOf;
 
 import "schema.dart" as models;
 export "schema.dart" show ProjectStatus, MemberRole;
@@ -474,7 +475,8 @@ final class ProjectMemberTableSet
     required int projectId,
     required int employeeId,
   }) => where(
-    (row) => row.projectId.eq(projectId).and(row.employeeId.eq(employeeId)),
+    (row) =>
+        orm.allOf([row.projectId.eq(projectId), row.employeeId.eq(employeeId)]),
   );
 }
 

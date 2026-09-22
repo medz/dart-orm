@@ -7,6 +7,7 @@ import 'package:orm/migrate.dart';
 import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
+import 'package:test/test.dart' as matchers show anyOf;
 
 import '../example/company/schema.orm.dart';
 import '../example/company/schema.snapshot.dart' as physical;
@@ -51,7 +52,7 @@ void runRecordTests(
   group('Record schema $name', () {
     late Database<Backend> db;
     final events = <QueryEvent>[];
-    final constraintFailure = anyOf(
+    final constraintFailure = matchers.anyOf(
       isA<SqliteFailure>().having((e) => e.code, 'code', 19),
       isA<PostgresFailure>().having(
         (e) => e.code,

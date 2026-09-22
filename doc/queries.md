@@ -28,7 +28,7 @@ final emails = await query.orderBy((u) => [u.id.asc()])
     .take(20).select((u) => u.email).get(); // List<String>
 ```
 
-Use `.eq`, `.and` and `.or` to construct SQL predicates. `.isNull()` and
+Use comparisons with `allOf` and `anyOf` to construct SQL predicates. `.isNull()` and
 `.isNotNull()` test SQL NULL; `.eq(null)` is available only on a nullable field.
 An empty `isIn([])` is false. Other NULL-containing membership expressions retain
 SQL's three-valued logic, not Dart collection semantics. Values are bound as
@@ -95,6 +95,38 @@ non-null key when the distinction matters. `count()` and `exists()` issue
 dedicated SQL. Add explicit ordering when the first row or page must be
 deterministic. Use [keyset cursors](#keyset-pagination) for changing large
 datasets; `skip`/`take` provide offset/limit pagination.
+
+## Boolean condition groups
+
+Use `allOf` for AND, `anyOf` for OR, and `.not()` to negate an expression.
+Nested groups preserve their parentheses in SQL. Dart's `&&`, `||` and `!`
+operate on Dart booleans and do not construct SQL expressions.
+
+```dart
+final query = db.user.where((u) => allOf([
+  if (minimumScore != null) u.score.gte(minimumScore),
+  anyOf([
+    for (final email in permittedEmails) u.email.eq(email),
+  ]),
+  anyOf([u.nickname.eq('blocked').not(), u.nickname.isNull()]),
+]));
+```
+
+The input iterable is consumed once when the group is built; changing a source
+list afterward does not change the query. `allOf([])` is TRUE and `anyOf([])` is
+FALSE. An empty list of permitted alternatives therefore matches no rows. When
+an empty input should omit an optional filter, omit that group explicitly with a
+Dart collection `if` instead. An empty outer `allOf` imposes no restriction;
+check required user input before using it for an update or delete.
+
+Repeated `.where(...)` calls combine complete predicates with AND. An OR group
+in an earlier call keeps its parentheses. Builder calls return new query values.
+
+Predicates retain SQL NULL semantics: NOT UNKNOWN is UNKNOWN, and WHERE keeps
+only TRUE. To include null nicknames while excluding a value, combine the negated
+comparison with `isNull()` as above. The same groups work in JOIN conditions,
+relation filters, HAVING, and table WHERE predicates for updates and deletes;
+their existing scope, aggregate, and mutation restrictions still apply.
 
 ## Keyset pagination
 

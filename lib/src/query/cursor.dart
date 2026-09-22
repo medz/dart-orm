@@ -84,7 +84,7 @@ extension KeysetQuery<R, F extends Fields> on Query<R, F> {
     final next = Expr<bool?>.internal(predicate!, Codecs.boolean.nullable());
     return copyQuery(
       queryState.copy(
-        predicate: queryState.predicate?.and(next) ?? next,
+        predicate: allOf([?queryState.predicate, next]),
         order: [for (final term in terms) term.order],
       ),
     );
