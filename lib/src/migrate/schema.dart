@@ -86,12 +86,6 @@ void validateSchema(List<TableSchema> tables, [SqlDialect? dialect]) {
   final names = <String>{};
   final indexes = <String>{};
   String identity(String name, String? namespace) {
-    if (name.contains('.') || namespace != null && namespace.contains('.')) {
-      throw const OrmException(
-        'SCHEMA.IDENTIFIER',
-        'Table and schema names must be separate identifiers, without dots.',
-      );
-    }
     identifier(name);
     if (namespace != null) {
       identifier(namespace);

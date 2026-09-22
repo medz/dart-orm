@@ -58,6 +58,43 @@ TableSchema _messages(
 
 void main() {
   test(
+    'manual tables reject dotted physical identity components before binding',
+    () {
+      final sql = SqlBuilder(.postgres);
+      Table<({int id, String name}), _UserFields> definition(
+        String name, {
+        String? namespace,
+      }) => Table(
+        TableSchema(name, namespace: namespace, columns: [_id, _name]),
+        _UserFields.new,
+        (u) => (u.id, u.name).map((id, name) => (id: id, name: name)),
+      );
+      final invalid = throwsA(
+        isA<OrmException>().having((e) => e.code, 'code', 'SCHEMA.IDENTIFIER'),
+      );
+      expect(() => sql.table(definition('auth.Users')).compile(), invalid);
+      expect(
+        () =>
+            sql.table(definition('Users', namespace: 'auth.private')).compile(),
+        invalid,
+      );
+      for (final key in [
+        ForeignKey(['Id'], 'auth.Users', ['Id']),
+        ForeignKey(['Id'], 'Users', ['Id'], targetNamespace: 'auth.private'),
+      ]) {
+        expect(
+          () => TableSchema('Reports', columns: [_id], foreignKeys: [key]),
+          invalid,
+        );
+      }
+      expect(
+        sql.table(definition('Users', namespace: 'auth')).compile().sql,
+        contains('"auth"."Users"'),
+      );
+    },
+  );
+
+  test(
     'explicit namespaces reject unsupported query and migration engines',
     () async {
       final db = await sqlite(const SqliteOptions.memory());

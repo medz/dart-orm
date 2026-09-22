@@ -228,7 +228,8 @@ final class IndexSchema {
 /// Immutable physical table metadata, independent of Dart model identity.
 ///
 /// The constructor copies collection inputs, including nested key and index
-/// column lists. Schema consumers validate engine support before executing DDL.
+/// column lists, and rejects dotted table/schema names, including foreign-key
+/// targets. Schema consumers validate engine support before executing DDL.
 ///
 /// ```dart
 /// final accounts = TableSchema(
@@ -241,7 +242,7 @@ final class IndexSchema {
 ///
 /// {@category Schema}
 final class TableSchema {
-  /// Physical table name.
+  /// Physical table name, without a schema prefix or dots.
   final String name;
 
   /// PostgreSQL namespace. Generated PostgreSQL models always specify this,
@@ -274,6 +275,9 @@ final class TableSchema {
   final List<Column<Object?>> clientDefaults;
 
   /// Copies schema collections without opening or altering a database.
+  ///
+  /// Throws `SCHEMA.IDENTIFIER` for dotted table/schema names or foreign-key
+  /// targets, before the metadata can be bound to queries or change tracking.
   TableSchema(
     this.name, {
     this.namespace,
@@ -309,5 +313,19 @@ final class TableSchema {
              List.unmodifiable(index.columns),
              unique: index.unique,
            ),
-       ]);
+       ]) {
+    void checkIdentity(String name, String? namespace) {
+      if (name.contains('.') || namespace != null && namespace.contains('.')) {
+        throw const OrmException(
+          'SCHEMA.IDENTIFIER',
+          'Table and schema names must be separate identifiers, without dots.',
+        );
+      }
+    }
+
+    checkIdentity(name, namespace);
+    for (final key in this.foreignKeys) {
+      checkIdentity(key.target, key.targetNamespace);
+    }
+  }
 }

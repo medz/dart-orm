@@ -109,8 +109,10 @@ queries `"auth"."Users"` and `"DisplayName"`. PostgreSQL generation also explici
 qualifies default models with `"public"`. Querying these tables does not depend
 on a later `SET search_path` or an identically named temporary table.
 
-Do not write `model('auth.Users', ...)`: dotted table names are rejected. Column
-names use snake_case unless their helper specifies `name:`. Explicit physical
+Do not write `model('auth.Users', ...)`: dotted table names are rejected.
+Manual `TableSchema` definitions apply the same rule to table names, namespaces
+and foreign-key targets when constructed. Column names use snake_case unless
+their helper specifies `name:`. Explicit physical
 names retain their spelling and quotes are escaped for the selected dialect;
 quoting does not change the database's own rules for case equality.
 
