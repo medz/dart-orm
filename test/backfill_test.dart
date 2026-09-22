@@ -5,9 +5,11 @@ import 'dart:io';
 import 'package:orm/migrate.dart';
 import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
+import 'package:orm/src/cli/migration.dart';
 import 'package:test/test.dart';
 
 import 'support/backfill.dart';
+import 'support/cli.dart';
 import 'support/backfill_history/migrations.g.dart' as historical;
 import 'support/migration_project.dart';
 
@@ -470,32 +472,53 @@ void main() {
         'CLI previews non-atomic work and reports a bounded run as incomplete',
         () async {
           await seed(db);
-          final project = await MigrationProject.create(
-            postgresSchema: backend == 'postgres' ? 'orm_backfill_tests' : null,
-            sqlitePath: path,
-          );
-          addTearDown(project.dispose);
-          await project.target(
-            fill(dialect: db.dialect).snapshot ?? SchemaSnapshot([payload]),
-          );
-          for (final m in [initial, fill(dialect: db.dialect)]) {
-            await project.append(m);
+          final history = MigrationHistory([
+            for (final m in [initial, fill(dialect: db.dialect)])
+              (m, m.checksum),
+          ], dialect: db.dialect);
+          Future<Map<String, Object?>> command(List<String> args) async {
+            final result = await captureCli(
+              () => runMigrationCommand(
+                args,
+                history: history,
+                directory: directory.path,
+                connect: ({required readOnly}) async => backend == 'sqlite'
+                    ? (await sqlite(
+                        readOnly
+                            ? SqliteOptions.readOnly(path)
+                            : SqliteOptions.file(path),
+                      )).sql
+                    : postgres(
+                        PostgresOptions(
+                          url: Uri.parse(
+                            Platform.environment['ORM_TEST_POSTGRES']!,
+                          ),
+                          tls: .disable,
+                          schema: 'orm_backfill_tests',
+                          maxConnections: 1,
+                        ),
+                      ).sql,
+              ),
+            );
+            expect(result.exitCode, 0, reason: result.stderr);
+            return cliReport(result);
           }
-          final plan = await project.run(['plan']);
+
+          final plan = await command(['plan']);
           expect(plan['atomic'], false);
-          final paused = await project.run([
+          final paused = await command([
             'apply',
             '--max-backfill-batches',
             '1',
           ]);
           expect(paused, {'applied': <String>[], 'complete': false});
-          final status = await project.run(['status']);
+          final status = await command(['status']);
           expect(
             (((status['progress'] as List).single as Map)['backfill']
                 as Map)['rows'],
             3,
           );
-          expect(await project.run(['apply', '--max-backfill-batches', '10']), {
+          expect(await command(['apply', '--max-backfill-batches', '10']), {
             'applied': ['0002_fill'],
             'complete': true,
           });
@@ -678,12 +701,7 @@ void main() {
           () async {
             await seed(db);
             final migrations = [initial, fill(dialect: db.dialect)];
-            final project = await MigrationProject.create(
-              postgresSchema: backend == 'postgres'
-                  ? 'orm_backfill_tests'
-                  : null,
-              sqlitePath: path,
-            );
+            final project = await MigrationProject.create(dialect: db.dialect);
             addTearDown(project.dispose);
             for (final m in migrations) {
               await project.append(m);

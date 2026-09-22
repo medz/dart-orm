@@ -398,7 +398,7 @@ void main() {
               ? [ExecuteSql(update), index]
               : [index, ExecuteSql(update)],
         );
-        final project = await MigrationProject.create(postgresSchema: schema);
+        final project = await MigrationProject.create(dialect: .postgres);
         try {
           for (final m in [initial, migration]) {
             await project.append(m);

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:orm/generate.dart';
 import 'package:orm/postgres.dart';
 import 'package:test/test.dart';
 
@@ -33,14 +34,10 @@ import '../auth/users.dart' as auth;
 final user = model('Users', (id: identity(), name: text(), accountId: integer()),
   relations: (u) => (account: references(u.accountId, () => auth.user),));
 ''');
-        await fixture.run([
-          'run',
-          'orm',
-          'generate',
-          'lib/schema',
-          '--database',
-          'postgres',
-        ]);
+        await writeGeneratedSchema(
+          fixture.file('lib/schema').path,
+          dialect: .postgres,
+        );
         await fixture.write('bin/namespaces.dart', r'''
 import 'dart:io';
 import 'package:orm/postgres.dart';

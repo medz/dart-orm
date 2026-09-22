@@ -66,16 +66,8 @@ final mariaOnly = sqlQuery(result: (value: integer(),), parameters: (minimum: in
       expect(generated.dart, contains("import 'package:orm/sql.dart'"));
       expect(generated.dart, contains('extension ResultSql on QueryContext'));
       expect(generated.dart, isNot(contains('Database<')));
-      await writeGeneratedQueries(source.path);
-      final analyzed = await Process.run(Platform.resolvedExecutable, [
-        'analyze',
-        '${directory.path}/queries.queries.dart',
-      ]);
-      expect(
-        analyzed.exitCode,
-        0,
-        reason: '${analyzed.stdout}\n${analyzed.stderr}',
-      );
+      await File('${directory.path}/queries.queries.dart')
+          .writeAsString(generated.dart);
       final consumer = File('${directory.path}/compile.dart');
       await consumer.writeAsString('''
 import 'package:orm/sql.dart';

@@ -2,10 +2,12 @@ import 'dart:io';
 
 import 'package:orm/generate.dart';
 import 'package:orm/migrate.dart';
-import 'package:orm/migrate_cli.dart';
+import 'package:orm/src/cli/migration.dart';
 import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
+
+import 'support/cli.dart';
 
 Matcher code(String value) =>
     isA<OrmException>().having((e) => e.code, 'code', value);
@@ -332,8 +334,8 @@ void main() {
       ['inspect', 'scores'],
     ]) {
       var connected = false;
-      try {
-        await runMigrationCli(
+      final result = await captureCli(
+        () => runMigrationCommand(
           args,
           history: args.first == 'apply'
               ? MigrationHistory([], dialect: .postgres)
@@ -348,13 +350,12 @@ void main() {
               onQuery: (e) => statements.add(e.sql),
             );
           },
-        );
-        expect(exitCode, 1, reason: args.first);
-        expect(connected, true);
-        expect(statements, isEmpty);
-      } finally {
-        exitCode = 0;
-      }
+        ),
+      );
+      expect(result.exitCode, 1, reason: args.first);
+      expect(result.stderr, contains('MIGRATION.TARGET'));
+      expect(connected, true);
+      expect(statements, isEmpty);
     }
   });
 

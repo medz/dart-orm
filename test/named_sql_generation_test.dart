@@ -9,6 +9,8 @@ import 'package:orm/builder.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
+import 'support/cli.dart';
+
 void main() {
   late Directory directory;
   setUp(() async {
@@ -222,10 +224,7 @@ void main() {
         "sqlite: 'query.sql'",
         'SELECT COUNT(*) AS n FROM entries',
       );
-      Future<ProcessResult> run(List<String> arguments) => Process.run(
-        Platform.resolvedExecutable,
-        ['run', 'orm', ...arguments],
-      );
+      final run = runCli;
       final generate = await run([
         'queries',
         'generate',

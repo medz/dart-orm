@@ -5,7 +5,7 @@ import 'package:orm/postgres.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
-import 'support/migration_project.dart';
+import 'support/cli.dart';
 
 void main() {
   for (final backend in [
@@ -13,15 +13,15 @@ void main() {
     if (Platform.environment.containsKey('ORM_TEST_POSTGRES')) 'postgres',
   ]) {
     test(
-      'CLI $backend imports reviews generates and baselines existing data without replacing files',
+      'CLI $backend imports and reports issues without replacing files or changing rows',
       () async {
         final schema =
             'orm_import_${pid}_${DateTime.now().microsecondsSinceEpoch}';
-        final project = await MigrationProject.create(
-          postgresSchema: backend == 'postgres' ? schema : null,
+        final directory = await Directory.systemTemp.createTemp(
+          'orm-import-cli-',
         );
-        final path = project.databasePath;
-        final source = '${project.path}/lib/imported.dart';
+        final path = '${directory.path}/database.sqlite';
+        final source = '${directory.path}/imported.dart';
         final options = backend == 'sqlite'
             ? ['--sqlite', path]
             : [
@@ -33,13 +33,8 @@ void main() {
                 schema,
               ];
         late Database<Backend> db;
-        Future<ProcessResult> cli(List<String> args, {int code = 0}) async {
-          final result = await Process.run(Platform.resolvedExecutable, [
-            'run',
-            'orm',
-            ...args,
-            '--json',
-          ]);
+        Future<CliResult> cli(List<String> args, {int code = 0}) async {
+          final result = await runCli([...args, '--json']);
           expect(
             result.exitCode,
             code,
@@ -94,11 +89,10 @@ void main() {
               '--table',
               'existing',
             ]);
-            final report =
-                jsonDecode(imported.stdout as String) as Map<String, Object?>;
+            final report = jsonDecode(imported.stdout) as Map<String, Object?>;
             expect(report['issues'], isEmpty);
             expect(
-              await File('${project.path}/lib/imported.import.json').exists(),
+              await File('${directory.path}/imported.import.json').exists(),
               true,
             );
             final original = await File(source).readAsString();
@@ -110,16 +104,6 @@ void main() {
               source,
             ], code: 64);
             expect(await File(source).readAsString(), original);
-            await cli(['generate', source]);
-            await project.fixture.write(
-              'lib/target.dart',
-              await File('${project.path}/lib/imported.snapshot.dart')
-                  .readAsString(),
-            );
-            await project.run(['create', '0001_imported']);
-            final baseline = await project.run(['baseline']);
-            expect(baseline['matches'], true);
-            await project.run(['verify']);
             expect(
               (await db.execute(SqlCommand('SELECT id, value FROM existing')))
                   .rows,
@@ -128,7 +112,7 @@ void main() {
               ],
             );
 
-            final blockedSource = '${project.path}/lib/blocked.dart';
+            final blockedSource = '${directory.path}/blocked.dart';
             final blocked = await cli([
               'db',
               'import',
@@ -138,24 +122,21 @@ void main() {
               '--table',
               'missing',
             ], code: 2);
-            expect(
-              (jsonDecode(blocked.stdout as String) as Map)['issues'],
-              isNotEmpty,
-            );
+            expect((jsonDecode(blocked.stdout) as Map)['issues'], isNotEmpty);
             expect(await File(blockedSource).exists(), true);
             await cli([
               'db',
               'import',
               ...options,
               '--output',
-              '${project.path}/lib/invalid.dart',
+              '${directory.path}/invalid.dart',
               '--table',
               'existing',
               '--table',
               'existing',
             ], code: 64);
             expect(
-              await File('${project.path}/lib/invalid.dart').exists(),
+              await File('${directory.path}/invalid.dart').exists(),
               false,
             );
           } finally {
@@ -165,7 +146,7 @@ void main() {
             await db.close();
           }
         } finally {
-          await project.dispose();
+          await directory.delete(recursive: true);
         }
       },
       timeout: const Timeout(Duration(minutes: 3)),

@@ -1,10 +1,9 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:orm/migrate.dart';
-import 'package:orm/migrate_cli.dart';
+import 'package:orm/src/cli/migration.dart';
 import 'package:orm/runtime.dart';
 import 'package:test/test.dart';
+
+import 'support/cli.dart';
 
 void main() {
   for (final dialect in SqlDialect.values) {
@@ -17,46 +16,29 @@ void main() {
         ),
       ], dialect: dialect);
       final driver = _CatalogDriver(dialect);
-      final output = _Output();
-      final previousExitCode = exitCode;
-      try {
-        exitCode = 0;
-        await IOOverrides.runZoned(
-          () => runMigrationCli(
-            ['plan'],
-            history: MigrationHistory([
-              (migration, migration.checksum),
-            ], dialect: dialect),
-            directory: 'unused',
-            connect: ({required readOnly}) {
-              expect(readOnly, isTrue);
-              return SqlDatabase(driver);
-            },
-          ),
-          stdout: () => output,
-        );
-        expect(exitCode, 0);
-        final report =
-            jsonDecode(output.buffer.toString()) as Map<String, Object?>;
-        expect(report['pending'], hasLength(1));
-        expect(
-          report['atomic'],
-          dialect == SqlDialect.sqlite || dialect == SqlDialect.postgres,
-        );
-        expect(driver.closed, isTrue);
-      } finally {
-        exitCode = previousExitCode;
-      }
+      final result = await captureCli(
+        () => runMigrationCommand(
+          ['plan'],
+          history: MigrationHistory([
+            (migration, migration.checksum),
+          ], dialect: dialect),
+          directory: 'unused',
+          connect: ({required readOnly}) {
+            expect(readOnly, isTrue);
+            return SqlDatabase(driver);
+          },
+        ),
+      );
+      expect(result.exitCode, 0, reason: result.stderr);
+      final report = cliReport(result);
+      expect(report['pending'], hasLength(1));
+      expect(
+        report['atomic'],
+        dialect == SqlDialect.sqlite || dialect == SqlDialect.postgres,
+      );
+      expect(driver.closed, isTrue);
     });
   }
-}
-
-final class _Output implements Stdout {
-  final buffer = StringBuffer();
-  @override
-  void writeln([Object? object = '']) => buffer.writeln(object);
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// Only protocol metadata is needed: the simulated server has no migration

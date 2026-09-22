@@ -169,7 +169,7 @@ void main() {
         'bin/check.dart',
         "import 'package:orm/migrate.dart';\n${imports.join('\n')}\nvoid main() { ${assertions.join('\n')} print('frozen-mysql-history-ok'); }",
       );
-      final result = await fixture.run(['run', 'bin/check.dart']);
+      final result = await fixture.run(['run', 'orm_build_fixture:check']);
       expect(result.output, contains('frozen-mysql-history-ok'));
     } finally {
       await fixture.dispose();

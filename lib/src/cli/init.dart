@@ -1,13 +1,19 @@
 import 'dart:io';
 
 import 'package:dart_style/dart_style.dart';
+import 'package:path/path.dart' as p;
 
 import '../../generate.dart';
 import '../../migrate.dart';
 import 'arguments.dart';
 import 'output.dart';
 
-Future<void> initializeProject(List<String> args, CliOutput output) async {
+Future<void> initializeProject(
+  List<String> args,
+  CliOutput output, {
+  String directory = '.',
+}) async {
+  String resolve(String path) => p.join(directory, path);
   final (positionals, options) = parseOptions(args, {'database'});
   if (positionals.isNotEmpty) {
     throw const FormatException('init accepts no positional arguments.');
@@ -18,7 +24,7 @@ Future<void> initializeProject(List<String> args, CliOutput output) async {
       'Choose --database sqlite, postgres, mysql or mariadb.',
     );
   }
-  if (!await File('pubspec.yaml').exists()) {
+  if (!await File(resolve('pubspec.yaml')).exists()) {
     throw const FormatException(
       'Run init in a Dart project containing pubspec.yaml and the orm dependency.',
     );
@@ -30,12 +36,12 @@ Future<void> initializeProject(List<String> args, CliOutput output) async {
   const config = 'orm.config.dart';
   const paths = [source, client, snapshot, registry, config];
   for (final path in paths) {
-    if (await FileSystemEntity.type(path, followLinks: false) !=
+    if (await FileSystemEntity.type(resolve(path), followLinks: false) !=
         FileSystemEntityType.notFound) {
       throw FormatException('init never replaces an existing file: $path');
     }
   }
-  final migrations = Directory('migrations');
+  final migrations = Directory(resolve('migrations'));
   if (await migrations.exists() &&
       !await migrations.list(followLinks: false).isEmpty) {
     throw const FormatException(
@@ -44,7 +50,7 @@ Future<void> initializeProject(List<String> args, CliOutput output) async {
   }
   final saved = <File>[];
   Future<void> save(String path, String content) async {
-    final file = File(path);
+    final file = File(resolve(path));
     await file.parent.create(recursive: true);
     await file.create(exclusive: true);
     saved.add(file);
@@ -55,8 +61,8 @@ Future<void> initializeProject(List<String> args, CliOutput output) async {
     await save(source, _initialSchema);
     final dialect = SqlDialect.values.byName(engine);
     final generated = await generateSchema(
-      source,
-      outputPath: client,
+      resolve(source),
+      outputPath: resolve(client),
       dialect: dialect,
     );
     await save(client, generated.dart);

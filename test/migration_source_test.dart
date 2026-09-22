@@ -4,9 +4,11 @@ import 'dart:io';
 import 'package:orm/generate.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
+import 'package:orm/src/cli/migration.dart';
 import 'package:test/test.dart';
 
 import '../tool/src/build_fixture.dart';
+import 'support/cli.dart';
 
 void main() {
   late BuildFixture fixture;
@@ -69,6 +71,10 @@ void main() {
       primaryKey: ['id'],
     );
     final snapshot = SchemaSnapshot([other, table]);
+    final imports = <String>[];
+    final checks = <String>[];
+    final checksums = <String>[];
+    await fixture.write('lib/frozen.dart', schemaSource(snapshot));
     for (final dialect in [SqlDialect.sqlite, SqlDialect.postgres]) {
       final migration = Migration.steps(
         '0001_literals',
@@ -100,148 +106,166 @@ void main() {
         snapshot: snapshot,
         dialect: dialect,
       );
-      await fixture.write('lib/frozen.dart', schemaSource(snapshot));
       await fixture.write(
-        'lib/m0001_literals.dart',
+        'lib/m_${dialect.name}.dart',
         migrationSource(migration),
       );
-      await fixture.write('bin/check.dart', '''
-import '../lib/frozen.dart' as s;
-import '../lib/m0001_literals.dart' as m;
-void main() {
-  print(s.schema.checksum);
-  print(m.migration.checksum);
-  if (m.migration.checksum != m.migrationChecksum) throw StateError('fingerprint');
-}
-''');
+      imports.add("import '../lib/m_${dialect.name}.dart' as ${dialect.name};");
+      checks.add(
+        "if (${dialect.name}.migration.checksum != ${dialect.name}.migrationChecksum) throw StateError('fingerprint'); print(${dialect.name}.migration.checksum);",
+      );
+      checksums.add(migration.checksum);
       final source = await fixture
-          .file('lib/m0001_literals.dart')
+          .file('lib/m_${dialect.name}.dart')
           .readAsString();
       expect(source, isNot(contains('fromJson')));
       expect(source, isNot(contains('schema.orm.dart')));
-      final result = await fixture.run(['run', 'orm_build_fixture:check']);
-      expect(result.output, contains(snapshot.checksum));
-      expect(result.output, contains(migration.checksum));
-      await fixture.run([
-        'analyze',
-        'lib/frozen.dart',
-        'lib/m0001_literals.dart',
-        'bin/check.dart',
-      ]);
+    }
+    await fixture.write(
+      'bin/check.dart',
+      "import '../lib/frozen.dart' as s;\n${imports.join('\n')}\nvoid main() { print(s.schema.checksum); ${checks.join('\n')} }",
+    );
+    final result = await fixture.run(['run', 'orm_build_fixture:check']);
+    for (final checksum in [snapshot.checksum, ...checksums]) {
+      expect(result.output, contains(checksum));
     }
   });
 
-  test('project CLI creates Dart history, upgrades a database and preserves recorded fingerprints', () async {
-    final initial = TableSchema(
-      'people',
-      columns: [Column('id', Codecs.integer), Column('name', Codecs.text)],
-      primaryKey: ['id'],
-    );
-    await fixture.write(
-      'lib/target.dart',
-      schemaSource(SchemaSnapshot([initial])),
-    );
-    await writeMigrationRegistry(
-      '${fixture.directory.path}/lib/migrations',
-      dialect: SqlDialect.sqlite,
-    );
-    await fixture.write('bin/migrate.dart', r'''
+  test(
+    'compiled history rejects edited fingerprints until explicitly recorded',
+    () async {
+      final initialSchema = SchemaSnapshot([
+        TableSchema(
+          'people',
+          columns: [Column('id', Codecs.integer), Column('name', Codecs.text)],
+          primaryKey: ['id'],
+        ),
+      ]);
+      final initial = Migration.create(
+        '0001_people',
+        initialSchema.tables,
+        dialect: .sqlite,
+      );
+      final after = SchemaSnapshot([
+        TableSchema(
+          'people',
+          columns: [
+            ...initialSchema.tables.single.columns,
+            Column('nickname', Codecs.text.nullable(), nullable: true),
+          ],
+          primaryKey: ['id'],
+        ),
+      ]);
+      final next = Migration.diff(
+        '0002_nickname',
+        dialect: .sqlite,
+        from: initialSchema,
+        to: after,
+        previous: initial.checksum,
+      );
+      final migrations = <Migration>[];
+      final directory = '${fixture.directory.path}/lib/migrations';
+      for (final m in [initial, next]) {
+        await writeMigration(
+          m,
+          directory: directory,
+          history: MigrationHistory([
+            for (final saved in migrations) (saved, saved.checksum),
+          ], dialect: .sqlite),
+        );
+        migrations.add(m);
+      }
+      final db = await sqlite(
+        SqliteOptions.file(fixture.file('database.sqlite').path),
+      );
+      try {
+        await Migrator(db.sql).apply(migrations);
+        await db.execute(
+          SqlCommand("INSERT INTO people(id, name) VALUES(1, 'Ada')"),
+        );
+      } finally {
+        await db.close();
+      }
+      await fixture.write('bin/migrate.dart', r'''
 import 'package:orm/migrate_cli.dart';
 import 'package:orm/sqlite.dart';
-import '../lib/target.dart';
 import '../lib/migrations/migrations.g.dart';
 Future<void> main(List<String> args) => runMigrationCli(args,
   history: migrationHistory,
   directory: 'lib/migrations',
-  schema: schema,
   connect: ({required readOnly}) async => (await sqlite(readOnly ? SqliteOptions.readOnly('database.sqlite') : SqliteOptions.file('database.sqlite'))).sql,
 );
 ''');
-    Future<Map<String, Object?>> command(
-      List<String> args, {
-      int code = 0,
-    }) async {
-      final result = await Process.run(Platform.resolvedExecutable, [
-        'run',
-        'orm_build_fixture:migrate',
-        ...args,
-      ], workingDirectory: fixture.directory.path);
-      expect(
-        result.exitCode,
-        code,
-        reason: '${result.stdout}\n${result.stderr}',
-      );
-      return code == 0
-          ? jsonDecode(result.stdout as String) as Map<String, Object?>
-          : {};
-    }
+      Future<Map<String, Object?>> command(
+        List<String> args, {
+        int code = 0,
+      }) async {
+        final result = await Process.run(Platform.resolvedExecutable, [
+          'run',
+          'orm_build_fixture:migrate',
+          ...args,
+        ], workingDirectory: fixture.directory.path);
+        expect(
+          result.exitCode,
+          code,
+          reason: '${result.stdout}\n${result.stderr}',
+        );
+        if (code != 0) {
+          expect(result.stderr, contains('MIGRATION.CHECKSUM'));
+          return {};
+        }
+        return jsonDecode(result.stdout as String) as Map<String, Object?>;
+      }
 
-    expect((await command(['check']))['valid'], true);
-    expect(await fixture.file('database.sqlite').exists(), false);
-    final created = await command(['create', '0001_people']);
-    expect(created['created'], 'lib/migrations/m0001_people.dart');
-    expect(
-      await fixture.file('lib/migrations/0001_people.json').exists(),
-      false,
-    );
-    await command(['plan'], code: 1);
-    expect(await fixture.file('database.sqlite').exists(), false);
-    expect((await command(['apply']))['applied'], ['0001_people']);
-    final db = await sqlite(
-      SqliteOptions.file(fixture.file('database.sqlite').path),
-    );
-    try {
-      await db.execute(SqlCommand("INSERT INTO people VALUES(1, 'Ada')"));
-    } finally {
-      await db.close();
-    }
-    final after = TableSchema(
-      'people',
-      columns: [
-        ...initial.columns,
-        Column('nickname', Codecs.text.nullable(), nullable: true),
-      ],
-      primaryKey: ['id'],
-    );
-    await fixture.write(
-      'lib/target.dart',
-      schemaSource(SchemaSnapshot([after])),
-    );
-    await command(['create', '0002_nickname']);
-    expect((await command(['plan']))['pending'], hasLength(1));
-    expect((await command(['apply']))['applied'], ['0002_nickname']);
-    expect((await command(['verify']))['matches'], true);
-    expect((await command(['apply']))['applied'], isEmpty);
-    final read = await sqlite(
-      SqliteOptions.readOnly(fixture.file('database.sqlite').path),
-    );
-    try {
-      expect(
-        (await read.execute(SqlCommand('SELECT name, nickname FROM people')))
-            .rows
-            .single,
-        ['Ada', null],
+      expect((await command(['check']))['migrations'], [
+        '0001_people',
+        '0002_nickname',
+      ]);
+      final latest = fixture.file('lib/migrations/m0002_nickname.dart');
+      final source = await latest.readAsString();
+      await latest.writeAsString(
+        source.replaceAll('ADD COLUMN', 'ADD  COLUMN'),
       );
-    } finally {
-      await read.close();
-    }
-
-    final latest = fixture.file('lib/migrations/m0002_nickname.dart');
-    final source = await latest.readAsString();
-    await latest.writeAsString(source.replaceAll('ADD COLUMN', 'ADD  COLUMN'));
-    await command(['check'], code: 1);
-    await writeMigrationRegistry(
-      '${fixture.directory.path}/lib/migrations',
-      dialect: SqlDialect.sqlite,
-    );
-    await command(['check'], code: 1);
-    await command(['record', '0001_people'], code: 1);
-    await command(['record', '0002_nickname']);
-    expect((await command(['check']))['valid'], true);
-    // Re-recording source cannot change an independently applied DB fingerprint.
-    await command(['plan'], code: 1);
-    await command(['apply', '--max-backfill-batches', '0'], code: 64);
-  }, timeout: const Timeout(Duration(minutes: 3)));
+      // Rebuilding the registry must not accept the edited definition.
+      await writeMigrationRegistry(directory, dialect: .sqlite);
+      await command(['check'], code: 1);
+      final rejected = await captureCli(
+        () => runMigrationCommand(
+          ['record', initial.id],
+          history: MigrationHistory([
+            for (final m in migrations) (m, m.checksum),
+          ], dialect: .sqlite),
+          directory: directory,
+        ),
+      );
+      expect(rejected.exitCode, 1);
+      expect(rejected.stderr, contains('Only the latest'));
+      final recorded = await command(['record', next.id]);
+      expect(recorded['checksum'], isNot(next.checksum));
+      expect((await command(['check']))['valid'], true);
+      // Re-recording source cannot change an independently applied DB fingerprint.
+      await command(['plan'], code: 1);
+      final read = await sqlite(
+        SqliteOptions.readOnly(fixture.file('database.sqlite').path),
+      );
+      try {
+        expect(
+          (await read.execute(SqlCommand('SELECT name, nickname FROM people')))
+              .rows,
+          [
+            ['Ada', null],
+          ],
+        );
+        expect(
+          (await Migrator(read.sql).history()).last.checksum,
+          next.checksum,
+        );
+      } finally {
+        await read.close();
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
   test(
     'AOT migration bundle works without Dart sources or migration assets',
     () async {
@@ -270,6 +294,7 @@ Future<void> main(List<String> args) => runMigrationCli(args,
       await fixture.write('bin/migrate.dart', """
 import 'package:orm/migrate_cli.dart';
 import 'package:orm/sqlite.dart';
+import 'package:orm/src/cli/migration.dart';
 import '../lib/target.dart';
 import '../lib/migrations/migrations.g.dart';
 Future<void> main(List<String> args) => runMigrationCli(args,

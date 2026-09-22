@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../generate.dart';
-import '../../migrate_cli.dart';
 import '../generate/schema/layout.dart';
 import 'commands.dart';
 import 'config.dart';
 import 'init.dart';
+import 'migration.dart';
 import 'output.dart';
 
 const _help = <String, String>{
@@ -70,6 +70,10 @@ Flutter Web bundles these resources automatically.''',
 /// not require a database. Reports go to stdout; failures go to stderr and set
 /// the process exit code. Pass `--json` in [arguments] for machine-readable output.
 Future<void> runOrmCli(List<String> arguments, {OrmConfig? config}) async {
+  exitCode = await runOrmCommand(arguments, config: config);
+}
+
+Future<int> runOrmCommand(List<String> arguments, {OrmConfig? config}) async {
   final json = arguments.contains('--json');
   final output = CliOutput(json);
   try {
@@ -108,7 +112,7 @@ Future<void> runOrmCli(List<String> arguments, {OrmConfig? config}) async {
       } else {
         stdout.writeln(help);
       }
-      return;
+      return 0;
     }
     if (args.first == 'init') {
       if (config != null || configPath != null) {
@@ -117,7 +121,7 @@ Future<void> runOrmCli(List<String> arguments, {OrmConfig? config}) async {
         );
       }
       await initializeProject(args.skip(1).toList(), output);
-      return;
+      return 0;
     }
     final projectCommand =
         args.first == 'migrate' ||
@@ -132,8 +136,7 @@ Future<void> runOrmCli(List<String> arguments, {OrmConfig? config}) async {
           ...args,
           if (json) '--json',
         ], mode: ProcessStartMode.inheritStdio);
-        exitCode = await child.exitCode;
-        return;
+        return await child.exitCode;
       }
       if (configPath != null || args.first == 'migrate') {
         throw FormatException(
@@ -147,14 +150,13 @@ Future<void> runOrmCli(List<String> arguments, {OrmConfig? config}) async {
       );
     }
     if (config != null && args.first == 'generate') {
-      await runExplicitCli(
+      return await runExplicitCli(
         args,
         json: json,
         dialect: config.history.dialect,
         defaultSource: config.schema,
         defaultOutput: config.output,
       );
-      return;
     }
     if (config != null && args.first == 'migrate') {
       var snapshot = config.snapshot;
@@ -183,7 +185,7 @@ Future<void> runOrmCli(List<String> arguments, {OrmConfig? config}) async {
         await File(snapshotPath).writeAsString(generated.snapshotDart);
         snapshot = generated.snapshot;
       }
-      await runMigrationCli(
+      return await runMigrationCommand(
         args.skip(1).toList(),
         history: config.history,
         directory: config.migrations,
@@ -193,9 +195,8 @@ Future<void> runOrmCli(List<String> arguments, {OrmConfig? config}) async {
         using: config.using,
         json: json,
       );
-      return;
     }
-    await runExplicitCli(args, json: json);
+    return await runExplicitCli(args, json: json);
   } on FormatException catch (error) {
     output.error(error.message, 64);
   } on ArgumentError catch (_) {
@@ -203,4 +204,5 @@ Future<void> runOrmCli(List<String> arguments, {OrmConfig? config}) async {
   } catch (error) {
     output.error(error.toString(), 1);
   }
+  return output.exitCode;
 }

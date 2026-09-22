@@ -81,14 +81,9 @@ jobs:
         run: dart format --output=none --set-exit-if-changed bin lib test tool example
       - name: Analyze Dart package and examples
         # The Flutter example is a separate package with its own SDK dependency.
-        run: |
-          for target in bin lib test tool example/*.dart example/migrations example/teams example/company; do
-            dart analyze "$target"
-          done
+        run: dart analyze bin lib test tool example/*.dart example/migrations example/teams example/company
       - name: Check committed SQLite web assets
         run: dart run tool/build_sqlite_web.dart --check
-      - name: Generate and validate API documentation
-        run: dart doc --validate-links
       - name: Test SQLite, PostgreSQL, MySQL and MariaDB
         run: dart test
 

@@ -15,14 +15,15 @@ import '../sqlite/assets_io.dart';
 import 'arguments.dart';
 import 'output.dart';
 
-Future<void> runExplicitCli(
+Future<int> runExplicitCli(
   List<String> arguments, {
   bool json = false,
   SqlDialect? dialect,
   String defaultSource = 'lib/schema.dart',
   String? defaultOutput,
 }) async {
-  void report(Map<String, Object?> value) => CliOutput(json).report(value);
+  final reporter = CliOutput(json);
+  void report(Map<String, Object?> value) => reporter.report(value);
   try {
     if (arguments.first == 'web-assets') {
       if (arguments.length > 2 ||
@@ -35,8 +36,8 @@ Future<void> runExplicitCli(
         arguments.length == 2 ? arguments[1] : 'web/orm',
       );
       await copySqliteWebAssets(directory);
-      CliOutput(json).report({'copied': directory.path});
-      return;
+      report({'copied': directory.path});
+      return 0;
     }
     if (arguments.first == 'generate') {
       final args = arguments.skip(1).toList();
@@ -70,10 +71,8 @@ Future<void> runExplicitCli(
           ? defaultOutput
           : null;
       await writeGeneratedSchema(source, output: output, dialect: dialect);
-      CliOutput(json).report({
-        'generated': output ?? '${SchemaLayout.stem(source)}.orm.dart',
-      });
-      return;
+      report({'generated': output ?? '${SchemaLayout.stem(source)}.orm.dart'});
+      return 0;
     }
     if (arguments.length < 2) {
       throw const FormatException('Expected a subcommand.');
@@ -101,7 +100,7 @@ Future<void> runExplicitCli(
               : null,
         ),
       });
-      return;
+      return 0;
     }
     if (command == 'queries generate') {
       if (arguments.length < 3 ||
@@ -115,12 +114,12 @@ Future<void> runExplicitCli(
         arguments[2],
         output: arguments.length == 4 ? arguments[3] : null,
       );
-      CliOutput(json).report({
+      report({
         'generated': arguments.length == 4
             ? arguments[3]
             : p.setExtension(arguments[2], '.queries.dart'),
       });
-      return;
+      return 0;
     }
     final common = {
       'sqlite',
@@ -255,19 +254,19 @@ Future<void> runExplicitCli(
             'report': importReport.path,
             ...result.toJson(),
           });
-          if (result.hasBlockingIssues) exitCode = 2;
+          if (result.hasBlockingIssues) return 2;
       }
     } finally {
       await db.close();
     }
   } on FormatException catch (error) {
-    CliOutput(json).error(error.message, 64);
+    reporter.error(error.message, 64);
   } on ArgumentError catch (_) {
-    CliOutput(json)
-        .error('Invalid command option or configuration. Use --help.', 64);
+    reporter.error('Invalid command option or configuration. Use --help.', 64);
   } catch (error) {
-    CliOutput(json).error(error.toString(), 1);
+    reporter.error(error.toString(), 1);
   }
+  return reporter.exitCode;
 }
 
 SqlDialect _databaseDialect(Map<String, String> options) {

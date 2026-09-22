@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import '../../generate.dart';
 import '../../migrate.dart';
 import '../../runtime.dart';
+import 'output.dart';
 
 /// Opens a runtime owned and closed by one migration CLI invocation.
 ///
@@ -30,24 +30,30 @@ Future<void> runMigrationCli(
   Map<String, Map<String, String>> using = const {},
   bool json = true,
 }) async {
-  void report(Map<String, Object?> value) {
-    if (json) {
-      stdout.writeln(const JsonEncoder.withIndent('  ').convert(value));
-    } else {
-      for (final entry in value.entries) {
-        stdout.writeln(
-          '${entry.key}: ${entry.value is String ? entry.value : jsonEncode(entry.value)}',
-        );
-      }
-    }
-  }
+  exitCode = await runMigrationCommand(
+    arguments,
+    history: history,
+    directory: directory,
+    schema: schema,
+    connect: connect,
+    renames: renames,
+    using: using,
+    json: json,
+  );
+}
 
-  void fail(String message, int code) {
-    stderr.writeln(
-      json ? jsonEncode({'error': message, 'exitCode': code}) : message,
-    );
-    exitCode = code;
-  }
+Future<int> runMigrationCommand(
+  List<String> arguments, {
+  required MigrationHistory history,
+  required String directory,
+  SchemaSnapshot? schema,
+  MigrationConnection? connect,
+  SchemaRenames renames = const SchemaRenames(),
+  Map<String, Map<String, String>> using = const {},
+  bool json = true,
+}) async {
+  final output = CliOutput(json);
+  final report = output.report;
 
   try {
     if (arguments.isEmpty || arguments.singleOrNull == '--help') {
@@ -63,7 +69,7 @@ Future<void> runMigrationCli(
   inspect <table>
 Connection, target schema, renames and conversions belong in the Dart entrypoint.
 Rebuild static imports with: dart run orm migration registry <directory>''');
-      return;
+      return 0;
     }
     final command = arguments.first;
     final rest = arguments.skip(1).toList();
@@ -108,7 +114,7 @@ Rebuild static imports with: dart run orm migration registry <directory>''');
         history: history,
       );
       report({'recorded': rest.single, 'checksum': checksum});
-      return;
+      return 0;
     }
     final migrations = history.checked;
     if (command == 'check') {
@@ -117,7 +123,7 @@ Rebuild static imports with: dart run orm migration registry <directory>''');
         'dialect': history.dialect.name,
         'migrations': migrations.map((m) => m.id).toList(),
       });
-      return;
+      return 0;
     }
     if (command == 'create') {
       if (schema == null) {
@@ -151,7 +157,7 @@ Rebuild static imports with: dart run orm migration registry <directory>''');
         );
         report({'created': path, 'checksum': change.checksum});
       }
-      return;
+      return 0;
     }
     if (command == 'verify' && schema == null) {
       throw const FormatException(
@@ -234,7 +240,7 @@ Rebuild static imports with: dart run orm migration registry <directory>''');
                 {'kind': o.kind, 'name': o.name, 'definition': o.definition},
             ],
           });
-          if (!result.matches) exitCode = 2;
+          if (!result.matches) output.exitCode = 2;
         case 'inspect':
           final table = await inspectTable(db, rest.single);
           report({
@@ -291,10 +297,11 @@ Rebuild static imports with: dart run orm migration registry <directory>''');
       await db.close();
     }
   } on FormatException catch (error) {
-    fail(error.message, 64);
+    output.error(error.message, 64);
   } on ArgumentError catch (_) {
-    fail('Invalid migration argument. Use --help.', 64);
+    output.error('Invalid migration argument. Use --help.', 64);
   } catch (error) {
-    fail(error.toString(), 1);
+    output.error(error.toString(), 1);
   }
+  return output.exitCode;
 }

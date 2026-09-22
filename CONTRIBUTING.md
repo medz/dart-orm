@@ -25,8 +25,13 @@ Use dedicated test servers and accounts with those privileges.
 Server TLS defaults to `verifyFull`. Self-signed local fixtures can explicitly
 set `ORM_TEST_MYSQL_TLS=require` and `ORM_TEST_MARIADB_TLS=require`.
 Run `dart test` with the default suite concurrency for the complete native matrix.
-CLI process tests use package entrypoints (`dart run orm` or
-`dart run orm_build_fixture:migrate`) so Dart can reuse compiled code.
+Test command behavior in process with the helpers in `test/support/cli.dart`.
+Use absolute fixture paths and capture output with `IOOverrides`; never change
+the shared VM's working directory or exit code. Keep subprocesses for generated
+consumer compilation, configuration reload, AOT packaging and crash recovery.
+Use package entrypoints (`dart run orm` or `dart run orm_build_fixture:migrate`)
+when a Dart subprocess is necessary so it can reuse compiled code. Exercise
+unchanged generated sources in one consumer instead of compiling each assertion.
 
 ## Documentation and public APIs
 
@@ -56,7 +61,9 @@ examples as well; a formatted code block alone does not verify an example.
 
 ## Release checks
 
-Check formatting and run `dart pub publish --dry-run`. The published package
+Check formatting, run `dart doc --validate-links` and run
+`dart pub publish --dry-run`. Documentation generation is a release check, not
+part of the ordinary test CI. The published package
 includes its Dart sources, documentation, examples and SQLite Web assets;
 development caches and repository test tools stay out of the archive.
 
