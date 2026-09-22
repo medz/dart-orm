@@ -71,7 +71,7 @@ Future<void> main() async {
 ''');
         final result = await Process.run(
           Platform.resolvedExecutable,
-          ['run', 'bin/namespaces.dart'],
+          ['run', 'orm_build_fixture:namespaces'],
           workingDirectory: fixture.directory.path,
           environment: {
             'ORM_NAMESPACE_TEST_URL': Uri.parse(url)

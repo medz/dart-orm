@@ -24,7 +24,9 @@ Use dedicated test servers and accounts with those privileges.
 
 Server TLS defaults to `verifyFull`. Self-signed local fixtures can explicitly
 set `ORM_TEST_MYSQL_TLS=require` and `ORM_TEST_MARIADB_TLS=require`.
-Run `dart test --concurrency=1` when testing the complete native matrix.
+Run `dart test` with the default suite concurrency for the complete native matrix.
+CLI process tests use package entrypoints (`dart run orm` or
+`dart run orm_build_fixture:migrate`) so Dart can reuse compiled code.
 
 ## Documentation and public APIs
 

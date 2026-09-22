@@ -119,7 +119,7 @@ void main() {
           .readAsString();
       expect(source, isNot(contains('fromJson')));
       expect(source, isNot(contains('schema.orm.dart')));
-      final result = await fixture.run(['run', 'bin/check.dart']);
+      final result = await fixture.run(['run', 'orm_build_fixture:check']);
       expect(result.output, contains(snapshot.checksum));
       expect(result.output, contains(migration.checksum));
       await fixture.run([
@@ -163,7 +163,7 @@ Future<void> main(List<String> args) => runMigrationCli(args,
     }) async {
       final result = await Process.run(Platform.resolvedExecutable, [
         'run',
-        'bin/migrate.dart',
+        'orm_build_fixture:migrate',
         ...args,
       ], workingDirectory: fixture.directory.path);
       expect(

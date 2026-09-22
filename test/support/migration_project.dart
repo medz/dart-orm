@@ -63,7 +63,7 @@ Future<void> main(List<String> args) => runMigrationCli(args,
   Future<Map<String, Object?>> run(List<String> args, {int code = 0}) async {
     final result = await Process.run(Platform.resolvedExecutable, [
       'run',
-      'bin/migrate.dart',
+      'orm_build_fixture:migrate',
       ...args,
     ], workingDirectory: path);
     expect(

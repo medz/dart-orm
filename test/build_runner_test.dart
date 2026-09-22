@@ -32,7 +32,10 @@ import '../lib/schema.snapshot.dart';
 void main() => print('@@schema ${jsonEncode(schema.toJson())}');
 ''');
       Future<Map<String, Object?>> inspectSnapshot() async {
-        final result = await fixture.run(['run', 'bin/read_schema.dart']);
+        final result = await fixture.run([
+          'run',
+          'orm_build_fixture:read_schema',
+        ]);
         final line = result.output
             .split('\n')
             .firstWhere((l) => l.startsWith('@@schema '));

@@ -36,7 +36,7 @@ void main() {
         Future<ProcessResult> cli(List<String> args, {int code = 0}) async {
           final result = await Process.run(Platform.resolvedExecutable, [
             'run',
-            'bin/orm.dart',
+            'orm',
             ...args,
             '--json',
           ]);

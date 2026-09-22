@@ -90,7 +90,7 @@ jobs:
       - name: Generate and validate API documentation
         run: dart doc --validate-links
       - name: Test SQLite, PostgreSQL, MySQL and MariaDB
-        run: dart test --concurrency=1
+        run: dart test
 
   browser:
     name: Chrome JS and WASM

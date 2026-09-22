@@ -410,7 +410,7 @@ Future<void> main(List<String> args) => crashMigration(migrationHistory.checked,
 ''');
           final process = await Process.run(Platform.resolvedExecutable, [
             'run',
-            'bin/crash.dart',
+            'orm_build_fixture:crash',
             schema,
             crashAtCommit ? update : index.sql,
             crashAtCommit ? 'commit' : 'statement',

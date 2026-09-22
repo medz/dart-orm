@@ -695,7 +695,7 @@ Future<void> main(List<String> args) => crashBackfill(migrationHistory.checked, 
 ''');
             final child = await Process.run(Platform.resolvedExecutable, [
               'run',
-              'bin/crash.dart',
+              'orm_build_fixture:crash',
               backend,
               backend == 'sqlite' ? path : 'orm_backfill_tests',
               boundary,

@@ -224,7 +224,7 @@ void main() {
       );
       Future<ProcessResult> run(List<String> arguments) => Process.run(
         Platform.resolvedExecutable,
-        ['run', 'bin/orm.dart', ...arguments],
+        ['run', 'orm', ...arguments],
       );
       final generate = await run([
         'queries',

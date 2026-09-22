@@ -13,7 +13,7 @@ void main() {
   Future<Map<String, Object?>> inspect(String file) async {
     final result = await Process.run(Platform.resolvedExecutable, [
       'run',
-      'bin/orm.dart',
+      'orm',
       '--json',
       'db',
       'inspect',
@@ -125,7 +125,7 @@ void main() {
       await project.run(['check', '--unknown', 'x'], code: 64);
       final removed = await Process.run(Platform.resolvedExecutable, [
         'run',
-        'bin/orm.dart',
+        'orm',
         'migration',
         'create',
         '0001_legacy',
