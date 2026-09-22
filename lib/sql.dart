@@ -63,8 +63,19 @@
 /// {@canonicalFor union.SetQueries}
 /// {@canonicalFor union.UnionFields}
 /// {@canonicalFor stream.QueryStreaming}
-/// {@canonicalFor named_sql.SqlTemplate}
-/// {@canonicalFor named_sql.SqlQueryDefinition}
+/// {@canonicalFor raw_sql.Sql}
+/// {@canonicalFor raw_sql.SqlValue}
+/// {@canonicalFor raw_sql.SqlQuery}
+/// {@canonicalFor raw_sql.ColumnSql}
+/// {@canonicalFor raw_sql.FieldSql}
+/// {@canonicalFor result.ResultShape}
+/// {@canonicalFor result.ResultColumn}
+/// {@canonicalFor result.Result2}
+/// {@canonicalFor result.Result3}
+/// {@canonicalFor result.Result4}
+/// {@canonicalFor result.Result5}
+/// {@canonicalFor result.Result6}
+/// {@canonicalFor raw_execution.SqlExecution}
 library;
 
 export 'driver.dart';
@@ -114,4 +125,9 @@ export 'src/query/cursor.dart' show NullOrder, CursorTerm, KeysetQuery;
 export 'src/query/union.dart'
     show SqlRow2, SqlRow3, SqlRow4, SqlRow5, SqlRow6, SetQueries, UnionFields;
 export 'src/query/stream.dart' show QueryStreaming;
-export 'src/query/named_sql.dart' show SqlTemplate, SqlQueryDefinition;
+
+export 'src/query/raw_sql.dart'
+    show Sql, SqlValue, SqlQuery, ColumnSql, FieldSql;
+export 'src/query/result.dart'
+    show ResultShape, ResultColumn, Result2, Result3, Result4, Result5, Result6;
+export 'src/query/raw_execution.dart' show SqlExecution;

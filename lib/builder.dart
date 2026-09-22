@@ -1,4 +1,4 @@
-/// Optional build_runner factories for model and named SQL generation.
+/// Optional build_runner factories for model generation.
 ///
 /// Select libraries with `generate_for`, or configure `schema` and `database`
 /// options to collect a definition directory as one client. Applications
@@ -6,7 +6,6 @@
 ///
 /// {@category Tooling}
 /// {@canonicalFor build.ormBuilder}
-/// {@canonicalFor build.ormQueryBuilder}
 library;
 
-export 'src/generate/build.dart' show ormBuilder, ormQueryBuilder;
+export 'src/generate/build.dart' show ormBuilder;

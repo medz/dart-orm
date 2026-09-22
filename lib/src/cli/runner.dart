@@ -17,7 +17,6 @@ const _help = <String, String>{
   migrate create|check|plan|apply|status|verify|baseline|record|inspect
   migration registry <directory> [--dialect engine]
   db inspect|import <options>
-  queries generate|check <options>
   web-assets [directory]
 
 Run help <command> for details. Project commands use orm.config.dart.
@@ -54,10 +53,6 @@ Rebuild static imports without updating reviewed migration fingerprints.''',
 Database: --sqlite file | --postgres-env NAME | --mysql-env NAME | --mariadb-env NAME
 Server options: --tls verifyFull|require|disable; PostgreSQL: --database-schema name
 Inspection and catalog import do not apply DDL or replace output files.''',
-  'queries': '''Usage: dart run orm queries generate <queries.dart> [output.queries.dart]
-       dart run orm queries check --source queries.dart [--output file] <database>
-Database options match help db. Generation is offline; check validates queries
-against the selected database.''',
   'web-assets': '''Usage: dart run orm web-assets [directory] [--json]
 Copies verified SQLite worker/WASM assets to web/orm by default.
 Flutter Web bundles these resources automatically.''',

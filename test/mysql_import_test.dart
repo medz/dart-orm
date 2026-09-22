@@ -7,7 +7,7 @@ import 'package:orm/drivers/mysql.dart';
 import 'package:orm/drivers/mariadb.dart';
 import 'package:orm/generate.dart';
 import 'package:orm/migrate.dart';
-import 'package:orm/runtime.dart';
+import 'package:orm/orm.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -113,22 +113,23 @@ void main() {
           },
         );
 
-        test('named SQL checks structure without pretending to infer storage types', () async {
-          final source = File('${directory.path}/queries.dart');
-          await source.writeAsString('''
-import 'package:orm/schema.dart';
-final probe = sqlQuery(result: (value: integer(),), parameters: (minimum: integer(),), $engine: 'query.sql');
-''');
-          await File('${directory.path}/query.sql')
-              .writeAsString('SELECT :minimum AS value');
-          final generated = await generateQueries(source.path);
-          final checked = await checkSqlQueries(db, generated);
-          expect(checked.single['structureChecked'], true);
-          expect(checked.single['storageTypesChecked'], false);
-          expect(checked.single['nullabilityChecked'], false);
-        });
+        test(
+          'raw SQL checks structure without pretending to infer storage types',
+          () async {
+            final checked = await checkSqlQuery(
+              db,
+              Sql(
+                'SELECT :minimum AS value',
+                parameters: {'minimum': SqlValue(1, Codecs.integer)},
+              ).returns(ResultColumn('value', Codecs.integer)),
+            );
+            expect(checked.structureChecked, true);
+            expect(checked.storageTypesChecked, false);
+            expect(checked.nullabilityChecked, false);
+          },
+        );
 
-        test('named SQL preparation never executes stored functions', () async {
+        test('raw SQL preparation never executes stored functions', () async {
           final function = '${table}_effect';
           await db.execute(
             SqlCommand('CREATE TABLE `$table` (n INT NOT NULL)'),
@@ -139,16 +140,12 @@ DETERMINISTIC MODIFIES SQL DATA
 BEGIN INSERT INTO `$table` VALUES (1); RETURN 1; END; /* final delimiter */'''),
           );
           try {
-            final source = File('${directory.path}/queries.dart');
-            await source.writeAsString('''
-import 'package:orm/schema.dart';
-final probe = sqlQuery(result: (value: integer(),), parameters: (minimum: integer(),), $engine: 'query.sql');
-''');
-            final sql = File('${directory.path}/query.sql');
-            await sql.writeAsString('SELECT `$function`() + :minimum AS value');
-            final generated = await generateQueries(source.path);
+            SqlQuery<int> probe(String label) => Sql(
+              'SELECT `$function`() + :minimum AS $label',
+              parameters: {'minimum': SqlValue(1, Codecs.integer)},
+            ).returns(ResultColumn('value', Codecs.integer));
             expect(
-              (await checkSqlQueries(db, generated)).single['structureChecked'],
+              (await checkSqlQuery(db, probe('value'))).structureChecked,
               true,
             );
             expect(
@@ -159,13 +156,9 @@ final probe = sqlQuery(result: (value: integer(),), parameters: (minimum: intege
               0,
             );
 
-            await sql.writeAsString(
-              'SELECT `$function`() + :minimum AS wrong_alias',
-            );
-            final invalid = await generateQueries(source.path);
             await expectLater(
-              checkSqlQueries(db, invalid),
-              throwsA(isA<GenerationException>()),
+              checkSqlQuery(db, probe('wrong_alias')),
+              throwsA(isA<OrmException>()),
             );
             // A rejected PREPARE also cleans up its session state and keeps the
             // connection usable without running the function during checking.

@@ -136,6 +136,8 @@ final item = model('items', (
   );
 
   final invalid = <String, String>{
+    for (final name in ['raw', 'query', 'streamSql', 'watchSql'])
+      'reserved_sql_$name': "final $name = model('items', (id: integer(),));",
     'reserved_root': "final close = model('items', (id: integer(),));",
     'private_root': "final _item = model('items', (id: integer(),));",
     'schema_symbol': "final app = model('items', (id: integer(),));",

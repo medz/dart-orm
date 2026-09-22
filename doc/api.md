@@ -80,10 +80,11 @@ final command = SqlBuilder(SqlDialect.postgres)
 // command.sql and separately bound command.parameters; no connection opened.
 ```
 
-Executing an unbound builder fails with `QUERY.UNBOUND`. Generated table getters
-and named SQL bindings target `QueryContext`, which both `SqlBuilder` and the ORM
-implement. Field and result types remain static; SQL capabilities and a missing
-named-query engine variant are checked against the chosen context before I/O.
+Executing an unbound builder fails with `QUERY.UNBOUND`. Generated table getters target `QueryContext`, implemented by `SqlBuilder` and
+the ORM. Raw `Sql` descriptions are independent of a context: compile with
+`statement.compile(capabilities)`, or execute with `db.raw(statement)` and
+`db.query(statement.returns(resultShape))`. Types remain static; missing engine
+variants fail before I/O. See [raw SQL](https://github.com/medz/dart-orm/blob/main/doc/raw-sql.md).
 
 ## Three kinds of Dart files
 

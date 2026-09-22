@@ -19,11 +19,38 @@ extension WatchQuery<R, F extends Fields> on Query<R, F> {
   Stream<List<R>> watch({
     Iterable<TableSchema> reads = const [],
     ExecutionOptions options = const ExecutionOptions(),
-  }) => _QueryWatch(this, List.unmodifiable(reads), options).controller.stream;
+  }) => _QueryWatch(
+    database,
+    () => dependencies,
+    (options) => get(options: options),
+    List.unmodifiable(reads),
+    options,
+  ).controller.stream;
 }
 
-final class _QueryWatch<R, F extends Fields> implements ChangeSubscription {
-  final Query<R, F> query;
+/// Re-executes raw typed SQL after explicitly declared physical tables change.
+extension WatchSql<B extends Backend> on Database<B> {
+  /// Reads an initial snapshot and refreshes after relevant committed writes.
+  /// [reads] must be nonempty: raw SQL dependencies cannot be inferred from
+  /// result codecs. The SQL should be suitable for repeated execution.
+  /// Requires a root database; cancellation and close release the subscription.
+  Stream<List<R>> watchSql<R>(
+    SqlQuery<R> query, {
+    required Iterable<TableSchema> reads,
+    ExecutionOptions options = const ExecutionOptions(),
+  }) => _QueryWatch(
+    this,
+    () => (tables: <TableSchema>{}, opaque: true),
+    (options) => this.query(query, options: options),
+    List.unmodifiable(reads),
+    options,
+  ).controller.stream;
+}
+
+final class _QueryWatch<R> implements ChangeSubscription {
+  final QueryContext context;
+  final ({Set<TableSchema> tables, bool opaque}) Function() dependencies;
+  final Future<List<R>> Function(ExecutionOptions) read;
   final List<TableSchema> extraReads;
   final ExecutionOptions options;
   @override
@@ -41,11 +68,17 @@ final class _QueryWatch<R, F extends Fields> implements ChangeSubscription {
   Future<void>? _running, _stopping;
   CancellationToken? _readCancellation;
   void Function()? _removeCancellation;
-  _QueryWatch(this.query, this.extraReads, this.options);
+  _QueryWatch(
+    this.context,
+    this.dependencies,
+    this.read,
+    this.extraReads,
+    this.options,
+  );
 
   void _start() {
     try {
-      final context = query.database;
+      final context = this.context;
       if (context is! Database<Backend>) {
         throw const OrmException(
           'QUERY.UNBOUND',
@@ -64,11 +97,11 @@ final class _QueryWatch<R, F extends Fields> implements ChangeSubscription {
       if (changesFor(db.driver).closed) {
         throw const OrmException('SESSION.CLOSED', 'Database is closed.');
       }
-      final reads = query.dependencies;
+      final reads = dependencies();
       if (reads.opaque && extraReads.isEmpty) {
         throw const OrmException(
           'WATCH.READS',
-          'Named SQL requires explicit physical tables in watch(reads: ...).',
+          'Raw SQL requires explicit physical tables in watch(reads: ...).',
         );
       }
       for (final table in [...reads.tables, ...extraReads]) {
@@ -121,13 +154,13 @@ final class _QueryWatch<R, F extends Fields> implements ChangeSubscription {
   Future<void> _pump() async {
     while (!_stopped && !_paused && _dirty) {
       _dirty = false;
-      final cancellation = query.database.capabilities.cancellation
+      final cancellation = context.capabilities.cancellation
           ? CancellationToken()
           : null;
       _readCancellation = cancellation;
       try {
-        final rows = await query.get(
-          options: ExecutionOptions(
+        final rows = await read(
+          ExecutionOptions(
             timeout: options.timeout,
             acquireTimeout: options.acquireTimeout,
             cancellation: cancellation,
@@ -149,7 +182,7 @@ final class _QueryWatch<R, F extends Fields> implements ChangeSubscription {
     final done = Completer<void>();
     _stopping = done.future;
     _stopped = true;
-    if (query.database case final Database<Backend> db) {
+    if (context case final Database<Backend> db) {
       changesFor(db.driver).watches.remove(this);
     }
     _removeCancellation?.call();

@@ -118,7 +118,7 @@ and the [query cookbook](https://github.com/medz/dart-orm/blob/main/example/quer
 
 Transactions use the provided `tx` session. Query subscriptions emit snapshots
 after relevant committed writes. Inspect SQL without connecting, or use raw and
-named SQL when a query needs database-specific features.
+raw SQL when a query needs database-specific features.
 
 ## Choose your database
 
@@ -174,7 +174,7 @@ migrations without importing today's application models. See [API boundaries](ht
 - [Queries and pagination](https://github.com/medz/dart-orm/blob/main/doc/queries.md) · [Relations](https://github.com/medz/dart-orm/blob/main/doc/relations.md)
 - [Transactions and execution](https://github.com/medz/dart-orm/blob/main/doc/execution.md) · [Subscriptions](https://github.com/medz/dart-orm/blob/main/doc/watch.md)
 - [CLI](https://github.com/medz/dart-orm/blob/main/doc/cli.md) · [build_runner](https://github.com/medz/dart-orm/blob/main/doc/generation.md) · [Existing databases](https://github.com/medz/dart-orm/blob/main/doc/importing.md)
-- [SQL inspection](https://github.com/medz/dart-orm/blob/main/doc/observability.md) · [Named SQL](https://github.com/medz/dart-orm/blob/main/doc/named-sql.md)
+- [SQL inspection](https://github.com/medz/dart-orm/blob/main/doc/observability.md) · [Raw SQL](https://github.com/medz/dart-orm/blob/main/doc/raw-sql.md)
 - [Contributing and validation](https://github.com/medz/dart-orm/blob/main/CONTRIBUTING.md)
 
 Licensed under the [BSD 3-Clause License](https://github.com/medz/dart-orm/blob/main/LICENSE).

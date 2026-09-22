@@ -44,8 +44,6 @@
 /// {@canonicalFor declaration.referencedBy}
 /// {@canonicalFor declaration.check}
 /// {@canonicalFor declaration.ReferentialAction}
-/// {@canonicalFor queries.SqlDeclaration}
-/// {@canonicalFor queries.sqlQuery}
 library;
 
 export 'values.dart';
@@ -78,4 +76,3 @@ export 'src/schema/declaration.dart'
         referencedBy,
         check;
 export 'schema_model.dart' show ComputedStorage;
-export 'src/schema/queries.dart' show SqlDeclaration, sqlQuery;

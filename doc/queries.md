@@ -133,7 +133,7 @@ to the outer query's fields through an explicitly captured expression. Queries
 from different database/transaction objects cannot be combined.
 
 For SQL beyond these typed operations, use parameterized raw expressions or
-[checked named SQL](https://github.com/medz/dart-orm/blob/main/doc/named-sql.md). Raw fragments are trusted SQL supplied by the
+[typed raw SQL](https://github.com/medz/dart-orm/blob/main/doc/raw-sql.md). Raw fragments are trusted SQL supplied by the
 application; do not interpolate user input into them.
 
 ## UNION and UNION ALL
