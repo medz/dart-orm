@@ -1,13 +1,13 @@
 # Choose an entrypoint
 
-Define a Record schema, generate its client, choose a database entrypoint,
+Annotate ordinary DTO classes, generate their typed client, choose a database entrypoint,
 and use the generated table getters. Each query belongs to that database view.
 Migrations have a separate, fixed history for the chosen engine.
 
 For an application, import its generated client and one database entrypoint:
 
 ```dart
-import 'package:my_app/schema.orm.dart';
+import 'package:my_app/models.orm.dart';
 import 'package:orm/sqlite.dart';
 
 final db = await sqlite(const SqliteOptions.file('app.sqlite'));
@@ -40,17 +40,19 @@ browser database. Flutter bundles its browser resources automatically; see
 | Physical schema | `package:orm/schema_model.dart` | Columns, keys, constraints and indexes without execution |
 | Typed SQL | `package:orm/sql.dart` | Query construction, typed projections and `SqlBuilder` without a connection runtime |
 | ORM execution | `package:orm/orm.dart` | `Database` binds typed queries to `SqlDatabase` and adds subscriptions |
-| Schema declaration | `package:orm/schema.dart` | Record model definitions, columns, keys and relationships |
-| Application convenience | Generated `schema.orm.dart` plus `package:orm/sqlite.dart`, `postgres.dart`, `mysql.dart` or `mariadb.dart` | Model types, table getters and the chosen adapter |
+| Model declaration | `package:orm/schema.dart` | DTO annotations for models, columns, keys, defaults and relationships |
+| Application convenience | Generated `models.orm.dart` plus `package:orm/sqlite.dart`, `postgres.dart`, `mysql.dart` or `mariadb.dart` | Model types, table getters and the chosen adapter |
 | Migration or snapshot | `package:orm/migrate.dart` | Physical history, steps, checksums and execution against `SqlDatabase` |
-| Project CLI | `package:orm/cli.dart` | `OrmConfig`, static history and unified project commands |
+| Project configuration | `package:orm/config.dart` | `defineConfig` with direct model/output/history paths and a lazy connection factory |
+| Package CLI | `package:orm/cli.dart` | `runOrmCli(arguments)` loads runnable project configuration |
 | Migration-only executable | `package:orm/migrate_cli.dart` | Programmatic commands with a static history and raw connection factory |
 | Generation scripts | `package:orm/generate.dart` | Analyze declarations and write derived Dart files |
 | build_runner configuration | `package:orm/builder.dart` | Builder factories only |
 
-Generated clients define immutable row classes and typed table getters. Model
-handles and unrelated application helpers remain in the source schema library. Types used inside rows, such as a custom
-ID or enum, remain owned by their defining library. Import that library when
+Generated clients import and re-export the original annotated DTO classes and add
+typed table getters. They do not define replacement row classes. Unrelated
+application helpers remain in their source libraries. Types used inside rows,
+such as a custom ID or enum, remain owned by their defining library. Import that library when
 constructing those values. Use import prefixes for multiple generated clients.
 
 These are real dependency boundaries within one package. `sql.dart` does not
@@ -88,8 +90,8 @@ variants fail before I/O. See [raw SQL](https://github.com/medz/dart-orm/blob/ma
 
 ## Three kinds of Dart files
 
-`schema.dart` is the current declaration. `schema.orm.dart` and
-`schema.snapshot.dart` are reproducible outputs; regenerate them after editing the
+`models.dart` contains the current DTO declarations. `models.orm.dart` and
+`models.snapshot.dart` are reproducible outputs; regenerate them after editing the
 declaration. `migrations/m0001_*.dart` is reviewed history. It contains its own frozen
 physical schema and fixed fingerprint, independent of the latest models.
 
@@ -101,7 +103,7 @@ Changing a connection URL does not convert a migration history.
 
 ## Shape, identity and selection
 
-Each generated model class is its complete row type. A `User` and an unrelated class with
+Each original annotated class is its complete row type. A `User` and an unrelated class with
 identical fields remain different Dart types. Record projections remain
 structural. Two models can declare identical field shapes while keeping distinct row types
 and SQL table identities. `table.alias()` creates a new occurrence for joins

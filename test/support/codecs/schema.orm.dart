@@ -2,21 +2,88 @@
 
 import 'package:orm/sql.dart';
 
+import "schema.dart" as models;
 export "types.dart" show PersonId, Membership, Location;
+export "schema.dart" show Person, Note;
 import "types.dart" as types0;
 import "alternate.dart" as types1;
 
-/// A complete immutable row from "people".
-final class Person({
-  required final types0.PersonId id,
-  required final types0.Email email,
-  required final types0.Membership membership,
-  required final types0.Membership? previousMembership,
-  required final List<String> tags,
-  required final types0.Location? location,
-  required final types1.Email alternate,
-  required final SqlJson? details,
-});
+final _noteId = Column<int>(
+  "id",
+  Codecs.integer,
+  nullable: false,
+  generated: true,
+);
+final _noteOwnerId = Column<types0.PersonId>(
+  "owner_id",
+  types0.PersonId.codec,
+  nullable: false,
+  generated: false,
+);
+final _noteBody = Column<String>(
+  "body",
+  Codecs.text,
+  nullable: false,
+  generated: false,
+);
+final noteSchema = TableSchema(
+  "notes",
+  columns: [_noteId, _noteOwnerId, _noteBody],
+  primaryKey: ["id"],
+  uniqueKeys: [],
+  indexes: [],
+  foreignKeys: [
+    ForeignKey(["owner_id"], "people", ["id"], onDelete: "RESTRICT"),
+  ],
+);
+
+final class NoteFields extends Fields {
+  NoteFields(super.table);
+  late final id = column(_noteId);
+  late final ownerId = column(_noteOwnerId);
+  late final body = column(_noteBody);
+  Relation<models.Person, PersonFields> get owner =>
+      Relation(personTable, parent: [ownerId], child: (row) => [row.id]);
+}
+
+final noteTable = Table<models.Note, NoteFields>(
+  noteSchema,
+  NoteFields.new,
+  (row) => (
+    row.id,
+    row.ownerId,
+    row.body,
+  ).map((v0, v1, v2) => models.Note(id: v0, ownerId: v1, body: v2)),
+);
+
+final class NoteTableSet extends TableSet<models.Note, NoteFields> {
+  NoteTableSet(QueryContext db) : super(db, noteTable) {
+    db.registerSchema(appSchema);
+  }
+  Future<models.Note> create({
+    Change<int> id = const Change.keep(),
+    required types0.PersonId ownerId,
+    required String body,
+  }) => createRow(
+    (row) => [
+      ...row.id.change(id),
+      row.ownerId.set(ownerId),
+      row.body.set(body),
+    ],
+  );
+  Query<models.Note, NoteFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
+}
+
+extension NoteUpdates on Query<models.Note, NoteFields> {
+  Future<int> patch({
+    Change<types0.PersonId> ownerId = const Change.keep(),
+    Change<String> body = const Change.keep(),
+  }) => update(
+    (row) => [...row.ownerId.change(ownerId), ...row.body.change(body)],
+  ).execute();
+}
+
 final _personId = Column<types0.PersonId>(
   "id",
   types0.PersonId.codec,
@@ -103,11 +170,13 @@ final class PersonFields extends Fields {
   late final location = column(_personLocation);
   late final alternate = column(_personAlternate);
   late final details = column(_personDetails);
-  Relation<Note, NoteFields> get notes =>
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Note, NoteFields> get notes =>
       Relation(noteTable, parent: [id], child: (row) => [row.ownerId]);
 }
 
-final personTable = Table<Person, PersonFields>(
+final personTable = Table<models.Person, PersonFields>(
   personSchema,
   PersonFields.new,
   (row) =>
@@ -132,7 +201,7 @@ final personTable = Table<Person, PersonFields>(
               (location: location, alternate: alternate, details: details),
         ),
       ).map(
-        (left, right) => Person(
+        (left, right) => models.Person(
           id: left.id,
           email: left.email,
           membership: left.membership,
@@ -145,11 +214,11 @@ final personTable = Table<Person, PersonFields>(
       ),
 );
 
-final class PersonTableSet extends TableSet<Person, PersonFields> {
+final class PersonTableSet extends TableSet<models.Person, PersonFields> {
   PersonTableSet(QueryContext db) : super(db, personTable) {
     db.registerSchema(appSchema);
   }
-  Future<Person> create({
+  Future<models.Person> create({
     Change<types0.PersonId> id = const Change.keep(),
     required types0.Email email,
     required types0.Membership membership,
@@ -170,11 +239,11 @@ final class PersonTableSet extends TableSet<Person, PersonFields> {
       row.details.set(details),
     ],
   );
-  Query<Person, PersonFields> byId(types0.PersonId id) =>
+  Query<models.Person, PersonFields> byId(types0.PersonId id) =>
       where((row) => row.id.eq(.value(id)));
 }
 
-extension PersonUpdates on Query<Person, PersonFields> {
+extension PersonUpdates on Query<models.Person, PersonFields> {
   Future<int> patch({
     Change<types0.Email> email = const Change.keep(),
     Change<types0.Membership> membership = const Change.keep(),
@@ -196,90 +265,9 @@ extension PersonUpdates on Query<Person, PersonFields> {
   ).execute();
 }
 
-/// A complete immutable row from "notes".
-final class Note({
-  required final int id,
-  required final types0.PersonId ownerId,
-  required final String body,
-});
-final _noteId = Column<int>(
-  "id",
-  Codecs.integer,
-  nullable: false,
-  generated: true,
-);
-final _noteOwnerId = Column<types0.PersonId>(
-  "owner_id",
-  types0.PersonId.codec,
-  nullable: false,
-  generated: false,
-);
-final _noteBody = Column<String>(
-  "body",
-  Codecs.text,
-  nullable: false,
-  generated: false,
-);
-final noteSchema = TableSchema(
-  "notes",
-  columns: [_noteId, _noteOwnerId, _noteBody],
-  primaryKey: ["id"],
-  uniqueKeys: [],
-  indexes: [],
-  foreignKeys: [
-    ForeignKey(["owner_id"], "people", ["id"], onDelete: "RESTRICT"),
-  ],
-);
-
-final class NoteFields extends Fields {
-  NoteFields(super.table);
-  late final id = column(_noteId);
-  late final ownerId = column(_noteOwnerId);
-  late final body = column(_noteBody);
-  Relation<Person, PersonFields> get owner =>
-      Relation(personTable, parent: [ownerId], child: (row) => [row.id]);
-}
-
-final noteTable = Table<Note, NoteFields>(
-  noteSchema,
-  NoteFields.new,
-  (row) => (
-    row.id,
-    row.ownerId,
-    row.body,
-  ).map((v0, v1, v2) => Note(id: v0, ownerId: v1, body: v2)),
-);
-
-final class NoteTableSet extends TableSet<Note, NoteFields> {
-  NoteTableSet(QueryContext db) : super(db, noteTable) {
-    db.registerSchema(appSchema);
-  }
-  Future<Note> create({
-    Change<int> id = const Change.keep(),
-    required types0.PersonId ownerId,
-    required String body,
-  }) => createRow(
-    (row) => [
-      ...row.id.change(id),
-      row.ownerId.set(ownerId),
-      row.body.set(body),
-    ],
-  );
-  Query<Note, NoteFields> byId(int id) => where((row) => row.id.eq(.value(id)));
-}
-
-extension NoteUpdates on Query<Note, NoteFields> {
-  Future<int> patch({
-    Change<types0.PersonId> ownerId = const Change.keep(),
-    Change<String> body = const Change.keep(),
-  }) => update(
-    (row) => [...row.ownerId.change(ownerId), ...row.body.change(body)],
-  ).execute();
-}
-
-final appSchema = List<TableSchema>.unmodifiable([personSchema, noteSchema]);
+final appSchema = List<TableSchema>.unmodifiable([noteSchema, personSchema]);
 
 extension AppTables on QueryContext {
-  PersonTableSet get person => PersonTableSet(this);
   NoteTableSet get note => NoteTableSet(this);
+  PersonTableSet get person => PersonTableSet(this);
 }

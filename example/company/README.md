@@ -1,8 +1,8 @@
 # Company schema
 
 This example defines departments, employees, projects and project memberships in
-one [Record schema](schema.dart). It generates immutable model classes, typed
-queries and an independent migration snapshot.
+one [annotated Dart model library](schema.dart). Full reads return these original
+DTO classes; generation adds typed queries and an independent migration snapshot.
 
 | Model | Relationships |
 | --- | --- |
@@ -11,9 +11,11 @@ queries and an independent migration snapshot.
 | Project | Has an employee owner and project memberships |
 | ProjectMember | Connects one employee to one project, with a role and joining time |
 
-Each model declares its own query members in `relations`. `references` owns a
-foreign key; `referencedBy` exposes its reverse. The membership's composite primary
-key prevents an employee from joining the same project twice.
+`@Relation` declares query navigation and, by default, a physical foreign key.
+This example also spells out collection navigation with `constraint: false`.
+Field lists are checked during generation and must be updated explicitly after
+Dart field renames. The membership's two `@Id()` fields form a composite primary
+key that prevents an employee from joining the same project twice.
 
 Deleting a manager clears their reports' `managerId`. Deleting a project removes
 its memberships. Employees who still own projects cannot be deleted; departments

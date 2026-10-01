@@ -15,23 +15,32 @@ dart run orm migrate verify
 dart run orm migrate inspect tasks
 ```
 
-`init` also accepts `postgres`, `mysql` and `mariadb`. It generates a nominal model,
+`init` also accepts `postgres`, `mysql` and `mariadb`. It generates an annotated DTO,
 client, physical snapshot, empty static registry and `orm.config.dart`. Existing
 files are never replaced, and initialization does not connect or execute DDL.
 See the [project CLI](https://github.com/medz/dart-orm/blob/main/doc/cli.md) for the generated typed configuration and all options.
 
-The config is an explicit Dart entrypoint with `runOrmCli(args, config: OrmConfig(...))`.
-It statically imports its current snapshot and migration history. Connection
-factories return the independent `SqlDatabase` runtime, built with the selected
-low-level driver; migrations do not need ORM models or typed query generation.
-Server connection factories read environment variables only when connecting.
+The config calls `defineConfig` from a parameterless `void main()` and imports
+neither the generated client/snapshot nor the registry. It declares the engine,
+model source, migration directory and optional connection factory. The CLI first
+registers those paths, then compiles a static registry import when history exists.
+Keep registration free of side effects; it may run twice. Connections belong in
+`connect` and use the independent `SqlDatabase` runtime with the selected driver.
+Server factories read environment variables only when connecting.
 
-Run from the project root. `migrate create` first regenerates the model's physical
-snapshot before diffing, so an edited declaration cannot use a stale snapshot.
-Other commands use their statically imported snapshot/history without changing
-source artifacts. Standalone generation remains `dart run orm generate
-lib/schema.dart`, and registry regeneration is `dart run orm migration registry
-migrations --dialect sqlite` for a new empty registry.
+Configuration model/output/migration paths are relative to the config file.
+`--config` itself and explicit command-line path overrides are relative to the
+working directory. `migrate create` regenerates current DTOs before diffing.
+`migrate verify` analyzes those DTOs into an in-memory snapshot without writing
+outputs. Other migration commands only use frozen history, so missing or invalid
+current models do not block applying or checking reviewed migrations.
+
+A missing registry is an empty history only when no migration Dart files exist.
+Existing files without a registry, a stale registry file list or a mismatched
+engine are rejected before a connection is opened. Rebuild imports explicitly
+with `dart run orm migration registry migrations --dialect sqlite`; this leaves
+recorded fingerprints unchanged. First generation needs no registry:
+`dart run orm generate lib/models.dart --database sqlite`.
 
 Projects can also call the lower-level `runMigrationCli` in their own executable:
 
@@ -39,7 +48,7 @@ Projects can also call the lower-level `runMigrationCli` in their own executable
 import 'package:orm/migrate_cli.dart';
 import 'package:orm/runtime.dart';
 import 'package:orm/drivers/sqlite.dart';
-import '../lib/schema.snapshot.dart';
+import '../lib/models.snapshot.dart';
 import '../migrations/migrations.g.dart';
 
 Future<void> main(List<String> args) => runMigrationCli(
@@ -82,11 +91,11 @@ runs first and may open/create a SQLite file; it must honor `readOnly`. Environm
 variables configure locations and credentials for the chosen engine, not select
 a different engine for the same history.
 
-Shared model declarations may contain per-engine expressions. Generation resolves
-only the selected engine; saved snapshots and operation tables freeze that SQL.
-Changes to another engine's override cannot change this history's plan or checksum.
-Database-specific restrictions apply only to the selected engine. Ordinary
-single-engine declarations can use `ComputedColumn(sql)` and `CheckSchema(name, sql)`.
+Saved snapshots and operation tables freeze SQL for the selected engine. Later
+edits to application models cannot change an existing migration's plan or
+checksum. Engine-specific capability checks still apply. Physical-schema APIs
+such as `ComputedColumn(sql)` and `CheckSchema(name, sql)` remain available for
+explicitly authored migration metadata and steps.
 
 Multi-database applications own separate directories, registries and connections.
 Use the application's database engine when checking migrations. Switching to
@@ -129,7 +138,7 @@ using: {
 },
 ```
 
-Import `package:orm/migrate.dart` for `SchemaRenames`. Renames and conversions are
+The configuration library exports `SchemaRenames`; migration-only tools can import it from `package:orm/migrate.dart`. Renames and conversions are
 inputs to the next `create`; remove them after generating that change. Pass
 `create <id> --allow-destructive` to generate reviewed drop steps or replace
 ordinary SQLite column values with a computed expression. Computed-to-ordinary
@@ -177,13 +186,19 @@ an explicit separate operation; SQL history alone does not prove schema equality
 
 ## Deployment bundle
 
-The project entrypoint can be compiled with the SDK's native-asset-aware CLI build:
+For deployment, save the `runMigrationCli` example above as `bin/migrate.dart`.
+It imports the reviewed registry and desired physical snapshot directly. Build
+that dedicated executable with the SDK's native-asset-aware CLI build:
 
 ```sh
-dart build cli --target orm.config.dart --output build/migration
-./build/migration/bundle/bin/orm.config migrate check
-./build/migration/bundle/bin/orm.config migrate apply
+dart build cli --target bin/migrate.dart --output build/migration
+./build/migration/bundle/bin/migrate check
+./build/migration/bundle/bin/migrate apply
 ```
+
+`orm.config.dart` is the source-authoring configuration, not the deployment
+executable. `runMigrationCli` intentionally accepts an explicit frozen history;
+it does not load source models or invoke the project configuration.
 
 Deploy the complete `bundle` directory, including its native libraries. Migration
 history and snapshots are compiled into the executable; runtime `check`, `plan`,

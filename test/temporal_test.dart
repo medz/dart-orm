@@ -605,7 +605,7 @@ void main() {
           expect(await verifyColumns(db.sql, appSchema), isEmpty);
           final imported = await importSchema(db.sql);
           expect(imported.issues, isEmpty);
-          expect(imported.dart, contains('localDateTime('));
+          expect(imported.dart, contains('final LocalDateTime? starts'));
           final directory = await Directory(
             '.dart_tool/orm-temporal-import-$backend',
           ).create(recursive: true);

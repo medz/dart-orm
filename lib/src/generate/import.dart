@@ -53,7 +53,7 @@ final class ImportedSchema {
   /// Editable Dart model declarations for supported catalog objects.
   final String dart;
 
-  /// Physical table names mapped to their Dart model declaration names.
+  /// Physical table names mapped to their annotated Dart class names.
   final Map<String, String> entities;
 
   /// Physical table and column names mapped to Dart field names.
@@ -500,26 +500,15 @@ final class _ImportNames {
     'LocalTime',
     'LocalDateTime',
     'Model',
-    'model',
-    'identity',
-    'integer',
-    'text',
-    'boolean',
-    'real',
-    'bigInteger',
-    'decimal',
-    'dateTime',
-    'date',
-    'time',
-    'localDateTime',
-    'bytes',
-    'json',
-    'enumeration',
-    'custom',
-    'index',
-    'check',
-    'references',
-    'referencedBy',
+    'Id',
+    'Unique',
+    'Index',
+    'ClientDefault',
+    'DatabaseDefault',
+    'Ignore',
+    'Check',
+    'Computed',
+    'ReferentialAction',
     'Codecs',
   };
   String take(
@@ -572,7 +561,7 @@ ImportedSchema _importDeclarations(
   final names = _ImportNames();
   final entities = {
     for (final name in infos.keys)
-      name: names.take(name, fallback: 'table', entity: true),
+      name: _importCap(names.take(name, fallback: 'table', entity: true)),
   };
   final fieldNames = {for (final name in infos.keys) name: _ImportNames()};
   final columnSymbols = <String>{};
@@ -591,18 +580,8 @@ ImportedSchema _importDeclarations(
       },
   };
   final relations = {for (final info in infos.values) info.name: <String>[]};
-  String selection(String table, List<String> columns) {
-    final values = columns.map((c) => 'row.${fields[table]![c]}').toList();
-    return values.length == 1 ? values.single : '(${values.join(', ')})';
-  }
-
-  String mapping(
-    String local,
-    List<String> columns,
-    String target,
-    List<String> targetColumns,
-  ) =>
-      '(${List.generate(columns.length, (i) => '${fields[target]![targetColumns[i]]}: row.${fields[local]![columns[i]]}').join(', ')},)';
+  String selection(String table, List<String> columns) =>
+      '[${columns.map((c) => dartLiteral(fields[table]![c]!)).join(', ')}]';
   for (final info in infos.values) {
     final entity = entities[info.name]!;
     final foreign = info.foreignKeys.toList()
@@ -661,73 +640,34 @@ ImportedSchema _importDeclarations(
       fieldNames[info.name]!.used.add(relation);
       final inverse = fieldNames[key.target]!.take('${entity}Rows');
       relations[info.name]!.add(
-        '$relation: references(${mapping(info.name, key.columns, key.target, key.targetColumns)}, () => ${entities[key.target]}, onDelete: .$action)',
-      );
-      relations[key.target]!.add(
-        '$inverse: referencedBy(() => $entity, on: ${mapping(key.target, key.targetColumns, info.name, key.columns)})',
+        '@Relation(target: ${entities[key.target]}, name: ${dartLiteral(relation)}, fields: ${selection(info.name, key.columns)}, keys: ${selection(key.target, key.targetColumns)}, inverse: ${dartLiteral(inverse)}, onDelete: .$action)',
       );
     }
   }
   final b = StringBuffer(
     '// Imported catalog draft. Review the import report before baselining.\n\n',
-  )..writeln("import 'package:orm/schema.dart';");
+  );
+  if (infos.values.any(
+    (info) => info.columns.any((c) => _importColumn(c, dialect) == 'bytes'),
+  )) {
+    b.writeln("import 'dart:typed_data';");
+  }
+  b.writeln("import 'package:orm/schema.dart';");
   for (final info in infos.values) {
     final entity = entities[info.name]!;
     b.writeln(
-      'final ${relations[info.name]!.isEmpty ? '' : 'Model '}$entity = model(${dartLiteral(info.name)}, (',
+      '@Model(table: ${dartLiteral(info.name)}${dialect == SqlDialect.postgres ? ', namespace: ${dartLiteral(schema)}' : ''})',
     );
-    for (final c in info.columns) {
-      final helper = _importColumn(c, dialect)!;
-      final options = <String>['name: ${dartLiteral(c.name)}'];
-      if (c.integerBits != null && c.integerBits != 64) {
-        options.add('bits: ${c.integerBits}');
-      }
-      if (c.temporalPrecision != null && c.temporalPrecision != 6) {
-        options.add('precision: ${c.temporalPrecision}');
-      }
-      if (c.decimalPrecision != null) {
-        options.add(
-          'precision: ${c.decimalPrecision}, scale: ${c.decimalScale ?? 0}',
-        );
-      }
-      if (c.declarationDefaultSql != null) {
-        options.add('defaultSql: ${dartLiteral(c.declarationDefaultSql!)}');
-      }
-      var column = '$helper(${options.join(', ')})';
-      if (c.nullable) column += '.nullable()';
-      if (generated[info.name]!.contains(c.name)) column += '.identity()';
-      if (c.computed case final computed?) {
-        column +=
-            '.computed(${dartLiteral(c.declarationComputed!.expression(dialect))}, storage: .${computed.storage.name})';
-        issues.add(
-          SchemaImportIssue(
-            'IMPORT.COMPUTED_SQL',
-            '${info.name}.${c.name}',
-            'Computed SQL was read from ${dialect.name}; review expression portability before using another backend.',
-            blocking: false,
-          ),
-        );
-      }
-      b.writeln('${fields[info.name]![c.name]}: $column,');
-    }
-    b.writeln('),');
-    if (info.primaryKey.isNotEmpty && generated[info.name]!.isEmpty) {
-      b.writeln(
-        'primaryKey: (row) => ${selection(info.name, info.primaryKey)},',
-      );
-    }
     final unique = info.uniqueKeys.toList()
       ..sort((a, b) => jsonEncode(a).compareTo(jsonEncode(b)));
-    if (unique.isNotEmpty) {
-      b.writeln(
-        'uniqueKeys: (row) => [${unique.map((k) => selection(info.name, k)).join(', ')}],',
-      );
+    for (final key in unique) {
+      b.writeln('@Unique(${selection(info.name, key)})');
     }
     final indexes = info.indexes.toList()
       ..sort((a, b) => a.name.compareTo(b.name));
-    if (indexes.isNotEmpty) {
+    for (final index in indexes) {
       b.writeln(
-        'indexes: (row) => [${indexes.map((i) => 'index(${selection(info.name, i.columns)}, name: ${dartLiteral(i.name)}, unique: ${i.unique})').join(', ')}],',
+        '@Index(${selection(info.name, index.columns)}, name: ${dartLiteral(index.name)}, unique: ${index.unique})',
       );
     }
     final checks = info.checks.toList()
@@ -736,10 +676,73 @@ ImportedSchema _importDeclarations(
             jsonEncode([a.name, a.expression])
                 .compareTo(jsonEncode([b.name, b.expression])),
       );
-    if (checks.isNotEmpty) {
+    for (final check in checks) {
       b.writeln(
-        'checks: [${checks.map((c) => 'check(${dartLiteral(c.expression)}, name: ${c.name == null ? 'null' : dartLiteral(c.name!)})').join(', ')}],',
+        '@Check(${dartLiteral(check.expression)}${check.name == null ? '' : ', name: ${dartLiteral(check.name!)}'})',
       );
+    }
+    for (final relation in relations[info.name]!) {
+      b.writeln(relation);
+    }
+    b.writeln('final class $entity {');
+    for (final column in info.columns) {
+      if (info.primaryKey.contains(column.name)) {
+        b.writeln(
+          generated[info.name]!.contains(column.name)
+              ? '@Id(generated: true)'
+              : '@Id()',
+        );
+      }
+      final options = <String>['name: ${dartLiteral(column.name)}'];
+      if (column.integerBits != null && column.integerBits != 64) {
+        options.add('bits: ${column.integerBits}');
+      }
+      if (column.temporalPrecision != null && column.temporalPrecision != 6) {
+        options.add('precision: ${column.temporalPrecision}');
+      }
+      if (column.decimalPrecision != null) {
+        options.add(
+          'precision: ${column.decimalPrecision}, scale: ${column.decimalScale ?? 0}',
+        );
+      }
+      b.writeln('@Column(${options.join(', ')})');
+      if (column.declarationDefaultSql case final sql?) {
+        b.writeln('@DatabaseDefault.sql(${dartLiteral(sql)})');
+      }
+      if (column.computed case final computed?) {
+        b.writeln(
+          '@Computed(${dartLiteral(column.declarationComputed!.expression(dialect))}, storage: .${computed.storage.name})',
+        );
+        issues.add(
+          SchemaImportIssue(
+            'IMPORT.COMPUTED_SQL',
+            '${info.name}.${column.name}',
+            'Computed SQL was read from ${dialect.name}; review expression portability before using another backend.',
+            blocking: false,
+          ),
+        );
+      }
+      final type = switch (_importColumn(column, dialect)!) {
+        'integer' => 'int',
+        'text' => 'String',
+        'boolean' => 'bool',
+        'real' => 'double',
+        'decimal' => 'Decimal',
+        'dateTime' => 'DateTime',
+        'date' => 'LocalDate',
+        'time' => 'LocalTime',
+        'localDateTime' => 'LocalDateTime',
+        'bytes' => 'Uint8List',
+        'json' => 'SqlJson',
+        final kind => throw StateError(
+          'Unexpected imported column kind: $kind',
+        ),
+      };
+      b.writeln(
+        'final $type${column.nullable ? '?' : ''} ${fields[info.name]![column.name]};',
+      );
+    }
+    if (checks.isNotEmpty) {
       issues.add(
         SchemaImportIssue(
           'IMPORT.CHECK_SQL',
@@ -749,10 +752,19 @@ ImportedSchema _importDeclarations(
         ),
       );
     }
-    if (relations[info.name]!.isNotEmpty) {
-      b.writeln('relations: (row) => (${relations[info.name]!.join(', ')},),');
+    // @Id order follows constructor order. A physical primary key may order its
+    // columns differently from the table's column declarations.
+    final constructorColumns = [
+      ...info.primaryKey,
+      for (final column in info.columns)
+        if (!info.primaryKey.contains(column.name)) column.name,
+    ];
+    b.writeln('const $entity({');
+    for (final column in constructorColumns) {
+      b.writeln('required this.${fields[info.name]![column]},');
     }
-    b.writeln(');');
+    b.writeln('});');
+    b.writeln('}');
   }
   if (infos.isEmpty) {
     b.writeln('// No supported tables were imported. See the import report.');

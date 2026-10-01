@@ -29,13 +29,23 @@ void main() {
         await fixture.file('lib/schema.dart').delete();
         await fixture.write('lib/schema/auth/users.dart', '''
 import 'package:orm/schema.dart';
-final user = model('Users', (id: identity(), name: text(name: 'DisplayName')));
+@Model(table: 'Users', namespace: 'auth')
+class Account {
+  @Id(generated: true) final int id;
+  @Column(name: 'DisplayName') final String name;
+  const Account({required this.id, required this.name});
+}
 ''');
         await fixture.write('lib/schema/public/users.dart', '''
 import 'package:orm/schema.dart';
-import '../auth/users.dart' as auth;
-final user = model('Users', (id: identity(), name: text(), accountId: integer()),
-  relations: (u) => (account: references(u.accountId, () => auth.user),));
+import '../auth/users.dart';
+@Model(table: 'Users')
+class Profile {
+  @Id(generated: true) final int id;
+  final String name;
+  @Relation(target: Account, name: 'account') final int accountId;
+  const Profile({required this.id, required this.name, required this.accountId});
+}
 ''');
         await writeGeneratedSchema(
           fixture.file('lib/schema').path,
@@ -52,19 +62,19 @@ Future<void> main() async {
   try {
     final initial = Migration.create('0001_initial', appSchema, dialect: .postgres);
     await Migrator(db.sql).apply([initial]);
-    final AuthUser account = await db.auth.user.create(name: 'Alice');
-    final PublicUser profile = await db.public.user.create(name: 'Profile', accountId: account.id);
-    final owner = await db.public.user.byId(profile.id).select((u) => u.account.select((a) => a.name).required()).single();
+    final Account account = await db.account.create(name: 'Alice');
+    final Profile profile = await db.profile.create(name: 'Profile', accountId: account.id);
+    final owner = await db.profile.byId(profile.id).select((u) => u.account.select((a) => a.name).required()).single();
     if (owner != 'Alice') throw StateError('Wrong relationship target: $owner');
     await db.session((session) async {
       await session.execute(SqlCommand('SET search_path TO auth'));
       await session.execute(SqlCommand('CREATE TEMP TABLE "Users" (id bigint, name text)'));
-      final rows = await session.public.user.get();
+      final rows = await session.profile.get();
       if (rows.single.name != 'Profile') throw StateError('Session state changed table target.');
       final verification = await verifySchema(session.sql, initial.snapshot!);
       if (!verification.matches) throw StateError(verification.differences.join('\n'));
     });
-    if ((await db.auth.user.get()).single.name != 'Alice') throw StateError('Wrong namespace.');
+    if ((await db.account.get()).single.name != 'Alice') throw StateError('Wrong namespace.');
     print('namespace-client-ok');
   } finally { await db.close(); }
 }

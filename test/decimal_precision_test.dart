@@ -526,15 +526,15 @@ void main() {
     try {
       final file = File('${dir.path}/schema.dart');
       for (final declaration in [
-        'n: decimal(precision: 0)',
-        'n: decimal(precision: 1001)',
-        'n: decimal(precision: 2, scale: -1001)',
-        'n: decimal(precision: 2, scale: 1001)',
-        'n: custom(Codecs.integer, precision: 2)',
-        'n: decimal(precision: 2, precision: 3)',
+        '@Column(precision: 0) required final Decimal n',
+        '@Column(precision: 1001) required final Decimal n',
+        '@Column(precision: 2, scale: -1001) required final Decimal n',
+        '@Column(precision: 2, scale: 1001) required final Decimal n',
+        '@Column(precision: 2) required final int n',
+        '@Column(precision: 2, precision: 3) required final Decimal n',
       ]) {
         await file.writeAsString(
-          "import 'package:orm/schema.dart'; final row = model('rows', ($declaration,));",
+          "import 'package:orm/schema.dart'; @Model(table: 'rows') final class Row({$declaration,});",
         );
         await expectLater(
           generateSchema(file.path),
@@ -548,7 +548,7 @@ extension type Money(Decimal value) {
   static Money decode(Object? value) => Money(Codecs.decimal.decode(value));
   static String encode(Money value) => value.value.toString();
 }
-final row = model('rows', (n: custom(Money.codec, precision: 8, scale: 2),));
+@Model(table: 'rows') final class Row({@Column(codec: Money.codec, precision: 8, scale: 2) required final Money n});
 """);
       final generated = await generateSchema(file.path);
       expect(generated.dart, contains('Column<models.Money>'));

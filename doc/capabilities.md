@@ -107,14 +107,15 @@ resource overrides, secure-context requirements and exclusive ownership.
 | Flutter | SQLite on Android and Flutter Web; persistence and resource ownership follow the platform driver |
 | Other browsers and devices | Safari, Firefox, physical-device and iOS/macOS Flutter behavior are not verified |
 
-Record schema generation has been exercised with SQLite and PostgreSQL. Its
-integration with MySQL/MariaDB, browser and Flutter clients is not yet verified.
+Annotated DTO generation is verified by the native SQLite vertical slice.
+PostgreSQL/MySQL/MariaDB live execution and browser/Flutter execution require
+separate validation; earlier runtime results do not verify the new generation path.
 Remote/serverless transports, replica routing and alternative pools require
 separate adapters.
 
-Record schemas generate immutable model classes and typed queries.
-Editor completion checks local fields; cross-model mapping names and schema
-semantics are checked during generation. Regenerate and analyze after edits.
+Annotated schemas generate typed clients that return the original DTO classes.
+Editor completion checks native Dart fields; string-valued index/relation field
+names and schema semantics are checked during generation. Regenerate and analyze after edits.
 See [generation](https://github.com/medz/dart-orm/blob/main/doc/generation.md) for
 build/watch behavior and [performance](https://github.com/medz/dart-orm/blob/main/doc/performance.md)
 for workload-specific cost measurements.

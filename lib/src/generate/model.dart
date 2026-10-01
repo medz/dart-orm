@@ -157,9 +157,10 @@ final class ModelEntity {
   final String name;
   final String table;
   final String row;
+  // Annotated models use the original, imported DTO rather than a generated row.
+  final String sourceType;
   final String? namespace;
-  final bool grouped;
-  String get binding => grouped ? '${namespace}_$name' : name;
+  String get binding => name;
   String get identity => namespace == null ? table : '$namespace.$table';
   final List<ModelField> fields;
 
@@ -174,7 +175,7 @@ final class ModelEntity {
     this.row,
     this.fields, {
     this.namespace,
-    this.grouped = false,
+    required this.sourceType,
   }) : primaryKey = [
          for (final f in fields)
            if (f.id) f.name,
@@ -186,7 +187,7 @@ final class ModelEntity {
   String get symbol => row;
   String get fieldsType => '${symbol}Fields';
   String get setType => '${symbol}TableSet';
-  String get rowType => row;
+  String get rowType => sourceType;
   ModelField field(String name) => fields.firstWhere(
     (f) => f.name == name,
     orElse: () => throw GenerationException('$this has no field $name.'),

@@ -274,7 +274,7 @@ void main() {
         expect(await verifyColumns(db.sql, appSchema), isEmpty);
         final imported = await importSchema(db.sql);
         expect(imported.issues, isEmpty);
-        expect(imported.dart, contains('decimal('));
+        expect(imported.dart, contains('final Decimal'));
         final directory = await Directory(
           '.dart_tool/orm-decimal-import-$backend',
         ).create(recursive: true);
@@ -505,7 +505,7 @@ void main() {
       );
       expect((await inspectTable(db.sql, 'custom')).unmanaged, isNotEmpty);
       final imported = await importSchema(db.sql, tables: ['missing']);
-      expect(imported.dart, contains('amount: text('));
+      expect(imported.dart, contains('final String amount'));
       await db.execute(
         SqlCommand(
           'CREATE TABLE unicode_names (Ä TEXT COLLATE orm_decimal_v1, ä TEXT)',

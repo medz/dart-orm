@@ -3,6 +3,11 @@ import 'package:orm/migrate.dart';
 
 final schema = SchemaSnapshot([
   TableSchema(
+    "bands",
+    columns: [Column("id", Codecs.integer), Column("name", Codecs.text)],
+    primaryKey: ["id"],
+  ),
+  TableSchema(
     "lines",
     columns: [
       Column("id", Codecs.integer, generated: true),
@@ -49,10 +54,5 @@ final schema = SchemaSnapshot([
     ],
 
     checks: [CheckSchema("nonnegative", "price >= 0 AND quantity >= 0")],
-  ),
-  TableSchema(
-    "bands",
-    columns: [Column("id", Codecs.integer), Column("name", Codecs.text)],
-    primaryKey: ["id"],
   ),
 ]);

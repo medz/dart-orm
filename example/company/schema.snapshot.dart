@@ -46,24 +46,6 @@ final schema = SchemaSnapshot([
     ],
   ),
   TableSchema(
-    "projects",
-    columns: [
-      Column("id", Codecs.integer, generated: true),
-      Column("name", Codecs.text),
-      Column("status", Codecs.text, defaultSql: "'draft'"),
-      Column("created_at", Codecs.dateTime),
-      Column("owner_id", Codecs.integer),
-    ],
-    primaryKey: ["id"],
-
-    indexes: [
-      IndexSchema("projects_owner_id", ["owner_id", "id"], unique: false),
-    ],
-    foreignKeys: [
-      ForeignKey(["owner_id"], "employees", ["id"], onDelete: "RESTRICT"),
-    ],
-  ),
-  TableSchema(
     "project_members",
     columns: [
       Column("project_id", Codecs.integer),
@@ -82,6 +64,24 @@ final schema = SchemaSnapshot([
     foreignKeys: [
       ForeignKey(["project_id"], "projects", ["id"], onDelete: "CASCADE"),
       ForeignKey(["employee_id"], "employees", ["id"], onDelete: "CASCADE"),
+    ],
+  ),
+  TableSchema(
+    "projects",
+    columns: [
+      Column("id", Codecs.integer, generated: true),
+      Column("name", Codecs.text),
+      Column("status", Codecs.text, defaultSql: "'draft'"),
+      Column("created_at", Codecs.dateTime),
+      Column("owner_id", Codecs.integer),
+    ],
+    primaryKey: ["id"],
+
+    indexes: [
+      IndexSchema("projects_owner_id", ["owner_id", "id"], unique: false),
+    ],
+    foreignKeys: [
+      ForeignKey(["owner_id"], "employees", ["id"], onDelete: "RESTRICT"),
     ],
   ),
 ]);

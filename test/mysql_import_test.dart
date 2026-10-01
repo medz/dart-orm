@@ -75,9 +75,13 @@ void main() {
             false,
             reason: imported.toJson().toString(),
           );
-          expect(imported.dart, contains('model('));
-          expect(imported.dart, contains('.identity()'));
-          expect(imported.dart, contains('localDateTime('));
+          expect(imported.dart, contains('@Model('));
+          expect(imported.dart, contains('@Id(generated: true)'));
+          expect(imported.dart, contains('final LocalDateTime created;'));
+          expect(imported.dart, contains('final Decimal amount;'));
+          expect(imported.dart, contains('precision: 12, scale: 2'));
+          expect(imported.dart, contains('required this.document'));
+          expect(imported.dart, isNot(contains('model(')));
           expect(
             imported.issues.map((i) => i.code),
             contains('IMPORT.TEMPORAL_SEMANTICS'),

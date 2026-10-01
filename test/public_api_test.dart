@@ -67,7 +67,6 @@ void main() {
           exports(schema).intersection({
             'Database',
             'TableSchema',
-            'Column',
             'ForeignKey',
             'IndexSchema',
             'CheckSchema',
@@ -79,7 +78,12 @@ void main() {
           exports(schema),
           containsAll([
             'Model',
-            'model',
+            'Id',
+            'Column',
+            'Unique',
+            'ClientDefault',
+            'Computed',
+            'Check',
             'Codec',
             'Decimal',
             'ComputedStorage',
@@ -93,13 +97,9 @@ void main() {
               contains('Entity'),
               contains('EntityKey'),
               contains('SchemaConstraint'),
-              contains('Id'),
               contains('UseCodec'),
               contains('ColumnName'),
-              contains('Unique'),
               contains('Default'),
-              contains('ClientDefault'),
-              contains('Computed'),
               contains('EnumValue'),
               contains('IntegerBits'),
               contains('DecimalDigits'),
@@ -112,8 +112,8 @@ void main() {
         expect(modelType.typeParameters, isEmpty);
         expect(
           modelType.constructors.where((c) => c.isPublic),
-          isEmpty,
-          reason: 'Create declarations only through model(...).',
+          hasLength(1),
+          reason: 'Model metadata has one public constant constructor.',
         );
         expect(
           modelType.methods.where((m) => m.isPublic && m.isStatic),

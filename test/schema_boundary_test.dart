@@ -96,12 +96,28 @@ void main() {
         final file = File('${directory.path}/schema.dart');
         await file.writeAsString(
           "import 'package:orm/schema.dart';\n${dialect == .sqlite ? '''
-final item = model('items', (id: integer(), value: integer(unique: true).computed('id + 1', storage: .virtual)));
+@Model(table: 'items')
+final class Item {
+  final int id;
+  @Unique()
+  @Computed('id + 1', storage: .virtual)
+  final int value;
+  const Item({required this.id, required this.value});
+}
 ''' : '''
-final item = model('Items', (source: integer(), id: integer().computed('source + 1')), primaryKey: (i) => i.id, checks: [check('source > 0', name: 'valid'), check('source < 10', name: 'VALID')]);
+@Model(table: 'Items', namespace: 'orm_schema_boundary_tests')
+@Check('source > 0', name: 'valid')
+@Check('source < 10', name: 'VALID')
+final class Item {
+  final int source;
+  @Id()
+  @Computed('source + 1')
+  final int id;
+  const Item({required this.source, required this.id});
+}
 '''}",
         );
-        final generated = await generateSchema(file.path);
+        final generated = await generateSchema(file.path, dialect: dialect);
         final Database<Backend> db = dialect == .sqlite
             ? await sqlite(const SqliteOptions.memory())
             : postgres(
@@ -157,10 +173,13 @@ final item = model('Items', (source: integer(), id: integer().computed('source +
             false,
             reason: imported.issues.map((i) => i.code).join(', '),
           );
-          expect(imported.entities['on_query'], isNot('onQuery'));
+          expect(imported.entities['on_query'], isNot('OnQuery'));
           final importedFile = File('${directory.path}/imported.dart');
           await importedFile.writeAsString(imported.dart);
-          final regenerated = await generateSchema(importedFile.path);
+          final regenerated = await generateSchema(
+            importedFile.path,
+            dialect: dialect,
+          );
           expect(
             (await verifySchema(db.sql, regenerated.snapshot)).matches,
             true,

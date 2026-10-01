@@ -14,11 +14,12 @@ silently lose precision. See [engine-specific boundaries](https://github.com/med
 ```dart
 import 'package:orm/schema.dart';
 
-final invoice = model('invoices', (
-  id: identity(),
-  total: decimal(),
-  discount: decimal().nullable(),
-));
+@Model(table: 'invoices')
+final class Invoice({
+  @Id(generated: true) required final int id,
+  required final Decimal total,
+  required final Decimal? discount,
+});
 
 // After generation:
 await db.invoice.create(total: Decimal.parse('9007199254740993.01'));
@@ -162,24 +163,26 @@ an out-of-range Decimal just to divide it back into range.
 Declare column precision independently of the Decimal value codec:
 
 ```dart
-final balance = model('balances', (
-  id: identity(),
-  amount: decimal(precision: 12, scale: 2),
-  initial: decimal(precision: 12, scale: 2, defaultSql: "'1.235'"),
-));
+@Model(table: 'balances')
+final class Balance({
+  @Id(generated: true) required final int id,
+  @Column(precision: 12, scale: 2) required final Decimal amount,
+  @Column(precision: 12, scale: 2) @DatabaseDefault.sql("'1.235'")
+  required final Decimal initial,
+});
 ```
 
 Precision is 1..1000 and scale is -1000..1000. Omitting scale means zero.
 These are [PostgreSQL NUMERIC declarations](https://www.postgresql.org/docs/current/datatype-numeric.html):
 negative scale rounds integer digits, and scale may exceed precision. For example,
-`decimal(precision: 3, scale: -2)` stores multiples of 100 through 99900 in magnitude;
-`decimal(precision: 3, scale: 5)` stores up to 0.00999 in magnitude. Negative/excess scales
+`@Column(precision: 3, scale: -2)` stores multiples of 100 through 99900 in magnitude;
+`@Column(precision: 3, scale: 5)` stores up to 0.00999 in magnitude. Negative/excess scales
 require PostgreSQL 15 or newer.
 
 ORM writes round ties away from zero and then check the range. `1.235` becomes
 `1.24`, `-1.235` becomes `-1.24`; `999.995` overflows NUMERIC(5,2) after rounding.
 This applies to generated creation/patches, expression assignments, batches,
-upserts and defaults. Generated records contain the stored value; use the
+upserts and defaults. Returned DTOs contain the stored value; use the
 returned key if a decimal primary key was rounded. Query parameters are not
 implicitly rounded to a column's scale.
 

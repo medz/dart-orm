@@ -3,15 +3,9 @@
 import 'package:orm/sql.dart';
 import 'package:orm/sql.dart' as orm show allOf;
 
-/// A complete immutable row from "accounts".
-final class Account({
-  required final int tenant,
-  required final int id,
-  required final String? label,
-  required final String? note,
-  required final int? managerId,
-  required final String? marker,
-});
+import "schema.dart" as models;
+export "schema.dart" show Account, Event;
+
 final _accountTenant = Column<int>(
   "tenant",
   Codecs.integer,
@@ -79,34 +73,40 @@ final class AccountFields extends Fields {
   late final note = column(_accountNote);
   late final managerId = column(_accountManagerId);
   late final marker = column(_accountMarker);
-  Relation<Account, AccountFields> get manager => Relation(
+  Relation<models.Account, AccountFields> get manager => Relation(
     accountTable,
     parent: [tenant, managerId],
     child: (row) => [row.tenant, row.id],
   );
-  Relation<Account, AccountFields> get reports => Relation(
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Account, AccountFields> get reports => Relation(
     accountTable,
     parent: [tenant, id],
     child: (row) => [row.tenant, row.managerId],
   );
-  Relation<Event, EventFields> get events => Relation(
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Event, EventFields> get events => Relation(
     eventTable,
     parent: [tenant, id],
     child: (row) => [row.tenant, row.owner],
   );
-  Relation<Event, EventFields> get reviews => Relation(
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Event, EventFields> get reviews => Relation(
     eventTable,
     parent: [tenant, id],
     child: (row) => [row.tenant, row.reviewer],
   );
 }
 
-final accountTable = Table<Account, AccountFields>(
+final accountTable = Table<models.Account, AccountFields>(
   accountSchema,
   AccountFields.new,
   (row) =>
       (row.tenant, row.id, row.label, row.note, row.managerId, row.marker).map(
-        (v0, v1, v2, v3, v4, v5) => Account(
+        (v0, v1, v2, v3, v4, v5) => models.Account(
           tenant: v0,
           id: v1,
           label: v2,
@@ -117,11 +117,11 @@ final accountTable = Table<Account, AccountFields>(
       ),
 );
 
-final class AccountTableSet extends TableSet<Account, AccountFields> {
+final class AccountTableSet extends TableSet<models.Account, AccountFields> {
   AccountTableSet(QueryContext db) : super(db, accountTable) {
     db.registerSchema(appSchema);
   }
-  Future<Account> create({
+  Future<models.Account> create({
     required int tenant,
     required int id,
     String? label,
@@ -138,14 +138,15 @@ final class AccountTableSet extends TableSet<Account, AccountFields> {
       row.marker.set(marker),
     ],
   );
-  Query<Account, AccountFields> byId({required int tenant, required int id}) =>
-      where(
-        (row) =>
-            orm.allOf([row.tenant.eq(.value(tenant)), row.id.eq(.value(id))]),
-      );
+  Query<models.Account, AccountFields> byId({
+    required int tenant,
+    required int id,
+  }) => where(
+    (row) => orm.allOf([row.tenant.eq(.value(tenant)), row.id.eq(.value(id))]),
+  );
 }
 
-extension AccountUpdates on Query<Account, AccountFields> {
+extension AccountUpdates on Query<models.Account, AccountFields> {
   Future<int> patch({
     Change<int> tenant = const Change.keep(),
     Change<int> id = const Change.keep(),
@@ -165,15 +166,6 @@ extension AccountUpdates on Query<Account, AccountFields> {
   ).execute();
 }
 
-/// A complete immutable row from "events".
-final class Event({
-  required final int id,
-  required final int? tenant,
-  required final int? owner,
-  required final int? reviewer,
-  required final String title,
-  required final int score,
-});
 final _eventId = Column<int>(
   "id",
   Codecs.integer,
@@ -247,24 +239,24 @@ final class EventFields extends Fields {
   late final reviewer = column(_eventReviewer);
   late final title = column(_eventTitle);
   late final score = column(_eventScore);
-  Relation<Account, AccountFields> get author => Relation(
+  Relation<models.Account, AccountFields> get author => Relation(
     accountTable,
     parent: [tenant, owner],
     child: (row) => [row.tenant, row.id],
   );
-  Relation<Account, AccountFields> get reviewerAccount => Relation(
+  Relation<models.Account, AccountFields> get reviewerAccount => Relation(
     accountTable,
     parent: [tenant, reviewer],
     child: (row) => [row.tenant, row.id],
   );
 }
 
-final eventTable = Table<Event, EventFields>(
+final eventTable = Table<models.Event, EventFields>(
   eventSchema,
   EventFields.new,
   (row) =>
       (row.id, row.tenant, row.owner, row.reviewer, row.title, row.score).map(
-        (v0, v1, v2, v3, v4, v5) => Event(
+        (v0, v1, v2, v3, v4, v5) => models.Event(
           id: v0,
           tenant: v1,
           owner: v2,
@@ -275,11 +267,11 @@ final eventTable = Table<Event, EventFields>(
       ),
 );
 
-final class EventTableSet extends TableSet<Event, EventFields> {
+final class EventTableSet extends TableSet<models.Event, EventFields> {
   EventTableSet(QueryContext db) : super(db, eventTable) {
     db.registerSchema(appSchema);
   }
-  Future<Event> create({
+  Future<models.Event> create({
     required int id,
     int? tenant,
     int? owner,
@@ -296,11 +288,11 @@ final class EventTableSet extends TableSet<Event, EventFields> {
       row.score.set(score),
     ],
   );
-  Query<Event, EventFields> byId(int id) =>
+  Query<models.Event, EventFields> byId(int id) =>
       where((row) => row.id.eq(.value(id)));
 }
 
-extension EventUpdates on Query<Event, EventFields> {
+extension EventUpdates on Query<models.Event, EventFields> {
   Future<int> patch({
     Change<int> id = const Change.keep(),
     Change<int?> tenant = const Change.keep(),

@@ -3,20 +3,8 @@
 import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
-export "schema.dart" show Email;
+export "schema.dart" show Email, Account, Note;
 
-/// A complete immutable row from "nominal_accounts".
-final class Account({
-  required final int id,
-  required final models.Email email,
-  required final String? label,
-  required final bool enabled,
-  required final String marker,
-  required final int a,
-  required final int b,
-  required final int c,
-  required final int total,
-});
 final _accountId = Column<int>(
   "id",
   Codecs.integer,
@@ -112,11 +100,13 @@ final class AccountFields extends Fields {
   late final b = column(_accountB);
   late final c = column(_accountC);
   late final total = readColumn(_accountTotal);
-  Relation<Note, NoteFields> get notes =>
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Note, NoteFields> get notes =>
       Relation(noteTable, parent: [id], child: (row) => [row.accountId]);
 }
 
-final accountTable = Table<Account, AccountFields>(
+final accountTable = Table<models.Account, AccountFields>(
   accountSchema,
   AccountFields.new,
   (row) =>
@@ -137,7 +127,7 @@ final accountTable = Table<Account, AccountFields>(
           row.total,
         ).map((a, b, c, total) => (a: a, b: b, c: c, total: total)),
       ).map(
-        (left, right) => Account(
+        (left, right) => models.Account(
           id: left.id,
           email: left.email,
           label: left.label,
@@ -151,11 +141,11 @@ final accountTable = Table<Account, AccountFields>(
       ),
 );
 
-final class AccountTableSet extends TableSet<Account, AccountFields> {
+final class AccountTableSet extends TableSet<models.Account, AccountFields> {
   AccountTableSet(QueryContext db) : super(db, accountTable) {
     db.registerSchema(appSchema);
   }
-  Future<Account> create({
+  Future<models.Account> create({
     Change<int> id = const Change.keep(),
     required models.Email email,
     String? label,
@@ -176,11 +166,11 @@ final class AccountTableSet extends TableSet<Account, AccountFields> {
       row.c.set(c),
     ],
   );
-  Query<Account, AccountFields> byId(int id) =>
+  Query<models.Account, AccountFields> byId(int id) =>
       where((row) => row.id.eq(.value(id)));
 }
 
-extension AccountUpdates on Query<Account, AccountFields> {
+extension AccountUpdates on Query<models.Account, AccountFields> {
   Future<int> patch({
     Change<models.Email> email = const Change.keep(),
     Change<String?> label = const Change.keep(),
@@ -202,12 +192,6 @@ extension AccountUpdates on Query<Account, AccountFields> {
   ).execute();
 }
 
-/// A complete immutable row from "nominal_notes".
-final class Note({
-  required final int id,
-  required final int accountId,
-  required final String body,
-});
 final _noteId = Column<int>(
   "id",
   Codecs.integer,
@@ -242,25 +226,25 @@ final class NoteFields extends Fields {
   late final id = column(_noteId);
   late final accountId = column(_noteAccountId);
   late final body = column(_noteBody);
-  Relation<Account, AccountFields> get account =>
+  Relation<models.Account, AccountFields> get account =>
       Relation(accountTable, parent: [accountId], child: (row) => [row.id]);
 }
 
-final noteTable = Table<Note, NoteFields>(
+final noteTable = Table<models.Note, NoteFields>(
   noteSchema,
   NoteFields.new,
   (row) => (
     row.id,
     row.accountId,
     row.body,
-  ).map((v0, v1, v2) => Note(id: v0, accountId: v1, body: v2)),
+  ).map((v0, v1, v2) => models.Note(id: v0, accountId: v1, body: v2)),
 );
 
-final class NoteTableSet extends TableSet<Note, NoteFields> {
+final class NoteTableSet extends TableSet<models.Note, NoteFields> {
   NoteTableSet(QueryContext db) : super(db, noteTable) {
     db.registerSchema(appSchema);
   }
-  Future<Note> create({
+  Future<models.Note> create({
     Change<int> id = const Change.keep(),
     required int accountId,
     required String body,
@@ -271,10 +255,11 @@ final class NoteTableSet extends TableSet<Note, NoteFields> {
       row.body.set(body),
     ],
   );
-  Query<Note, NoteFields> byId(int id) => where((row) => row.id.eq(.value(id)));
+  Query<models.Note, NoteFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
-extension NoteUpdates on Query<Note, NoteFields> {
+extension NoteUpdates on Query<models.Note, NoteFields> {
   Future<int> patch({
     Change<int> accountId = const Change.keep(),
     Change<String> body = const Change.keep(),

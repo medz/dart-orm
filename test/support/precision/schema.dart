@@ -1,25 +1,45 @@
 import 'package:orm/schema.dart';
 
-final Model wallet = model("wallets", (
-  id: integer().identity(),
-  amount: decimal(precision: 5, scale: 2),
-  hundreds: decimal(precision: 3, scale: -2),
-  fraction: decimal(precision: 3, scale: 5),
-  defaulted: decimal(defaultSql: "'1.235'", precision: 5, scale: 2),
-  optional: decimal(precision: 5, scale: 2).nullable(),
-));
+@Model(table: "wallets")
+final class Wallet({
+  @Id(generated: true) @Column(name: "id") required final int id,
+  @Column(name: "amount", precision: 5, scale: 2) required final Decimal amount,
+  @Column(name: "hundreds", precision: 3, scale: -2)
+  required final Decimal hundreds,
+  @Column(name: "fraction", precision: 3, scale: 5)
+  required final Decimal fraction,
+  @Column(name: "defaulted", precision: 5, scale: 2)
+  @DatabaseDefault.sql("'1.235'")
+  required final Decimal defaulted,
+  @Column(name: "optional", precision: 5, scale: 2)
+  required final Decimal? optional,
+});
 
-final Model price = model(
-  "prices",
-  (id: decimal(precision: 4, scale: 2), label: text()),
-  primaryKey: (r) => r.id,
-  relations: (r) =>
-      (receipts: referencedBy(() => receipt, on: (priceId: r.id))),
-);
+@Model(table: "prices")
+@Relation(
+  target: Receipt,
+  name: "receipts",
+  fields: ["id"],
+  keys: ["priceId"],
+  constraint: false,
+)
+final class Price({
+  @Id(generated: false)
+  @Column(name: "id", precision: 4, scale: 2)
+  required final Decimal id,
+  @Column(name: "label") required final String label,
+});
 
-final Model receipt = model(
-  "receipts",
-  (id: integer().identity(), priceId: decimal(precision: 4, scale: 2)),
-  relations: (r) =>
-      (price: references((id: r.priceId), () => price, onDelete: .restrict)),
-);
+@Model(table: "receipts")
+@Relation(
+  target: Price,
+  name: "price",
+  fields: ["priceId"],
+  keys: ["id"],
+  onDelete: .restrict,
+)
+final class Receipt({
+  @Id(generated: true) @Column(name: "id") required final int id,
+  @Column(name: "price_id", precision: 4, scale: 2)
+  required final Decimal priceId,
+});

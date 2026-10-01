@@ -2,111 +2,9 @@
 
 import 'package:orm/sql.dart';
 
-/// A complete immutable row from "users".
-final class User({
-  required final int id,
-  required final String email,
-  required final String? nickname,
-  required final int score,
-});
-final _userId = Column<int>(
-  "id",
-  Codecs.integer,
-  nullable: false,
-  generated: true,
-);
-final _userEmail = Column<String>(
-  "email",
-  Codecs.text,
-  nullable: false,
-  generated: false,
-);
-final _userNickname = Column<String?>(
-  "nickname",
-  Codecs.text.nullable(),
-  nullable: true,
-  generated: false,
-);
-final _userScore = Column<int>(
-  "score",
-  Codecs.integer,
-  nullable: false,
-  generated: false,
-  defaultSql: "0",
-);
-final userSchema = TableSchema(
-  "users",
-  columns: [_userId, _userEmail, _userNickname, _userScore],
-  primaryKey: ["id"],
-  uniqueKeys: [
-    ["email"],
-  ],
-  indexes: [],
-  foreignKeys: [],
-);
+import "schema.dart" as models;
+export "schema.dart" show User, Post;
 
-final class UserFields extends Fields {
-  UserFields(super.table);
-  late final id = column(_userId);
-  late final email = column(_userEmail);
-  late final nickname = column(_userNickname);
-  late final score = column(_userScore);
-  Relation<Post, PostFields> get posts =>
-      Relation(postTable, parent: [id], child: (row) => [row.authorId]);
-}
-
-final userTable = Table<User, UserFields>(
-  userSchema,
-  UserFields.new,
-  (row) => (
-    row.id,
-    row.email,
-    row.nickname,
-    row.score,
-  ).map((v0, v1, v2, v3) => User(id: v0, email: v1, nickname: v2, score: v3)),
-);
-
-final class UserTableSet extends TableSet<User, UserFields> {
-  UserTableSet(QueryContext db) : super(db, userTable) {
-    db.registerSchema(appSchema);
-  }
-  Future<User> create({
-    Change<int> id = const Change.keep(),
-    required String email,
-    String? nickname,
-    Change<int> score = const Change.keep(),
-  }) => createRow(
-    (row) => [
-      ...row.id.change(id),
-      row.email.set(email),
-      row.nickname.set(nickname),
-      ...row.score.change(score),
-    ],
-  );
-  Query<User, UserFields> byId(int id) => where((row) => row.id.eq(.value(id)));
-}
-
-extension UserUpdates on Query<User, UserFields> {
-  Future<int> patch({
-    Change<String> email = const Change.keep(),
-    Change<String?> nickname = const Change.keep(),
-    Change<int> score = const Change.keep(),
-  }) => update(
-    (row) => [
-      ...row.email.change(email),
-      ...row.nickname.change(nickname),
-      ...row.score.change(score),
-    ],
-  ).execute();
-}
-
-/// A complete immutable row from "posts".
-final class Post({
-  required final int id,
-  required final int authorId,
-  required final String title,
-  required final DateTime createdAt,
-});
 final _postId = Column<int>(
   "id",
   Codecs.integer,
@@ -154,23 +52,24 @@ final class PostFields extends Fields {
   late final authorId = column(_postAuthorId);
   late final title = column(_postTitle);
   late final createdAt = column(_postCreatedAt);
-  Relation<User, UserFields> get author =>
+  Relation<models.User, UserFields> get author =>
       Relation(userTable, parent: [authorId], child: (row) => [row.id]);
 }
 
-final postTable = Table<Post, PostFields>(
+final postTable = Table<models.Post, PostFields>(
   postSchema,
   PostFields.new,
   (row) => (row.id, row.authorId, row.title, row.createdAt).map(
-    (v0, v1, v2, v3) => Post(id: v0, authorId: v1, title: v2, createdAt: v3),
+    (v0, v1, v2, v3) =>
+        models.Post(id: v0, authorId: v1, title: v2, createdAt: v3),
   ),
 );
 
-final class PostTableSet extends TableSet<Post, PostFields> {
+final class PostTableSet extends TableSet<models.Post, PostFields> {
   PostTableSet(QueryContext db) : super(db, postTable) {
     db.registerSchema(appSchema);
   }
-  Future<Post> create({
+  Future<models.Post> create({
     Change<int> id = const Change.keep(),
     required int authorId,
     required String title,
@@ -183,10 +82,11 @@ final class PostTableSet extends TableSet<Post, PostFields> {
       row.createdAt.set(createdAt),
     ],
   );
-  Query<Post, PostFields> byId(int id) => where((row) => row.id.eq(.value(id)));
+  Query<models.Post, PostFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
-extension PostUpdates on Query<Post, PostFields> {
+extension PostUpdates on Query<models.Post, PostFields> {
   Future<int> patch({
     Change<int> authorId = const Change.keep(),
     Change<String> title = const Change.keep(),
@@ -200,9 +100,100 @@ extension PostUpdates on Query<Post, PostFields> {
   ).execute();
 }
 
-final appSchema = List<TableSchema>.unmodifiable([userSchema, postSchema]);
+final _userId = Column<int>(
+  "id",
+  Codecs.integer,
+  nullable: false,
+  generated: true,
+);
+final _userEmail = Column<String>(
+  "email",
+  Codecs.text,
+  nullable: false,
+  generated: false,
+);
+final _userNickname = Column<String?>(
+  "nickname",
+  Codecs.text.nullable(),
+  nullable: true,
+  generated: false,
+);
+final _userScore = Column<int>(
+  "score",
+  Codecs.integer,
+  nullable: false,
+  generated: false,
+  defaultSql: "0",
+);
+final userSchema = TableSchema(
+  "users",
+  columns: [_userId, _userEmail, _userNickname, _userScore],
+  primaryKey: ["id"],
+  uniqueKeys: [
+    ["email"],
+  ],
+  indexes: [],
+  foreignKeys: [],
+);
+
+final class UserFields extends Fields {
+  UserFields(super.table);
+  late final id = column(_userId);
+  late final email = column(_userEmail);
+  late final nickname = column(_userNickname);
+  late final score = column(_userScore);
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Post, PostFields> get posts =>
+      Relation(postTable, parent: [id], child: (row) => [row.authorId]);
+}
+
+final userTable = Table<models.User, UserFields>(
+  userSchema,
+  UserFields.new,
+  (row) => (row.id, row.email, row.nickname, row.score).map(
+    (v0, v1, v2, v3) => models.User(id: v0, email: v1, nickname: v2, score: v3),
+  ),
+);
+
+final class UserTableSet extends TableSet<models.User, UserFields> {
+  UserTableSet(QueryContext db) : super(db, userTable) {
+    db.registerSchema(appSchema);
+  }
+  Future<models.User> create({
+    Change<int> id = const Change.keep(),
+    required String email,
+    String? nickname,
+    Change<int> score = const Change.keep(),
+  }) => createRow(
+    (row) => [
+      ...row.id.change(id),
+      row.email.set(email),
+      row.nickname.set(nickname),
+      ...row.score.change(score),
+    ],
+  );
+  Query<models.User, UserFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
+}
+
+extension UserUpdates on Query<models.User, UserFields> {
+  Future<int> patch({
+    Change<String> email = const Change.keep(),
+    Change<String?> nickname = const Change.keep(),
+    Change<int> score = const Change.keep(),
+  }) => update(
+    (row) => [
+      ...row.email.change(email),
+      ...row.nickname.change(nickname),
+      ...row.score.change(score),
+    ],
+  ).execute();
+}
+
+final appSchema = List<TableSchema>.unmodifiable([postSchema, userSchema]);
 
 extension AppTables on QueryContext {
-  UserTableSet get user => UserTableSet(this);
   PostTableSet get post => PostTableSet(this);
+  UserTableSet get user => UserTableSet(this);
 }

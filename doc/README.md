@@ -13,6 +13,7 @@ and the [company example](https://github.com/medz/dart-orm/blob/main/example/com
 
 | Task | Guide |
 | --- | --- |
+| Use ordinary DTO classes and runnable configuration | [Annotated models](https://github.com/medz/dart-orm/blob/main/doc/annotated-models.md) |
 | Define models, columns, keys and relationships | [Schema declarations](https://github.com/medz/dart-orm/blob/main/doc/authoring.md) |
 | Organize files and PostgreSQL database schemas | [Database schemas](https://github.com/medz/dart-orm/blob/main/doc/namespaces.md) |
 | Generate a client and use build_runner | [Generation](https://github.com/medz/dart-orm/blob/main/doc/generation.md) |

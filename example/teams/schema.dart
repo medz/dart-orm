@@ -2,37 +2,60 @@ import 'package:orm/schema.dart';
 
 enum MembershipRole { owner, member }
 
-final Model user = model(
-  'users',
-  (id: integer(), name: text()),
-  primaryKey: (u) => u.id,
-  relations: (u) => (memberships: referencedBy(() => membership)),
-);
+@Model(table: "users")
+@Relation(
+  target: Membership,
+  name: "memberships",
+  fields: ["id"],
+  keys: ["userId"],
+  constraint: false,
+)
+final class User({
+  @Id(generated: false) @Column(name: "id") required final int id,
+  @Column(name: "name") required final String name,
+});
 
-final Model team = model(
-  'teams',
-  (id: integer(), name: text()),
-  primaryKey: (t) => t.id,
-  relations: (t) => (memberships: referencedBy(() => membership)),
-);
+@Model(table: "teams")
+@Relation(
+  target: Membership,
+  name: "memberships",
+  fields: ["id"],
+  keys: ["teamId"],
+  constraint: false,
+)
+final class Team({
+  @Id(generated: false) @Column(name: "id") required final int id,
+  @Column(name: "name") required final String name,
+});
 
-final membership = model(
-  'memberships',
-  (
-    teamId: integer(),
-    userId: integer(),
-    role: enumeration(
-      MembershipRole.values,
-      defaultValue: MembershipRole.member,
-    ),
-    joinedAt: dateTime(),
-  ),
-  primaryKey: (m) => (m.teamId, m.userId),
-  indexes: (m) => [
-    index((m.userId, m.joinedAt, m.teamId), name: 'user_memberships'),
-  ],
-  relations: (m) => (
-    team: references(m.teamId, () => team, onDelete: .cascade),
-    user: references(m.userId, () => user, onDelete: .cascade),
-  ),
-);
+@Model(table: "memberships")
+@Index(
+  ["userId", "joinedAt", "teamId"],
+  name: "user_memberships",
+  unique: false,
+)
+@Relation(
+  target: Team,
+  name: "team",
+  fields: ["teamId"],
+  keys: ["id"],
+  onDelete: .cascade,
+)
+@Relation(
+  target: User,
+  name: "user",
+  fields: ["userId"],
+  keys: ["id"],
+  onDelete: .cascade,
+)
+final class Membership({
+  @Id(generated: false) @Column(name: "team_id") required final int teamId,
+  @Id(generated: false) @Column(name: "user_id") required final int userId,
+  @Column(
+    name: "role",
+    labels: {MembershipRole.owner: "owner", MembershipRole.member: "member"},
+  )
+  @DatabaseDefault.sql("'member'")
+  required final MembershipRole role,
+  @Column(name: "joined_at") required final DateTime joinedAt,
+});

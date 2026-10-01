@@ -142,7 +142,7 @@ dart run tool/benchmark_editor.dart
 ```
 
 The generation benchmark creates disposable projects with 10, 100 and 1000
-four-field Record models. It measures first and unchanged builds, watcher startup,
+four-field annotated DTO models. It measures first and unchanged builds, watcher startup,
 field and imported-metadata edits, and analysis. It also checks that an unrelated
 edit leaves output timestamps unchanged. The report is written to
 `.dart_tool/benchmarks/generation.json`; a positional argument chooses another
@@ -160,8 +160,7 @@ Generation timing includes process startup where applicable, excludes dependency
 downloads, and uses warm shared SDK/pub caches. Editor measurements include protocol
 transport and JSON processing, but exclude GUI rendering and editor extensions.
 Keep startup, analysis readiness, first completion and warm completion separate.
-A successful rename probe does not guarantee every IDE workflow; Record field
-renaming depends on the Dart SDK. Always regenerate and analyze after refactoring.
+A successful rename probe does not guarantee every IDE workflow; String-valued index and relation metadata is generation-checked and needs explicit updates after native Dart field renaming. Always regenerate and analyze after refactoring.
 
 Run these tools independently of other builds with source and SDK versions fixed.
 Read sample counts, conditions and errors in the produced report before comparing

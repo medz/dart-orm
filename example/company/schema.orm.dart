@@ -4,10 +4,15 @@ import 'package:orm/sql.dart';
 import 'package:orm/sql.dart' as orm show allOf;
 
 import "schema.dart" as models;
-export "schema.dart" show ProjectStatus, MemberRole;
+export "schema.dart"
+    show
+        Department,
+        Employee,
+        ProjectStatus,
+        Project,
+        MemberRole,
+        ProjectMember;
 
-/// A complete immutable row from "departments".
-final class Department({required final int id, required final String name});
 final _departmentId = Column<int>(
   "id",
   Codecs.integer,
@@ -35,43 +40,37 @@ final class DepartmentFields extends Fields {
   DepartmentFields(super.table);
   late final id = column(_departmentId);
   late final name = column(_departmentName);
-  Relation<Employee, EmployeeFields> get employees =>
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Employee, EmployeeFields> get employees =>
       Relation(employeeTable, parent: [id], child: (row) => [row.departmentId]);
 }
 
-final departmentTable = Table<Department, DepartmentFields>(
+final departmentTable = Table<models.Department, DepartmentFields>(
   departmentSchema,
   DepartmentFields.new,
-  (row) => (row.id, row.name).map((v0, v1) => Department(id: v0, name: v1)),
+  (row) =>
+      (row.id, row.name).map((v0, v1) => models.Department(id: v0, name: v1)),
 );
 
-final class DepartmentTableSet extends TableSet<Department, DepartmentFields> {
+final class DepartmentTableSet
+    extends TableSet<models.Department, DepartmentFields> {
   DepartmentTableSet(QueryContext db) : super(db, departmentTable) {
     db.registerSchema(appSchema);
   }
-  Future<Department> create({
+  Future<models.Department> create({
     Change<int> id = const Change.keep(),
     required String name,
   }) => createRow((row) => [...row.id.change(id), row.name.set(name)]);
-  Query<Department, DepartmentFields> byId(int id) =>
+  Query<models.Department, DepartmentFields> byId(int id) =>
       where((row) => row.id.eq(.value(id)));
 }
 
-extension DepartmentUpdates on Query<Department, DepartmentFields> {
+extension DepartmentUpdates on Query<models.Department, DepartmentFields> {
   Future<int> patch({Change<String> name = const Change.keep()}) =>
       update((row) => [...row.name.change(name)]).execute();
 }
 
-/// A complete immutable row from "employees".
-final class Employee({
-  required final int id,
-  required final String name,
-  required final String email,
-  required final bool active,
-  required final DateTime createdAt,
-  required final int departmentId,
-  required final int? managerId,
-});
 final _employeeId = Column<int>(
   "id",
   Codecs.integer,
@@ -153,25 +152,32 @@ final class EmployeeFields extends Fields {
   late final createdAt = column(_employeeCreatedAt);
   late final departmentId = column(_employeeDepartmentId);
   late final managerId = column(_employeeManagerId);
-  Relation<Department, DepartmentFields> get department => Relation(
+  Relation<models.Department, DepartmentFields> get department => Relation(
     departmentTable,
     parent: [departmentId],
     child: (row) => [row.id],
   );
-  Relation<Employee, EmployeeFields> get manager =>
+  Relation<models.Employee, EmployeeFields> get manager =>
       Relation(employeeTable, parent: [managerId], child: (row) => [row.id]);
-  Relation<Employee, EmployeeFields> get directReports =>
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Employee, EmployeeFields> get directReports =>
       Relation(employeeTable, parent: [id], child: (row) => [row.managerId]);
-  Relation<Project, ProjectFields> get ownedProjects =>
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Project, ProjectFields> get ownedProjects =>
       Relation(projectTable, parent: [id], child: (row) => [row.ownerId]);
-  Relation<ProjectMember, ProjectMemberFields> get memberships => Relation(
-    projectMemberTable,
-    parent: [id],
-    child: (row) => [row.employeeId],
-  );
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.ProjectMember, ProjectMemberFields> get memberships =>
+      Relation(
+        projectMemberTable,
+        parent: [id],
+        child: (row) => [row.employeeId],
+      );
 }
 
-final employeeTable = Table<Employee, EmployeeFields>(
+final employeeTable = Table<models.Employee, EmployeeFields>(
   employeeSchema,
   EmployeeFields.new,
   (row) =>
@@ -190,7 +196,7 @@ final employeeTable = Table<Employee, EmployeeFields>(
               (departmentId: departmentId, managerId: managerId),
         ),
       ).map(
-        (left, right) => Employee(
+        (left, right) => models.Employee(
           id: left.id,
           name: left.name,
           email: left.email,
@@ -202,11 +208,11 @@ final employeeTable = Table<Employee, EmployeeFields>(
       ),
 );
 
-final class EmployeeTableSet extends TableSet<Employee, EmployeeFields> {
+final class EmployeeTableSet extends TableSet<models.Employee, EmployeeFields> {
   EmployeeTableSet(QueryContext db) : super(db, employeeTable) {
     db.registerSchema(appSchema);
   }
-  Future<Employee> create({
+  Future<models.Employee> create({
     Change<int> id = const Change.keep(),
     required String name,
     required String email,
@@ -225,11 +231,11 @@ final class EmployeeTableSet extends TableSet<Employee, EmployeeFields> {
       row.managerId.set(managerId),
     ],
   );
-  Query<Employee, EmployeeFields> byId(int id) =>
+  Query<models.Employee, EmployeeFields> byId(int id) =>
       where((row) => row.id.eq(.value(id)));
 }
 
-extension EmployeeUpdates on Query<Employee, EmployeeFields> {
+extension EmployeeUpdates on Query<models.Employee, EmployeeFields> {
   Future<int> patch({
     Change<String> name = const Change.keep(),
     Change<String> email = const Change.keep(),
@@ -249,14 +255,128 @@ extension EmployeeUpdates on Query<Employee, EmployeeFields> {
   ).execute();
 }
 
-/// A complete immutable row from "projects".
-final class Project({
-  required final int id,
-  required final String name,
-  required final models.ProjectStatus status,
-  required final DateTime createdAt,
-  required final int ownerId,
-});
+final _projectMemberProjectId = Column<int>(
+  "project_id",
+  Codecs.integer,
+  nullable: false,
+  generated: false,
+);
+final _projectMemberEmployeeId = Column<int>(
+  "employee_id",
+  Codecs.integer,
+  nullable: false,
+  generated: false,
+);
+final _projectMemberRole = Column<models.MemberRole>(
+  "role",
+  Codecs.enumeration<models.MemberRole>({
+    models.MemberRole.maintainer: "maintainer",
+    models.MemberRole.member: "member",
+  }),
+  nullable: false,
+  generated: false,
+  defaultSql: "'member'",
+);
+final _projectMemberJoinedAt = Column<DateTime>(
+  "joined_at",
+  Codecs.dateTime,
+  nullable: false,
+  generated: false,
+  clientDefault: DateTime.now,
+);
+final projectMemberSchema = TableSchema(
+  "project_members",
+  columns: [
+    _projectMemberProjectId,
+    _projectMemberEmployeeId,
+    _projectMemberRole,
+    _projectMemberJoinedAt,
+  ],
+  primaryKey: ["project_id", "employee_id"],
+  uniqueKeys: [],
+  indexes: [
+    IndexSchema("project_members_employee_project", [
+      "employee_id",
+      "project_id",
+    ], unique: false),
+  ],
+  foreignKeys: [
+    ForeignKey(["project_id"], "projects", ["id"], onDelete: "CASCADE"),
+    ForeignKey(["employee_id"], "employees", ["id"], onDelete: "CASCADE"),
+  ],
+);
+
+final class ProjectMemberFields extends Fields {
+  ProjectMemberFields(super.table);
+  late final projectId = column(_projectMemberProjectId);
+  late final employeeId = column(_projectMemberEmployeeId);
+  late final role = column(_projectMemberRole);
+  late final joinedAt = column(_projectMemberJoinedAt);
+  Relation<models.Project, ProjectFields> get project =>
+      Relation(projectTable, parent: [projectId], child: (row) => [row.id]);
+  Relation<models.Employee, EmployeeFields> get employee =>
+      Relation(employeeTable, parent: [employeeId], child: (row) => [row.id]);
+}
+
+final projectMemberTable = Table<models.ProjectMember, ProjectMemberFields>(
+  projectMemberSchema,
+  ProjectMemberFields.new,
+  (row) => (row.projectId, row.employeeId, row.role, row.joinedAt).map(
+    (v0, v1, v2, v3) => models.ProjectMember(
+      projectId: v0,
+      employeeId: v1,
+      role: v2,
+      joinedAt: v3,
+    ),
+  ),
+);
+
+final class ProjectMemberTableSet
+    extends TableSet<models.ProjectMember, ProjectMemberFields> {
+  ProjectMemberTableSet(QueryContext db) : super(db, projectMemberTable) {
+    db.registerSchema(appSchema);
+  }
+  Future<models.ProjectMember> create({
+    required int projectId,
+    required int employeeId,
+    Change<models.MemberRole> role = const Change.keep(),
+    Change<DateTime> joinedAt = const Change.keep(),
+  }) => createRow(
+    (row) => [
+      row.projectId.set(projectId),
+      row.employeeId.set(employeeId),
+      ...row.role.change(role),
+      ...row.joinedAt.change(joinedAt),
+    ],
+  );
+  Query<models.ProjectMember, ProjectMemberFields> byId({
+    required int projectId,
+    required int employeeId,
+  }) => where(
+    (row) => orm.allOf([
+      row.projectId.eq(.value(projectId)),
+      row.employeeId.eq(.value(employeeId)),
+    ]),
+  );
+}
+
+extension ProjectMemberUpdates
+    on Query<models.ProjectMember, ProjectMemberFields> {
+  Future<int> patch({
+    Change<int> projectId = const Change.keep(),
+    Change<int> employeeId = const Change.keep(),
+    Change<models.MemberRole> role = const Change.keep(),
+    Change<DateTime> joinedAt = const Change.keep(),
+  }) => update(
+    (row) => [
+      ...row.projectId.change(projectId),
+      ...row.employeeId.change(employeeId),
+      ...row.role.change(role),
+      ...row.joinedAt.change(joinedAt),
+    ],
+  ).execute();
+}
+
 final _projectId = Column<int>(
   "id",
   Codecs.integer,
@@ -319,29 +439,36 @@ final class ProjectFields extends Fields {
   late final status = column(_projectStatus);
   late final createdAt = column(_projectCreatedAt);
   late final ownerId = column(_projectOwnerId);
-  Relation<Employee, EmployeeFields> get owner =>
+  Relation<models.Employee, EmployeeFields> get owner =>
       Relation(employeeTable, parent: [ownerId], child: (row) => [row.id]);
-  Relation<ProjectMember, ProjectMemberFields> get members => Relation(
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.ProjectMember, ProjectMemberFields> get members => Relation(
     projectMemberTable,
     parent: [id],
     child: (row) => [row.projectId],
   );
 }
 
-final projectTable = Table<Project, ProjectFields>(
+final projectTable = Table<models.Project, ProjectFields>(
   projectSchema,
   ProjectFields.new,
   (row) => (row.id, row.name, row.status, row.createdAt, row.ownerId).map(
-    (v0, v1, v2, v3, v4) =>
-        Project(id: v0, name: v1, status: v2, createdAt: v3, ownerId: v4),
+    (v0, v1, v2, v3, v4) => models.Project(
+      id: v0,
+      name: v1,
+      status: v2,
+      createdAt: v3,
+      ownerId: v4,
+    ),
   ),
 );
 
-final class ProjectTableSet extends TableSet<Project, ProjectFields> {
+final class ProjectTableSet extends TableSet<models.Project, ProjectFields> {
   ProjectTableSet(QueryContext db) : super(db, projectTable) {
     db.registerSchema(appSchema);
   }
-  Future<Project> create({
+  Future<models.Project> create({
     Change<int> id = const Change.keep(),
     required String name,
     Change<models.ProjectStatus> status = const Change.keep(),
@@ -356,11 +483,11 @@ final class ProjectTableSet extends TableSet<Project, ProjectFields> {
       row.ownerId.set(ownerId),
     ],
   );
-  Query<Project, ProjectFields> byId(int id) =>
+  Query<models.Project, ProjectFields> byId(int id) =>
       where((row) => row.id.eq(.value(id)));
 }
 
-extension ProjectUpdates on Query<Project, ProjectFields> {
+extension ProjectUpdates on Query<models.Project, ProjectFields> {
   Future<int> patch({
     Change<String> name = const Change.keep(),
     Change<models.ProjectStatus> status = const Change.keep(),
@@ -376,140 +503,16 @@ extension ProjectUpdates on Query<Project, ProjectFields> {
   ).execute();
 }
 
-/// A complete immutable row from "project_members".
-final class ProjectMember({
-  required final int projectId,
-  required final int employeeId,
-  required final models.MemberRole role,
-  required final DateTime joinedAt,
-});
-final _projectMemberProjectId = Column<int>(
-  "project_id",
-  Codecs.integer,
-  nullable: false,
-  generated: false,
-);
-final _projectMemberEmployeeId = Column<int>(
-  "employee_id",
-  Codecs.integer,
-  nullable: false,
-  generated: false,
-);
-final _projectMemberRole = Column<models.MemberRole>(
-  "role",
-  Codecs.enumeration<models.MemberRole>({
-    models.MemberRole.maintainer: "maintainer",
-    models.MemberRole.member: "member",
-  }),
-  nullable: false,
-  generated: false,
-  defaultSql: "'member'",
-);
-final _projectMemberJoinedAt = Column<DateTime>(
-  "joined_at",
-  Codecs.dateTime,
-  nullable: false,
-  generated: false,
-  clientDefault: DateTime.now,
-);
-final projectMemberSchema = TableSchema(
-  "project_members",
-  columns: [
-    _projectMemberProjectId,
-    _projectMemberEmployeeId,
-    _projectMemberRole,
-    _projectMemberJoinedAt,
-  ],
-  primaryKey: ["project_id", "employee_id"],
-  uniqueKeys: [],
-  indexes: [
-    IndexSchema("project_members_employee_project", [
-      "employee_id",
-      "project_id",
-    ], unique: false),
-  ],
-  foreignKeys: [
-    ForeignKey(["project_id"], "projects", ["id"], onDelete: "CASCADE"),
-    ForeignKey(["employee_id"], "employees", ["id"], onDelete: "CASCADE"),
-  ],
-);
-
-final class ProjectMemberFields extends Fields {
-  ProjectMemberFields(super.table);
-  late final projectId = column(_projectMemberProjectId);
-  late final employeeId = column(_projectMemberEmployeeId);
-  late final role = column(_projectMemberRole);
-  late final joinedAt = column(_projectMemberJoinedAt);
-  Relation<Project, ProjectFields> get project =>
-      Relation(projectTable, parent: [projectId], child: (row) => [row.id]);
-  Relation<Employee, EmployeeFields> get employee =>
-      Relation(employeeTable, parent: [employeeId], child: (row) => [row.id]);
-}
-
-final projectMemberTable = Table<ProjectMember, ProjectMemberFields>(
-  projectMemberSchema,
-  ProjectMemberFields.new,
-  (row) => (row.projectId, row.employeeId, row.role, row.joinedAt).map(
-    (v0, v1, v2, v3) =>
-        ProjectMember(projectId: v0, employeeId: v1, role: v2, joinedAt: v3),
-  ),
-);
-
-final class ProjectMemberTableSet
-    extends TableSet<ProjectMember, ProjectMemberFields> {
-  ProjectMemberTableSet(QueryContext db) : super(db, projectMemberTable) {
-    db.registerSchema(appSchema);
-  }
-  Future<ProjectMember> create({
-    required int projectId,
-    required int employeeId,
-    Change<models.MemberRole> role = const Change.keep(),
-    Change<DateTime> joinedAt = const Change.keep(),
-  }) => createRow(
-    (row) => [
-      row.projectId.set(projectId),
-      row.employeeId.set(employeeId),
-      ...row.role.change(role),
-      ...row.joinedAt.change(joinedAt),
-    ],
-  );
-  Query<ProjectMember, ProjectMemberFields> byId({
-    required int projectId,
-    required int employeeId,
-  }) => where(
-    (row) => orm.allOf([
-      row.projectId.eq(.value(projectId)),
-      row.employeeId.eq(.value(employeeId)),
-    ]),
-  );
-}
-
-extension ProjectMemberUpdates on Query<ProjectMember, ProjectMemberFields> {
-  Future<int> patch({
-    Change<int> projectId = const Change.keep(),
-    Change<int> employeeId = const Change.keep(),
-    Change<models.MemberRole> role = const Change.keep(),
-    Change<DateTime> joinedAt = const Change.keep(),
-  }) => update(
-    (row) => [
-      ...row.projectId.change(projectId),
-      ...row.employeeId.change(employeeId),
-      ...row.role.change(role),
-      ...row.joinedAt.change(joinedAt),
-    ],
-  ).execute();
-}
-
 final appSchema = List<TableSchema>.unmodifiable([
   departmentSchema,
   employeeSchema,
-  projectSchema,
   projectMemberSchema,
+  projectSchema,
 ]);
 
 extension AppTables on QueryContext {
   DepartmentTableSet get department => DepartmentTableSet(this);
   EmployeeTableSet get employee => EmployeeTableSet(this);
-  ProjectTableSet get project => ProjectTableSet(this);
   ProjectMemberTableSet get projectMember => ProjectMemberTableSet(this);
+  ProjectTableSet get project => ProjectTableSet(this);
 }

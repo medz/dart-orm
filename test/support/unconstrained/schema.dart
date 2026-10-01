@@ -1,56 +1,72 @@
 import 'package:orm/schema.dart';
 
-final Model account = model(
-  "accounts",
-  (
-    tenant: integer(),
-    id: integer(),
-    label: text(name: "display_label").nullable(),
-    managerId: integer().nullable(),
-  ),
-  primaryKey: (r) => (r.tenant, r.id),
-  relations: (r) => (
-    entries: referencedBy(() => entry, on: (tenant: r.tenant, owner: r.id)),
-    matches: referencedBy(() => entry, on: (tenant: r.tenant, label: r.label)),
-    manager: references(
-      (tenant: r.tenant, id: r.managerId),
-      () => account,
-      constraint: false,
-    ),
-    reports: referencedBy(
-      () => account,
-      on: (tenant: r.tenant, managerId: r.id),
-    ),
-  ),
-);
+@Model(table: "accounts")
+@Relation(
+  target: Entry,
+  name: "entries",
+  fields: ["tenant", "id"],
+  keys: ["tenant", "owner"],
+  constraint: false,
+)
+@Relation(
+  target: Entry,
+  name: "matches",
+  fields: ["tenant", "label"],
+  keys: ["tenant", "label"],
+  constraint: false,
+)
+@Relation(
+  target: Account,
+  name: "manager",
+  fields: ["tenant", "managerId"],
+  keys: ["tenant", "id"],
+  constraint: false,
+)
+@Relation(
+  target: Account,
+  name: "reports",
+  fields: ["tenant", "id"],
+  keys: ["tenant", "managerId"],
+  constraint: false,
+)
+final class Account({
+  @Id(generated: false) @Column(name: "tenant") required final int tenant,
+  @Id(generated: false) @Column(name: "id") required final int id,
+  @Column(name: "display_label") required final String? label,
+  @Column(name: "manager_id") required final int? managerId,
+});
 
-final Model entry = model(
-  "entries",
-  (
-    id: integer(),
-    tenant: integer().nullable(),
-    owner: integer().nullable(),
-    label: text(name: "lookup_label").nullable(),
-  ),
-  primaryKey: (r) => r.id,
-  relations: (r) => (
-    ownerAccount: references(
-      (tenant: r.tenant, id: r.owner),
-      () => account,
-      constraint: false,
-    ),
-    matchingAccounts: references(
-      (tenant: r.tenant, label: r.label),
-      () => account,
-      constraint: false,
-    ),
-  ),
-);
+@Model(table: "entries")
+@Relation(
+  target: Account,
+  name: "ownerAccount",
+  fields: ["tenant", "owner"],
+  keys: ["tenant", "id"],
+  constraint: false,
+)
+@Relation(
+  target: Account,
+  name: "matchingAccounts",
+  fields: ["tenant", "label"],
+  keys: ["tenant", "label"],
+  constraint: false,
+)
+final class Entry({
+  @Id(generated: false) @Column(name: "id") required final int id,
+  @Column(name: "tenant") required final int? tenant,
+  @Column(name: "owner") required final int? owner,
+  @Column(name: "lookup_label") required final String? label,
+});
 
-final Model reading = model(
-  "readings",
-  (id: integer(), value: real()),
-  primaryKey: (r) => r.id,
-  relations: (r) =>
-      (peers: references((value: r.value), () => reading, constraint: false)),
-);
+@Model(table: "readings")
+@Relation(
+  target: Reading,
+  name: "peers",
+  fields: ["value"],
+  keys: ["value"],
+  constraint: false,
+)
+final class Reading({
+  @Id(generated: false) @Column(name: "id") required final int id,
+  @Column(name: "value") required final double value,
+});

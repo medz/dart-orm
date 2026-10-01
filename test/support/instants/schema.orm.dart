@@ -2,13 +2,9 @@
 
 import 'package:orm/sql.dart';
 
-/// A complete immutable row from "events".
-final class Event({
-  required final int id,
-  required final DateTime at,
-  required final DateTime created,
-  required final DateTime? optional,
-});
+import "schema.dart" as models;
+export "schema.dart" show Event, Moment, Link;
+
 final _eventId = Column<int>(
   "id",
   Codecs.integer,
@@ -51,22 +47,19 @@ final class EventFields extends Fields {
   late final optional = column(_eventOptional);
 }
 
-final eventTable = Table<Event, EventFields>(
+final eventTable = Table<models.Event, EventFields>(
   eventSchema,
   EventFields.new,
-  (row) => (
-    row.id,
-    row.at,
-    row.created,
-    row.optional,
-  ).map((v0, v1, v2, v3) => Event(id: v0, at: v1, created: v2, optional: v3)),
+  (row) => (row.id, row.at, row.created, row.optional).map(
+    (v0, v1, v2, v3) => models.Event(id: v0, at: v1, created: v2, optional: v3),
+  ),
 );
 
-final class EventTableSet extends TableSet<Event, EventFields> {
+final class EventTableSet extends TableSet<models.Event, EventFields> {
   EventTableSet(QueryContext db) : super(db, eventTable) {
     db.registerSchema(appSchema);
   }
-  Future<Event> create({
+  Future<models.Event> create({
     Change<int> id = const Change.keep(),
     required DateTime at,
     Change<DateTime> created = const Change.keep(),
@@ -79,11 +72,11 @@ final class EventTableSet extends TableSet<Event, EventFields> {
       row.optional.set(optional),
     ],
   );
-  Query<Event, EventFields> byId(int id) =>
+  Query<models.Event, EventFields> byId(int id) =>
       where((row) => row.id.eq(.value(id)));
 }
 
-extension EventUpdates on Query<Event, EventFields> {
+extension EventUpdates on Query<models.Event, EventFields> {
   Future<int> patch({
     Change<DateTime> at = const Change.keep(),
     Change<DateTime> created = const Change.keep(),
@@ -97,67 +90,6 @@ extension EventUpdates on Query<Event, EventFields> {
   ).execute();
 }
 
-/// A complete immutable row from "moments".
-final class Moment({required final DateTime at, required final String label});
-final _momentAt = Column<DateTime>(
-  "at",
-  Codecs.dateTime,
-  nullable: false,
-  generated: false,
-);
-final _momentLabel = Column<String>(
-  "label",
-  Codecs.text,
-  nullable: false,
-  generated: false,
-  defaultSql: "'pending'",
-);
-final momentSchema = TableSchema(
-  "moments",
-  columns: [_momentAt, _momentLabel],
-  primaryKey: ["at"],
-  uniqueKeys: [],
-  indexes: [],
-  foreignKeys: [],
-);
-
-final class MomentFields extends Fields {
-  MomentFields(super.table);
-  late final at = column(_momentAt);
-  late final label = column(_momentLabel);
-  Relation<Link, LinkFields> get links =>
-      Relation(linkTable, parent: [at], child: (row) => [row.at]);
-}
-
-final momentTable = Table<Moment, MomentFields>(
-  momentSchema,
-  MomentFields.new,
-  (row) => (row.at, row.label).map((v0, v1) => Moment(at: v0, label: v1)),
-);
-
-final class MomentTableSet extends TableSet<Moment, MomentFields> {
-  MomentTableSet(QueryContext db) : super(db, momentTable) {
-    db.registerSchema(appSchema);
-  }
-  Future<Moment> create({
-    required DateTime at,
-    Change<String> label = const Change.keep(),
-  }) => createRow((row) => [row.at.set(at), ...row.label.change(label)]);
-  Query<Moment, MomentFields> byId(DateTime at) =>
-      where((row) => row.at.eq(.value(at)));
-}
-
-extension MomentUpdates on Query<Moment, MomentFields> {
-  Future<int> patch({
-    Change<DateTime> at = const Change.keep(),
-    Change<String> label = const Change.keep(),
-  }) =>
-      update((row) => [...row.at.change(at), ...row.label.change(label)])
-          .execute();
-}
-
-/// A complete immutable row from "links".
-final class Link({required final int id, required final DateTime at});
 final _linkId = Column<int>(
   "id",
   Codecs.integer,
@@ -185,40 +117,101 @@ final class LinkFields extends Fields {
   LinkFields(super.table);
   late final id = column(_linkId);
   late final at = column(_linkAt);
-  Relation<Moment, MomentFields> get moment =>
+  Relation<models.Moment, MomentFields> get moment =>
       Relation(momentTable, parent: [at], child: (row) => [row.at]);
 }
 
-final linkTable = Table<Link, LinkFields>(
+final linkTable = Table<models.Link, LinkFields>(
   linkSchema,
   LinkFields.new,
-  (row) => (row.id, row.at).map((v0, v1) => Link(id: v0, at: v1)),
+  (row) => (row.id, row.at).map((v0, v1) => models.Link(id: v0, at: v1)),
 );
 
-final class LinkTableSet extends TableSet<Link, LinkFields> {
+final class LinkTableSet extends TableSet<models.Link, LinkFields> {
   LinkTableSet(QueryContext db) : super(db, linkTable) {
     db.registerSchema(appSchema);
   }
-  Future<Link> create({
+  Future<models.Link> create({
     Change<int> id = const Change.keep(),
     required DateTime at,
   }) => createRow((row) => [...row.id.change(id), row.at.set(at)]);
-  Query<Link, LinkFields> byId(int id) => where((row) => row.id.eq(.value(id)));
+  Query<models.Link, LinkFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
-extension LinkUpdates on Query<Link, LinkFields> {
+extension LinkUpdates on Query<models.Link, LinkFields> {
   Future<int> patch({Change<DateTime> at = const Change.keep()}) =>
       update((row) => [...row.at.change(at)]).execute();
 }
 
+final _momentAt = Column<DateTime>(
+  "at",
+  Codecs.dateTime,
+  nullable: false,
+  generated: false,
+);
+final _momentLabel = Column<String>(
+  "label",
+  Codecs.text,
+  nullable: false,
+  generated: false,
+  defaultSql: "'pending'",
+);
+final momentSchema = TableSchema(
+  "moments",
+  columns: [_momentAt, _momentLabel],
+  primaryKey: ["at"],
+  uniqueKeys: [],
+  indexes: [],
+  foreignKeys: [],
+);
+
+final class MomentFields extends Fields {
+  MomentFields(super.table);
+  late final at = column(_momentAt);
+  late final label = column(_momentLabel);
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Link, LinkFields> get links =>
+      Relation(linkTable, parent: [at], child: (row) => [row.at]);
+}
+
+final momentTable = Table<models.Moment, MomentFields>(
+  momentSchema,
+  MomentFields.new,
+  (row) =>
+      (row.at, row.label).map((v0, v1) => models.Moment(at: v0, label: v1)),
+);
+
+final class MomentTableSet extends TableSet<models.Moment, MomentFields> {
+  MomentTableSet(QueryContext db) : super(db, momentTable) {
+    db.registerSchema(appSchema);
+  }
+  Future<models.Moment> create({
+    required DateTime at,
+    Change<String> label = const Change.keep(),
+  }) => createRow((row) => [row.at.set(at), ...row.label.change(label)]);
+  Query<models.Moment, MomentFields> byId(DateTime at) =>
+      where((row) => row.at.eq(.value(at)));
+}
+
+extension MomentUpdates on Query<models.Moment, MomentFields> {
+  Future<int> patch({
+    Change<DateTime> at = const Change.keep(),
+    Change<String> label = const Change.keep(),
+  }) =>
+      update((row) => [...row.at.change(at), ...row.label.change(label)])
+          .execute();
+}
+
 final appSchema = List<TableSchema>.unmodifiable([
   eventSchema,
-  momentSchema,
   linkSchema,
+  momentSchema,
 ]);
 
 extension AppTables on QueryContext {
   EventTableSet get event => EventTableSet(this);
-  MomentTableSet get moment => MomentTableSet(this);
   LinkTableSet get link => LinkTableSet(this);
+  MomentTableSet get moment => MomentTableSet(this);
 }

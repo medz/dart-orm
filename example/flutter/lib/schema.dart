@@ -1,15 +1,30 @@
 import 'package:orm/schema.dart';
 
-final Model note = model('notes', (
-  id: identity(),
-  text: text(name: 'body'),
-  done: boolean(defaultValue: false),
-  createdAt: dateTime(),
-), relations: (n) => (comments: referencedBy(() => comment)));
+@Model(table: "notes")
+@Relation(
+  target: Comment,
+  name: "comments",
+  fields: ["id"],
+  keys: ["noteId"],
+  constraint: false,
+)
+final class Note({
+  @Id(generated: true) @Column(name: "id") required final int id,
+  @Column(name: "body") required final String text,
+  @Column(name: "done") @DatabaseDefault.sql("false") required final bool done,
+  @Column(name: "created_at") required final DateTime createdAt,
+});
 
-final comment = model(
-  'comments',
-  (id: identity(), noteId: integer(), text: text()),
-  relations: (c) =>
-      (note: references(c.noteId, () => note, onDelete: .cascade)),
-);
+@Model(table: "comments")
+@Relation(
+  target: Note,
+  name: "note",
+  fields: ["noteId"],
+  keys: ["id"],
+  onDelete: .cascade,
+)
+final class Comment({
+  @Id(generated: true) @Column(name: "id") required final int id,
+  @Column(name: "note_id") required final int noteId,
+  @Column(name: "text") required final String text,
+});

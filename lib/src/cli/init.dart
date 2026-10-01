@@ -29,9 +29,9 @@ Future<void> initializeProject(
       'Run init in a Dart project containing pubspec.yaml and the orm dependency.',
     );
   }
-  const source = 'lib/schema.dart';
-  const client = 'lib/schema.orm.dart';
-  const snapshot = 'lib/schema.snapshot.dart';
+  const source = 'lib/models.dart';
+  const client = 'lib/models.orm.dart';
+  const snapshot = 'lib/models.snapshot.dart';
   const registry = 'migrations/migrations.g.dart';
   const config = 'orm.config.dart';
   const paths = [source, client, snapshot, registry, config];
@@ -93,11 +93,12 @@ Future<void> initializeProject(
 
 const _initialSchema = '''import 'package:orm/schema.dart';
 
-final task = model('tasks', (
-  id: identity(),
-  title: text(),
-  done: boolean(defaultValue: false),
-));
+@Model(table: 'tasks')
+final class Task({
+  @Id(generated: true) required final int id,
+  required final String title,
+  @DatabaseDefault(false) final bool done = false,
+});
 ''';
 
 String _initialConfig(String engine) {
@@ -124,20 +125,19 @@ String _initialConfig(String engine) {
     _ => throw ArgumentError.value(engine),
   };
   return '''${engine == 'sqlite' ? '' : "import 'dart:io';"}
-import 'package:orm/cli.dart';
+import 'package:orm/config.dart';
 import 'package:orm/drivers/$engine.dart';
-import 'lib/schema.snapshot.dart' as target;
-import 'migrations/migrations.g.dart';
 
-Future<void> main(List<String> args) => runOrmCli(args, config: OrmConfig(
-  schema: 'lib/schema.dart',
+void main() {
+  defineConfig(
+  database: .$engine,
+  models: 'lib/models.dart',
   migrations: 'migrations',
-  history: migrationHistory,
-  snapshot: target.schema,
   connect: ({required bool readOnly}) async {
     $connection
   },
-));
+  );
+}
 ${engine == 'sqlite' ? '' : '''
 Uri databaseUrl() {
   final value = Platform.environment['DATABASE_URL'];

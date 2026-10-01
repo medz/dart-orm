@@ -50,17 +50,18 @@ missing targets and temporary objects shadowing selected tables produce issues.
 
 ## Declarations and reports
 
-Catalog import emits `model(...)` declarations using the same column helpers,
-keys and relationships as a handwritten schema:
+Catalog import emits annotated DTO classes using the same metadata as
+a handwritten model:
 
 ```dart
 import 'package:orm/schema.dart';
 
-final accounts = model('accounts', (
-  id: integer(name: 'id').identity(),
-  email: text(name: 'email'),
-  displayName: text(name: 'display_name').nullable(),
-), uniqueKeys: (a) => [a.email]);
+@Model(table: 'accounts')
+final class Accounts({
+  @Id(generated: true) @Column(name: 'id') required final int id,
+  @Unique() @Column(name: 'email') required final String email,
+  @Column(name: 'display_name') required final String? displayName,
+});
 ```
 
 Every table and field retains an explicit physical name. Dart keywords, punctuation,
@@ -73,7 +74,7 @@ Foreign-key actions include SET DEFAULT on supporting engines; MySQL/MariaDB
 reject it. Unsupported unsigned and binary storage must be reviewed explicitly;
 see [MySQL/MariaDB limits](https://github.com/medz/dart-orm/blob/main/doc/mysql.md).
 
-Ordinary enforced [CHECK constraints](https://github.com/medz/dart-orm/blob/main/doc/checks.md) become `check(...)` declarations
+Ordinary enforced [CHECK constraints](https://github.com/medz/dart-orm/blob/main/doc/checks.md) become `@Check(...)` declarations
 with their native names and SQL. A nonblocking `IMPORT.CHECK_SQL` note requests
 review of backend-specific expressions before deployment on another dialect.
 PostgreSQL unvalidated, unenforced and inheritance-specific checks remain unmanaged.
@@ -89,7 +90,7 @@ The JSON report records the dialect, schema, name maps, and issues:
 
 An empty issue list is not proof of complete database equivalence. Catalog support
 and `verifySchema` cover declared facts; they do not prove that grants, extensions,
-database settings or every native object can be recreated from a Record schema.
+database settings or every native object can be recreated from annotated model metadata.
 
 ## Types and boundaries
 
@@ -122,8 +123,8 @@ need explicit support. See
 [decimal boundaries](https://github.com/medz/dart-orm/blob/main/doc/decimals.md) before reviewing a draft.
 
 SQLite rowid integer primary keys and PostgreSQL BY DEFAULT integer primary-key
-identities get `.identity()`. [Computed expressions](https://github.com/medz/dart-orm/blob/main/doc/computed.md) become
-`.computed(...)` with their stored/virtual mode and an `IMPORT.COMPUTED_SQL`
+identities get `@Id(generated: true)`. [Computed expressions](https://github.com/medz/dart-orm/blob/main/doc/computed.md) become
+`@Computed(...)` with their stored/virtual mode and an `IMPORT.COMPUTED_SQL`
 portability review note. ALWAYS identities,
 non-primary identities and nullable primary keys require explicit write semantics
 and are currently blocking. Sequence defaults such as a BIGSERIAL default retain

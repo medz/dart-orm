@@ -1,14 +1,19 @@
 # Relationship queries
 
-Declare relation members in your model's `relations` Record. Forward references
-own the foreign key; reverse references belong to the model exposing them:
+Declare explicit query navigation with `@Relation`. The source owns one foreign
+key; an optional inverse adds reverse navigation without another constraint:
 
 ```dart
-final Model user = model('users', (id: identity(), email: text()),
-  relations: (u) => (posts: referencedBy(() => post),));
+@Model(table: 'users')
+final class User({@Id(generated: true) required final int id, required final String email});
 
-final post = model('posts', (id: identity(), title: text(), authorId: integer()),
-  relations: (p) => (author: references(p.authorId, () => user),));
+@Model(table: 'posts')
+final class Post({
+  @Id(generated: true) required final int id,
+  required final String title,
+  @Relation(target: User, name: 'author', inverse: 'posts')
+  required final int authorId,
+});
 ```
 
 See [schema declarations](https://github.com/medz/dart-orm/blob/main/doc/authoring.md#keys-and-relationships)
@@ -179,20 +184,25 @@ The ORM does not automatically split the operation or force subquery materializa
 
 ## Navigation without foreign keys
 
-Use `references(..., constraint: false)` for read-only navigation when the
+Use `@Relation(..., constraint: false)` for read-only navigation when the
 database does not enforce a foreign key:
 
 ```dart
-final Model account = model('accounts', (
-  tenant: integer(), id: integer(), label: text().nullable(),
-), primaryKey: (a) => (a.tenant, a.id),
-   relations: (a) => (entries: referencedBy(() => entry),));
+@Model(table: 'accounts')
+final class Account({
+  @Id() required final int tenant,
+  @Id() required final int id,
+  required final String? label,
+});
 
-final entry = model('entries', (
-  id: identity(), tenant: integer().nullable(), owner: integer().nullable(),
-), relations: (e) => (
-  ownerAccount: references((e.tenant, e.owner), () => account, constraint: false),
-));
+@Model(table: 'entries')
+@Relation(target: Account, name: 'ownerAccount', inverse: 'entries',
+    fields: ['tenant', 'owner'], keys: ['tenant', 'id'], constraint: false)
+final class Entry({
+  @Id(generated: true) required final int id,
+  required final int? tenant,
+  required final int? owner,
+});
 ```
 
 `e.ownerAccount.one()` returns an optional `Account`; `a.entries.many()` returns
@@ -224,24 +234,20 @@ the relationship:
 ```dart
 enum MembershipRole { owner, member }
 
-final team = model('teams', (id: identity(), name: text()),
-  relations: (t) => (memberships: referencedBy(() => membership),));
-final user = model('users', (id: identity(), name: text()),
-  relations: (u) => (memberships: referencedBy(() => membership),));
-final Model membership = model(
-  'memberships',
-  (
-    teamId: integer(), userId: integer(),
-    role: enumeration(MembershipRole.values, defaultValue: MembershipRole.member),
-    joinedAt: dateTime(),
-  ),
-  primaryKey: (m) => (m.teamId, m.userId),
-  relations: (m) => (
-    team: references(m.teamId, () => team, onDelete: .cascade),
-    user: references(m.userId, () => user, onDelete: .cascade),
-  ),
-  indexes: (m) => [index((m.userId, m.teamId), name: 'memberships_user_team')],
-);
+@Model(table: 'teams')
+final class Team({@Id(generated: true) required final int id, required final String name});
+@Model(table: 'users')
+final class User({@Id(generated: true) required final int id, required final String name});
+@Model(table: 'memberships')
+@Index(['userId', 'teamId'], name: 'memberships_user_team')
+final class Membership({
+  @Id() @Relation(target: Team, name: 'team', inverse: 'memberships', onDelete: .cascade)
+  required final int teamId,
+  @Id() @Relation(target: User, name: 'user', inverse: 'memberships', onDelete: .cascade)
+  required final int userId,
+  @DatabaseDefault(MembershipRole.member) required final MembershipRole role,
+  required final DateTime joinedAt,
+});
 ```
 
 The navigation is `user.memberships → membership.team` or

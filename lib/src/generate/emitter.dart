@@ -3,7 +3,7 @@ import 'model.dart';
 import 'source.dart';
 import 'types.dart';
 
-String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
+String emitSchema(List<ModelEntity> schema, DartNames names) {
   final b = StringBuffer('// GENERATED CODE - DO NOT MODIFY BY HAND.\n\n')
     ..writeln("import 'package:orm/sql.dart';");
   var groupsPrefix = 'orm';
@@ -18,7 +18,10 @@ String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
     b.writeln("import 'package:orm/sql.dart' as $groupsPrefix show allOf;");
   }
   if (names.usesSource) {
-    b.writeln("import ${dartLiteral(import)} as models;");
+    // Original DTOs must have one library identity across imports and exports.
+    // A file-relative source import cannot be mixed with a package export.
+    final source = names.importUri(names.source);
+    b.writeln("import ${dartLiteral(source)} as models;");
   }
   for (final (uri, symbols) in names.exports) {
     b.writeln('export ${dartLiteral(uri)} show ${symbols.join(', ')};');
@@ -31,10 +34,6 @@ String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
   }
   b.writeln('');
   for (final entity in schema) {
-    b.writeln(
-      '/// A complete immutable row from ${dartLiteral(entity.table)}.',
-    );
-    b.writeln(rowDeclaration(entity));
     for (final f in entity.fields) {
       b.writeln(
         'final ${columnSymbol(entity, f)} = Column<${f.type}>(${dartLiteral(f.column)}, ${f.codec}, '
@@ -144,33 +143,11 @@ String emitSchema(List<ModelEntity> schema, String import, DartNames names) {
   b.writeln(
     'final appSchema = List<TableSchema>.unmodifiable([${schema.map((e) => '${e.binding}Schema').join(', ')}]);',
   );
-  if (schema.first.grouped) {
-    final namespaces = schema.map((e) => e.namespace!).toSet().toList()..sort();
-    for (final namespace in namespaces) {
-      final type =
-          '${namespace[0].toUpperCase()}${namespace.substring(1)}Tables';
-      b.writeln(
-        'final class $type { final QueryContext _context; $type(this._context);',
-      );
-      for (final e in schema.where((e) => e.namespace == namespace)) {
-        b.writeln('${e.setType} get ${e.name} => ${e.setType}(_context);');
-      }
-      b.writeln('}');
-    }
-    b.writeln('extension AppTables on QueryContext {');
-    for (final namespace in namespaces) {
-      final type =
-          '${namespace[0].toUpperCase()}${namespace.substring(1)}Tables';
-      b.writeln('$type get $namespace => $type(this);');
-    }
-    b.writeln('}');
-  } else {
-    b.writeln('extension AppTables on QueryContext {');
-    for (final e in schema) {
-      b.writeln('${e.setType} get ${e.name} => ${e.setType}(this);');
-    }
-    b.writeln('}');
+  b.writeln('extension AppTables on QueryContext {');
+  for (final e in schema) {
+    b.writeln('${e.setType} get ${e.name} => ${e.setType}(this);');
   }
+  b.writeln('}');
   return b.toString();
 }
 
@@ -211,6 +188,3 @@ String recordSelection(List<ModelField> fields, String row) {
 
 String _computedLiteral(ComputedColumn value) =>
     'ComputedColumn.forDialects(sqlite: ${dartLiteral(value.sqlite)}, postgres: ${dartLiteral(value.postgres)}, mysql: ${value.mysql == null ? 'null' : dartLiteral(value.mysql!)}, mariadb: ${value.mariadb == null ? 'null' : dartLiteral(value.mariadb!)}, storage: ComputedStorage.${value.storage.name})';
-
-String rowDeclaration(ModelEntity entity) =>
-    'final class ${entity.row}({${entity.fields.map((f) => 'required final ${f.type} ${f.name}').join(', ')}});';
