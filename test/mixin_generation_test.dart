@@ -6,6 +6,8 @@ import 'dart:io';
 import 'package:orm/generate.dart';
 import 'package:test/test.dart';
 
+import '../tool/src/build_fixture.dart';
+
 void main() {
   late Directory fixtures;
   setUpAll(() async {
@@ -90,6 +92,114 @@ import 'relations.dart';
       expect(generated.dart, contains('get items =>'));
     },
   );
+
+  for (final (name, annotation) in [
+    ('id', '@Id()'),
+    ('column', "@Column(name: 'stored_id')"),
+    ('database_default', '@DatabaseDefault(7)'),
+  ]) {
+    test('rejects cross-file $name metadata at equal source offsets', () async {
+      const sharedPrefix = 'mixin Fields { ';
+      final modelPrefix =
+          "import 'equal_${name}_shared.dart';\n"
+          '@Model() class User with Fields { User({';
+      final sharedSource =
+          '$sharedPrefix${' '.padLeft(modelPrefix.length - sharedPrefix.length)}'
+          '$annotation int id = 0; }';
+      final modelSource =
+          '$modelPrefix$annotation required int id}) { this.id = id; } }';
+      expect(sharedSource.indexOf(annotation), modelSource.indexOf(annotation));
+      await source('equal_${name}_shared', sharedSource);
+      final file = await source('equal_${name}_model', modelSource);
+
+      await expectLater(
+        writeGeneratedSchema(file.path),
+        throwsA(
+          isA<GenerationException>()
+              .having((e) => e.code, 'code', 'SCHEMA.DUPLICATE')
+              .having((e) => e.message, 'message', contains('more than once')),
+        ),
+      );
+      expect(
+        File('${fixtures.path}/equal_${name}_model.orm.dart').existsSync(),
+        false,
+      );
+      expect(
+        File('${fixtures.path}/equal_${name}_model.snapshot.dart').existsSync(),
+        false,
+      );
+    });
+  }
+
+  for (final directory in ['lib', 'example']) {
+    test(
+      'resolves $directory mixin dependencies outside the source folder',
+      () async {
+        final fixture = await BuildFixture.create(
+          ormPath: Directory.current.path,
+        );
+        try {
+          await fixture.write('$directory/domain/code.dart', '''
+final class Code { final String value; const Code(this.value); }
+''');
+          await fixture.write('$directory/codecs/code.dart', '''
+import 'package:orm/schema.dart';
+import '../domain/code.dart';
+Code decodeCode(Object? value) => Code(value as String);
+String encodeCode(Code value) => value.value;
+const codeCodec = Codec<Code>.text(decodeCode, encodeCode);
+''');
+          await fixture.write('$directory/factories/code.dart', '''
+import '../domain/code.dart';
+Code nextCode() => throw StateError('Generation must not execute factories.');
+''');
+          await fixture.write('$directory/shared/fields.dart', '''
+import 'package:orm/schema.dart';
+import '../domain/code.dart';
+import '../codecs/code.dart' as codecs;
+import '../factories/code.dart' as defaults;
+mixin Fields {
+  @Id() int id = 0;
+  @Column(codec: codecs.codeCodec) @ClientDefault(defaults.nextCode)
+  Code code = const Code('');
+}
+''');
+          final model = '$directory/models/nested/item.dart';
+          await fixture.write(model, '''
+import 'package:orm/schema.dart';
+import '../../domain/code.dart';
+import '../../shared/fields.dart' as shared;
+@Model() class Item with shared.Fields {
+  Item({required int id, required Code code}) {
+    this.id = id;
+    this.code = code;
+  }
+}
+''');
+          final output = '$directory/generated/deeper/client.orm.dart';
+          await writeGeneratedSchema(
+            fixture.file(model).path,
+            output: fixture.file(output).path,
+          );
+          final generated = await fixture.file(output).readAsString();
+          final prefix = directory == 'lib'
+              ? 'package:orm_build_fixture/'
+              : '../../';
+          for (final dependency in [
+            'models/nested/item',
+            'domain/code',
+            'codecs/code',
+            'factories/code',
+          ]) {
+            expect(generated, contains('$prefix$dependency.dart'));
+          }
+          await fixture.run(['analyze', output]);
+        } finally {
+          await fixture.dispose();
+        }
+      },
+    );
+  }
 
   test(
     'business-only mixins leave ordinary field construction unchanged',

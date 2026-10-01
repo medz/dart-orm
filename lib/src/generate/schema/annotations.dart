@@ -969,10 +969,15 @@ final class AnnotationReader(
     String name,
     AstNode node,
   ) {
-    final annotations = <int, ElementAnnotation>{};
+    final annotations = <(Uri, int), ElementAnnotation>{};
     for (final owner in owners) {
       for (final annotation in _annotations(owner, name)) {
-        annotations[_node(annotation).offset] = annotation;
+        final syntax = _node(annotation);
+        final unit = syntax.root as CompilationUnit;
+        // A primary parameter and its induced field share one annotation, but
+        // equal offsets in separate model/mixin libraries are distinct metadata.
+        annotations[(unit.declaredFragment!.source.uri, syntax.offset)] =
+            annotation;
       }
     }
     if (annotations.length > 1) {

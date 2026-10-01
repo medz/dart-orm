@@ -92,6 +92,14 @@ Future<GeneratedSchema> generateSchema(
   }
   final contexts = AnalysisContextCollection(includedPaths: [p.dirname(root)]);
   try {
+    void validateResolvedUnit(ResolvedUnitResult result) {
+      validateModelLibrary(result.unit, source: Uri.file(result.path));
+      final errors = result.diagnostics.where(
+        (e) => e.severity.name.toLowerCase() == 'error',
+      );
+      if (errors.isNotEmpty) throw GenerationException(errors.join('\n'));
+    }
+
     Future<ResolvedUnitResult> resolvePath(String path) async {
       final result = await contexts
           .contextFor(path)
@@ -100,11 +108,7 @@ Future<GeneratedSchema> generateSchema(
       if (result is! ResolvedUnitResult) {
         throw GenerationException('Cannot analyze $path.');
       }
-      validateModelLibrary(result.unit, source: Uri.file(path));
-      final errors = result.diagnostics.where(
-        (e) => e.severity.name.toLowerCase() == 'error',
-      );
-      if (errors.isNotEmpty) throw GenerationException(errors.join('\n'));
+      validateResolvedUnit(result);
       return result;
     }
 
@@ -122,8 +126,21 @@ Future<GeneratedSchema> generateSchema(
       resolved.unit,
       resolved.libraryElement,
       importPath,
-      resolve: (library) async =>
-          (await resolvePath(library.firstFragment.source.fullName)).unit,
+      resolve: (library) async {
+        // Imported model/mixin libraries can live outside the selected roots.
+        // Keep their original session and identity rather than rediscovering
+        // them through the root-only analysis context collection.
+        final result = await library.session.getResolvedLibraryByElement(
+          library,
+        );
+        final path = library.firstFragment.source.fullName;
+        final unit = result is ResolvedLibraryResult
+            ? result.unitWithPath(path)
+            : null;
+        if (unit == null) throw GenerationException('Cannot analyze $path.');
+        validateResolvedUnit(unit);
+        return unit.unit;
+      },
       additionalRoots: [for (final result in roots.skip(1)) result.unit],
       dialect: dialect,
       defaultNamespace: defaultNamespace,
