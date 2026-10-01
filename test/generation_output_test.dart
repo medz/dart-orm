@@ -186,6 +186,87 @@ mixin Behavior {
     skip: Platform.isWindows ? 'Fixture needs Unix directory links.' : false,
   );
 
+  for (final directive in ['import', 'export']) {
+    for (final dependency in [
+      'platform_stub.dart',
+      'fallback/details.dart',
+      'platform_web.dart',
+      'web/details.dart',
+    ]) {
+      test('conditional $directive protects unselected $dependency', () async {
+        await write('models.dart', '''
+export 'domain/barrel.dart';
+$directive 'platform_stub.dart'
+    if (dart.library.io) 'platform_native.dart'
+    if (dart.library.js_interop) 'platform_web.dart';
+''');
+        await write('platform_stub.dart', "export 'fallback/details.dart';\n");
+        await write('fallback/details.dart', '''
+export '../platform_stub.dart';
+const platformLabel = 'fallback';
+''');
+        await write(
+          'platform_native.dart',
+          "const platformLabel = 'native';\n",
+        );
+        await write('platform_web.dart', "export 'web/details.dart';\n");
+        await write('web/details.dart', '''
+export '../platform_web.dart';
+const platformLabel = 'web';
+''');
+        final output = File(p.join(project.path, dependency));
+        final original = await output.readAsString();
+        final snapshot = File(p.setExtension(output.path, '.snapshot.dart'));
+        await snapshot.writeAsString('previous snapshot');
+        await expectLater(
+          writeGeneratedSchema(
+            p.join(project.path, 'models.dart'),
+            output: output.path,
+            dialect: .sqlite,
+          ),
+          throwsA(
+            isA<GenerationException>().having(
+              (error) => error.code,
+              'code',
+              'SCHEMA.OUTPUT',
+            ),
+          ),
+        );
+        expect(await output.readAsString(), original);
+        expect(await snapshot.readAsString(), 'previous snapshot');
+      });
+    }
+  }
+
+  test('source-side symbolic link protects its target', () async {
+    final target = File(p.join(project.path, 'domain/labels.dart'));
+    final original = await target.readAsString();
+    await Link(p.join(project.path, 'domain/labels_alias.dart'))
+        .create(target.absolute.path);
+    final behavior = File(p.join(project.path, 'domain/behavior.dart'));
+    await behavior.writeAsString(
+      (await behavior.readAsString()).replaceFirst(
+        "'labels.dart'",
+        "'labels_alias.dart'",
+      ),
+    );
+    await expectLater(
+      writeGeneratedSchema(
+        p.join(project.path, 'models.dart'),
+        output: target.path,
+        dialect: .sqlite,
+      ),
+      throwsA(
+        isA<GenerationException>().having(
+          (error) => error.code,
+          'code',
+          'SCHEMA.OUTPUT',
+        ),
+      ),
+    );
+    expect(await target.readAsString(), original);
+  }, skip: Platform.isWindows ? 'Fixture needs Unix file links.' : false);
+
   test('nested config protects source dependencies before generation and migration creation', () async {
     final fixture = await BuildFixture.create(ormPath: Directory.current.path);
     addTearDown(fixture.dispose);

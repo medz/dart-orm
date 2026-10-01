@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
+import 'package:analyzer/dart/analysis/session.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:dart_style/dart_style.dart';
@@ -169,20 +170,46 @@ void _validateOutputSources(
       if (File(output).existsSync()) File(output).resolveSymbolicLinksSync(),
   ];
   final visited = <LibraryElement>{};
+  final visitedSources = <String>{};
+  void scan(AnalysisSession session, String source) {
+    source = p.normalize(p.absolute(source));
+    if (!visitedSources.add(source)) return;
+    final file = File(source);
+    final target = file.existsSync() ? file.resolveSymbolicLinksSync() : null;
+    if (outputs.contains(source) ||
+        target != null &&
+            existing.any(
+              (output) => FileSystemEntity.identicalSync(target, output),
+            )) {
+      throw GenerationException(
+        'Client and snapshot outputs must not overwrite source dependencies: '
+        '$source. Choose a separate output path.',
+        code: 'SCHEMA.OUTPUT',
+      );
+    }
+    final parsed = session.getParsedUnit(source);
+    if (parsed is! ParsedUnitResult) return;
+    // Parse every directive without resolving platform-specific declarations.
+    // Element imports/exports alone omit inactive conditional alternatives.
+    for (final directive
+        in parsed.unit.directives.whereType<UriBasedDirective>()) {
+      for (final literal in [
+        directive.uri,
+        if (directive is NamespaceDirective)
+          ...directive.configurations.map((configuration) => configuration.uri),
+      ]) {
+        final value = literal.stringValue;
+        if (value == null) continue;
+        final path = session.uriConverter.uriToPath(file.uri.resolve(value));
+        if (path != null) scan(session, path);
+      }
+    }
+  }
+
   void check(LibraryElement library) {
     if (!visited.add(library)) return;
     for (final fragment in library.fragments) {
-      final source = p.normalize(p.absolute(fragment.source.fullName));
-      if (outputs.contains(source) ||
-          existing.any(
-            (output) => FileSystemEntity.identicalSync(source, output),
-          )) {
-        throw GenerationException(
-          'Client and snapshot outputs must not overwrite source dependencies: '
-          '$source. Choose a separate output path.',
-          code: 'SCHEMA.OUTPUT',
-        );
-      }
+      scan(library.session, fragment.source.fullName);
       for (final dependency in fragment.importedLibraries) {
         check(dependency);
       }

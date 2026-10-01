@@ -55,7 +55,8 @@ are rejected before either output is written. The CLI checks source errors and
 resolves imports through the project's package configuration.
 
 Neither the client nor snapshot may overwrite a selected source or any of its
-transitive imports and exports. This includes barrel libraries, relationship
+transitive imports and exports, including every conditional branch and its
+dependencies. This includes barrel libraries, relationship
 targets, mixins and business helpers outside the selected directory. Filesystem
 aliases such as symbolic links and hard links do not bypass this check. Choose a
 separate generated destination; a rejected command preserves both existing files.
