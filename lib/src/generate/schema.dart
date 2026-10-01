@@ -40,6 +40,8 @@ final class GeneratedSchema {
 /// physical namespaces. An annotation's explicit namespace overrides
 /// [defaultNamespace], then PostgreSQL defaults to `public`. Other engines reject
 /// explicit namespaces. A model source must not import generated clients.
+/// Every discovered source must be an independent library, not a `part of`
+/// compilation unit, matching build_runner's root validation.
 /// A sibling `{root}.dart` can contribute models or exports. Single-file
 /// generation without a dialect retains engine-neutral metadata.
 ///
@@ -96,6 +98,19 @@ Future<GeneratedSchema> generateSchema(
           .getResolvedUnit(path);
       if (result is! ResolvedUnitResult) {
         throw GenerationException('Cannot analyze $path.');
+      }
+      final part = result.unit.directives
+          .whereType<PartOfDirective>()
+          .firstOrNull;
+      if (part != null) {
+        final location = result.unit.lineInfo.getLocation(part.offset);
+        throw GenerationException(
+          'Use independent Dart model libraries, not part files.',
+          code: 'SCHEMA.LIBRARY',
+          source: Uri.file(path),
+          line: location.lineNumber,
+          column: location.columnNumber,
+        );
       }
       final errors = result.diagnostics.where(
         (e) => e.severity.name.toLowerCase() == 'error',

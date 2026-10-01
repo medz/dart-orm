@@ -9,6 +9,8 @@ import 'package:orm/src/generate/schema/layout.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import 'support/cli.dart';
+
 String _model(String name, String table, {String? namespace}) =>
     '''
 @Model(table: '$table'${namespace == null ? '' : ", namespace: '$namespace'"})
@@ -57,6 +59,131 @@ void main() {
     await file.parent.create(recursive: true);
     await file.writeAsString("import 'package:orm/schema.dart';\n$body");
   }
+
+  test(
+    'standalone and CLI reject an explicit part before replacing outputs',
+    () async {
+      await source('owner.dart', "part 'user.dart';");
+      final part = File('${project.path}/user.dart');
+      await part.writeAsString(
+        "part of 'owner.dart';\n${_model('User', 'users')}",
+      );
+      final client = File('${project.path}/user.orm.dart');
+      final snapshot = File('${project.path}/user.snapshot.dart');
+      await client.writeAsString('previous client');
+      await snapshot.writeAsString('previous snapshot');
+      await expectLater(
+        writeGeneratedSchema(part.path, dialect: .sqlite),
+        throwsA(
+          isA<GenerationException>()
+              .having((e) => e.code, 'code', 'SCHEMA.LIBRARY')
+              .having((e) => e.source, 'source', part.absolute.uri)
+              .having((e) => e.line, 'line', 1),
+        ),
+      );
+      final cli = await runCli([
+        'generate',
+        part.absolute.path,
+        '--database',
+        'sqlite',
+        '--json',
+      ]);
+      expect(cli.exitCode, isNonZero);
+      expect('${cli.stdout}${cli.stderr}', contains('SCHEMA.LIBRARY'));
+      expect(await client.readAsString(), 'previous client');
+      expect(await snapshot.readAsString(), 'previous snapshot');
+    },
+  );
+
+  test(
+    'directory parts fail before compilation units can replace one another',
+    () async {
+      await source(
+        'schema/library.dart',
+        "part 'a.dart';\npart 'z.dart';\n${_model('User', 'users')}",
+      );
+      for (final (file, name) in [('a.dart', 'Post'), ('z.dart', 'Tag')]) {
+        await File('${project.path}/schema/$file').writeAsString(
+          "part of 'library.dart';\n${_model(name, name.toLowerCase())}",
+        );
+      }
+      await expectLater(
+        generateSchema('${project.path}/schema'),
+        throwsA(
+          isA<GenerationException>()
+              .having((e) => e.code, 'code', 'SCHEMA.LIBRARY')
+              .having(
+                (e) => e.source?.path,
+                'part path',
+                endsWith('/schema/a.dart'),
+              ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'directory discovery diagnoses unrelated generated part roots',
+    () async {
+      await source(
+        'schema/user.dart',
+        "part 'helper.g.dart';\n${_model('User', 'users')}",
+      );
+      await File('${project.path}/schema/helper.g.dart')
+          .writeAsString("part of 'user.dart';\nconst generatedHelper = 1;\n");
+      await expectLater(
+        generateSchema('${project.path}/schema'),
+        throwsA(
+          isA<GenerationException>()
+              .having((e) => e.code, 'code', 'SCHEMA.LIBRARY')
+              .having(
+                (e) => e.source?.path,
+                'part path',
+                endsWith('/schema/helper.g.dart'),
+              ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'unassociated part inputs get the same independent-library diagnostic',
+    () async {
+      final part = File('${project.path}/orphan.dart');
+      await part.writeAsString("part of 'missing.dart';\n");
+      await expectLater(
+        generateSchema(part.path),
+        throwsA(
+          isA<GenerationException>().having(
+            (e) => e.code,
+            'code',
+            'SCHEMA.LIBRARY',
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'independent model roots keep unrelated parts outside the layout',
+    () async {
+      await source(
+        'schema/user.dart',
+        "part '../support/helper.g.dart';\n${_model('User', 'users')}",
+      );
+      final helper = File('${project.path}/support/helper.g.dart');
+      await helper.parent.create(recursive: true);
+      await helper.writeAsString(
+        "part of '../schema/user.dart';\nconst generatedHelper = 1;\n",
+      );
+      final directory = await generateSchema('${project.path}/schema');
+      final standalone = await generateSchema(
+        '${project.path}/schema/user.dart',
+      );
+      expect(directory.snapshot.tables.map((t) => t.name), ['users']);
+      expect(standalone.snapshot.checksum, directory.snapshot.checksum);
+    },
+  );
 
   for (final dialect in SqlDialect.values) {
     test(

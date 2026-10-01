@@ -112,6 +112,12 @@ Directory roots discover model sources recursively for every engine. A sibling
 `.snapshot.dart` files are excluded. Outputs remain `lib/models.orm.dart` and
 `lib/models.snapshot.dart`; a wrapper source file is not required.
 
+Every other discovered Dart file must be an independent library. Both the CLI
+and builder reject `part of` inputs, including unrelated generated `.g.dart`
+parts inside the selected directory. Keep those parts outside the model layout
+or select individual model libraries instead. Generation does not silently skip
+discovered parts or treat their declarations as separate libraries.
+
 The CLI accepts `lib/models`, `lib/models/` or `lib/models.dart` for this root.
 Folder names do not determine physical namespaces. For PostgreSQL,
 `@Model(namespace: ...)` overrides the configured `defaultNamespace`, with

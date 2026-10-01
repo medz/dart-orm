@@ -115,6 +115,31 @@ void main() {
     expect(snapshot, isNot(contains('namespace:')));
   });
 
+  test('directory builder rejects unrelated generated part roots', () async {
+    final files = TestReaderWriter(rootPackage: 'orm', flattenOutput: true);
+    await files.testing.loadIsolateSources();
+    final result = await testBuilder(
+      ormBuilder(BuilderOptions({'models': 'lib/fixture/models'})),
+      {
+        'orm|lib/fixture/models/user.dart': _user.replaceFirst(
+          "import 'package:orm/schema.dart';",
+          "import 'package:orm/schema.dart';\npart 'helper.g.dart';",
+        ),
+        'orm|lib/fixture/models/helper.g.dart':
+            "part of 'user.dart';\nconst generatedHelper = 1;\n",
+      },
+      rootPackage: 'orm',
+      readerWriter: files,
+      flattenOutput: true,
+    );
+    expect(result.succeeded, false);
+    expect(
+      result.errors.join('\n'),
+      contains('Use independent Dart model libraries'),
+    );
+    expect(result.outputs, isEmpty);
+  });
+
   test(
     'directory build rejects semantic errors in referenced external models',
     () async {
