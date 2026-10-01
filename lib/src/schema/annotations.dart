@@ -25,6 +25,14 @@ enum ReferentialAction {
 /// [table] defaults to the class name without case conversion or pluralization.
 /// [namespace] overrides the PostgreSQL configuration default; it never changes
 /// the Dart class identity, query member name, or connection search path.
+///
+/// Optional plain, nongeneric mixins can share field annotations and business
+/// methods. Persistent mixin storage must be mutable and non-late, with constant
+/// initializers or implicit null. Map each field through a same-name, same-type
+/// named constructor parameter and a direct `this.field = field` assignment.
+/// Initializers are placeholders, not insert defaults. Generation rejects
+/// conflicting fields/accessors, repeated metadata, superclass storage and
+/// executable constructor logic beyond these assignments.
 final class Model {
   /// Explicit physical table name.
   final String? table;

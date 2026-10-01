@@ -60,6 +60,53 @@ void main() {
     },
   );
 
+  test(
+    'builder resolves imported optional mixin storage and metadata',
+    () async {
+      const root = 'lib/fixture/mixin_model.dart';
+      final files = TestReaderWriter(rootPackage: 'orm', flattenOutput: true);
+      await files.testing.loadIsolateSources();
+      final result = await testBuilder(
+        _OnlyRoot('orm|$root', {'database': 'postgres'}),
+        {
+          'orm|$root': '''
+import 'package:orm/schema.dart';
+import 'shared.dart';
+@Model() class User with Shared {
+  final String name;
+  User({required int id, required this.name, bool active = false}) {
+    this.id = id;
+    this.active = active;
+  }
+}
+''',
+          'orm|lib/fixture/shared.dart': '''
+import 'package:orm/schema.dart';
+mixin Shared {
+  @Id(generated: true) int id = 0;
+  @DatabaseDefault(true) bool active = false;
+  String describe() => '\$id: \$active';
+}
+''',
+        },
+        rootPackage: 'orm',
+        readerWriter: files,
+        generateFor: {'orm|$root'},
+        flattenOutput: true,
+      );
+      expect(result.succeeded, true, reason: result.errors.toString());
+      final client = files.testing.readString(
+        AssetId('orm', 'lib/fixture/mixin_model.orm.dart'),
+      );
+      final snapshot = files.testing.readString(
+        AssetId('orm', 'lib/fixture/mixin_model.snapshot.dart'),
+      );
+      expect(client, contains('models.User(id: v0, name: v1, active: v2)'));
+      expect(snapshot, contains('generated: true'));
+      expect(snapshot, contains('defaultSql: "true"'));
+    },
+  );
+
   test('model directory assets recursively discover source files without PG path namespaces', () async {
     final files = TestReaderWriter(rootPackage: 'orm', flattenOutput: true);
     await files.testing.loadIsolateSources();
