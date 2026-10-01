@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
+import 'package:analyzer/dart/analysis/session.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:dart_style/dart_style.dart';
@@ -48,7 +49,9 @@ final class GeneratedSchema {
 ///
 /// [outputPath] determines relative imports and defaults to the source basename
 /// with an `.orm.dart` extension. Invalid declarations or output collisions throw
-/// [GenerationException]. Directory outputs must not be discovered as schema
+/// [GenerationException]. Neither output may overwrite a selected source or its
+/// transitive imports and exports, including filesystem aliases. Directory
+/// outputs must not be discovered as schema
 /// inputs on later runs. Application default factories are never executed.
 Future<GeneratedSchema> generateSchema(
   String sourcePath, {
@@ -59,7 +62,8 @@ Future<GeneratedSchema> generateSchema(
   final input = p.normalize(p.absolute(sourcePath));
   final root = SchemaLayout.stem(input);
   final layout = SchemaLayout(input, directory: await Directory(root).exists());
-  final output = p.normalize(p.absolute(outputPath ?? layout.output));
+  final requestedOutput = p.absolute(outputPath ?? layout.output);
+  final output = p.normalize(requestedOutput);
   if (layout.directory &&
       SchemaLayout.declaration(output) &&
       (layout.includes(output) || p.dirname(output) == root)) {
@@ -83,9 +87,7 @@ Future<GeneratedSchema> generateSchema(
   if (sources.isEmpty) {
     throw GenerationException('No schema files found for $sourcePath.');
   }
-  if (p.extension(output) != '.dart' ||
-      sources.contains(output) ||
-      sources.contains(_schemaSnapshotPath(output))) {
+  if (p.extension(output) != '.dart') {
     throw const GenerationException(
       'Client and snapshot outputs must be separate Dart files from the source.',
     );
@@ -116,6 +118,12 @@ Future<GeneratedSchema> generateSchema(
     for (final path in sources) {
       roots.add(await resolvePath(path));
     }
+    validateSchemaOutputs(roots.map((result) => result.libraryElement), {
+      output,
+      _schemaSnapshotPath(output),
+      requestedOutput,
+      _schemaSnapshotPath(requestedOutput),
+    });
     String importPath(Uri uri) => uri.scheme == 'file'
         ? p
               .relative(uri.toFilePath(), from: p.dirname(output))
@@ -147,6 +155,75 @@ Future<GeneratedSchema> generateSchema(
     );
   } finally {
     await contexts.dispose();
+  }
+}
+
+// Protect every source dependency, not just files selected by the root layout.
+// Resolve existing output links before comparing identities so file links and
+// hard links cannot turn generation into a write to an application source.
+void validateSchemaOutputs(
+  Iterable<LibraryElement> roots,
+  Set<String> outputs,
+) {
+  final existing = [
+    for (final output in outputs)
+      if (File(output).existsSync()) File(output).resolveSymbolicLinksSync(),
+  ];
+  final visited = <LibraryElement>{};
+  final visitedSources = <String>{};
+  void scan(AnalysisSession session, String source) {
+    final pathContext = session.resourceProvider.pathContext;
+    source = pathContext.normalize(pathContext.absolute(source));
+    if (!visitedSources.add(source)) return;
+    final file = File(source);
+    final target = file.existsSync() ? file.resolveSymbolicLinksSync() : null;
+    if (outputs.contains(source) ||
+        target != null &&
+            existing.any(
+              (output) => FileSystemEntity.identicalSync(target, output),
+            )) {
+      throw GenerationException(
+        'Client and snapshot outputs must not overwrite source dependencies: '
+        '$source. Choose a separate output path.',
+        code: 'SCHEMA.OUTPUT',
+      );
+    }
+    final parsed = session.getParsedUnit(source);
+    if (parsed is! ParsedUnitResult) return;
+    // Parse every directive without resolving platform-specific declarations.
+    // Element imports/exports alone omit inactive conditional alternatives.
+    for (final directive
+        in parsed.unit.directives.whereType<UriBasedDirective>()) {
+      for (final literal in [
+        directive.uri,
+        if (directive is NamespaceDirective)
+          ...directive.configurations.map((configuration) => configuration.uri),
+      ]) {
+        final value = literal.stringValue;
+        if (value == null) continue;
+        final path = session.uriConverter.uriToPath(
+          pathContext.toUri(source).resolve(value),
+        );
+        if (path != null) scan(session, path);
+      }
+    }
+  }
+
+  void check(LibraryElement library) {
+    if (!visited.add(library)) return;
+    for (final fragment in library.fragments) {
+      scan(library.session, fragment.source.fullName);
+      for (final dependency in fragment.importedLibraries) {
+        check(dependency);
+      }
+    }
+    for (final dependency in library.exportedLibraries) {
+      check(dependency);
+    }
+  }
+
+  for (final root in roots) {
+    check(root);
   }
 }
 

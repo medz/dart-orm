@@ -3,10 +3,15 @@ library;
 
 import 'dart:io';
 
+import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
+import 'package:analyzer/dart/analysis/results.dart';
 import 'package:build/build.dart';
 import 'package:build_test/build_test.dart';
 import 'package:orm/builder.dart';
 import 'package:orm/generate.dart';
+import 'package:orm/src/generate/build.dart' show retrySchemaAnalysis;
+import 'package:orm/src/generate/schema.dart'
+    show generateResolvedSchema, validateSchemaOutputs;
 import 'package:test/test.dart';
 
 import '../tool/src/build_fixture.dart';
@@ -21,6 +26,104 @@ void main() {
       expect(() => ormBuilder(BuilderOptions(options)), throwsArgumentError);
     }
   });
+
+  test(
+    'session replacement reparses edited DTOs before output validation',
+    () async {
+      final directory = await Directory('.dart_tool')
+          .createTemp('builder-session-');
+      addTearDown(() => directory.delete(recursive: true));
+      final source = File('${directory.path}/models.dart').absolute;
+      await source.writeAsString(_user);
+      final contexts = AnalysisContextCollection(
+        includedPaths: [directory.absolute.path],
+      );
+      addTearDown(contexts.dispose);
+      final context = contexts.contextFor(source.path);
+      var replace = true;
+      final generated = await retrySchemaAnalysis(() async {
+        final result = await context.currentSession.getResolvedUnit(
+          source.path,
+        );
+        expect(result, isA<ResolvedUnitResult>());
+        final resolved = result as ResolvedUnitResult;
+        if (replace) {
+          replace = false;
+          await source.writeAsString(
+            _user
+                .replaceFirst(
+                  'final String name;',
+                  'final String name;\n  final String? nickname;',
+                )
+                .replaceFirst(
+                  'required this.name}',
+                  'required this.name, this.nickname}',
+                ),
+          );
+          context.changeFile(source.path);
+          await context.applyPendingFileChanges();
+        }
+        validateSchemaOutputs(
+          [resolved.libraryElement],
+          {
+            '${directory.absolute.path}/models.orm.dart',
+            '${directory.absolute.path}/models.snapshot.dart',
+          },
+        );
+        return generateResolvedSchema(
+          resolved.unit,
+          resolved.libraryElement,
+          (uri) => uri.toString(),
+          resolve: (_) =>
+              throw StateError('No additional model library expected'),
+          dialect: .postgres,
+        );
+      });
+      expect(generated.snapshot.tables.single.columns.last.name, 'nickname');
+      expect(generated.snapshot.tables.single.columns.last.nullable, true);
+      expect(generated.dart, contains('nickname: v2'));
+      expect(File('${directory.path}/models.orm.dart').existsSync(), false);
+    },
+  );
+
+  for (final directory in [false, true]) {
+    for (final snapshot in [false, true]) {
+      test(
+        '${directory ? 'directory' : 'file'} builder rejects an inactive dependency on its ${snapshot ? 'snapshot' : 'client'} output',
+        () async {
+          const stem = 'lib/fixture/models';
+          final root = directory ? '$stem/user.dart' : '$stem.dart';
+          final output = '$stem.${snapshot ? 'snapshot' : 'orm'}.dart';
+          final prefix = directory ? '../' : '';
+          final files = TestReaderWriter(
+            rootPackage: 'orm',
+            flattenOutput: true,
+          );
+          await files.testing.loadIsolateSources();
+          final result = await testBuilder(
+            directory
+                ? ormBuilder(
+                    BuilderOptions({'models': stem, 'database': 'postgres'}),
+                  )
+                : _OnlyRoot('orm|$root', {'database': 'postgres'}),
+            {
+              'orm|$root':
+                  "import '${prefix}stub.dart' if (dart.library.js_interop) '${prefix}models.${snapshot ? 'snapshot' : 'orm'}.dart';\n$_user",
+              'orm|lib/fixture/stub.dart': "const platformLabel = 'native';\n",
+              'orm|$output': "const platformLabel = 'application source';\n",
+            },
+            rootPackage: 'orm',
+            readerWriter: files,
+            generateFor: directory ? null : {'orm|$root'},
+            flattenOutput: true,
+          );
+          expect(result.succeeded, false);
+          expect(result.errors.join('\n'), contains('SCHEMA.OUTPUT'));
+          expect(result.outputs, isEmpty);
+        },
+      );
+    }
+  }
 
   test(
     'individual build assets detect DTOs and preserve standalone parity',

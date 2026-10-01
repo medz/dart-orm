@@ -17,6 +17,9 @@ import 'schema/diagnostics.dart';
 /// Use `models` for a recursive model source directory, `database` for the target
 /// engine, and `default_namespace` for PostgreSQL's default physical namespace.
 /// Individual libraries can instead be selected with `generate_for`.
+/// Models must not depend on their generated destinations, including inactive
+/// conditional imports/exports. build_runner owns output cleanup; application
+/// sources must never occupy those declared output slots.
 builder.Builder ormBuilder(builder.BuilderOptions options) {
   if (options.config.keys.any(
     (key) => !{'database', 'models', 'default_namespace'}.contains(key),
@@ -77,15 +80,21 @@ final class _OrmBuilder implements builder.Builder {
       );
     }
     final output = input.changeExtension('.orm.dart');
-    final (unit, library) = await _resolveSchema(step);
-    final result = await generateResolvedSchema(
-      unit,
-      library,
-      (uri) => _importPath(uri, input.package, output.path),
-      dialect: dialect,
-      defaultNamespace: defaultNamespace,
-      resolve: (library) => _resolveReference(step, library),
-    );
+    final result = await retrySchemaAnalysis(() async {
+      final (unit, library) = await _resolveSchema(step);
+      _validateOutputs(
+        [unit],
+        [output, input.changeExtension('.snapshot.dart')],
+      );
+      return generateResolvedSchema(
+        unit,
+        library,
+        (uri) => _importPath(uri, input.package, output.path),
+        dialect: dialect,
+        defaultNamespace: defaultNamespace,
+        resolve: (library) => _resolveReference(step, library),
+      );
+    });
     // Both outputs are fully constructed before touching the build writer.
     final snapshot = result.snapshotDart;
     await step.writeAsString(output, result.dart);
@@ -170,35 +179,75 @@ final class _OrmDirectoryBuilder implements builder.Builder {
     if (sources.isEmpty) {
       return; // Deleting the definitions removes owned outputs.
     }
-    final units = <CompilationUnit>[];
     final resolver = _OrmBuilder(dialect: dialect);
-    for (final source in sources) {
-      if (!await step.resolver.isLibrary(source)) {
-        throw GenerationException(
-          'Use independent Dart model libraries: $source',
-          code: 'SCHEMA.LIBRARY',
-        );
-      }
-      final (unit, _) = await resolver._resolveSchema(step, source);
-      units.add(unit);
-    }
     final output = builder.AssetId(package, layout.output);
-    final library = units.first.declaredFragment!.element;
-    final result = await generateResolvedSchema(
-      units.first,
-      library,
-      (uri) => _importPath(uri, package, output.path),
-      resolve: (owner) => resolver._resolveReference(step, owner),
-      additionalRoots: units.skip(1).toList(),
-      dialect: dialect,
-      defaultNamespace: defaultNamespace,
-    );
+    final result = await retrySchemaAnalysis(() async {
+      final units = <CompilationUnit>[];
+      for (final source in sources) {
+        if (!await step.resolver.isLibrary(source)) {
+          throw GenerationException(
+            'Use independent Dart model libraries: $source',
+            code: 'SCHEMA.LIBRARY',
+          );
+        }
+        final (unit, _) = await resolver._resolveSchema(step, source);
+        units.add(unit);
+      }
+      final library = units.first.declaredFragment!.element;
+      _validateOutputs(units, [
+        output,
+        builder.AssetId(package, '$root.snapshot.dart'),
+      ]);
+      return generateResolvedSchema(
+        units.first,
+        library,
+        (uri) => _importPath(uri, package, output.path),
+        resolve: (owner) => resolver._resolveReference(step, owner),
+        additionalRoots: units.skip(1).toList(),
+        dialect: dialect,
+        defaultNamespace: defaultNamespace,
+      );
+    });
     final snapshot = result.snapshotDart;
     await step.writeAsString(output, result.dart);
     await step.writeAsString(
       builder.AssetId(package, '$root.snapshot.dart'),
       snapshot,
     );
+  }
+}
+
+void _validateOutputs(
+  List<CompilationUnit> units,
+  List<builder.AssetId> outputs,
+) {
+  final libraries = units
+      .map((unit) => unit.declaredFragment!.element)
+      .toList();
+  final converter = libraries.first.session.uriConverter;
+  final paths = <String>{};
+  for (final output in outputs) {
+    final path = converter.uriToPath(output.uri);
+    if (path == null) {
+      throw GenerationException(
+        'Cannot resolve generated output $output.',
+        code: 'SCHEMA.OUTPUT',
+      );
+    }
+    paths.add(path);
+  }
+  validateSchemaOutputs(libraries, paths);
+}
+
+// Parallel/watch builds may replace the shared analyzer session after an await.
+// Reload every root and rerun all validation/emission before writing anything.
+Future<T> retrySchemaAnalysis<T>(Future<T> Function() analyze) async {
+  for (var attempt = 0; ; attempt++) {
+    try {
+      return await analyze();
+    } on InconsistentAnalysisException {
+      if (attempt >= 2) rethrow;
+    }
   }
 }
 
