@@ -107,12 +107,17 @@ ${invalid ? 'int invalid = "not an integer";' : ''}
     await output.writeAsString(contents, flush: true);
   }
 
-  Future<({int milliseconds, String output})> run(List<String> args) async {
+  // Child-only overrides keep connection settings out of logged arguments.
+  Future<({int milliseconds, String output})> run(
+    List<String> args, {
+    Map<String, String>? environment,
+  }) async {
     final watch = Stopwatch()..start();
     final result = await Process.run(
       Platform.resolvedExecutable,
       args,
       workingDirectory: directory.path,
+      environment: environment,
     );
     final output = '${result.stdout}\n${result.stderr}';
     if (result.exitCode != 0) {

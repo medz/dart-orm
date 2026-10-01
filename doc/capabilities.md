@@ -107,11 +107,12 @@ resource overrides, secure-context requirements and exclusive ownership.
 | Flutter | SQLite on Android and Flutter Web; persistence and resource ownership follow the platform driver |
 | Other browsers and devices | Safari, Firefox, physical-device and iOS/macOS Flutter behavior are not verified |
 
-Annotated DTO generation is verified by native SQLite and PostgreSQL vertical
-slices. Independent consumers generate clients and saved migrations, execute CRUD
-and relations, and retain original DTO classes and business methods.
-MySQL/MariaDB live execution and browser/Flutter execution require separate
-validation; earlier runtime results do not verify the new generation path.
+Annotated DTO generation is verified by native SQLite, PostgreSQL, MySQL and
+MariaDB vertical slices. Independent consumers generate clients and saved
+migrations, execute CRUD and relations, and retain original DTO classes and
+business methods.
+Browser/Flutter execution requires separate validation; earlier runtime results
+do not verify the new generation path.
 Remote/serverless transports, replica routing and alternative pools require
 separate adapters.
 
