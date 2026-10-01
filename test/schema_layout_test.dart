@@ -9,31 +9,47 @@ import 'package:orm/src/generate/schema/layout.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+String _model(String name, String table, {String? namespace}) =>
+    '''
+@Model(table: '$table'${namespace == null ? '' : ", namespace: '$namespace'"})
+class $name {
+  @Id(generated: true) final int id;
+  const $name({required this.id});
+}
+''';
+
 void main() {
-  test('layout respects native Windows and URL asset path contexts', () {
+  test('recursive layout respects Windows and URL asset path contexts', () {
     for (final paths in [p.Context(style: p.Style.windows), p.url]) {
       final layout = SchemaLayout(
         'lib/fixture/./schema.dart',
-        dialect: .postgres,
         directory: true,
         paths: paths,
       );
       expect(layout.root, paths.join('lib', 'fixture', 'schema'));
       expect(layout.includes('lib/fixture/schema/auth/users.dart'), isTrue);
-      expect(layout.namespace('lib/fixture/schema/auth/users.dart'), 'auth');
-      expect(layout.namespace('lib/fixture/schema.dart'), 'public');
+      expect(layout.includes('lib/fixture/schema.dart'), isTrue);
       expect(
         layout.includes('lib/fixture/schema/auth/deep/users.dart'),
-        isFalse,
+        isTrue,
       );
       expect(layout.includes('lib/other/auth/users.dart'), isFalse);
+      expect(
+        layout.includes('lib/fixture/schema/deep/client.orm.dart'),
+        isFalse,
+      );
+      expect(
+        layout.includes('lib/fixture/schema/deep/client.snapshot.dart'),
+        isFalse,
+      );
     }
   });
 
   late Directory project;
-  setUp(() async {
-    project = await Directory('.dart_tool').createTemp('schema-layout-');
-  });
+  setUp(
+    () async =>
+        project = await Directory('.dart_tool').createTemp('schema-layout-'),
+  );
   tearDown(() => project.delete(recursive: true));
 
   Future<void> source(String path, String body) async {
@@ -44,20 +60,15 @@ void main() {
 
   for (final dialect in SqlDialect.values) {
     test(
-      '${dialect.name} rejects outputs discovered as schema inputs',
+      '${dialect.name} rejects outputs discovered as model inputs',
       () async {
-        final directory = dialect == SqlDialect.postgres
-            ? 'schema/public'
-            : 'schema';
-        await source(
-          '$directory/users.dart',
-          "final user = model('users', (id: identity(),));",
-        );
-        for (final output in {
+        const directory = 'schema/features/users';
+        await source('$directory/user.dart', _model('User', 'users'));
+        for (final output in [
           'schema.dart',
           '$directory/client.dart',
           'schema/client.dart',
-        }) {
+        ]) {
           await expectLater(
             writeGeneratedSchema(
               '${project.path}/schema',
@@ -91,16 +102,25 @@ void main() {
   }
 
   test(
-    'PG directory namespaces, repeated names and cross-schema references',
+    'explicit PG namespaces retain DTO names and cross-schema references',
     () async {
-      await source(
-        'schema/auth/users.dart',
-        "final user = model('Users', (id: identity(), displayName: text(name: 'DisplayName')));",
-      );
-      await source(
-        'schema/public/users.dart',
-        "import '../auth/users.dart' as auth;\nfinal user = model('Users', (id: identity(), accountId: integer()), relations: (u) => (account: references(u.accountId, () => auth.user),));",
-      );
+      await source('schema/features/accounts.dart', '''
+@Model(table: 'Users', namespace: 'auth')
+class Account {
+  @Id(generated: true) final int id;
+  @Column(name: 'DisplayName') final String displayName;
+  const Account({required this.id, required this.displayName});
+}
+''');
+      await source('schema/users.dart', '''
+import 'features/accounts.dart';
+@Model(table: 'Users')
+class User {
+  @Id(generated: true) final int id;
+  @Relation(target: Account, name: 'account') final int accountId;
+  const User({required this.id, required this.accountId});
+}
+''');
       final result = await generateSchema(
         '${project.path}/schema',
         dialect: .postgres,
@@ -113,10 +133,10 @@ void main() {
         result.snapshot.tables.last.foreignKeys.single.targetNamespace,
         'auth',
       );
-      expect(result.dart, contains('final class AuthUser('));
-      expect(result.dart, contains('final class PublicUser('));
-      expect(result.dart, contains('get auth =>'));
-      expect(result.dart, contains('get public =>'));
+      expect(result.dart, contains('get account =>'));
+      expect(result.dart, contains('get user =>'));
+      expect(result.dart, isNot(contains('get auth =>')));
+      expect(result.dart, isNot(contains('get public =>')));
       await writeGeneratedSchema('${project.path}/schema/', dialect: .postgres);
       final analysis = await Process.run(Platform.resolvedExecutable, [
         'analyze',
@@ -138,16 +158,13 @@ void main() {
   );
 
   test(
-    'all entry spellings merge the default file and directory once',
+    'all entry spellings merge the sibling file and recursive directory once',
     () async {
       await source(
         'schema.dart',
-        "export 'schema/public/users.dart';\nfinal post = model('posts', (id: identity(),));",
+        "export 'schema/features/users.dart';\n${_model('Post', 'posts')}",
       );
-      await source(
-        'schema/public/users.dart',
-        "final user = model('users', (id: identity(),));",
-      );
+      await source('schema/features/users.dart', _model('User', 'users'));
       final checksums = <String>{};
       for (final suffix in ['schema', 'schema/', 'schema.dart']) {
         final result = await generateSchema(
@@ -166,29 +183,23 @@ void main() {
     },
   );
 
-  test('directory generation requires an offline engine selection', () async {
-    await source(
-      'schema/users.dart',
-      "final user = model('users', (id: identity(),));",
-    );
-    await expectLater(
-      generateSchema('${project.path}/schema'),
-      throwsA(isA<GenerationException>()),
-    );
+  test('directory discovery supports engine-neutral snapshots', () async {
+    await source('schema/features/users.dart', _model('User', 'users'));
+    final result = await generateSchema('${project.path}/schema');
+    expect(result.snapshot.tables.single.namespace, isNull);
   });
 
   test(
-    'splitting a targeted file into public preserves the snapshot',
+    'splitting a model file into recursive directories preserves the snapshot',
     () async {
-      const posts = "final post = model('posts', (id: identity(),));";
-      const users = "final user = model('users', (id: identity(),));";
+      final posts = _model('Post', 'posts'), users = _model('User', 'users');
       await source('schema.dart', '$users\n$posts');
       final before = await generateSchema(
         '${project.path}/schema',
         dialect: .postgres,
       );
       await source('schema.dart', users);
-      await source('schema/public/posts.dart', posts);
+      await source('schema/features/deep/posts.dart', posts);
       final after = await generateSchema(
         '${project.path}/schema',
         dialect: .postgres,
@@ -207,15 +218,19 @@ void main() {
   );
 
   test(
-    'replacing unqualified PostgreSQL snapshots requires destructive opt-in',
+    'qualifying an unqualified snapshot requires destructive opt-in',
     () async {
       await source('schema.dart', '''
-final user = model('users', (id: identity(),));
-final post = model('posts', (id: identity(), authorId: integer()),
-  relations: (p) => (author: references(p.authorId, () => user),));
+${_model('User', 'users')}
+@Model(table: 'posts')
+class Post {
+  @Id(generated: true) final int id;
+  @Relation(target: User, name: 'author') final int authorId;
+  const Post({required this.id, required this.authorId});
+}
 ''');
-      final legacy = await generateSchema('${project.path}/schema');
-      final current = await generateSchema(
+      final neutral = await generateSchema('${project.path}/schema');
+      final targeted = await generateSchema(
         '${project.path}/schema',
         dialect: .postgres,
       );
@@ -223,8 +238,8 @@ final post = model('posts', (id: identity(), authorId: integer()),
         () => Migration.diff(
           '0002_qualified',
           dialect: .postgres,
-          from: legacy.snapshot,
-          to: current.snapshot,
+          from: neutral.snapshot,
+          to: targeted.snapshot,
         ),
         throwsA(
           isA<OrmException>().having(
@@ -238,8 +253,8 @@ final post = model('posts', (id: identity(), authorId: integer()),
         () => Migration.diff(
           '0002_renamed',
           dialect: .postgres,
-          from: legacy.snapshot,
-          to: current.snapshot,
+          from: neutral.snapshot,
+          to: targeted.snapshot,
           renames: SchemaRenames(
             tables: {'users': 'public.users', 'posts': 'public.posts'},
           ),
@@ -251,8 +266,8 @@ final post = model('posts', (id: identity(), authorId: integer()),
       final change = Migration.diff(
         '0002_qualified',
         dialect: .postgres,
-        from: legacy.snapshot,
-        to: current.snapshot,
+        from: neutral.snapshot,
+        to: targeted.snapshot,
         allowDestructive: true,
       );
       expect(change.steps.whereType<DropTable>().map((s) => s.table).toSet(), {
@@ -276,115 +291,67 @@ final post = model('posts', (id: identity(), authorId: integer()),
     SqlDialect.mariadb,
   ]) {
     test(
-      '${dialect.name} collects direct files without namespaces or recursion',
+      '${dialect.name} recursively collects files without namespaces',
       () async {
-        await source(
-          'schema/users.dart',
-          "final user = model('users', (id: identity(),));",
-        );
-        await source(
-          'schema/nested/posts.dart',
-          "final post = model('posts', (id: identity(),));",
-        );
+        await source('schema/users.dart', _model('User', 'users'));
+        await source('schema/nested/posts.dart', _model('Post', 'posts'));
         final result = await generateSchema(
           '${project.path}/schema',
           dialect: dialect,
         );
-        expect(result.snapshot.tables.map((t) => t.name), ['users']);
-        expect(result.snapshot.tables.single.namespace, isNull);
+        expect(result.snapshot.tables.map((t) => t.name), ['posts', 'users']);
+        expect(result.snapshot.tables.every((t) => t.namespace == null), true);
       },
     );
   }
 
-  test('references cannot pull models through deeper directories', () async {
-    await source(
-      'schema/auth/users.dart',
-      "import 'nested/accounts.dart';\nfinal user = model('users', (id: identity(), accountId: integer()), relations: (u) => (account: references(u.accountId, () => account),));",
-    );
-    await source(
-      'schema/auth/nested/accounts.dart',
-      "final account = model('accounts', (id: identity(),));",
-    );
-    await expectLater(
-      generateSchema('${project.path}/schema', dialect: .postgres),
-      throwsA(
-        isA<GenerationException>().having(
-          (e) => e.toString(),
-          'diagnostic',
-          contains('outside the schema layout'),
-        ),
-      ),
-    );
-  });
-
   test(
-    'moving declarations within a namespace preserves physical identity',
+    'moving model sources across folders preserves physical identity',
     () async {
       await source(
         'schema/auth/users.dart',
-        "final user = model('users', (id: identity(),));",
+        _model('User', 'users', namespace: 'identity'),
       );
       final before = await generateSchema(
         '${project.path}/schema',
         dialect: .postgres,
       );
+      await Directory('${project.path}/schema/features/deep')
+          .create(recursive: true);
       await File('${project.path}/schema/auth/users.dart')
-          .rename('${project.path}/schema/auth/accounts.dart');
+          .rename('${project.path}/schema/features/deep/accounts.dart');
       final after = await generateSchema(
         '${project.path}/schema',
         dialect: .postgres,
       );
       expect(after.snapshot.checksum, before.snapshot.checksum);
+      expect(after.snapshot.tables.single.namespace, 'identity');
     },
   );
 
   test(
     'dotted table names fail instead of being interpreted as qualification',
     () async {
-      await source(
-        'schema.dart',
-        "final user = model('auth.users', (id: identity(),));",
-      );
+      await source('schema.dart', _model('User', 'auth.users'));
       await expectLater(
         generateSchema('${project.path}/schema.dart', dialect: .postgres),
-        throwsA(
-          isA<OrmException>().having(
-            (e) => e.code,
-            'code',
-            'SCHEMA.IDENTIFIER',
-          ),
-        ),
+        throwsA(isA<GenerationException>()),
       );
     },
   );
 
   test(
-    'PG rejects direct directory files and conflicting physical declarations',
+    'conflicting physical declarations fail across source directories',
     () async {
-      await source(
-        'schema/users.dart',
-        "final user = model('users', (id: identity(),));",
-      );
-      await expectLater(
-        generateSchema('${project.path}/schema', dialect: .postgres),
-        throwsA(isA<GenerationException>()),
-      );
-      await File('${project.path}/schema/users.dart').delete();
-      await source(
-        'schema.dart',
-        "final user = model('users', (id: identity(),));",
-      );
-      await source(
-        'schema/public/users.dart',
-        "final user = model('users', (id: identity(),));",
-      );
+      await source('schema.dart', _model('User', 'users'));
+      await source('schema/nested/accounts.dart', _model('Account', 'users'));
       await expectLater(
         generateSchema('${project.path}/schema', dialect: .postgres),
         throwsA(
           isA<GenerationException>().having(
             (e) => e.toString(),
             'diagnostic',
-            contains('also declared'),
+            contains('Duplicate physical table'),
           ),
         ),
       );

@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:orm/src/cli/config.dart';
+import 'package:orm/src/cli/config_entrypoint.dart';
 import 'package:orm/src/cli/runner.dart';
 
 typedef CliResult = ({int exitCode, String stdout, String stderr});
 
-Future<CliResult> runCli(List<String> args, {OrmConfig? config}) =>
+Future<CliResult> runCli(List<String> args, {ProjectConfig? config}) =>
     captureCli(() => runOrmCommand(args, config: config));
 
 // Command tests share the VM, so never change Directory.current or io.exitCode.

@@ -3,6 +3,24 @@ import 'package:orm/migrate.dart';
 
 final schema = SchemaSnapshot([
   TableSchema(
+    "posts",
+    columns: [
+      Column("id", Codecs.integer, generated: true),
+      Column("author_id", Codecs.integer),
+      Column("title", Codecs.text),
+    ],
+    primaryKey: ["id"],
+
+    foreignKeys: [
+      ForeignKey(["author_id"], "users", ["id"], onDelete: "CASCADE"),
+    ],
+  ),
+  TableSchema(
+    "readings",
+    columns: [Column("id", Codecs.integer), Column("value", Codecs.real)],
+    primaryKey: ["id"],
+  ),
+  TableSchema(
     "users",
     columns: [
       Column("id", Codecs.integer, generated: true),
@@ -36,19 +54,6 @@ final schema = SchemaSnapshot([
     checks: [CheckSchema("valid_email", "length(email) > 0")],
   ),
   TableSchema(
-    "posts",
-    columns: [
-      Column("id", Codecs.integer, generated: true),
-      Column("author_id", Codecs.integer),
-      Column("title", Codecs.text),
-    ],
-    primaryKey: ["id"],
-
-    foreignKeys: [
-      ForeignKey(["author_id"], "users", ["id"], onDelete: "CASCADE"),
-    ],
-  ),
-  TableSchema(
     "values",
     columns: [
       Column("id", Codecs.integer, generated: true),
@@ -60,11 +65,6 @@ final schema = SchemaSnapshot([
       Column("stamp", Codecs.localDateTime),
       Column("instant", Codecs.dateTime),
     ],
-    primaryKey: ["id"],
-  ),
-  TableSchema(
-    "readings",
-    columns: [Column("id", Codecs.integer), Column("value", Codecs.real)],
     primaryKey: ["id"],
   ),
 ]);

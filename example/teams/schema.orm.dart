@@ -4,125 +4,8 @@ import 'package:orm/sql.dart';
 import 'package:orm/sql.dart' as orm show allOf;
 
 import "schema.dart" as models;
-export "schema.dart" show MembershipRole;
+export "schema.dart" show User, Team, MembershipRole, Membership;
 
-/// A complete immutable row from "users".
-final class User({required final int id, required final String name});
-final _userId = Column<int>(
-  "id",
-  Codecs.integer,
-  nullable: false,
-  generated: false,
-);
-final _userName = Column<String>(
-  "name",
-  Codecs.text,
-  nullable: false,
-  generated: false,
-);
-final userSchema = TableSchema(
-  "users",
-  columns: [_userId, _userName],
-  primaryKey: ["id"],
-  uniqueKeys: [],
-  indexes: [],
-  foreignKeys: [],
-);
-
-final class UserFields extends Fields {
-  UserFields(super.table);
-  late final id = column(_userId);
-  late final name = column(_userName);
-  Relation<Membership, MembershipFields> get memberships =>
-      Relation(membershipTable, parent: [id], child: (row) => [row.userId]);
-}
-
-final userTable = Table<User, UserFields>(
-  userSchema,
-  UserFields.new,
-  (row) => (row.id, row.name).map((v0, v1) => User(id: v0, name: v1)),
-);
-
-final class UserTableSet extends TableSet<User, UserFields> {
-  UserTableSet(QueryContext db) : super(db, userTable) {
-    db.registerSchema(appSchema);
-  }
-  Future<User> create({required int id, required String name}) =>
-      createRow((row) => [row.id.set(id), row.name.set(name)]);
-  Query<User, UserFields> byId(int id) => where((row) => row.id.eq(.value(id)));
-}
-
-extension UserUpdates on Query<User, UserFields> {
-  Future<int> patch({
-    Change<int> id = const Change.keep(),
-    Change<String> name = const Change.keep(),
-  }) =>
-      update((row) => [...row.id.change(id), ...row.name.change(name)])
-          .execute();
-}
-
-/// A complete immutable row from "teams".
-final class Team({required final int id, required final String name});
-final _teamId = Column<int>(
-  "id",
-  Codecs.integer,
-  nullable: false,
-  generated: false,
-);
-final _teamName = Column<String>(
-  "name",
-  Codecs.text,
-  nullable: false,
-  generated: false,
-);
-final teamSchema = TableSchema(
-  "teams",
-  columns: [_teamId, _teamName],
-  primaryKey: ["id"],
-  uniqueKeys: [],
-  indexes: [],
-  foreignKeys: [],
-);
-
-final class TeamFields extends Fields {
-  TeamFields(super.table);
-  late final id = column(_teamId);
-  late final name = column(_teamName);
-  Relation<Membership, MembershipFields> get memberships =>
-      Relation(membershipTable, parent: [id], child: (row) => [row.teamId]);
-}
-
-final teamTable = Table<Team, TeamFields>(
-  teamSchema,
-  TeamFields.new,
-  (row) => (row.id, row.name).map((v0, v1) => Team(id: v0, name: v1)),
-);
-
-final class TeamTableSet extends TableSet<Team, TeamFields> {
-  TeamTableSet(QueryContext db) : super(db, teamTable) {
-    db.registerSchema(appSchema);
-  }
-  Future<Team> create({required int id, required String name}) =>
-      createRow((row) => [row.id.set(id), row.name.set(name)]);
-  Query<Team, TeamFields> byId(int id) => where((row) => row.id.eq(.value(id)));
-}
-
-extension TeamUpdates on Query<Team, TeamFields> {
-  Future<int> patch({
-    Change<int> id = const Change.keep(),
-    Change<String> name = const Change.keep(),
-  }) =>
-      update((row) => [...row.id.change(id), ...row.name.change(name)])
-          .execute();
-}
-
-/// A complete immutable row from "memberships".
-final class Membership({
-  required final int teamId,
-  required final int userId,
-  required final models.MembershipRole role,
-  required final DateTime joinedAt,
-});
 final _membershipTeamId = Column<int>(
   "team_id",
   Codecs.integer,
@@ -180,26 +63,27 @@ final class MembershipFields extends Fields {
   late final userId = column(_membershipUserId);
   late final role = column(_membershipRole);
   late final joinedAt = column(_membershipJoinedAt);
-  Relation<Team, TeamFields> get team =>
+  Relation<models.Team, TeamFields> get team =>
       Relation(teamTable, parent: [teamId], child: (row) => [row.id]);
-  Relation<User, UserFields> get user =>
+  Relation<models.User, UserFields> get user =>
       Relation(userTable, parent: [userId], child: (row) => [row.id]);
 }
 
-final membershipTable = Table<Membership, MembershipFields>(
+final membershipTable = Table<models.Membership, MembershipFields>(
   membershipSchema,
   MembershipFields.new,
   (row) => (row.teamId, row.userId, row.role, row.joinedAt).map(
     (v0, v1, v2, v3) =>
-        Membership(teamId: v0, userId: v1, role: v2, joinedAt: v3),
+        models.Membership(teamId: v0, userId: v1, role: v2, joinedAt: v3),
   ),
 );
 
-final class MembershipTableSet extends TableSet<Membership, MembershipFields> {
+final class MembershipTableSet
+    extends TableSet<models.Membership, MembershipFields> {
   MembershipTableSet(QueryContext db) : super(db, membershipTable) {
     db.registerSchema(appSchema);
   }
-  Future<Membership> create({
+  Future<models.Membership> create({
     required int teamId,
     required int userId,
     Change<models.MembershipRole> role = const Change.keep(),
@@ -212,7 +96,7 @@ final class MembershipTableSet extends TableSet<Membership, MembershipFields> {
       row.joinedAt.set(joinedAt),
     ],
   );
-  Query<Membership, MembershipFields> byId({
+  Query<models.Membership, MembershipFields> byId({
     required int teamId,
     required int userId,
   }) => where(
@@ -223,7 +107,7 @@ final class MembershipTableSet extends TableSet<Membership, MembershipFields> {
   );
 }
 
-extension MembershipUpdates on Query<Membership, MembershipFields> {
+extension MembershipUpdates on Query<models.Membership, MembershipFields> {
   Future<int> patch({
     Change<int> teamId = const Change.keep(),
     Change<int> userId = const Change.keep(),
@@ -239,14 +123,126 @@ extension MembershipUpdates on Query<Membership, MembershipFields> {
   ).execute();
 }
 
-final appSchema = List<TableSchema>.unmodifiable([
-  userSchema,
+final _teamId = Column<int>(
+  "id",
+  Codecs.integer,
+  nullable: false,
+  generated: false,
+);
+final _teamName = Column<String>(
+  "name",
+  Codecs.text,
+  nullable: false,
+  generated: false,
+);
+final teamSchema = TableSchema(
+  "teams",
+  columns: [_teamId, _teamName],
+  primaryKey: ["id"],
+  uniqueKeys: [],
+  indexes: [],
+  foreignKeys: [],
+);
+
+final class TeamFields extends Fields {
+  TeamFields(super.table);
+  late final id = column(_teamId);
+  late final name = column(_teamName);
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Membership, MembershipFields> get memberships =>
+      Relation(membershipTable, parent: [id], child: (row) => [row.teamId]);
+}
+
+final teamTable = Table<models.Team, TeamFields>(
   teamSchema,
+  TeamFields.new,
+  (row) => (row.id, row.name).map((v0, v1) => models.Team(id: v0, name: v1)),
+);
+
+final class TeamTableSet extends TableSet<models.Team, TeamFields> {
+  TeamTableSet(QueryContext db) : super(db, teamTable) {
+    db.registerSchema(appSchema);
+  }
+  Future<models.Team> create({required int id, required String name}) =>
+      createRow((row) => [row.id.set(id), row.name.set(name)]);
+  Query<models.Team, TeamFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
+}
+
+extension TeamUpdates on Query<models.Team, TeamFields> {
+  Future<int> patch({
+    Change<int> id = const Change.keep(),
+    Change<String> name = const Change.keep(),
+  }) =>
+      update((row) => [...row.id.change(id), ...row.name.change(name)])
+          .execute();
+}
+
+final _userId = Column<int>(
+  "id",
+  Codecs.integer,
+  nullable: false,
+  generated: false,
+);
+final _userName = Column<String>(
+  "name",
+  Codecs.text,
+  nullable: false,
+  generated: false,
+);
+final userSchema = TableSchema(
+  "users",
+  columns: [_userId, _userName],
+  primaryKey: ["id"],
+  uniqueKeys: [],
+  indexes: [],
+  foreignKeys: [],
+);
+
+final class UserFields extends Fields {
+  UserFields(super.table);
+  late final id = column(_userId);
+  late final name = column(_userName);
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Membership, MembershipFields> get memberships =>
+      Relation(membershipTable, parent: [id], child: (row) => [row.userId]);
+}
+
+final userTable = Table<models.User, UserFields>(
+  userSchema,
+  UserFields.new,
+  (row) => (row.id, row.name).map((v0, v1) => models.User(id: v0, name: v1)),
+);
+
+final class UserTableSet extends TableSet<models.User, UserFields> {
+  UserTableSet(QueryContext db) : super(db, userTable) {
+    db.registerSchema(appSchema);
+  }
+  Future<models.User> create({required int id, required String name}) =>
+      createRow((row) => [row.id.set(id), row.name.set(name)]);
+  Query<models.User, UserFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
+}
+
+extension UserUpdates on Query<models.User, UserFields> {
+  Future<int> patch({
+    Change<int> id = const Change.keep(),
+    Change<String> name = const Change.keep(),
+  }) =>
+      update((row) => [...row.id.change(id), ...row.name.change(name)])
+          .execute();
+}
+
+final appSchema = List<TableSchema>.unmodifiable([
   membershipSchema,
+  teamSchema,
+  userSchema,
 ]);
 
 extension AppTables on QueryContext {
-  UserTableSet get user => UserTableSet(this);
-  TeamTableSet get team => TeamTableSet(this);
   MembershipTableSet get membership => MembershipTableSet(this);
+  TeamTableSet get team => TeamTableSet(this);
+  UserTableSet get user => UserTableSet(this);
 }

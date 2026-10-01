@@ -442,12 +442,12 @@ void main() {
     try {
       final source = File('${directory.path}/schema.dart');
       for (final declaration in [
-        'id: integer(bits: 8)',
-        'id: custom(Codecs.text, bits: 32)',
-        'id: integer(bits: 16, bits: 32)',
+        '@Column(bits: 8) required final int id',
+        '@Column(bits: 32) required final String id',
+        '@Column(bits: 16, bits: 32) required final int id',
       ]) {
         await source.writeAsString(
-          "import 'package:orm/schema.dart';\nfinal row = model('rows', ($declaration,));",
+          "import 'package:orm/schema.dart';\n@Model(table: 'rows') final class Row({$declaration,});",
         );
         await expectLater(
           generateSchema(source.path),
@@ -459,7 +459,7 @@ extension type Identifier(int value) {}
 Identifier decode(Object? value) => Identifier(value as int);
 int encode(Identifier value) => value.value;
 const idCodec = Codec<Identifier>.integer(decode, encode);
-final row = model('rows', (id: custom(idCodec, bits: 16),));
+@Model(table: 'rows') final class Row({@Column(codec: idCodec, bits: 16) required final Identifier id});
 ''');
       final generated = await generateSchema(source.path);
       final column = generated.snapshot.tables.single.columns.single;

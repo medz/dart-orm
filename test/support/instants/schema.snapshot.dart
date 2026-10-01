@@ -13,14 +13,6 @@ final schema = SchemaSnapshot([
     primaryKey: ["id"],
   ),
   TableSchema(
-    "moments",
-    columns: [
-      Column("at", Codecs.dateTime),
-      Column("label", Codecs.text, defaultSql: "'pending'"),
-    ],
-    primaryKey: ["at"],
-  ),
-  TableSchema(
     "links",
     columns: [
       Column("id", Codecs.integer, generated: true),
@@ -31,5 +23,13 @@ final schema = SchemaSnapshot([
     foreignKeys: [
       ForeignKey(["at"], "moments", ["at"], onDelete: "RESTRICT"),
     ],
+  ),
+  TableSchema(
+    "moments",
+    columns: [
+      Column("at", Codecs.dateTime),
+      Column("label", Codecs.text, defaultSql: "'pending'"),
+    ],
+    primaryKey: ["at"],
   ),
 ]);

@@ -11,22 +11,35 @@ import 'package:test/test.dart';
 import '../tool/src/build_fixture.dart';
 import 'support/cli.dart';
 
+String _model(String name, String namespace) =>
+    '''
+import 'package:orm/schema.dart';
+@Model(table: 'users', namespace: '$namespace')
+class $name {
+  @Id(generated: true) final int id;
+  const $name({required this.id});
+}
+''';
+
 void main() {
   test(
-    'package builder collects namespaces without a root Dart file',
+    'package builder collects recursive sources without a root Dart file',
     () async {
       final files = TestReaderWriter(rootPackage: 'orm', flattenOutput: true);
       await files.testing.loadIsolateSources();
       final result = await testBuilder(
         ormBuilder(
           BuilderOptions({
-            'schema': 'lib/fixture/./schema.dart',
+            'models': 'lib/fixture/./schema.dart',
             'database': 'postgres',
           }),
         ),
         {
-          'orm|lib/fixture/schema/auth/users.dart': "import 'package:orm/schema.dart'; final user = model('users', (id: identity(),));",
-          'orm|lib/fixture/schema/public/users.dart': "import 'package:orm/schema.dart'; final user = model('users', (id: identity(),));",
+          'orm|lib/fixture/schema/accounts/deep/users.dart': _model(
+            'Account',
+            'auth',
+          ),
+          'orm|lib/fixture/schema/users.dart': _model('User', 'public'),
         },
         rootPackage: 'orm',
         readerWriter: files,
@@ -36,12 +49,13 @@ void main() {
       final client = files.testing.readString(
         AssetId('orm', 'lib/fixture/schema.orm.dart'),
       );
-      expect(client, contains('final class AuthUser('));
-      expect(client, contains('final class PublicUser('));
+      expect(client, contains('get account =>'));
+      expect(client, contains('get user =>'));
+      expect(client, isNot(contains('get auth =>')));
     },
   );
 
-  test('real directory build/watch tracks addition, removal, imports and CLI parity', () async {
+  test('real directory build/watch tracks addition, removal, movement and CLI parity', () async {
     final fixture = await BuildFixture.create(ormPath: Directory.current.path);
     BuildWatch? watcher;
     try {
@@ -53,12 +67,12 @@ targets:
       orm:orm:
         enabled: true
         options:
-          schema: lib/fixture/schema
+          models: lib/fixture/schema
           database: postgres
 ''');
       await fixture.write(
-        'lib/fixture/schema/public/users.dart',
-        "import 'package:orm/schema.dart'; final user = model('users', (id: identity(),));",
+        'lib/fixture/schema/users.dart',
+        _model('User', 'public'),
       );
       await fixture.run(['run', 'build_runner', 'build']);
       final client = fixture.file('lib/fixture/schema.orm.dart');
@@ -78,24 +92,34 @@ targets:
       watcher = await fixture.watch();
       await watcher.next();
       await fixture.write(
-        'lib/fixture/schema/auth/users.dart',
-        "import 'package:orm/schema.dart'; final user = model('users', (id: identity(),));",
+        'lib/fixture/schema/features/nested/accounts.dart',
+        _model('Account', 'auth'),
       );
       await watcher.next();
-      expect(await client.readAsString(), contains('AuthUser'));
-      expect(await client.readAsString(), contains('PublicUser'));
+      expect(await client.readAsString(), contains('get account =>'));
       final beforeMove = await snapshot.readAsString();
       await fixture
-          .file('lib/fixture/schema/auth/users.dart')
-          .rename(fixture.file('lib/fixture/schema/auth/accounts.dart').path);
+          .file('lib/fixture/schema/features/nested/accounts.dart')
+          .rename(fixture.file('lib/fixture/schema/accounts.dart').path);
       await watcher.next();
       expect(await snapshot.readAsString(), beforeMove);
-      await fixture.file('lib/fixture/schema/auth/accounts.dart').delete();
+      await fixture.file('lib/fixture/schema/accounts.dart').delete();
       await watcher.next();
-      expect(await client.readAsString(), isNot(contains('AuthUser')));
+      expect(await client.readAsString(), isNot(contains('get account =>')));
       expect(await client.readAsString(), contains('get user =>'));
       await fixture.write('lib/unrelated.dart', 'const unused = 1;');
       await watcher.quiet();
+      await fixture.file('lib/fixture/schema/users.dart').delete();
+      await watcher.next();
+      expect(await client.exists(), false);
+      expect(await snapshot.exists(), false);
+      await fixture.write(
+        'lib/fixture/schema/users.dart',
+        _model('User', 'public'),
+      );
+      await watcher.next();
+      expect(await client.exists(), true);
+      expect(await snapshot.exists(), true);
       await watcher.close();
       watcher = null;
       await fixture.run(['analyze', 'lib/fixture/schema.orm.dart']);

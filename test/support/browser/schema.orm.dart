@@ -3,17 +3,150 @@
 import 'package:orm/sql.dart';
 
 import "schema.dart" as models;
+export "schema.dart" show User, Post, Value, Reading;
 
 import 'dart:typed_data';
 
-/// A complete immutable row from "users".
-final class User({
-  required final int id,
-  required final String email,
-  required final String? nickname,
-  required final int emailSize,
-  required final String? upperNickname,
-});
+final _postId = Column<int>(
+  "id",
+  Codecs.integer,
+  nullable: false,
+  generated: true,
+);
+final _postAuthorId = Column<int>(
+  "author_id",
+  Codecs.integer,
+  nullable: false,
+  generated: false,
+);
+final _postTitle = Column<String>(
+  "title",
+  Codecs.text,
+  nullable: false,
+  generated: false,
+);
+final postSchema = TableSchema(
+  "posts",
+  columns: [_postId, _postAuthorId, _postTitle],
+  primaryKey: ["id"],
+  uniqueKeys: [],
+  indexes: [],
+  foreignKeys: [
+    ForeignKey(["author_id"], "users", ["id"], onDelete: "CASCADE"),
+  ],
+);
+
+final class PostFields extends Fields {
+  PostFields(super.table);
+  late final id = column(_postId);
+  late final authorId = column(_postAuthorId);
+  late final title = column(_postTitle);
+  Relation<models.User, UserFields> get author =>
+      Relation(userTable, parent: [authorId], child: (row) => [row.id]);
+}
+
+final postTable = Table<models.Post, PostFields>(
+  postSchema,
+  PostFields.new,
+  (row) => (
+    row.id,
+    row.authorId,
+    row.title,
+  ).map((v0, v1, v2) => models.Post(id: v0, authorId: v1, title: v2)),
+);
+
+final class PostTableSet extends TableSet<models.Post, PostFields> {
+  PostTableSet(QueryContext db) : super(db, postTable) {
+    db.registerSchema(appSchema);
+  }
+  Future<models.Post> create({
+    Change<int> id = const Change.keep(),
+    required int authorId,
+    required String title,
+  }) => createRow(
+    (row) => [
+      ...row.id.change(id),
+      row.authorId.set(authorId),
+      row.title.set(title),
+    ],
+  );
+  Query<models.Post, PostFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
+}
+
+extension PostUpdates on Query<models.Post, PostFields> {
+  Future<int> patch({
+    Change<int> authorId = const Change.keep(),
+    Change<String> title = const Change.keep(),
+  }) => update(
+    (row) => [...row.authorId.change(authorId), ...row.title.change(title)],
+  ).execute();
+}
+
+final _readingId = Column<int>(
+  "id",
+  Codecs.integer,
+  nullable: false,
+  generated: false,
+);
+final _readingValue = Column<double>(
+  "value",
+  Codecs.real,
+  nullable: false,
+  generated: false,
+);
+final readingSchema = TableSchema(
+  "readings",
+  columns: [_readingId, _readingValue],
+  primaryKey: ["id"],
+  uniqueKeys: [],
+  indexes: [],
+  foreignKeys: [],
+);
+
+final class ReadingFields extends Fields {
+  ReadingFields(super.table);
+  late final id = column(_readingId);
+  late final value = column(_readingValue);
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Reading, ReadingFields> get peers =>
+      Relation(readingTable, parent: [value], child: (row) => [row.value]);
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Reading, ReadingFields> get sameReading => Relation(
+    readingTable,
+    parent: [id, value],
+    child: (row) => [row.id, row.value],
+  );
+}
+
+final readingTable = Table<models.Reading, ReadingFields>(
+  readingSchema,
+  ReadingFields.new,
+  (row) =>
+      (row.id, row.value).map((v0, v1) => models.Reading(id: v0, value: v1)),
+);
+
+final class ReadingTableSet extends TableSet<models.Reading, ReadingFields> {
+  ReadingTableSet(QueryContext db) : super(db, readingTable) {
+    db.registerSchema(appSchema);
+  }
+  Future<models.Reading> create({required int id, required double value}) =>
+      createRow((row) => [row.id.set(id), row.value.set(value)]);
+  Query<models.Reading, ReadingFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
+}
+
+extension ReadingUpdates on Query<models.Reading, ReadingFields> {
+  Future<int> patch({
+    Change<int> id = const Change.keep(),
+    Change<double> value = const Change.keep(),
+  }) =>
+      update((row) => [...row.id.change(id), ...row.value.change(value)])
+          .execute();
+}
+
 final _userId = Column<int>(
   "id",
   Codecs.integer,
@@ -92,16 +225,18 @@ final class UserFields extends Fields {
   late final nickname = column(_userNickname);
   late final emailSize = readColumn(_userEmailSize);
   late final upperNickname = readColumn(_userUpperNickname);
-  Relation<Post, PostFields> get posts =>
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Post, PostFields> get posts =>
       Relation(postTable, parent: [id], child: (row) => [row.authorId]);
 }
 
-final userTable = Table<User, UserFields>(
+final userTable = Table<models.User, UserFields>(
   userSchema,
   UserFields.new,
   (row) =>
       (row.id, row.email, row.nickname, row.emailSize, row.upperNickname).map(
-        (v0, v1, v2, v3, v4) => User(
+        (v0, v1, v2, v3, v4) => models.User(
           id: v0,
           email: v1,
           nickname: v2,
@@ -111,11 +246,11 @@ final userTable = Table<User, UserFields>(
       ),
 );
 
-final class UserTableSet extends TableSet<User, UserFields> {
+final class UserTableSet extends TableSet<models.User, UserFields> {
   UserTableSet(QueryContext db) : super(db, userTable) {
     db.registerSchema(appSchema);
   }
-  Future<User> create({
+  Future<models.User> create({
     Change<int> id = const Change.keep(),
     required String email,
     Change<String?> nickname = const Change.keep(),
@@ -126,10 +261,11 @@ final class UserTableSet extends TableSet<User, UserFields> {
       ...row.nickname.change(nickname),
     ],
   );
-  Query<User, UserFields> byId(int id) => where((row) => row.id.eq(.value(id)));
+  Query<models.User, UserFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
-extension UserUpdates on Query<User, UserFields> {
+extension UserUpdates on Query<models.User, UserFields> {
   Future<int> patch({
     Change<String> email = const Change.keep(),
     Change<String?> nickname = const Change.keep(),
@@ -138,98 +274,6 @@ extension UserUpdates on Query<User, UserFields> {
   ).execute();
 }
 
-/// A complete immutable row from "posts".
-final class Post({
-  required final int id,
-  required final int authorId,
-  required final String title,
-});
-final _postId = Column<int>(
-  "id",
-  Codecs.integer,
-  nullable: false,
-  generated: true,
-);
-final _postAuthorId = Column<int>(
-  "author_id",
-  Codecs.integer,
-  nullable: false,
-  generated: false,
-);
-final _postTitle = Column<String>(
-  "title",
-  Codecs.text,
-  nullable: false,
-  generated: false,
-);
-final postSchema = TableSchema(
-  "posts",
-  columns: [_postId, _postAuthorId, _postTitle],
-  primaryKey: ["id"],
-  uniqueKeys: [],
-  indexes: [],
-  foreignKeys: [
-    ForeignKey(["author_id"], "users", ["id"], onDelete: "CASCADE"),
-  ],
-);
-
-final class PostFields extends Fields {
-  PostFields(super.table);
-  late final id = column(_postId);
-  late final authorId = column(_postAuthorId);
-  late final title = column(_postTitle);
-  Relation<User, UserFields> get author =>
-      Relation(userTable, parent: [authorId], child: (row) => [row.id]);
-}
-
-final postTable = Table<Post, PostFields>(
-  postSchema,
-  PostFields.new,
-  (row) => (
-    row.id,
-    row.authorId,
-    row.title,
-  ).map((v0, v1, v2) => Post(id: v0, authorId: v1, title: v2)),
-);
-
-final class PostTableSet extends TableSet<Post, PostFields> {
-  PostTableSet(QueryContext db) : super(db, postTable) {
-    db.registerSchema(appSchema);
-  }
-  Future<Post> create({
-    Change<int> id = const Change.keep(),
-    required int authorId,
-    required String title,
-  }) => createRow(
-    (row) => [
-      ...row.id.change(id),
-      row.authorId.set(authorId),
-      row.title.set(title),
-    ],
-  );
-  Query<Post, PostFields> byId(int id) => where((row) => row.id.eq(.value(id)));
-}
-
-extension PostUpdates on Query<Post, PostFields> {
-  Future<int> patch({
-    Change<int> authorId = const Change.keep(),
-    Change<String> title = const Change.keep(),
-  }) => update(
-    (row) => [...row.authorId.change(authorId), ...row.title.change(title)],
-  ).execute();
-}
-
-/// A complete immutable row from "values".
-final class Value({
-  required final int id,
-  required final BigInt wide,
-  required final Uint8List bytes,
-  required final Decimal amount,
-  required final LocalDate day,
-  required final LocalTime time,
-  required final LocalDateTime stamp,
-  required final DateTime instant,
-});
 final _valueId = Column<int>(
   "id",
   Codecs.integer,
@@ -308,7 +352,7 @@ final class ValueFields extends Fields {
   late final instant = column(_valueInstant);
 }
 
-final valueTable = Table<Value, ValueFields>(
+final valueTable = Table<models.Value, ValueFields>(
   valueSchema,
   ValueFields.new,
   (row) =>
@@ -322,7 +366,7 @@ final valueTable = Table<Value, ValueFields>(
               (time: time, stamp: stamp, instant: instant),
         ),
       ).map(
-        (left, right) => Value(
+        (left, right) => models.Value(
           id: left.id,
           wide: left.wide,
           bytes: left.bytes,
@@ -335,11 +379,11 @@ final valueTable = Table<Value, ValueFields>(
       ),
 );
 
-final class ValueTableSet extends TableSet<Value, ValueFields> {
+final class ValueTableSet extends TableSet<models.Value, ValueFields> {
   ValueTableSet(QueryContext db) : super(db, valueTable) {
     db.registerSchema(appSchema);
   }
-  Future<Value> create({
+  Future<models.Value> create({
     Change<int> id = const Change.keep(),
     required BigInt wide,
     required Uint8List bytes,
@@ -360,11 +404,11 @@ final class ValueTableSet extends TableSet<Value, ValueFields> {
       row.instant.set(instant),
     ],
   );
-  Query<Value, ValueFields> byId(int id) =>
+  Query<models.Value, ValueFields> byId(int id) =>
       where((row) => row.id.eq(.value(id)));
 }
 
-extension ValueUpdates on Query<Value, ValueFields> {
+extension ValueUpdates on Query<models.Value, ValueFields> {
   Future<int> patch({
     Change<BigInt> wide = const Change.keep(),
     Change<Uint8List> bytes = const Change.keep(),
@@ -386,81 +430,16 @@ extension ValueUpdates on Query<Value, ValueFields> {
   ).execute();
 }
 
-/// A complete immutable row from "readings".
-final class Reading({required final int id, required final double value});
-final _readingId = Column<int>(
-  "id",
-  Codecs.integer,
-  nullable: false,
-  generated: false,
-);
-final _readingValue = Column<double>(
-  "value",
-  Codecs.real,
-  nullable: false,
-  generated: false,
-);
-final readingSchema = TableSchema(
-  "readings",
-  columns: [_readingId, _readingValue],
-  primaryKey: ["id"],
-  uniqueKeys: [],
-  indexes: [],
-  foreignKeys: [],
-);
-
-final class ReadingFields extends Fields {
-  ReadingFields(super.table);
-  late final id = column(_readingId);
-  late final value = column(_readingValue);
-
-  /// Read-only navigation; no database foreign key or write effects.
-  Relation<Reading, ReadingFields> get peers =>
-      Relation(readingTable, parent: [value], child: (row) => [row.value]);
-
-  /// Read-only navigation; no database foreign key or write effects.
-  Relation<Reading, ReadingFields> get sameReading => Relation(
-    readingTable,
-    parent: [id, value],
-    child: (row) => [row.id, row.value],
-  );
-}
-
-final readingTable = Table<Reading, ReadingFields>(
-  readingSchema,
-  ReadingFields.new,
-  (row) => (row.id, row.value).map((v0, v1) => Reading(id: v0, value: v1)),
-);
-
-final class ReadingTableSet extends TableSet<Reading, ReadingFields> {
-  ReadingTableSet(QueryContext db) : super(db, readingTable) {
-    db.registerSchema(appSchema);
-  }
-  Future<Reading> create({required int id, required double value}) =>
-      createRow((row) => [row.id.set(id), row.value.set(value)]);
-  Query<Reading, ReadingFields> byId(int id) =>
-      where((row) => row.id.eq(.value(id)));
-}
-
-extension ReadingUpdates on Query<Reading, ReadingFields> {
-  Future<int> patch({
-    Change<int> id = const Change.keep(),
-    Change<double> value = const Change.keep(),
-  }) =>
-      update((row) => [...row.id.change(id), ...row.value.change(value)])
-          .execute();
-}
-
 final appSchema = List<TableSchema>.unmodifiable([
-  userSchema,
   postSchema,
-  valueSchema,
   readingSchema,
+  userSchema,
+  valueSchema,
 ]);
 
 extension AppTables on QueryContext {
-  UserTableSet get user => UserTableSet(this);
   PostTableSet get post => PostTableSet(this);
-  ValueTableSet get value => ValueTableSet(this);
   ReadingTableSet get reading => ReadingTableSet(this);
+  UserTableSet get user => UserTableSet(this);
+  ValueTableSet get value => ValueTableSet(this);
 }

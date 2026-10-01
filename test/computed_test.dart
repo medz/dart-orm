@@ -212,7 +212,7 @@ void main() {
                 false,
                 reason: '${imported.issues.map((i) => i.toJson())}',
               );
-              expect(imported.dart, contains('.computed('));
+              expect(imported.dart, contains('@Computed('));
               final source = File('${dir.path}/schema.dart');
               await source.writeAsString(imported.dart);
               final generated = await generateSchema(source.path);

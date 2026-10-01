@@ -2,15 +2,126 @@
 
 import 'package:orm/sql.dart';
 
-/// A complete immutable row from "wallets".
-final class Wallet({
-  required final int id,
-  required final Decimal amount,
-  required final Decimal hundreds,
-  required final Decimal fraction,
-  required final Decimal defaulted,
-  required final Decimal? optional,
-});
+import "schema.dart" as models;
+export "schema.dart" show Wallet, Price, Receipt;
+
+final _priceId = Column<Decimal>(
+  "id",
+  Codecs.decimal,
+  nullable: false,
+  generated: false,
+  decimalPrecision: 4,
+  decimalScale: 2,
+);
+final _priceLabel = Column<String>(
+  "label",
+  Codecs.text,
+  nullable: false,
+  generated: false,
+);
+final priceSchema = TableSchema(
+  "prices",
+  columns: [_priceId, _priceLabel],
+  primaryKey: ["id"],
+  uniqueKeys: [],
+  indexes: [],
+  foreignKeys: [],
+);
+
+final class PriceFields extends Fields {
+  PriceFields(super.table);
+  late final id = column(_priceId);
+  late final label = column(_priceLabel);
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Receipt, ReceiptFields> get receipts =>
+      Relation(receiptTable, parent: [id], child: (row) => [row.priceId]);
+}
+
+final priceTable = Table<models.Price, PriceFields>(
+  priceSchema,
+  PriceFields.new,
+  (row) => (row.id, row.label).map((v0, v1) => models.Price(id: v0, label: v1)),
+);
+
+final class PriceTableSet extends TableSet<models.Price, PriceFields> {
+  PriceTableSet(QueryContext db) : super(db, priceTable) {
+    db.registerSchema(appSchema);
+  }
+  Future<models.Price> create({required Decimal id, required String label}) =>
+      createRow((row) => [row.id.set(id), row.label.set(label)]);
+  Query<models.Price, PriceFields> byId(Decimal id) =>
+      where((row) => row.id.eq(.value(id)));
+}
+
+extension PriceUpdates on Query<models.Price, PriceFields> {
+  Future<int> patch({
+    Change<Decimal> id = const Change.keep(),
+    Change<String> label = const Change.keep(),
+  }) =>
+      update((row) => [...row.id.change(id), ...row.label.change(label)])
+          .execute();
+}
+
+final _receiptId = Column<int>(
+  "id",
+  Codecs.integer,
+  nullable: false,
+  generated: true,
+);
+final _receiptPriceId = Column<Decimal>(
+  "price_id",
+  Codecs.decimal,
+  nullable: false,
+  generated: false,
+  decimalPrecision: 4,
+  decimalScale: 2,
+);
+final receiptSchema = TableSchema(
+  "receipts",
+  columns: [_receiptId, _receiptPriceId],
+  primaryKey: ["id"],
+  uniqueKeys: [],
+  indexes: [],
+  foreignKeys: [
+    ForeignKey(["price_id"], "prices", ["id"], onDelete: "RESTRICT"),
+  ],
+);
+
+final class ReceiptFields extends Fields {
+  ReceiptFields(super.table);
+  late final id = column(_receiptId);
+  late final priceId = column(_receiptPriceId);
+  Relation<models.Price, PriceFields> get price =>
+      Relation(priceTable, parent: [priceId], child: (row) => [row.id]);
+}
+
+final receiptTable = Table<models.Receipt, ReceiptFields>(
+  receiptSchema,
+  ReceiptFields.new,
+  (row) => (
+    row.id,
+    row.priceId,
+  ).map((v0, v1) => models.Receipt(id: v0, priceId: v1)),
+);
+
+final class ReceiptTableSet extends TableSet<models.Receipt, ReceiptFields> {
+  ReceiptTableSet(QueryContext db) : super(db, receiptTable) {
+    db.registerSchema(appSchema);
+  }
+  Future<models.Receipt> create({
+    Change<int> id = const Change.keep(),
+    required Decimal priceId,
+  }) => createRow((row) => [...row.id.change(id), row.priceId.set(priceId)]);
+  Query<models.Receipt, ReceiptFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
+}
+
+extension ReceiptUpdates on Query<models.Receipt, ReceiptFields> {
+  Future<int> patch({Change<Decimal> priceId = const Change.keep()}) =>
+      update((row) => [...row.priceId.change(priceId)]).execute();
+}
+
 final _walletId = Column<int>(
   "id",
   Codecs.integer,
@@ -84,7 +195,7 @@ final class WalletFields extends Fields {
   late final optional = column(_walletOptional);
 }
 
-final walletTable = Table<Wallet, WalletFields>(
+final walletTable = Table<models.Wallet, WalletFields>(
   walletSchema,
   WalletFields.new,
   (row) =>
@@ -96,7 +207,7 @@ final walletTable = Table<Wallet, WalletFields>(
         row.defaulted,
         row.optional,
       ).map(
-        (v0, v1, v2, v3, v4, v5) => Wallet(
+        (v0, v1, v2, v3, v4, v5) => models.Wallet(
           id: v0,
           amount: v1,
           hundreds: v2,
@@ -107,11 +218,11 @@ final walletTable = Table<Wallet, WalletFields>(
       ),
 );
 
-final class WalletTableSet extends TableSet<Wallet, WalletFields> {
+final class WalletTableSet extends TableSet<models.Wallet, WalletFields> {
   WalletTableSet(QueryContext db) : super(db, walletTable) {
     db.registerSchema(appSchema);
   }
-  Future<Wallet> create({
+  Future<models.Wallet> create({
     Change<int> id = const Change.keep(),
     required Decimal amount,
     required Decimal hundreds,
@@ -128,11 +239,11 @@ final class WalletTableSet extends TableSet<Wallet, WalletFields> {
       row.optional.set(optional),
     ],
   );
-  Query<Wallet, WalletFields> byId(int id) =>
+  Query<models.Wallet, WalletFields> byId(int id) =>
       where((row) => row.id.eq(.value(id)));
 }
 
-extension WalletUpdates on Query<Wallet, WalletFields> {
+extension WalletUpdates on Query<models.Wallet, WalletFields> {
   Future<int> patch({
     Change<Decimal> amount = const Change.keep(),
     Change<Decimal> hundreds = const Change.keep(),
@@ -150,130 +261,14 @@ extension WalletUpdates on Query<Wallet, WalletFields> {
   ).execute();
 }
 
-/// A complete immutable row from "prices".
-final class Price({required final Decimal id, required final String label});
-final _priceId = Column<Decimal>(
-  "id",
-  Codecs.decimal,
-  nullable: false,
-  generated: false,
-  decimalPrecision: 4,
-  decimalScale: 2,
-);
-final _priceLabel = Column<String>(
-  "label",
-  Codecs.text,
-  nullable: false,
-  generated: false,
-);
-final priceSchema = TableSchema(
-  "prices",
-  columns: [_priceId, _priceLabel],
-  primaryKey: ["id"],
-  uniqueKeys: [],
-  indexes: [],
-  foreignKeys: [],
-);
-
-final class PriceFields extends Fields {
-  PriceFields(super.table);
-  late final id = column(_priceId);
-  late final label = column(_priceLabel);
-  Relation<Receipt, ReceiptFields> get receipts =>
-      Relation(receiptTable, parent: [id], child: (row) => [row.priceId]);
-}
-
-final priceTable = Table<Price, PriceFields>(
-  priceSchema,
-  PriceFields.new,
-  (row) => (row.id, row.label).map((v0, v1) => Price(id: v0, label: v1)),
-);
-
-final class PriceTableSet extends TableSet<Price, PriceFields> {
-  PriceTableSet(QueryContext db) : super(db, priceTable) {
-    db.registerSchema(appSchema);
-  }
-  Future<Price> create({required Decimal id, required String label}) =>
-      createRow((row) => [row.id.set(id), row.label.set(label)]);
-  Query<Price, PriceFields> byId(Decimal id) =>
-      where((row) => row.id.eq(.value(id)));
-}
-
-extension PriceUpdates on Query<Price, PriceFields> {
-  Future<int> patch({
-    Change<Decimal> id = const Change.keep(),
-    Change<String> label = const Change.keep(),
-  }) =>
-      update((row) => [...row.id.change(id), ...row.label.change(label)])
-          .execute();
-}
-
-/// A complete immutable row from "receipts".
-final class Receipt({required final int id, required final Decimal priceId});
-final _receiptId = Column<int>(
-  "id",
-  Codecs.integer,
-  nullable: false,
-  generated: true,
-);
-final _receiptPriceId = Column<Decimal>(
-  "price_id",
-  Codecs.decimal,
-  nullable: false,
-  generated: false,
-  decimalPrecision: 4,
-  decimalScale: 2,
-);
-final receiptSchema = TableSchema(
-  "receipts",
-  columns: [_receiptId, _receiptPriceId],
-  primaryKey: ["id"],
-  uniqueKeys: [],
-  indexes: [],
-  foreignKeys: [
-    ForeignKey(["price_id"], "prices", ["id"], onDelete: "RESTRICT"),
-  ],
-);
-
-final class ReceiptFields extends Fields {
-  ReceiptFields(super.table);
-  late final id = column(_receiptId);
-  late final priceId = column(_receiptPriceId);
-  Relation<Price, PriceFields> get price =>
-      Relation(priceTable, parent: [priceId], child: (row) => [row.id]);
-}
-
-final receiptTable = Table<Receipt, ReceiptFields>(
-  receiptSchema,
-  ReceiptFields.new,
-  (row) => (row.id, row.priceId).map((v0, v1) => Receipt(id: v0, priceId: v1)),
-);
-
-final class ReceiptTableSet extends TableSet<Receipt, ReceiptFields> {
-  ReceiptTableSet(QueryContext db) : super(db, receiptTable) {
-    db.registerSchema(appSchema);
-  }
-  Future<Receipt> create({
-    Change<int> id = const Change.keep(),
-    required Decimal priceId,
-  }) => createRow((row) => [...row.id.change(id), row.priceId.set(priceId)]);
-  Query<Receipt, ReceiptFields> byId(int id) =>
-      where((row) => row.id.eq(.value(id)));
-}
-
-extension ReceiptUpdates on Query<Receipt, ReceiptFields> {
-  Future<int> patch({Change<Decimal> priceId = const Change.keep()}) =>
-      update((row) => [...row.priceId.change(priceId)]).execute();
-}
-
 final appSchema = List<TableSchema>.unmodifiable([
-  walletSchema,
   priceSchema,
   receiptSchema,
+  walletSchema,
 ]);
 
 extension AppTables on QueryContext {
-  WalletTableSet get wallet => WalletTableSet(this);
   PriceTableSet get price => PriceTableSet(this);
   ReceiptTableSet get receipt => ReceiptTableSet(this);
+  WalletTableSet get wallet => WalletTableSet(this);
 }

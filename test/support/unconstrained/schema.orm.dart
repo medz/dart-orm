@@ -3,13 +3,9 @@
 import 'package:orm/sql.dart';
 import 'package:orm/sql.dart' as orm show allOf;
 
-/// A complete immutable row from "accounts".
-final class Account({
-  required final int tenant,
-  required final int id,
-  required final String? label,
-  required final int? managerId,
-});
+import "schema.dart" as models;
+export "schema.dart" show Account, Entry, Reading;
+
 final _accountTenant = Column<int>(
   "tenant",
   Codecs.integer,
@@ -51,47 +47,48 @@ final class AccountFields extends Fields {
   late final managerId = column(_accountManagerId);
 
   /// Read-only navigation; no database foreign key or write effects.
-  Relation<Entry, EntryFields> get entries => Relation(
+  Relation<models.Entry, EntryFields> get entries => Relation(
     entryTable,
     parent: [tenant, id],
     child: (row) => [row.tenant, row.owner],
   );
 
   /// Read-only navigation; no database foreign key or write effects.
-  Relation<Entry, EntryFields> get matches => Relation(
+  Relation<models.Entry, EntryFields> get matches => Relation(
     entryTable,
     parent: [tenant, label],
     child: (row) => [row.tenant, row.label],
   );
 
   /// Read-only navigation; no database foreign key or write effects.
-  Relation<Account, AccountFields> get manager => Relation(
+  Relation<models.Account, AccountFields> get manager => Relation(
     accountTable,
     parent: [tenant, managerId],
     child: (row) => [row.tenant, row.id],
   );
 
   /// Read-only navigation; no database foreign key or write effects.
-  Relation<Account, AccountFields> get reports => Relation(
+  Relation<models.Account, AccountFields> get reports => Relation(
     accountTable,
     parent: [tenant, id],
     child: (row) => [row.tenant, row.managerId],
   );
 }
 
-final accountTable = Table<Account, AccountFields>(
+final accountTable = Table<models.Account, AccountFields>(
   accountSchema,
   AccountFields.new,
   (row) => (row.tenant, row.id, row.label, row.managerId).map(
-    (v0, v1, v2, v3) => Account(tenant: v0, id: v1, label: v2, managerId: v3),
+    (v0, v1, v2, v3) =>
+        models.Account(tenant: v0, id: v1, label: v2, managerId: v3),
   ),
 );
 
-final class AccountTableSet extends TableSet<Account, AccountFields> {
+final class AccountTableSet extends TableSet<models.Account, AccountFields> {
   AccountTableSet(QueryContext db) : super(db, accountTable) {
     db.registerSchema(appSchema);
   }
-  Future<Account> create({
+  Future<models.Account> create({
     required int tenant,
     required int id,
     String? label,
@@ -104,14 +101,15 @@ final class AccountTableSet extends TableSet<Account, AccountFields> {
       row.managerId.set(managerId),
     ],
   );
-  Query<Account, AccountFields> byId({required int tenant, required int id}) =>
-      where(
-        (row) =>
-            orm.allOf([row.tenant.eq(.value(tenant)), row.id.eq(.value(id))]),
-      );
+  Query<models.Account, AccountFields> byId({
+    required int tenant,
+    required int id,
+  }) => where(
+    (row) => orm.allOf([row.tenant.eq(.value(tenant)), row.id.eq(.value(id))]),
+  );
 }
 
-extension AccountUpdates on Query<Account, AccountFields> {
+extension AccountUpdates on Query<models.Account, AccountFields> {
   Future<int> patch({
     Change<int> tenant = const Change.keep(),
     Change<int> id = const Change.keep(),
@@ -127,13 +125,6 @@ extension AccountUpdates on Query<Account, AccountFields> {
   ).execute();
 }
 
-/// A complete immutable row from "entries".
-final class Entry({
-  required final int id,
-  required final int? tenant,
-  required final int? owner,
-  required final String? label,
-});
 final _entryId = Column<int>(
   "id",
   Codecs.integer,
@@ -175,36 +166,33 @@ final class EntryFields extends Fields {
   late final label = column(_entryLabel);
 
   /// Read-only navigation; no database foreign key or write effects.
-  Relation<Account, AccountFields> get ownerAccount => Relation(
+  Relation<models.Account, AccountFields> get ownerAccount => Relation(
     accountTable,
     parent: [tenant, owner],
     child: (row) => [row.tenant, row.id],
   );
 
   /// Read-only navigation; no database foreign key or write effects.
-  Relation<Account, AccountFields> get matchingAccounts => Relation(
+  Relation<models.Account, AccountFields> get matchingAccounts => Relation(
     accountTable,
     parent: [tenant, label],
     child: (row) => [row.tenant, row.label],
   );
 }
 
-final entryTable = Table<Entry, EntryFields>(
+final entryTable = Table<models.Entry, EntryFields>(
   entrySchema,
   EntryFields.new,
-  (row) => (
-    row.id,
-    row.tenant,
-    row.owner,
-    row.label,
-  ).map((v0, v1, v2, v3) => Entry(id: v0, tenant: v1, owner: v2, label: v3)),
+  (row) => (row.id, row.tenant, row.owner, row.label).map(
+    (v0, v1, v2, v3) => models.Entry(id: v0, tenant: v1, owner: v2, label: v3),
+  ),
 );
 
-final class EntryTableSet extends TableSet<Entry, EntryFields> {
+final class EntryTableSet extends TableSet<models.Entry, EntryFields> {
   EntryTableSet(QueryContext db) : super(db, entryTable) {
     db.registerSchema(appSchema);
   }
-  Future<Entry> create({
+  Future<models.Entry> create({
     required int id,
     int? tenant,
     int? owner,
@@ -217,11 +205,11 @@ final class EntryTableSet extends TableSet<Entry, EntryFields> {
       row.label.set(label),
     ],
   );
-  Query<Entry, EntryFields> byId(int id) =>
+  Query<models.Entry, EntryFields> byId(int id) =>
       where((row) => row.id.eq(.value(id)));
 }
 
-extension EntryUpdates on Query<Entry, EntryFields> {
+extension EntryUpdates on Query<models.Entry, EntryFields> {
   Future<int> patch({
     Change<int> id = const Change.keep(),
     Change<int?> tenant = const Change.keep(),
@@ -237,8 +225,6 @@ extension EntryUpdates on Query<Entry, EntryFields> {
   ).execute();
 }
 
-/// A complete immutable row from "readings".
-final class Reading({required final int id, required final double value});
 final _readingId = Column<int>(
   "id",
   Codecs.integer,
@@ -266,27 +252,28 @@ final class ReadingFields extends Fields {
   late final value = column(_readingValue);
 
   /// Read-only navigation; no database foreign key or write effects.
-  Relation<Reading, ReadingFields> get peers =>
+  Relation<models.Reading, ReadingFields> get peers =>
       Relation(readingTable, parent: [value], child: (row) => [row.value]);
 }
 
-final readingTable = Table<Reading, ReadingFields>(
+final readingTable = Table<models.Reading, ReadingFields>(
   readingSchema,
   ReadingFields.new,
-  (row) => (row.id, row.value).map((v0, v1) => Reading(id: v0, value: v1)),
+  (row) =>
+      (row.id, row.value).map((v0, v1) => models.Reading(id: v0, value: v1)),
 );
 
-final class ReadingTableSet extends TableSet<Reading, ReadingFields> {
+final class ReadingTableSet extends TableSet<models.Reading, ReadingFields> {
   ReadingTableSet(QueryContext db) : super(db, readingTable) {
     db.registerSchema(appSchema);
   }
-  Future<Reading> create({required int id, required double value}) =>
+  Future<models.Reading> create({required int id, required double value}) =>
       createRow((row) => [row.id.set(id), row.value.set(value)]);
-  Query<Reading, ReadingFields> byId(int id) =>
+  Query<models.Reading, ReadingFields> byId(int id) =>
       where((row) => row.id.eq(.value(id)));
 }
 
-extension ReadingUpdates on Query<Reading, ReadingFields> {
+extension ReadingUpdates on Query<models.Reading, ReadingFields> {
   Future<int> patch({
     Change<int> id = const Change.keep(),
     Change<double> value = const Change.keep(),

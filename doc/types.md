@@ -1,6 +1,6 @@
 # Domain types and storage
 
-Record fields keep their Dart types throughout generated creation, patches,
+Annotated DTO fields keep their Dart types throughout generated creation, patches,
 predicates, projections, relationships and cursor values. A codec describes the
 storage boundary: `encode` produces a driver value, and `decode` validates and
 constructs the application value.
@@ -18,10 +18,13 @@ extension type const UserId(int value) {
   static int _encode(UserId value) => value.value;
 }
 
-final user = model('users', (
-  id: custom(UserId.codec).identity(),
-  name: text(),
-));
+@Model(table: 'users')
+final class User({
+  @Id(generated: true)
+  @Column(codec: UserId.codec)
+  required final UserId id,
+  required final String name,
+});
 ```
 
 After generation, `db.user.byId(UserId(1))` accepts the domain ID;
@@ -33,13 +36,13 @@ the encoder's return type. The general `Codec<T>(storage, decode, encode)` accep
 the storage tags in the table below. It is the application's responsibility to
 validate the representation and keep encoding deterministic.
 
-`custom(codec)` accepts a **public const variable or public static const field**.
+`@Column(codec: codec)` accepts a **public const variable or public static const field**.
 The generator checks the reference's resolved Dart type and reads the constant
 storage tag. It never calls application encoders, decoders or model constructors.
 Private codec references and inline codec constructors are rejected. Use
-`custom(codec).nullable()` for optional values: SQL `NULL` bypasses a non-nullable
-domain decoder. A codec whose Dart value type is nullable also produces a nullable
-column.
+a nullable field type, such as `UserId?`, for optional values: SQL `NULL`
+bypasses a non-nullable domain decoder. A nullable codec requires a nullable DTO
+field. The annotation does not change the field's declared Dart type.
 
 Imported types, extension types, public record aliases and nested generic types
 retain qualified names in generated code. Two different libraries may both
@@ -52,15 +55,17 @@ declare `Email`. Output can be generated into a different directory.
 ```dart
 enum Membership { pending, active, cancelled }
 
-final account = model('accounts', (
-  id: identity(),
-  membership: enumeration(Membership.values, labels: {
+@Model(table: 'accounts')
+final class Account({
+  @Id(generated: true) required final int id,
+  @Column(labels: {
     Membership.pending: 'pending-payment',
     Membership.active: 'active',
     Membership.cancelled: 'closed',
-  }),
-  previousMembership: enumeration(Membership.values).nullable(),
-));
+  })
+  required final Membership membership,
+  required final Membership? previousMembership,
+});
 ```
 
 Enums use text labels. Without a `labels` map, the label is the constant's Dart
@@ -93,10 +98,11 @@ Location decodeLocation(Object? raw) {
 String encodeLocation(Location value) =>
     jsonEncode({'city': value.city, 'zone': value.zone});
 
-final place = model('places', (
-  id: identity(),
-  location: custom(locationCodec).nullable(),
-));
+@Model(table: 'places')
+final class Place({
+  @Id(generated: true) required final int id,
+  @Column(codec: locationCodec) required final Location? location,
+});
 ```
 
 Use `Codecs.json.decode(raw)` inside a custom JSON decoder. SQLite supplies JSON
@@ -107,10 +113,11 @@ passed to the domain decoder; it does not bypass validation as SQL `NULL` does.
 For an arbitrary document with explicit presence:
 
 ```dart
-final event = model('events', (
-  id: identity(),
-  payload: json().nullable(),
-));
+@Model(table: 'events')
+final class Event({
+  @Id(generated: true) required final int id,
+  required final SqlJson? payload,
+});
 
 // In generated create/patch arguments:
 // null            -> SQL NULL
@@ -231,12 +238,13 @@ importer infer `DateTime` without sampling data.
 ## Local calendar values
 
 ```dart
-final appointment = model('appointments', (
-  id: identity(),
-  day: date(),
-  time: time(defaultSql: "'12:30'"),
-  starts: localDateTime().nullable(),
-));
+@Model(table: 'appointments')
+final class Appointment({
+  @Id(generated: true) required final int id,
+  required final LocalDate day,
+  @DatabaseDefault.sql("'12:30'") required final LocalTime time,
+  required final LocalDateTime? starts,
+});
 
 // After generation:
 await db.appointment.create(
@@ -312,16 +320,18 @@ resolved instants.
 ## Temporal precision
 
 ```dart
-final event = model('events', (
-  id: identity(),
-  clock: time(precision: 3),
-  appointment: localDateTime(precision: 3),
-  occurredAt: dateTime(precision: 0),
-));
+@Model(table: 'events')
+final class Event({
+  @Id(generated: true) required final int id,
+  @Column(precision: 3) required final LocalTime clock,
+  @Column(precision: 3) required final LocalDateTime appointment,
+  @Column(precision: 0) required final DateTime occurredAt,
+});
 ```
 
-`time`, `localDateTime` and `dateTime` accept `precision` from 0 through 6,
-including on nullable columns. Manual `Column` declarations use
+`@Column(precision: ...)` accepts values from 0 through 6 on `LocalTime`,
+`LocalDateTime` and `DateTime` fields, including nullable ones. Physical `Column`
+metadata from `schema_model.dart` uses
 `temporalPrecision: 3`, including for domain codecs with a temporal storage tag.
 Date-only and unrelated storage types do not accept temporal precision.
 Omitting precision retains microseconds. Explicit six and the default have the
@@ -376,16 +386,18 @@ the precision metadata.
 ## Signed integer column widths
 
 ```dart
-final counter = model('counters', (
-  id: integer(bits: 32).identity(),
-  small: integer(bits: 16),
-  optional: integer(bits: 32).nullable(),
-  total: integer(),
-));
+@Model(table: 'counters')
+final class Counter({
+  @Id(generated: true) @Column(bits: 32) required final int id,
+  @Column(bits: 16) required final int small,
+  @Column(bits: 32) required final int? optional,
+  required final int total,
+});
 ```
 
-`integer(bits: ...)` accepts 16, 32 or 64. Omitting it means 64. For manual
-tables, pass `integerBits: 16` to `Column`, including columns with integer-backed
+`@Column(bits: ...)` accepts 16, 32 or 64. Omitting it means 64. For physical
+tables, pass `integerBits: 16` to `Column` from `schema_model.dart`, including
+columns with integer-backed
 domain codecs. Explicit 64 and the default have the same serialized
 schema and produce no migration difference.
 
@@ -413,7 +425,7 @@ Catalog inspection recognizes the emitted SQLite range checks while ignoring
 quoted defaults and comments. It does not claim to prove equivalence of arbitrary
 handwritten CHECK expressions; those remain unmanaged. Column checks and full
 schema verification both compare the inferred width. Catalog import emits
-`integer(bits: ...)` for PostgreSQL SMALLINT/INTEGER and recognized SQLite range checks.
+`@Column(bits: ...)` for PostgreSQL SMALLINT/INTEGER and recognized SQLite range checks.
 
 Width changes are type changes in migration history. Supply reviewed conversion
 expressions for the selected database, even for widening. PostgreSQL alters the native
@@ -429,8 +441,8 @@ safe-number range; use `BigInt` for wider exact transport. See
 
 ## Exact decimals
 
-Use `decimal()` for finite base-ten values, including money. Generated fields
-use the `Decimal` Dart type and `Codecs.decimal`. See [exact decimals](https://github.com/medz/dart-orm/blob/main/doc/decimals.md) for
+Declare a `Decimal` field for finite base-ten values, including money. Generation
+uses `Codecs.decimal`; `@Column(precision: 12, scale: 2)` adds explicit limits. See [exact decimals](https://github.com/medz/dart-orm/blob/main/doc/decimals.md) for
 construction, arithmetic, numeric keys, SQLite storage requirements and current
 limits. `BigInt` storage does not provide these fractional or SQLite numeric
 ordering semantics.

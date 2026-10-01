@@ -1,5 +1,10 @@
 ## Unreleased
 
+- Replace Record declarations with ordinary annotated DTOs in `package:orm/schema.dart`, preserving original class identity and business methods in full-row results. Regenerate clients; the old declaration helpers are removed.
+- Add `void defineConfig` in `package:orm/config.dart` for generation without existing client, snapshot or migration registry imports. Configuration paths are relative to the configuration file.
+- Keep omitted create values distinct from explicit values/null with typed `Change`; constructor constants provide client-only fallbacks. Explicit client/database defaults and generated identities take precedence.
+- Resolve PostgreSQL namespaces independently of source folders. Set explicit namespace metadata when migrating old folder-based declarations. Replace `OrmConfig` project entrypoints with `defineConfig`; frozen migration files and the production `runMigrationCli` API remain independent and unchanged.
+
 Breaking filter API refactor: regenerate clients and migrate application queries.
 There are no compatibility aliases. This changes query construction only; keep
 historical migration files unchanged.

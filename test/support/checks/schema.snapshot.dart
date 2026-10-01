@@ -3,6 +3,18 @@ import 'package:orm/migrate.dart';
 
 final schema = SchemaSnapshot([
   TableSchema(
+    "lines",
+    columns: [
+      Column("id", Codecs.integer, generated: true),
+      Column("product_id", Codecs.integer),
+    ],
+    primaryKey: ["id"],
+
+    foreignKeys: [
+      ForeignKey(["product_id"], "products", ["id"], onDelete: "RESTRICT"),
+    ],
+  ),
+  TableSchema(
     "products",
     columns: [
       Column("id", Codecs.integer, generated: true),
@@ -27,18 +39,6 @@ final schema = SchemaSnapshot([
         mariadb: "length(label) <= 20",
       ),
       CheckSchema(null, "label <> '; CHECK (0)'"),
-    ],
-  ),
-  TableSchema(
-    "lines",
-    columns: [
-      Column("id", Codecs.integer, generated: true),
-      Column("product_id", Codecs.integer),
-    ],
-    primaryKey: ["id"],
-
-    foreignKeys: [
-      ForeignKey(["product_id"], "products", ["id"], onDelete: "RESTRICT"),
     ],
   ),
 ]);

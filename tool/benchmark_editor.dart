@@ -44,10 +44,9 @@ Future<void> main(List<String> args) async {
           forbidden: <String>[],
         ),
         (
-          name: 'schema_record_fields',
+          name: 'original_dto_fields',
           file: 'lib/schema.dart',
-          source:
-              "$source\nfinal editorProbe = model('editor_probes', (id: integer(), title: text(), score: integer(), status: enumeration(Status.values)), primaryKey: (r) => r./*caret*/);\n",
+          source: "$source\nvoid inspectModel(Row0 row) { row./*caret*/; }\n",
           required: ['id', 'title', 'score', 'status'],
           forbidden: <String>[],
         ),
@@ -239,10 +238,13 @@ Future<void> main(List<String> args) async {
       final renameServerPid = server.process.pid;
       final symbols = fixture.file('lib/symbols.dart');
       server.open(symbols.path, _symbols);
+      final originalPhysical = (await generateSchema(symbols.path))
+          .snapshot
+          .checksum;
       final renames = <Map<String, Object?>>[];
       for (final (name, marker, newName) in [
-        ('model_handle', 'Model person', 'employee'),
-        ('schema_field', 'managerId:', 'supervisorId'),
+        ('model_class', 'class Person', 'Employee'),
+        ('dto_field', 'int? managerId', 'supervisorId'),
       ]) {
         final text = await symbols.readAsString();
         final offset = text.indexOf(marker) + marker.lastIndexOf(' ') + 1;
@@ -276,9 +278,47 @@ Future<void> main(List<String> args) async {
             : applied == null
             ? 'unavailable'
             : 'applied';
-        if (name == 'model_handle' &&
-            (applied?['lib/symbols.dart'] as Map?)?['edits'] != 3) {
+        if (name == 'model_class' &&
+            (applied?['lib/symbols.dart'] as Map?)?['edits'] != 4) {
           throw StateError('Unexpected $name rename: $response / $error');
+        }
+        Map<String, Object?>? metadata;
+        if (name == 'dto_field' && applied != null) {
+          final renamed = await symbols.readAsString();
+          if (!renamed.contains('final int? supervisorId;') ||
+              !renamed.contains('this.supervisorId') ||
+              !renamed.contains("['managerId']")) {
+            throw StateError(
+              'The DTO rename must leave string metadata for explicit review.',
+            );
+          }
+          String? staleMetadataError;
+          try {
+            await generateSchema(symbols.path);
+          } on GenerationException catch (e) {
+            staleMetadataError = e.message;
+          }
+          if (staleMetadataError == null) {
+            throw StateError(
+              'Stale string field references passed generation.',
+            );
+          }
+          final repaired = renamed.replaceAll("'managerId'", "'supervisorId'");
+          await fixture.write('lib/symbols.dart', repaired);
+          server.open(symbols.path, repaired);
+          final regenerated = await generateSchema(symbols.path);
+          if (regenerated.snapshot.checksum != originalPhysical) {
+            throw StateError(
+              'Dart symbol renames changed the preserved physical schema.',
+            );
+          }
+          metadata = {
+            'stringReferencesRenamedByAnalyzer': false,
+            'generatorErrorBeforeExplicitRepair': staleMetadataError,
+            'explicitRepair': "'managerId' -> 'supervisorId'",
+            'regenerationAfterRepair': 'passed',
+            'physicalSchemaPreserved': true,
+          };
         }
         renames.add({
           'probe': name,
@@ -288,12 +328,18 @@ Future<void> main(List<String> args) async {
           'error': error,
           'workspaceEdit': _relative(response, fixture.directory),
           'applied': applied,
+          'metadata': ?metadata,
         });
         stdout.writeln('  rename: $name ($status)');
       }
-      // A valid Dart selector may still violate the ORM's restricted selector AST.
+      // String metadata is valid Dart but its field names are checked by generation.
       final invalid =
-          "$source\nfinal invalid = model('invalid', (id: integer(),), indexes: (r) => [index([r.id], name: 'invalid_index')]);\n";
+          '''
+$source
+@Model(table: 'invalid')
+@Index(['missing'], name: 'invalid_index')
+final class Invalid({required final int id});
+''';
       await fixture.write('lib/schema.dart', invalid);
       server.open(schema.path, invalid);
       final dartAnalysis = await fixture.run(['analyze', 'lib/schema.dart']);
@@ -304,7 +350,7 @@ Future<void> main(List<String> args) async {
         generationError = e.message;
       }
       if (generationError == null) {
-        throw StateError('The invalid selector passed generation.');
+        throw StateError('The invalid metadata field name passed generation.');
       }
       await fixture.write('lib/schema.dart', source);
       server.open(schema.path, source);
@@ -361,10 +407,10 @@ Future<void> main(List<String> args) async {
         p: sha256.convert(await File(p).readAsBytes()).toString(),
     },
     'scope':
-        'Direct stdio LSP client against the installed Dart Analysis Server, isolated consumer packages and real generated APIs; no database. Includes client transport/JSON costs, excludes GUI/plugin rendering and dependency download. ${sameSession ? 'Each scale retains the same server across completion, deliberate errors, repair and symbol renames; PIDs are recorded.' : 'Each scale uses one fresh server for completion/diagnostics and another for symbol renames.'} Startup and initial project analysis are measured separately from completion. First completion follows a fresh diagnostic for the incomplete source and is not a cold OS/cache measurement. Warm probes use unchanged documents after two unrecorded warmups. Diagnostic probes serialize changes and await a fresh notification; this SDK omits document versions. Final CLI analysis verifies the edited sources. Rename probes use model handles and named column declarations, including self and forward references. Regeneration remains a separate step after schema edits.',
+        'Direct stdio LSP client against the installed Dart Analysis Server, isolated consumer packages and real generated APIs; no database. Includes client transport/JSON costs, excludes GUI/plugin rendering and dependency download. ${sameSession ? 'Each scale retains the same server across completion, deliberate errors, repair and symbol renames; PIDs are recorded.' : 'Each scale uses one fresh server for completion/diagnostics and another for symbol renames.'} Startup and initial project analysis are measured separately from completion. First completion follows a fresh diagnostic for the incomplete source and is not a cold OS/cache measurement. Warm probes use unchanged documents after two unrecorded warmups. Diagnostic probes serialize changes and await a fresh notification; this SDK omits document versions. Final CLI analysis verifies the edited sources. Rename probes use original DTO classes and fields, including self and forward class references. String field metadata is repaired explicitly after generation rejects stale names; its validation is separate from native Dart renaming.',
     'limits': [
       if (!sameSession) 'This capture restarts the server for renames and does not establish mixed-session rename after diagnostic recovery.',
-      'Named Record field rename support depends on the SDK; inspect each probe response. A successful bounded sequence does not establish every IDE/plugin workflow.',
+      'Class and field rename responses depend on the SDK; inspect each probe response. String field lists in annotations are not Dart symbol references and require explicit maintenance. A successful bounded sequence does not establish every IDE/plugin workflow.',
     ],
     'results': results,
   };
@@ -401,11 +447,24 @@ Map<String, Object?> _stats(List<int> times) {
 
 const _symbols = '''
 import 'package:orm/schema.dart';
-final Model person = model('people', (
-  id: identity(), managerId: integer().nullable(),
-), relations: (p) => (manager: references(p.managerId, () => person),));
-final report = model('reports', (id: identity(), authorId: integer()),
-  relations: (r) => (author: references(r.authorId, () => person),));
+@Model(table: 'people')
+@Index(['managerId'], name: 'people_manager')
+@Relation(target: Person, name: 'manager', fields: ['managerId'], keys: ['id'])
+final class Person {
+  @Id(generated: true)
+  final int id;
+  @Column(name: 'manager_id')
+  final int? managerId;
+  const Person({required this.id, required this.managerId});
+}
+@Model(table: 'reports')
+@Relation(target: Person, name: 'author', fields: ['authorId'], keys: ['id'])
+final class Report {
+  @Id(generated: true)
+  final int id;
+  final int authorId;
+  const Report({required this.id, required this.authorId});
+}
 ''';
 
 Object? _relative(Object? value, Directory root) => switch (value) {

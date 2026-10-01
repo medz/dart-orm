@@ -87,7 +87,15 @@ enum Status { pending, ready }
 import 'package:orm/schema.dart';
 import 'models.dart';
 ${[for (var i = 0; i < models; i++) '''
-final row$i = model('rows_$i', (id: identity(), title: text(), score: integer(defaultSql: defaultScore), status: enumeration(Status.values, labels: {Status.pending: pendingLabel, Status.ready: 'ready'})${extra && i == 0 ? ', enabled: boolean()' : ''}));
+@Model(table: 'rows_$i')
+final class Row$i({
+  @Id(generated: true) required final int id,
+  required final String title,
+  @DatabaseDefault.sql(defaultScore) required final int score,
+  @Column(labels: {Status.pending: pendingLabel, Status.ready: 'ready'})
+  required final Status status,
+  ${extra && i == 0 ? 'required final bool enabled,' : ''}
+});
 '''].join()}
 ${invalid ? 'int invalid = "not an integer";' : ''}
 ''';

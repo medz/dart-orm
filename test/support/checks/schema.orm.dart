@@ -2,15 +2,67 @@
 
 import 'package:orm/sql.dart';
 
-/// A complete immutable row from "products".
-final class Product({
-  required final int id,
-  required final int stock,
-  required final double price,
-  required final double? discount,
-  required final String state,
-  required final String? label,
-});
+import "schema.dart" as models;
+export "schema.dart" show Product, Line;
+
+final _lineId = Column<int>(
+  "id",
+  Codecs.integer,
+  nullable: false,
+  generated: true,
+);
+final _lineProductId = Column<int>(
+  "product_id",
+  Codecs.integer,
+  nullable: false,
+  generated: false,
+);
+final lineSchema = TableSchema(
+  "lines",
+  columns: [_lineId, _lineProductId],
+  primaryKey: ["id"],
+  uniqueKeys: [],
+  indexes: [],
+  foreignKeys: [
+    ForeignKey(["product_id"], "products", ["id"], onDelete: "RESTRICT"),
+  ],
+);
+
+final class LineFields extends Fields {
+  LineFields(super.table);
+  late final id = column(_lineId);
+  late final productId = column(_lineProductId);
+  Relation<models.Product, ProductFields> get product =>
+      Relation(productTable, parent: [productId], child: (row) => [row.id]);
+}
+
+final lineTable = Table<models.Line, LineFields>(
+  lineSchema,
+  LineFields.new,
+  (row) => (
+    row.id,
+    row.productId,
+  ).map((v0, v1) => models.Line(id: v0, productId: v1)),
+);
+
+final class LineTableSet extends TableSet<models.Line, LineFields> {
+  LineTableSet(QueryContext db) : super(db, lineTable) {
+    db.registerSchema(appSchema);
+  }
+  Future<models.Line> create({
+    Change<int> id = const Change.keep(),
+    required int productId,
+  }) =>
+      createRow((row) => [...row.id.change(id), row.productId.set(productId)]);
+  Query<models.Line, LineFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
+}
+
+extension LineUpdates on Query<models.Line, LineFields> {
+  Future<int> patch({Change<int> productId = const Change.keep()}) =>
+      update((row) => [...row.productId.change(productId)]).execute();
+}
+
 final _productId = Column<int>(
   "id",
   Codecs.integer,
@@ -117,16 +169,18 @@ final class ProductFields extends Fields {
   late final discount = column(_productDiscount);
   late final state = column(_productState);
   late final label = column(_productLabel);
-  Relation<Line, LineFields> get lines =>
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Line, LineFields> get lines =>
       Relation(lineTable, parent: [id], child: (row) => [row.productId]);
 }
 
-final productTable = Table<Product, ProductFields>(
+final productTable = Table<models.Product, ProductFields>(
   productSchema,
   ProductFields.new,
   (row) =>
       (row.id, row.stock, row.price, row.discount, row.state, row.label).map(
-        (v0, v1, v2, v3, v4, v5) => Product(
+        (v0, v1, v2, v3, v4, v5) => models.Product(
           id: v0,
           stock: v1,
           price: v2,
@@ -137,11 +191,11 @@ final productTable = Table<Product, ProductFields>(
       ),
 );
 
-final class ProductTableSet extends TableSet<Product, ProductFields> {
+final class ProductTableSet extends TableSet<models.Product, ProductFields> {
   ProductTableSet(QueryContext db) : super(db, productTable) {
     db.registerSchema(appSchema);
   }
-  Future<Product> create({
+  Future<models.Product> create({
     Change<int> id = const Change.keep(),
     Change<int> stock = const Change.keep(),
     required double price,
@@ -158,11 +212,11 @@ final class ProductTableSet extends TableSet<Product, ProductFields> {
       row.label.set(label),
     ],
   );
-  Query<Product, ProductFields> byId(int id) =>
+  Query<models.Product, ProductFields> byId(int id) =>
       where((row) => row.id.eq(.value(id)));
 }
 
-extension ProductUpdates on Query<Product, ProductFields> {
+extension ProductUpdates on Query<models.Product, ProductFields> {
   Future<int> patch({
     Change<int> stock = const Change.keep(),
     Change<double> price = const Change.keep(),
@@ -180,65 +234,9 @@ extension ProductUpdates on Query<Product, ProductFields> {
   ).execute();
 }
 
-/// A complete immutable row from "lines".
-final class Line({required final int id, required final int productId});
-final _lineId = Column<int>(
-  "id",
-  Codecs.integer,
-  nullable: false,
-  generated: true,
-);
-final _lineProductId = Column<int>(
-  "product_id",
-  Codecs.integer,
-  nullable: false,
-  generated: false,
-);
-final lineSchema = TableSchema(
-  "lines",
-  columns: [_lineId, _lineProductId],
-  primaryKey: ["id"],
-  uniqueKeys: [],
-  indexes: [],
-  foreignKeys: [
-    ForeignKey(["product_id"], "products", ["id"], onDelete: "RESTRICT"),
-  ],
-);
-
-final class LineFields extends Fields {
-  LineFields(super.table);
-  late final id = column(_lineId);
-  late final productId = column(_lineProductId);
-  Relation<Product, ProductFields> get product =>
-      Relation(productTable, parent: [productId], child: (row) => [row.id]);
-}
-
-final lineTable = Table<Line, LineFields>(
-  lineSchema,
-  LineFields.new,
-  (row) => (row.id, row.productId).map((v0, v1) => Line(id: v0, productId: v1)),
-);
-
-final class LineTableSet extends TableSet<Line, LineFields> {
-  LineTableSet(QueryContext db) : super(db, lineTable) {
-    db.registerSchema(appSchema);
-  }
-  Future<Line> create({
-    Change<int> id = const Change.keep(),
-    required int productId,
-  }) =>
-      createRow((row) => [...row.id.change(id), row.productId.set(productId)]);
-  Query<Line, LineFields> byId(int id) => where((row) => row.id.eq(.value(id)));
-}
-
-extension LineUpdates on Query<Line, LineFields> {
-  Future<int> patch({Change<int> productId = const Change.keep()}) =>
-      update((row) => [...row.productId.change(productId)]).execute();
-}
-
-final appSchema = List<TableSchema>.unmodifiable([productSchema, lineSchema]);
+final appSchema = List<TableSchema>.unmodifiable([lineSchema, productSchema]);
 
 extension AppTables on QueryContext {
-  ProductTableSet get product => ProductTableSet(this);
   LineTableSet get line => LineTableSet(this);
+  ProductTableSet get product => ProductTableSet(this);
 }

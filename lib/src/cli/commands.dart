@@ -19,8 +19,9 @@ Future<int> runExplicitCli(
   List<String> arguments, {
   bool json = false,
   SqlDialect? dialect,
-  String defaultSource = 'lib/schema.dart',
+  String defaultSource = 'lib/models.dart',
   String? defaultOutput,
+  String? defaultNamespace,
 }) async {
   final reporter = CliOutput(json);
   void report(Map<String, Object?> value) => reporter.report(value);
@@ -53,7 +54,7 @@ Future<int> runExplicitCli(
         final selected = SqlDialect.values.byName(args[index + 1]);
         if (dialect != null && selected != dialect) {
           throw const FormatException(
-            'Generation engine must match the project migration history.',
+            'Generation engine must match the project configuration.',
           );
         }
         dialect = selected;
@@ -70,7 +71,12 @@ Future<int> runExplicitCli(
           : args.isEmpty
           ? defaultOutput
           : null;
-      await writeGeneratedSchema(source, output: output, dialect: dialect);
+      await writeGeneratedSchema(
+        source,
+        output: output,
+        dialect: dialect,
+        defaultNamespace: defaultNamespace,
+      );
       report({'generated': output ?? '${SchemaLayout.stem(source)}.orm.dart'});
       return 0;
     }

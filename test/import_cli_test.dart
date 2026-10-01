@@ -99,6 +99,15 @@ void main() {
               true,
             );
             final original = await File(source).readAsString();
+            expect(original, contains('@Model(table: "existing"'));
+            expect(original, contains('final class Existing'));
+            expect(original, contains('final int id;'));
+            expect(original, contains('required this.value'));
+            expect(original, isNot(contains('model(')));
+            expect(report['entities'], {'existing': 'Existing'});
+            if (backend == 'postgres') {
+              expect(original, contains('namespace: "$schema"'));
+            }
             await cli([
               'db',
               'import',

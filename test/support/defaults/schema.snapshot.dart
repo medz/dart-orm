@@ -3,6 +3,11 @@ import 'package:orm/migrate.dart';
 
 final schema = SchemaSnapshot([
   TableSchema(
+    "sequences",
+    columns: [Column("id", Codecs.integer, generated: true)],
+    primaryKey: ["id"],
+  ),
+  TableSchema(
     "tickets",
     columns: [
       Column("id", Codecs.integer),
@@ -11,11 +16,6 @@ final schema = SchemaSnapshot([
       Column("state", Codecs.text, defaultSql: "'server'"),
       Column("created_at", Codecs.dateTime),
     ],
-    primaryKey: ["id"],
-  ),
-  TableSchema(
-    "sequences",
-    columns: [Column("id", Codecs.integer, generated: true)],
     primaryKey: ["id"],
   ),
 ]);

@@ -1,65 +1,68 @@
 # Generation and incremental builds
 
-The ORM supports a standalone CLI and the standard
-[Dart build_runner workflow](https://dart.dev/tools/build_runner). Both use the
-same schema validation, emission and in-process formatter. Generation reads
-declarations and produces source/metadata; it does not connect to or migrate a
-database.
+The standalone CLI and [build_runner](https://dart.dev/tools/build_runner) use
+one annotation reader, validator and source emitter. Generation analyzes Dart
+without opening a database or executing application factories.
 
-Generated clients contain nominal row classes and an immutable `appSchema`.
-Declaration values remain in their source libraries. Import the generated client and
-the chosen driver in application code. Programmatic generation is in
-`generate.dart`; build_runner factories are exported only by `builder.dart`.
-See [API boundaries](https://github.com/medz/dart-orm/blob/main/doc/api.md).
+Declare ordinary DTO classes with `@Model()` from `package:orm/schema.dart`.
+Generated clients import and re-export the original classes, construct them when
+decoding complete rows, and expose typed table getters plus an immutable
+`appSchema`. They do not create a second row class. Scalar projections and
+explicit relationship selections retain their own result types.
 
-Generation validates declaration structure and generated symbol names. Database
-member collisions such as a model called `close` fail here; keep the physical
-name with the first `model` argument when renaming its Dart declaration. Database-specific computed
-and identifier restrictions are checked when selecting the migration engine.
+```dart
+import 'package:orm/schema.dart';
+
+@Model(table: 'users')
+final class User({
+  @Id(generated: true) required final int id,
+  @Unique() required final String email,
+  final String? nickname,
+});
+```
+
+Public tooling is in `generate.dart`; builder factories are exported only by
+`builder.dart`. Application code imports its generated client and chosen database
+entrypoint. See [API boundaries](https://github.com/medz/dart-orm/blob/main/doc/api.md).
 
 ## Standalone command
 
 ```sh
 dart run orm init --database sqlite
 dart run orm generate
-# Or select a source explicitly:
-dart run orm generate lib/schema.dart
+# Or select a source and engine explicitly:
+dart run orm generate lib/models.dart --database sqlite
 ```
 
-Initialization creates typed `orm.config.dart`, a model and static migration
-history without connecting. The path-free command uses `OrmConfig.schema` (or
-`lib/schema.dart` when no config exists). See [project CLI](https://github.com/medz/dart-orm/blob/main/doc/cli.md).
+The path-free command reads `defineConfig(models: ...)` from `orm.config.dart`,
+or defaults to `lib/models.dart` without a configuration. A configuration uses
+parameterless `void main()` and requires no generated imports, so generation works
+before any client, snapshot or migration registry exists. See
+[project configuration](https://github.com/medz/dart-orm/blob/main/doc/cli.md).
 
-This writes `lib/schema.orm.dart` and `lib/schema.snapshot.dart`. The latter is the
-physical schema snapshot used by migration tools. It is a standalone Dart library
-with no application imports. An explicit `database.dart` output gets an adjacent
-`database.snapshot.dart`. For an explicitly chosen
-output path:
+A `lib/models.dart` root produces `lib/models.orm.dart` and
+`lib/models.snapshot.dart`. The snapshot is standalone physical metadata with no
+application imports. An explicit `database.dart` output gets an adjacent
+`database.snapshot.dart`:
 
 ```sh
-dart run orm generate lib/schema.dart lib/generated/database.dart
+dart run orm generate lib/models.dart lib/generated/database.dart --database sqlite
 ```
 
-For directory generation, the output must not match a schema input path,
-including the optional sibling `schema.dart`. Choose a path outside the layout
-or use an excluded `.orm.dart` filename inside it. Invalid paths are rejected
-before either generated file is written, including on the first run.
-
-The CLI checks source errors and resolves imports using the project's package
-configuration. Use it when a single explicit generation step suits the project.
+Directory outputs must not become discovered model inputs. Use an `.orm.dart`
+filename inside the source directory or choose an output outside it. Collisions
+are rejected before either output is written. The CLI checks source errors and
+resolves imports through the project's package configuration.
 
 ## build_runner
 
-Schema libraries use Dart language version 3.13. Set the application's SDK
-constraint to `'>=3.13.0 <4.0.0'` when adopting the declaration syntax.
-
-Add `build_runner` as a development dependency in the application using `orm`:
+Use Dart 3.13 or newer and add build_runner as an application development dependency:
 
 ```sh
 dart pub add dev:build_runner
 ```
 
-Select the schema roots in the application's `build.yaml`:
+Select individual model roots in `build.yaml`:
 
 ```yaml
 targets:
@@ -68,35 +71,30 @@ targets:
       orm:orm:
         enabled: true
         generate_for:
-          - lib/schema.dart
+          - lib/models.dart
 ```
 
-Then run a build or keep a watcher open:
+Then build once or watch:
 
 ```sh
 dart run build_runner build
 dart run build_runner watch
 ```
 
-For individual libraries, the builder is opt-in and uses the explicit `generate_for` list. Select schema
-libraries containing or exporting `model` declarations. Referenced models
-are included transitively; unrelated imports are not additional schema roots.
-Do not select every
-Dart file or a `part of` file. Additional roots produce their own clients and snapshots
-next to their input files. Import generated clients with prefixes if their
-declaration names overlap.
+A file root contains or exports annotated models. Relation targets are discovered
+transitively; unrelated imports do not create additional model roots. Do not
+select every Dart file or a `part of` file. Each additional root gets its own
+client and snapshot. Use import prefixes where clients have overlapping query
+member names.
 
-The output of `lib/schema.dart` is always `lib/schema.orm.dart` and
-`lib/schema.snapshot.dart`. Set `options.database: postgres` for a PostgreSQL
-file root, so default tables explicitly belong to `public`. Use the CLI's output
-argument for other locations. `build_runner` owns its build cache and output
-cleanup; do not manually edit that cache or generated source.
+`lib/models.dart` always produces adjacent `lib/models.orm.dart` and
+`lib/models.snapshot.dart`. Set `options.database: postgres` for PostgreSQL
+namespace rules. Use the CLI's output path for other locations. build_runner
+owns its output cleanup and cache; do not edit either manually.
 
-## Definition directories
+## Model directories
 
-For a directory, select its root and engine through builder options. This runs
-once for the root, without requiring an empty `schema.dart` or a `generate_for`
-entry for each model file:
+Select a directory root through builder options:
 
 ```yaml
 targets:
@@ -105,74 +103,45 @@ targets:
       orm:orm:
         enabled: true
         options:
-          schema: lib/schema
+          models: lib/models
           database: postgres
 ```
 
-PostgreSQL collects `lib/schema/{schema}/*.dart`; `sqlite`, `mysql` and `mariadb`
-collect `lib/schema/*.dart`. Both also include a sibling `lib/schema.dart` when
-present. Additional nesting is not recursive. The builder tracks matching file
-additions and deletions as well as imported metadata. Outputs remain
-`lib/schema.orm.dart` and `lib/schema.snapshot.dart`.
+Directory roots discover model sources recursively for every engine. A sibling
+`lib/models.dart` is also included when present. Generated `.orm.dart` and
+`.snapshot.dart` files are excluded. Outputs remain `lib/models.orm.dart` and
+`lib/models.snapshot.dart`; a wrapper source file is not required.
 
-The CLI accepts `lib/schema`, `lib/schema/` and `lib/schema.dart` for this same root.
-It reads the engine from the project history, or accepts an explicit
-`--database postgres` when no configuration should be loaded. See
-[database schemas](https://github.com/medz/dart-orm/blob/main/doc/namespaces.md) for
-namespace ownership, name collisions, relationships and migration behavior.
+The CLI accepts `lib/models`, `lib/models/` or `lib/models.dart` for this root.
+Folder names do not determine physical namespaces. For PostgreSQL,
+`@Model(namespace: ...)` overrides the configured `defaultNamespace`, with
+`public` as the final default. Other engines reject explicit namespaces. See
+[database schemas](https://github.com/medz/dart-orm/blob/main/doc/namespaces.md).
 
-## What triggers regeneration
+## Regeneration and errors
 
-The builder resolves source through `BuildStep.resolver` and writes through
-`BuildStep.writeAsString`. It shares build_runner's analysis infrastructure and
-asset dependency tracking. No independent filesystem analyzer is launched for
-each build step. Schema imports, exports and parts reachable during resolution
-are tracked; this includes imported enums, const defaults and custom codecs.
-Types generated by an earlier builder can also be resolved.
+The builder resolves through `BuildStep.resolver` and writes through
+`BuildStep.writeAsString`, sharing build_runner's analysis and dependency tracking.
+Model imports, exports, imported enums, codec metadata and constants are tracked.
+Directory file additions/deletions and metadata edits regenerate affected outputs;
+unrelated source edits do not. Deleting a root removes its outputs, and recreating
+it regenerates them. An unchanged build reports no new outputs.
 
-Changes to a schema field regenerate its client and snapshot. Imported metadata
-changes also regenerate them. Unrelated source file edits do not trigger a build
-or modify the generated client. Deleting a schema
-root removes its generated outputs; recreating it regenerates them.
+Both entrypoints reject Dart errors and unsupported model mappings before emission.
+Application codecs and client-default factories are referenced rather than run.
+Relations are validated against the original target classes and fields before
+query navigation is emitted. Ambiguous mappings, incompatible fields and generated
+member collisions fail with source locations. Model-specific diagnostics currently
+run during generation rather than through a dedicated editor plugin.
 
-A new `build_runner build` process with unchanged inputs reports zero outputs.
-An unrelated edit in watch mode can remain completely silent, with no completion
-event because no build was needed. Standard build configuration is described in
-the [build_runner documentation](https://pub.dev/packages/build_runner).
+Source models must not import generated clients: that would make a first build
+or regeneration depend on its own previous output. Formatting finishes before
+either output is written. A failed build can be repaired and retried by the same
+watcher. Generated files are reviewable and may be committed with an application.
 
-## Errors and generated output
-
-Both entry points validate the schema's Dart semantic errors before emission.
-The builder also rejects non-library roots, unknown codec mappings and duplicate
-enum storage labels. Formatting of client and snapshot source finish before it
-writes either output. A failed build reports an error; repairing the input lets
-the same watcher generate again.
-
-Application encoders, decoders and declaration callbacks are not executed. The
-schema reader reads column helper calls, named fields and local selectors.
-Relations are a named Record of `references` and `referencedBy` calls. All forward
-references are resolved before inverse matching, including across libraries.
-Ambiguous or missing inverse mappings fail with source locations. Named target
-mappings are validated and canonicalized without executing callbacks.
-Source static types preserve domain IDs even when constant evaluation erases an
-extension type's representation. Record declaration errors include a diagnostic
-code, source URI and line/column; schema-only checks currently run at generation
-time, not through a dedicated editor plugin.
-
-Generated source stays reviewable and can be committed with the application.
-Schema snapshot changes are migration inputs, not permission to apply DDL
-automatically. Follow the [migration workflow](https://github.com/medz/dart-orm/blob/main/doc/migrations.md) to review and apply
-database changes.
-
-## Verify generated code
-
-Run `dart analyze` after generation so changes to a model, selector or result type
-are checked in application code. A renamed Dart field can retain its physical
-column with `name: 'old_name'`; changing a database name requires an explicit
-[reviewed migration](https://github.com/medz/dart-orm/blob/main/doc/migrations.md).
-
-The generator reports ORM-specific errors such as a computed expression in a key
-selector. These can be valid Dart expressions, so editor diagnostics alone do not
-replace a generation run. Keep `build_runner watch` active while editing schemas.
-Treat generated files as outputs: make edits in the declaration, regenerate, then
-repair affected application references with the type checker.
+Run `dart analyze` after generating to check affected queries and DTO consumers.
+A renamed Dart field can preserve its column using `@Column(name: 'old_name')`;
+a changed database identity requires a reviewed migration. Snapshot changes do
+not authorize DDL. Follow the
+[migration workflow](https://github.com/medz/dart-orm/blob/main/doc/migrations.md)
+to review and explicitly apply database changes.

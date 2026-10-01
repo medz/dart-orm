@@ -2,17 +2,65 @@
 
 import 'package:orm/sql.dart';
 
-/// A complete immutable row from "lines".
-final class Line({
-  required final int id,
-  required final int price,
-  required final int quantity,
-  required final String label,
-  required final String? note,
-  required final int total,
-  required final int labelSize,
-  required final String? normalizedNote,
-});
+import "schema.dart" as models;
+export "schema.dart" show Line, Band;
+
+final _bandId = Column<int>(
+  "id",
+  Codecs.integer,
+  nullable: false,
+  generated: false,
+);
+final _bandName = Column<String>(
+  "name",
+  Codecs.text,
+  nullable: false,
+  generated: false,
+);
+final bandSchema = TableSchema(
+  "bands",
+  columns: [_bandId, _bandName],
+  primaryKey: ["id"],
+  uniqueKeys: [],
+  indexes: [],
+  foreignKeys: [],
+);
+
+final class BandFields extends Fields {
+  BandFields(super.table);
+  late final id = column(_bandId);
+  late final name = column(_bandName);
+
+  /// Read-only navigation; no database foreign key or write effects.
+  Relation<models.Line, LineFields> get lines =>
+      Relation(lineTable, parent: [id], child: (row) => [row.total]);
+}
+
+final bandTable = Table<models.Band, BandFields>(
+  bandSchema,
+  BandFields.new,
+  (row) => (row.id, row.name).map((v0, v1) => models.Band(id: v0, name: v1)),
+);
+
+final class BandTableSet extends TableSet<models.Band, BandFields> {
+  BandTableSet(QueryContext db) : super(db, bandTable) {
+    db.registerSchema(appSchema);
+  }
+  Future<models.Band> create({required int id, required String name}) =>
+      createRow((row) => [row.id.set(id), row.name.set(name)]);
+  Query<models.Band, BandFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
+}
+
+extension BandUpdates on Query<models.Band, BandFields> {
+  Future<int> patch({
+    Change<int> id = const Change.keep(),
+    Change<String> name = const Change.keep(),
+  }) =>
+      update((row) => [...row.id.change(id), ...row.name.change(name)])
+          .execute();
+}
+
 final _lineId = Column<int>(
   "id",
   Codecs.integer,
@@ -123,11 +171,11 @@ final class LineFields extends Fields {
   late final normalizedNote = readColumn(_lineNormalizedNote);
 
   /// Read-only navigation; no database foreign key or write effects.
-  Relation<Band, BandFields> get band =>
+  Relation<models.Band, BandFields> get band =>
       Relation(bandTable, parent: [total], child: (row) => [row.id]);
 }
 
-final lineTable = Table<Line, LineFields>(
+final lineTable = Table<models.Line, LineFields>(
   lineSchema,
   LineFields.new,
   (row) =>
@@ -149,7 +197,7 @@ final lineTable = Table<Line, LineFields>(
           ),
         ),
       ).map(
-        (left, right) => Line(
+        (left, right) => models.Line(
           id: left.id,
           price: left.price,
           quantity: left.quantity,
@@ -162,11 +210,11 @@ final lineTable = Table<Line, LineFields>(
       ),
 );
 
-final class LineTableSet extends TableSet<Line, LineFields> {
+final class LineTableSet extends TableSet<models.Line, LineFields> {
   LineTableSet(QueryContext db) : super(db, lineTable) {
     db.registerSchema(appSchema);
   }
-  Future<Line> create({
+  Future<models.Line> create({
     Change<int> id = const Change.keep(),
     required int price,
     required int quantity,
@@ -181,10 +229,11 @@ final class LineTableSet extends TableSet<Line, LineFields> {
       row.note.set(note),
     ],
   );
-  Query<Line, LineFields> byId(int id) => where((row) => row.id.eq(.value(id)));
+  Query<models.Line, LineFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
-extension LineUpdates on Query<Line, LineFields> {
+extension LineUpdates on Query<models.Line, LineFields> {
   Future<int> patch({
     Change<int> price = const Change.keep(),
     Change<int> quantity = const Change.keep(),
@@ -200,66 +249,9 @@ extension LineUpdates on Query<Line, LineFields> {
   ).execute();
 }
 
-/// A complete immutable row from "bands".
-final class Band({required final int id, required final String name});
-final _bandId = Column<int>(
-  "id",
-  Codecs.integer,
-  nullable: false,
-  generated: false,
-);
-final _bandName = Column<String>(
-  "name",
-  Codecs.text,
-  nullable: false,
-  generated: false,
-);
-final bandSchema = TableSchema(
-  "bands",
-  columns: [_bandId, _bandName],
-  primaryKey: ["id"],
-  uniqueKeys: [],
-  indexes: [],
-  foreignKeys: [],
-);
-
-final class BandFields extends Fields {
-  BandFields(super.table);
-  late final id = column(_bandId);
-  late final name = column(_bandName);
-
-  /// Read-only navigation; no database foreign key or write effects.
-  Relation<Line, LineFields> get lines =>
-      Relation(lineTable, parent: [id], child: (row) => [row.total]);
-}
-
-final bandTable = Table<Band, BandFields>(
-  bandSchema,
-  BandFields.new,
-  (row) => (row.id, row.name).map((v0, v1) => Band(id: v0, name: v1)),
-);
-
-final class BandTableSet extends TableSet<Band, BandFields> {
-  BandTableSet(QueryContext db) : super(db, bandTable) {
-    db.registerSchema(appSchema);
-  }
-  Future<Band> create({required int id, required String name}) =>
-      createRow((row) => [row.id.set(id), row.name.set(name)]);
-  Query<Band, BandFields> byId(int id) => where((row) => row.id.eq(.value(id)));
-}
-
-extension BandUpdates on Query<Band, BandFields> {
-  Future<int> patch({
-    Change<int> id = const Change.keep(),
-    Change<String> name = const Change.keep(),
-  }) =>
-      update((row) => [...row.id.change(id), ...row.name.change(name)])
-          .execute();
-}
-
-final appSchema = List<TableSchema>.unmodifiable([lineSchema, bandSchema]);
+final appSchema = List<TableSchema>.unmodifiable([bandSchema, lineSchema]);
 
 extension AppTables on QueryContext {
-  LineTableSet get line => LineTableSet(this);
   BandTableSet get band => BandTableSet(this);
+  LineTableSet get line => LineTableSet(this);
 }

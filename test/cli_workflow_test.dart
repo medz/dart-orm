@@ -4,7 +4,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:orm/cli.dart';
+import 'package:orm/src/cli/config_entrypoint.dart';
 import 'package:orm/src/cli/init.dart';
 import 'package:orm/src/cli/output.dart';
 import 'package:test/test.dart';
@@ -15,7 +15,9 @@ import 'support/cli.dart';
 void main() {
   Future<BuildFixture> project() async {
     final fixture = await BuildFixture.create(ormPath: Directory.current.path);
-    await fixture.file('lib/schema.dart').delete();
+    for (final path in ['lib/schema.dart', 'lib/models.dart']) {
+      if (await fixture.file(path).exists()) await fixture.file(path).delete();
+    }
     return fixture;
   }
 
@@ -45,16 +47,16 @@ void main() {
     expect(initialized['database'], 'sqlite');
     expect(initialized['created'], hasLength(5));
     expect(await fixture.file('app.sqlite').exists(), false);
-    final declaration = await fixture.file('lib/schema.dart').readAsString();
-    expect(declaration, contains('final task = model('));
+    final declaration = await fixture.file('lib/models.dart').readAsString();
+    expect(declaration, contains("@Model(table: 'tasks')"));
     final config = await fixture.file('orm.config.dart').readAsString();
     expect(config, contains('package:orm/drivers/sqlite.dart'));
     expect(config, isNot(contains('package:orm/orm.dart')));
     await fixture.write(
-      'lib/schema.dart',
+      'lib/models.dart',
       declaration.replaceFirst(
-        'title: text(),',
-        'title: text(),\n  detail: text().nullable(),',
+        'required final String title,',
+        'required final String title,\n  final String? detail,',
       ),
     );
     final first = await report(fixture, ['migrate', 'create', '0001_initial']);
@@ -62,26 +64,34 @@ void main() {
     final initial = fixture.file('migrations/m0001_initial.dart');
     final initialSource = await initial.readAsString();
     expect(initialSource, contains('detail'));
-    expect(initialSource, isNot(contains('lib/schema.dart')));
+    expect(initialSource, isNot(contains('lib/models.dart')));
     expect(await fixture.file('app.sqlite').exists(), false);
     expect((await report(fixture, ['migrate', 'apply']))['applied'], [
       '0001_initial',
     ]);
     final firstSnapshot = await fixture
-        .file('lib/schema.snapshot.dart')
+        .file('lib/models.snapshot.dart')
         .readAsString();
     await fixture.write(
-      'lib/schema.dart',
+      'lib/models.dart',
       declaration.replaceFirst(
-        'title: text(),',
-        'title: text(),\n  detail: text().nullable(),\n  label: text().nullable(),',
+        'required final String title,',
+        'required final String title,\n  final String? detail,\n  final String? label,',
       ),
     );
-    // No explicit generate: create must read the edited model, even though the
-    // configuration imported the previous snapshot before command execution.
+    // Verification reads edited DTOs without rewriting generated artifacts.
+    expect(
+      (await report(fixture, ['migrate', 'verify'], code: 2))['matches'],
+      false,
+    );
+    expect(
+      await fixture.file('lib/models.snapshot.dart').readAsString(),
+      firstSnapshot,
+    );
+    // Creation also reads current DTOs without an explicit generate command.
     await report(fixture, ['migrate', 'create', '0002_label']);
     expect(
-      await fixture.file('lib/schema.snapshot.dart').readAsString(),
+      await fixture.file('lib/models.snapshot.dart').readAsString(),
       isNot(firstSnapshot),
     );
     expect(
@@ -93,7 +103,19 @@ void main() {
     ]);
     expect((await report(fixture, ['migrate', 'verify']))['matches'], true);
     expect(await initial.readAsString(), initialSource);
-  }, timeout: const Timeout(Duration(minutes: 3)));
+    for (final path in [
+      'lib/models.dart',
+      'lib/models.orm.dart',
+      'lib/models.snapshot.dart',
+    ]) {
+      await fixture.file(path).delete();
+    }
+    expect((await report(fixture, ['migrate', 'check']))['valid'], true);
+    expect(
+      (await report(fixture, ['migrate', 'status']))['applied'],
+      hasLength(2),
+    );
+  }, timeout: const Timeout(Duration(minutes: 6)));
 
   for (final engine in ['postgres', 'mysql', 'mariadb']) {
     test(
@@ -120,11 +142,16 @@ void main() {
         // should need credentials; the preceding history check must succeed.
         await fixture.write('bin/check_config.dart', '''
 import 'dart:io';
+import 'package:orm/src/cli/config_entrypoint.dart';
 import '../orm.config.dart' as project;
+import '../migrations/migrations.g.dart';
 Future<void> main() async {
-  await project.main(['migrate', 'check', '--json']);
+  final path = File('orm.config.dart').absolute.path;
+  await runConfigEntrypoint(['migrate', 'check', '--json'], project.main,
+      path: path, history: migrationHistory);
   if (exitCode != 0) return;
-  await project.main(['migrate', 'status', '--json']);
+  await runConfigEntrypoint(['migrate', 'status', '--json'], project.main,
+      path: path, history: migrationHistory);
 }
 ''');
         final result = await Process.run(
@@ -188,14 +215,13 @@ Future<void> main() async {
     () async {
       final fixture = await project();
       addTearDown(fixture.dispose);
-      await fixture.write('lib/schema.dart', BuildFixture.schema(1));
+      await fixture.write('lib/models.dart', _model);
       final output = fixture.file('lib/custom.orm.dart').path;
-      final config = OrmConfig(
-        schema: fixture.file('lib/schema.dart').path,
+      final config = ProjectConfig(
+        database: .postgres,
+        models: fixture.file('lib/models.dart').path,
         output: output,
         migrations: fixture.file('migrations').path,
-        history: MigrationHistory([], dialect: .postgres),
-        snapshot: SchemaSnapshot([]),
         connect: ({required readOnly}) =>
             throw StateError('Generation connected'),
       );
@@ -220,7 +246,7 @@ Future<void> main() async {
     () async {
       final fixture = await project();
       addTearDown(fixture.dispose);
-      await fixture.write('lib/schema.dart', '// User-owned source.\n');
+      await fixture.write('lib/models.dart', '// User-owned source.\n');
       await expectLater(
         initializeProject(
           ['--database', 'sqlite'],
@@ -230,13 +256,13 @@ Future<void> main() async {
         throwsFormatException,
       );
       expect(
-        await fixture.file('lib/schema.dart').readAsString(),
+        await fixture.file('lib/models.dart').readAsString(),
         '// User-owned source.\n',
       );
       for (final path in [
         'orm.config.dart',
-        'lib/schema.orm.dart',
-        'lib/schema.snapshot.dart',
+        'lib/models.orm.dart',
+        'lib/models.snapshot.dart',
         'migrations/migrations.g.dart',
       ]) {
         expect(await fixture.file(path).exists(), false, reason: path);
@@ -244,3 +270,11 @@ Future<void> main() async {
     },
   );
 }
+
+const _model = '''import 'package:orm/schema.dart';
+@Model()
+final class Item({
+  @Id(generated: true) required final int id,
+  required final String title,
+});
+''';

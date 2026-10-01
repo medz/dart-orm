@@ -4,18 +4,16 @@ Declare SQL over physical column names. The generated row includes the result;
 creation and patch inputs omit it.
 
 ```dart
-final line = model('lines', (
-  id: identity(),
-  price: integer(),
-  quantity: integer(),
-  label: text(),
-  total: integer().computed('price * quantity'),
-  labelSize: integer().computed(
-    'length(label)',
-    postgres: 'char_length(label)',
-    storage: .virtual,
-  ),
-));
+@Model(table: 'lines')
+final class Line({
+  @Id(generated: true) required final int id,
+  required final int price,
+  required final int quantity,
+  required final String label,
+  @Computed('price * quantity') required final int total,
+  @Computed('length(label)', postgres: 'char_length(label)', storage: .virtual)
+  required final int labelSize,
+});
 
 final row = await db.line.create(price: 4, quantity: 3, label: 'cat');
 print(row.total); // 12
@@ -95,7 +93,7 @@ This plans SQL without selecting rows; immutable constant functions may run duri
 planning. SQLite compares tokenized SQL and preserves precedence, comments and
 quoted identifiers. Semantically equivalent rewrites are not always recognized.
 
-`db import` emits `.computed(...)` and a nonblocking `IMPORT.COMPUTED_SQL` review
+`db import` emits `@Computed(...)` and a nonblocking `IMPORT.COMPUTED_SQL` review
 note. SQL from one database is not evidence of portability to the other. Managed
 Decimal coercion is unwrapped for declarations and emitted once on regeneration.
 Import does not run application code or sample data values.

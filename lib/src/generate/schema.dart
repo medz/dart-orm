@@ -10,9 +10,9 @@ import 'package:path/path.dart' as p;
 import '../../migrate.dart';
 import 'emitter.dart';
 import 'exception.dart';
+import 'schema/annotations.dart';
 import 'schema/layout.dart';
-import 'schema/reader.dart';
-import 'schema/sources.dart';
+import 'schema/diagnostics.dart';
 import 'source.dart';
 import 'types.dart';
 
@@ -36,11 +36,12 @@ final class GeneratedSchema {
 
 /// Analyzes one file or a definition directory without writing files.
 ///
-/// [dialect] selects the directory layout and physical namespace rules. PostgreSQL
-/// uses `{root}/{schema}/*.dart`; other engines use `{root}/*.dart`. A sibling
-/// `{root}.dart` contributes to the default namespace. Discovery is not recursive.
-/// PostgreSQL generation records `public` explicitly for default models.
-/// Single-file generation without a dialect retains engine-neutral metadata.
+/// Directories are discovered recursively and their names never determine
+/// physical namespaces. An annotation's explicit namespace overrides
+/// [defaultNamespace], then PostgreSQL defaults to `public`. Other engines reject
+/// explicit namespaces. A model source must not import generated clients.
+/// A sibling `{root}.dart` can contribute models or exports. Single-file
+/// generation without a dialect retains engine-neutral metadata.
 ///
 /// [outputPath] determines relative imports and defaults to the source basename
 /// with an `.orm.dart` extension. Invalid declarations or output collisions throw
@@ -50,14 +51,11 @@ Future<GeneratedSchema> generateSchema(
   String sourcePath, {
   String? outputPath,
   SqlDialect? dialect,
+  String? defaultNamespace,
 }) async {
   final input = p.normalize(p.absolute(sourcePath));
   final root = SchemaLayout.stem(input);
-  final layout = SchemaLayout(
-    input,
-    dialect: dialect,
-    directory: await Directory(root).exists(),
-  );
+  final layout = SchemaLayout(input, directory: await Directory(root).exists());
   final output = p.normalize(p.absolute(outputPath ?? layout.output));
   if (layout.directory &&
       SchemaLayout.declaration(output) &&
@@ -70,20 +68,11 @@ Future<GeneratedSchema> generateSchema(
   final sources = <String>[];
   if (await File(layout.file).exists()) sources.add(layout.file);
   if (layout.directory) {
-    await for (final entry in Directory(root).list(followLinks: false)) {
+    await for (final entry in Directory(
+      root,
+    ).list(followLinks: false, recursive: true)) {
       if (entry is File && SchemaLayout.declaration(entry.path)) {
-        if (dialect == SqlDialect.postgres) {
-          throw GenerationException(
-            'Put PostgreSQL declarations in $root/{schema}/*.dart: ${entry.path}',
-          );
-        }
         sources.add(entry.path);
-      } else if (entry is Directory && dialect == SqlDialect.postgres) {
-        await for (final file in entry.list(followLinks: false)) {
-          if (file is File && SchemaLayout.declaration(file.path)) {
-            sources.add(file.path);
-          }
-        }
       }
     }
     sources.sort();
@@ -128,22 +117,12 @@ Future<GeneratedSchema> generateSchema(
     return await generateResolvedSchema(
       resolved.unit,
       resolved.libraryElement,
-      importPath(Uri.file(sources.first)),
       importPath,
       resolve: (library) async =>
           (await resolvePath(library.firstFragment.source.fullName)).unit,
       additionalRoots: [for (final result in roots.skip(1)) result.unit],
-      namespaceOf: (variable) => layout.namespace(
-        variable
-            .declaredFragment!
-            .element
-            .library!
-            .firstFragment
-            .source
-            .fullName,
-      ),
-      stableOrder: layout.directory || dialect != null,
       dialect: dialect,
+      defaultNamespace: defaultNamespace,
     );
   } finally {
     await contexts.dispose();
@@ -153,35 +132,51 @@ Future<GeneratedSchema> generateSchema(
 Future<GeneratedSchema> generateResolvedSchema(
   CompilationUnit unit,
   LibraryElement library,
-  String sourceImport,
   String Function(Uri) importUri, {
   required Future<CompilationUnit> Function(LibraryElement) resolve,
   List<CompilationUnit> additionalRoots = const [],
-  String? Function(VariableDeclaration)? namespaceOf,
-  bool stableOrder = false,
   SqlDialect? dialect,
+  String? defaultNamespace,
 }) async {
   final names = DartNames(library.uri, importUri);
-  final schema = SchemaReader(
-    unit,
-    library.typeSystem,
+  final classes = await annotatedSources([unit, ...additionalRoots], resolve);
+  if (classes.isEmpty) {
+    throw const GenerationException('No @Model class declarations found.');
+  }
+  for (final declaration in classes) {
+    final visited = <LibraryElement>{};
+    void checkDependencies(LibraryElement owner) {
+      if (!visited.add(owner)) return;
+      for (final dependency in [
+        ...owner.exportedLibraries,
+        for (final fragment in owner.fragments) ...fragment.importedLibraries,
+      ]) {
+        final path = dependency.firstFragment.source.fullName;
+        if (path.endsWith('.orm.dart') || path.endsWith('.snapshot.dart')) {
+          failAt(
+            declaration,
+            'DEPENDENCY',
+            'Model sources must not depend on generated clients or snapshots: ${dependency.uri}.',
+          );
+        }
+        checkDependencies(dependency);
+      }
+    }
+
+    checkDependencies(declaration.declaredFragment!.element.library);
+  }
+  final schema = AnnotationReader(
+    classes,
     names,
-    await schemaSources(
-      unit,
-      library,
-      resolve,
-      additionalRoots: additionalRoots,
-    ),
-    namespaceOf: namespaceOf,
-    additionalRoots: additionalRoots,
-    stableOrder: stableOrder,
+    dialect: dialect,
+    defaultNamespace: defaultNamespace,
   ).read();
   final snapshot = SchemaSnapshot([
     for (final table in schema) table.snapshot(),
   ]);
   return GeneratedSchema(
     DartFormatter(languageVersion: library.languageVersion.effective)
-        .format(emitSchema(schema, sourceImport, names)),
+        .format(emitSchema(schema, names)),
     dialect == null ? snapshot : snapshot.forDialect(dialect),
   );
 }
@@ -190,17 +185,20 @@ Future<GeneratedSchema> generateResolvedSchema(
 ///
 /// [output] defaults to the source basename with an `.orm.dart` extension.
 /// The snapshot uses the corresponding `.snapshot.dart` basename. Both are
-/// derived files and are replaced when generation succeeds.
+/// derived files and are replaced when generation succeeds. [defaultNamespace]
+/// follows [generateSchema]'s namespace resolution rules.
 Future<void> writeGeneratedSchema(
   String source, {
   String? output,
   SqlDialect? dialect,
+  String? defaultNamespace,
 }) async {
   output ??= '${SchemaLayout.stem(source)}.orm.dart';
   final result = await generateSchema(
     source,
     outputPath: output,
     dialect: dialect,
+    defaultNamespace: defaultNamespace,
   );
   final file = File(output);
   await file.parent.create(recursive: true);

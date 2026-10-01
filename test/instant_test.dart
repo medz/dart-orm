@@ -310,7 +310,7 @@ Future<void> main() => consumer.main();
         expect(await verifyColumns(db.sql, appSchema), isEmpty);
         final imported = await importSchema(db.sql);
         expect(imported.issues, isEmpty);
-        expect(imported.dart, contains('dateTime('));
+        expect(imported.dart, contains('final DateTime at'));
         final directory = await Directory(
           '.dart_tool/orm-instant-import-$backend',
         ).create(recursive: true);

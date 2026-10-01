@@ -18,10 +18,17 @@ void main() {
     final source = File('${directory.path}/schema.dart');
     await source.writeAsString('''
 import 'package:orm/schema.dart';
-final entry = model('entries', (
-  id: integer(), source: integer(),
-  computed: integer().nullable().computed('source + 1', postgres: 'source + 2', mysql: 'source + 3', mariadb: 'source + 4'),
-), primaryKey: (e) => e.id, checks: [check('source >= 1', name: 'valid', postgres: 'source >= 2', mysql: 'source >= 3', mariadb: 'source >= 4')]);
+@Model(table: 'entries')
+@Check('source >= 1', name: 'valid', postgres: 'source >= 2', mysql: 'source >= 3', mariadb: 'source >= 4')
+final class Entry {
+  @Id()
+  final int id;
+  final int source;
+  @Computed('source + 1', postgres: 'source + 2', mysql: 'source + 3', mariadb: 'source + 4')
+  final int? computed;
+
+  const Entry({required this.id, required this.source, required this.computed});
+}
 ''');
     final result = await generateSchema(source.path);
     for (final (index, dialect) in SqlDialect.values.indexed) {

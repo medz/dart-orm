@@ -561,14 +561,14 @@ void main() {
     try {
       final file = File('${dir.path}/schema.dart');
       for (final field in [
-        't: time(precision: -1)',
-        't: localDateTime(precision: 7)',
-        't: custom(Codecs.date, precision: 3)',
-        't: custom(Codecs.text, precision: 3)',
-        't: dateTime(precision: 3, precision: 2)',
+        '@Column(precision: -1) required final LocalTime t',
+        '@Column(precision: 7) required final LocalDateTime t',
+        '@Column(precision: 3) required final LocalDate t',
+        '@Column(precision: 3) required final String t',
+        '@Column(precision: 3, precision: 2) required final DateTime t',
       ]) {
         await file.writeAsString(
-          "import 'package:orm/schema.dart'; final row=model('rows', ($field,));",
+          "import 'package:orm/schema.dart'; @Model(table: 'rows') final class Row({$field,});",
         );
         await expectLater(
           generateSchema(file.path),

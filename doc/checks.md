@@ -1,19 +1,19 @@
 # Row CHECK constraints
 
-Declare row constraints in the model's `checks` list. Expressions use physical
+Declare class-level constraints with `@Check`. Expressions use physical
 SQL column names:
 
 ```dart
-final product = model(
-  'products',
-  (id: identity(), price: real(), discount: real().nullable(), label: text()),
-  checks: [
-    check('price >= 0', name: 'nonnegative_price'),
-    check('discount >= 0 AND discount <= price', name: 'valid_discount'),
-    check('length(label) <= 20',
-      postgres: 'char_length(label) <= 20', name: 'short_label'),
-  ],
-);
+@Model(table: 'products')
+@Check('price >= 0', name: 'nonnegative_price')
+@Check('discount >= 0 AND discount <= price', name: 'valid_discount')
+@Check('length(label) <= 20', postgres: 'char_length(label) <= 20', name: 'short_label')
+final class Product({
+  @Id(generated: true) required final int id,
+  required final double price,
+  required final double? discount,
+  required final String label,
+});
 ```
 
 Constraint names are explicit, stable and unique per table. Renaming a Dart model
@@ -21,7 +21,7 @@ or field does not rename them. SQLite compares ASCII identifier case without
 distinction; PostgreSQL preserves quoted case. An engine override replaces the
 common expression for that backend; the selected expression must be nonempty.
 
-These are trusted schema SQL fragments, like `defaultSql`; do not construct
+These are trusted schema SQL fragments, like `@DatabaseDefault.sql`; do not construct
 them from user input. Dart checks the declaration API, while the database checks
 SQL syntax and enforces the predicate. This feature does not type-check SQL column
 names or translate arbitrary Dart boolean closures.

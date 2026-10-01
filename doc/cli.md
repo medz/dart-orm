@@ -14,127 +14,129 @@ dart run orm migrate verify
 
 | File | Purpose |
 | --- | --- |
-| `lib/schema.dart` | Editable Record schema |
-| `lib/schema.orm.dart` | Generated models and typed queries |
-| `lib/schema.snapshot.dart` | Standalone physical schema |
-| `migrations/migrations.g.dart` | Static imports and one fixed engine |
-| `orm.config.dart` | Typed project configuration and executable entrypoint |
+| `lib/models.dart` | Editable annotated DTO classes |
+| `lib/models.orm.dart` | Typed queries using the original DTO types |
+| `lib/models.snapshot.dart` | Standalone physical schema |
+| `migrations/migrations.g.dart` | Static history imports and one fixed engine |
+| `orm.config.dart` | Runnable project configuration |
 
-Initialization refuses an existing destination before writing anything. It never
-connects to a database, creates a database file or applies DDL. The first client
-and snapshot are generated before writing the config, so its static imports are
-valid immediately. build_runner is optional for this workflow.
+Initialization refuses existing destinations before writing anything. It never
+connects, creates a database file or applies DDL. build_runner is optional.
+SQLite's generated connection factory uses `app.sqlite` relative to the command's
+working directory. Server factories read `DATABASE_URL` only when connecting;
+missing credentials do not prevent generation or history validation. Server TLS
+defaults to certificate verification.
 
-SQLite defaults to `app.sqlite`; edit its typed options in the config to change
-the path. Server connections read `DATABASE_URL` only when connecting. Missing
-credentials do not prevent initialization, generation or history validation.
-TLS defaults to certificate verification. Connections use the independent driver
-and `SqlDatabase` layers rather than importing model/query APIs.
+## Runnable configuration
 
-## Typed configuration
-
-The generated `orm.config.dart` is normal application-owned Dart:
+The configuration contains ordinary Dart and does not import generated files:
 
 ```dart
-import 'package:orm/cli.dart';
+import 'package:orm/config.dart';
 import 'package:orm/drivers/sqlite.dart';
-import 'lib/schema.snapshot.dart' as target;
-import 'migrations/migrations.g.dart';
 
-Future<void> main(List<String> args) => runOrmCli(args, config: OrmConfig(
-  schema: 'lib/schema.dart',
-  migrations: 'migrations',
-  history: migrationHistory,
-  snapshot: target.schema,
-  connect: ({required bool readOnly}) async => SqlDatabase(
-    await SqliteDriver.open(readOnly
-        ? const SqliteOptions.readOnly('app.sqlite')
-        : const SqliteOptions.file('app.sqlite')),
-  ),
-));
+void main() {
+  defineConfig(
+    database: .sqlite,
+    models: 'lib/models.dart',
+    output: 'lib/models.orm.dart',
+    migrations: 'migrations',
+    connect: ({required bool readOnly}) async => SqlDatabase(
+      await SqliteDriver.open(readOnly
+          ? const SqliteOptions.readOnly('app.sqlite')
+          : const SqliteOptions.file('app.sqlite')),
+    ),
+  );
+}
 ```
 
-The package command runs this explicit entrypoint in a child Dart process.
-History is statically imported and checked; it is not discovered by executing
-every Dart file in a directory. Run from the project root so relative schema,
-history and connection paths are consistent. Use `--config other.config.dart`
-for another explicitly selected entrypoint, or run
-`dart run orm.config.dart migrate check` directly.
+`models`, `output` and `migrations` are direct string paths relative to the
+configuration file's directory. `models` accepts one Dart file or a recursively
+discovered source directory. Omit `output` to use the model root's `.orm.dart`
+basename. PostgreSQL accepts `defaultNamespace: 'application'`; an explicit
+`@Model(namespace: ...)` overrides it. Source folder names never select namespaces.
 
-Config is trusted project source and should not perform I/O at the top level.
-Place connection setup inside `connect`. Migration commands establish their own
-transaction and locking behavior; `readOnly` lets a SQLite factory avoid creating
-a file during inspection.
+Run `dart run orm generate` for the first build. Neither a snapshot nor a history
+registry needs to exist. `--config configuration/development.dart` selects another
+entrypoint; the option's path is relative to the command's working directory.
+Paths used inside a connection callback are application-owned and are not rewritten.
+
+The CLI executes `main()` to register the configuration. For migration commands,
+it compiles a second static entrypoint when a registry exists. Keep registration
+free of side effects: `main()` may run twice for one command. Put connection setup
+inside `connect`, which is called only by database commands. Do not invoke
+`orm.config.dart` directly as a command-line executable. A dedicated
+[migration executable](https://github.com/medz/dart-orm/blob/main/doc/migrations.md#deployment-bundle)
+is available for frozen-history deployment.
 
 ## Commands and side effects
 
 | Command | Behavior |
 | --- | --- |
-| `generate` | Generate client and physical snapshot using the config |
-| `migrate create <id>` | Regenerate the current schema, then save its diff as fixed Dart history |
-| `migrate check` | Check compiled history and fingerprints without a connection |
+| `generate` | Write the typed client and physical snapshot |
+| `migrate create <id>` | Regenerate current models, then save a reviewed diff |
+| `migrate check` | Validate registered files, fixed engine and fingerprints offline |
 | `migrate plan` | Read applied history and report pending operations |
 | `migrate apply` | Apply pending operations explicitly |
-| `migrate status` | Read migration history and recovery checkpoints |
-| `migrate verify` | Compare the catalog with the generated snapshot |
-| `migrate baseline` | Verify an existing schema and register its history |
+| `migrate status` | Read applied history and recovery checkpoints |
+| `migrate verify` | Compare the catalog with current models without writing generated files |
+| `migrate baseline` | Verify an existing schema against the last frozen snapshot and register history |
 | `migrate record <id>` | Record a reviewed edit to the latest unpublished migration |
 | `migrate inspect <table>` | Read physical metadata for one table |
 
-`create` always uses the current source, including edits since the last
-`generate`. Other commands use the statically imported snapshot/history; they do
-not silently regenerate or change deployment artifacts. Run `generate` before
-checking a deliberately edited target with `verify`. New migrations never
-overwrite existing files. Database changes happen through explicit `apply` or
-`baseline`; initialization, generation and diff creation are offline.
+`create` and `verify` analyze the current models, including edits since the last
+`generate`. Other migration commands use the frozen history without loading
+current models or generated clients. They remain usable if those application
+sources are temporarily missing or invalid. Database commands own and close the
+runtime returned by `connect`; read-only commands request `readOnly: true`.
 
-An initial SQLite `plan` needs an existing file and fails without creating one.
-The first `apply` can create that file. `create <id> --allow-destructive` permits
+A missing registry represents an empty history only if no migration source files
+exist. Existing migrations without a registry, stale registry membership and an
+engine different from `database` fail before opening a connection. Rebuild static
+imports explicitly with `migration registry`; this does not accept edited
+fingerprints. `record` is the separate, explicit review step for an unpublished edit.
+
+An initial SQLite `plan` needs an existing database file and fails without creating
+one. The first `apply` can create it. `create <id> --allow-destructive` permits
 writing reviewed drop operations, not executing them. `apply
---max-backfill-batches <count>` bounds a resumable backfill invocation.
-
-See [migrations](https://github.com/medz/dart-orm/blob/main/doc/migrations.md) for immutable history, engine boundaries, reviewed
-renames/conversions, baseline and recovery behavior.
+--max-backfill-batches <count>` bounds a resumable backfill invocation. No command
+except explicit `apply` or `baseline` changes database state.
 
 ## Explicit tools
 
 These commands also work without project configuration:
 
 ```sh
-dart run orm generate lib/schema.dart lib/generated/database.dart --database sqlite
-dart run orm generate lib/schema --database postgres
+dart run orm generate lib/models.dart lib/generated/database.dart --database sqlite
+dart run orm generate lib/models --database postgres
 dart run orm migration registry migrations --dialect sqlite
 dart run orm db inspect --sqlite app.sqlite --table tasks
 dart run orm db import --sqlite app.sqlite --output lib/imported.dart
 dart run orm web-assets web/orm
 ```
 
+Generation normally loads the project configuration, even with a positional source
+path. `--database` bypasses the default configuration; an explicit `--config`
+still loads it and rejects a mismatched engine. Without a configuration or source
+path, generation uses `lib/models.dart`. Positional source/output overrides are
+relative to the command's working directory.
+
 Server database flags are `--postgres-env NAME`, `--mysql-env NAME` and
-`--mariadb-env NAME`. Choose exactly one database option. `--tls
+`--mariadb-env NAME`. Choose one database option. `--tls
 verifyFull|require|disable` configures server TLS; `--database-schema` is specific
-to PostgreSQL. Catalog import writes a Dart draft and a separate review report.
-It does not migrate an existing database.
-
-Generation uses the project configuration even when a schema path is supplied.
-`--database` selects the engine without loading a configuration, which is useful
-when recreating a deleted snapshot:
-`dart run orm generate lib/schema --database postgres`. When an explicitly loaded
-configuration and engine disagree, generation rejects the mismatch. Without a
-configuration or path, the source defaults to `lib/schema.dart`.
-
-Directory layouts require an engine. `lib/schema`, `lib/schema/` and
-`lib/schema.dart` identify the same root and combine the file and directory when
-both exist. See [database schemas](https://github.com/medz/dart-orm/blob/main/doc/namespaces.md).
+to PostgreSQL. Catalog import writes a Dart draft and a separate review report;
+it does not migrate an existing database.
 
 ## Help and automation
 
 `dart run orm --help`, `dart run orm help migrate` and `dart run orm migrate
-apply --help` describe command groups. Add `--json` to emit machine-readable
-reports on stdout and error objects on stderr. JSON is a reporting format only;
-schema snapshots and migration history remain Dart source.
+apply --help` describe command groups. Add `--json` for machine-readable reports
+on stdout and error objects on stderr. Schema snapshots and migration history
+remain Dart source.
 
 Exit codes are `0` for success, `1` for execution/generation failure, `2` for
 catalog drift or blocking import issues, and `64` for invalid arguments or
-configuration. The Dart launcher may print native build-hook diagnostics on
-stderr before the CLI starts; automation should parse successful stdout reports
-and use the process exit code for failures.
+configuration. Compilation failures in a loaded config or migration registry are
+reported as execution failures (`1`), with compiler diagnostics in the JSON error
+message. The outer Dart launcher can still emit its own native build-hook
+diagnostics before the package CLI starts.

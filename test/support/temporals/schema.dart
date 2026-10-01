@@ -1,22 +1,37 @@
 import 'package:orm/schema.dart';
 
-final Model appointment = model("appointments", (
-  id: integer().identity(),
-  day: date(),
-  time: time(defaultSql: "'12:30'"),
-  starts: localDateTime().nullable(),
-));
+@Model(table: "appointments")
+final class Appointment({
+  @Id(generated: true) @Column(name: "id") required final int id,
+  @Column(name: "day") required final LocalDate day,
+  @Column(name: "time")
+  @DatabaseDefault.sql("'12:30'")
+  required final LocalTime time,
+  @Column(name: "starts") required final LocalDateTime? starts,
+});
 
-final Model holiday = model(
-  "holidays",
-  (day: date(), label: text()),
-  primaryKey: (r) => r.day,
-  relations: (r) => (visits: referencedBy(() => visit, on: (day: r.day))),
-);
+@Model(table: "holidays")
+@Relation(
+  target: Visit,
+  name: "visits",
+  fields: ["day"],
+  keys: ["day"],
+  constraint: false,
+)
+final class Holiday({
+  @Id(generated: false) @Column(name: "day") required final LocalDate day,
+  @Column(name: "label") required final String label,
+});
 
-final Model visit = model(
-  "visits",
-  (id: integer().identity(), day: date()),
-  relations: (r) =>
-      (holiday: references((day: r.day), () => holiday, onDelete: .restrict)),
-);
+@Model(table: "visits")
+@Relation(
+  target: Holiday,
+  name: "holiday",
+  fields: ["day"],
+  keys: ["day"],
+  onDelete: .restrict,
+)
+final class Visit({
+  @Id(generated: true) @Column(name: "id") required final int id,
+  @Column(name: "day") required final LocalDate day,
+});

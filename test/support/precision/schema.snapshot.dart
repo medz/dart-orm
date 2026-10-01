@@ -3,6 +3,26 @@ import 'package:orm/migrate.dart';
 
 final schema = SchemaSnapshot([
   TableSchema(
+    "prices",
+    columns: [
+      Column("id", Codecs.decimal, decimalPrecision: 4, decimalScale: 2),
+      Column("label", Codecs.text),
+    ],
+    primaryKey: ["id"],
+  ),
+  TableSchema(
+    "receipts",
+    columns: [
+      Column("id", Codecs.integer, generated: true),
+      Column("price_id", Codecs.decimal, decimalPrecision: 4, decimalScale: 2),
+    ],
+    primaryKey: ["id"],
+
+    foreignKeys: [
+      ForeignKey(["price_id"], "prices", ["id"], onDelete: "RESTRICT"),
+    ],
+  ),
+  TableSchema(
     "wallets",
     columns: [
       Column("id", Codecs.integer, generated: true),
@@ -28,25 +48,5 @@ final schema = SchemaSnapshot([
       ),
     ],
     primaryKey: ["id"],
-  ),
-  TableSchema(
-    "prices",
-    columns: [
-      Column("id", Codecs.decimal, decimalPrecision: 4, decimalScale: 2),
-      Column("label", Codecs.text),
-    ],
-    primaryKey: ["id"],
-  ),
-  TableSchema(
-    "receipts",
-    columns: [
-      Column("id", Codecs.integer, generated: true),
-      Column("price_id", Codecs.decimal, decimalPrecision: 4, decimalScale: 2),
-    ],
-    primaryKey: ["id"],
-
-    foreignKeys: [
-      ForeignKey(["price_id"], "prices", ["id"], onDelete: "RESTRICT"),
-    ],
   ),
 ]);

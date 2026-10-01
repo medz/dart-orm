@@ -49,10 +49,13 @@ void main() {
 
   test('migration commands upgrade and verify constraints without overwriting history', () async {
     final initial = SchemaSnapshot(appSchema);
-    final first = Migration.create(
+    // The CLI plans a diff from an empty history. Direct create plans may use
+    // another valid table order, and SQL order intentionally affects checksums.
+    final first = Migration.diff(
       '0001_initial',
-      initial.tables,
       dialect: .sqlite,
+      from: SchemaSnapshot([]),
+      to: initial,
     );
     final created = await migrate(
       ['create', first.id],

@@ -1,17 +1,30 @@
 import 'package:orm/schema.dart';
 
-final Model sample = model("samples", (
-  id: integer(bits: 32).identity(),
-  small: integer(bits: 16),
-  medium: integer(bits: 32),
-  large: integer(),
-  optional: integer(bits: 16).nullable(),
-), relations: (r) => (owners: referencedBy(() => owner, on: (sampleId: r.id))));
+@Model(table: "samples")
+@Relation(
+  target: Owner,
+  name: "owners",
+  fields: ["id"],
+  keys: ["sampleId"],
+  constraint: false,
+)
+final class Sample({
+  @Id(generated: true) @Column(name: "id", bits: 32) required final int id,
+  @Column(name: "small", bits: 16) required final int small,
+  @Column(name: "medium", bits: 32) required final int medium,
+  @Column(name: "large") required final int large,
+  @Column(name: "optional", bits: 16) required final int? optional,
+});
 
-final Model owner = model(
-  "owners",
-  (id: integer(), sampleId: integer(bits: 32)),
-  primaryKey: (r) => r.id,
-  relations: (r) =>
-      (sample: references((id: r.sampleId), () => sample, onDelete: .restrict)),
-);
+@Model(table: "owners")
+@Relation(
+  target: Sample,
+  name: "sample",
+  fields: ["sampleId"],
+  keys: ["id"],
+  onDelete: .restrict,
+)
+final class Owner({
+  @Id(generated: false) @Column(name: "id") required final int id,
+  @Column(name: "sample_id", bits: 32) required final int sampleId,
+});

@@ -1,16 +1,12 @@
-/// Project commands configured with ordinary Dart and static migration history.
+/// Package command runner for generation and project migrations.
 ///
-/// Define [OrmConfig] in `orm.config.dart` and pass it to [runOrmCli].
-/// Generation works offline; database commands use the explicit connection
-/// factory and the database engine fixed by the migration history.
+/// Run the `orm` executable or pass command arguments to [runOrmCli]. Projects
+/// configure their parameterless Dart entrypoint with `defineConfig` from
+/// `package:orm/config.dart`. The runner loads that configuration and its frozen
+/// migration history only when needed; generation remains offline.
 ///
 /// {@category Tooling}
-/// {@canonicalFor config.OrmConfig}
 /// {@canonicalFor runner.runOrmCli}
 library;
 
-export 'src/cli/config.dart' show OrmConfig;
 export 'src/cli/runner.dart' show runOrmCli;
-export 'migrate.dart' show MigrationHistory, SchemaRenames, SchemaSnapshot;
-export 'migrate_cli.dart' show MigrationConnection;
-export 'runtime.dart' show SqlDatabase;

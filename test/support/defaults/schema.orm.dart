@@ -2,17 +2,49 @@
 
 import 'package:orm/sql.dart';
 
+import "schema.dart" as models;
 export "types.dart" show TicketId;
+export "schema.dart" show Ticket, SequenceRow;
 import "types.dart" as types0;
 
-/// A complete immutable row from "tickets".
-final class Ticket({
-  required final types0.TicketId id,
-  required final String name,
-  required final String? label,
-  required final String state,
-  required final DateTime createdAt,
-});
+final _sequenceRowId = Column<int>(
+  "id",
+  Codecs.integer,
+  nullable: false,
+  generated: true,
+  clientDefault: types0.clientIdentity,
+);
+final sequenceRowSchema = TableSchema(
+  "sequences",
+  columns: [_sequenceRowId],
+  primaryKey: ["id"],
+  uniqueKeys: [],
+  indexes: [],
+  foreignKeys: [],
+);
+
+final class SequenceRowFields extends Fields {
+  SequenceRowFields(super.table);
+  late final id = column(_sequenceRowId);
+}
+
+final sequenceRowTable = Table<models.SequenceRow, SequenceRowFields>(
+  sequenceRowSchema,
+  SequenceRowFields.new,
+  (row) => row.id.map((value) => models.SequenceRow(id: value)),
+);
+
+final class SequenceRowTableSet
+    extends TableSet<models.SequenceRow, SequenceRowFields> {
+  SequenceRowTableSet(QueryContext db) : super(db, sequenceRowTable) {
+    db.registerSchema(appSchema);
+  }
+  Future<models.SequenceRow> create({Change<int> id = const Change.keep()}) =>
+      createRow((row) => [...row.id.change(id)]);
+  Query<models.SequenceRow, SequenceRowFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
+}
+
 final _ticketId = Column<types0.TicketId>(
   "id",
   types0.TicketId.codec,
@@ -73,20 +105,20 @@ final class TicketFields extends Fields {
   late final createdAt = column(_ticketCreatedAt);
 }
 
-final ticketTable = Table<Ticket, TicketFields>(
+final ticketTable = Table<models.Ticket, TicketFields>(
   ticketSchema,
   TicketFields.new,
   (row) => (row.id, row.name, row.label, row.state, row.createdAt).map(
     (v0, v1, v2, v3, v4) =>
-        Ticket(id: v0, name: v1, label: v2, state: v3, createdAt: v4),
+        models.Ticket(id: v0, name: v1, label: v2, state: v3, createdAt: v4),
   ),
 );
 
-final class TicketTableSet extends TableSet<Ticket, TicketFields> {
+final class TicketTableSet extends TableSet<models.Ticket, TicketFields> {
   TicketTableSet(QueryContext db) : super(db, ticketTable) {
     db.registerSchema(appSchema);
   }
-  Future<Ticket> create({
+  Future<models.Ticket> create({
     Change<types0.TicketId> id = const Change.keep(),
     Change<String> name = const Change.keep(),
     Change<String?> label = const Change.keep(),
@@ -101,11 +133,11 @@ final class TicketTableSet extends TableSet<Ticket, TicketFields> {
       ...row.createdAt.change(createdAt),
     ],
   );
-  Query<Ticket, TicketFields> byId(types0.TicketId id) =>
+  Query<models.Ticket, TicketFields> byId(types0.TicketId id) =>
       where((row) => row.id.eq(.value(id)));
 }
 
-extension TicketUpdates on Query<Ticket, TicketFields> {
+extension TicketUpdates on Query<models.Ticket, TicketFields> {
   Future<int> patch({
     Change<types0.TicketId> id = const Change.keep(),
     Change<String> name = const Change.keep(),
@@ -123,52 +155,12 @@ extension TicketUpdates on Query<Ticket, TicketFields> {
   ).execute();
 }
 
-/// A complete immutable row from "sequences".
-final class SequenceRow({required final int id});
-final _sequenceRowId = Column<int>(
-  "id",
-  Codecs.integer,
-  nullable: false,
-  generated: true,
-  clientDefault: types0.clientIdentity,
-);
-final sequenceRowSchema = TableSchema(
-  "sequences",
-  columns: [_sequenceRowId],
-  primaryKey: ["id"],
-  uniqueKeys: [],
-  indexes: [],
-  foreignKeys: [],
-);
-
-final class SequenceRowFields extends Fields {
-  SequenceRowFields(super.table);
-  late final id = column(_sequenceRowId);
-}
-
-final sequenceRowTable = Table<SequenceRow, SequenceRowFields>(
-  sequenceRowSchema,
-  SequenceRowFields.new,
-  (row) => row.id.map((value) => SequenceRow(id: value)),
-);
-
-final class SequenceRowTableSet
-    extends TableSet<SequenceRow, SequenceRowFields> {
-  SequenceRowTableSet(QueryContext db) : super(db, sequenceRowTable) {
-    db.registerSchema(appSchema);
-  }
-  Future<SequenceRow> create({Change<int> id = const Change.keep()}) =>
-      createRow((row) => [...row.id.change(id)]);
-  Query<SequenceRow, SequenceRowFields> byId(int id) =>
-      where((row) => row.id.eq(.value(id)));
-}
-
 final appSchema = List<TableSchema>.unmodifiable([
-  ticketSchema,
   sequenceRowSchema,
+  ticketSchema,
 ]);
 
 extension AppTables on QueryContext {
-  TicketTableSet get ticket => TicketTableSet(this);
   SequenceRowTableSet get sequenceRow => SequenceRowTableSet(this);
+  TicketTableSet get ticket => TicketTableSet(this);
 }

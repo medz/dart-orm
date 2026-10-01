@@ -85,7 +85,7 @@ void main() {
               final result = await verifySchema(db.sql, generated.snapshot);
               expect(result.differences, isEmpty);
               expect(result.unmanaged, isEmpty);
-              expect(imported.dart, contains('check('));
+              expect(imported.dart, contains('@Check('));
               expect(
                 imported.issues.map((i) => i.code),
                 contains('IMPORT.CHECK_SQL'),

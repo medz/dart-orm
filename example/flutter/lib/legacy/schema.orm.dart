@@ -2,12 +2,9 @@
 
 import 'package:orm/sql.dart';
 
-/// A complete immutable row from "notes".
-final class Note({
-  required final int id,
-  required final String body,
-  required final DateTime createdAt,
-});
+import "schema.dart" as models;
+export "schema.dart" show Note;
+
 final _noteId = Column<int>(
   "id",
   Codecs.integer,
@@ -42,21 +39,21 @@ final class NoteFields extends Fields {
   late final createdAt = column(_noteCreatedAt);
 }
 
-final noteTable = Table<Note, NoteFields>(
+final noteTable = Table<models.Note, NoteFields>(
   noteSchema,
   NoteFields.new,
   (row) => (
     row.id,
     row.body,
     row.createdAt,
-  ).map((v0, v1, v2) => Note(id: v0, body: v1, createdAt: v2)),
+  ).map((v0, v1, v2) => models.Note(id: v0, body: v1, createdAt: v2)),
 );
 
-final class NoteTableSet extends TableSet<Note, NoteFields> {
+final class NoteTableSet extends TableSet<models.Note, NoteFields> {
   NoteTableSet(QueryContext db) : super(db, noteTable) {
     db.registerSchema(appSchema);
   }
-  Future<Note> create({
+  Future<models.Note> create({
     Change<int> id = const Change.keep(),
     required String body,
     required DateTime createdAt,
@@ -67,10 +64,11 @@ final class NoteTableSet extends TableSet<Note, NoteFields> {
       row.createdAt.set(createdAt),
     ],
   );
-  Query<Note, NoteFields> byId(int id) => where((row) => row.id.eq(.value(id)));
+  Query<models.Note, NoteFields> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
-extension NoteUpdates on Query<Note, NoteFields> {
+extension NoteUpdates on Query<models.Note, NoteFields> {
   Future<int> patch({
     Change<String> body = const Change.keep(),
     Change<DateTime> createdAt = const Change.keep(),

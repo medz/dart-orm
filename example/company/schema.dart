@@ -4,75 +4,146 @@ enum ProjectStatus { draft, active, archived }
 
 enum MemberRole { maintainer, member }
 
-// 部门
-final department = model('departments', (
-  id: identity(),
-  name: text(unique: true),
-), relations: (d) => (employees: referencedBy(() => employee)));
+// Departments.
+@Model(table: "departments")
+@Unique(["name"])
+@Relation(
+  target: Employee,
+  name: "employees",
+  fields: ["id"],
+  keys: ["departmentId"],
+  constraint: false,
+)
+final class Department({
+  @Id(generated: true) @Column(name: "id") required final int id,
+  @Column(name: "name") required final String name,
+});
 
-// 员工：所属部门与直属上级
-final Model employee = model(
-  'employees',
-  (
-    id: identity(),
-    name: text(),
-    email: text(unique: true),
-    active: boolean(defaultValue: true),
-    createdAt: dateTime(clientDefault: DateTime.now),
-    departmentId: integer(),
-    managerId: integer().nullable(),
-  ),
-  relations: (e) => (
-    department: references(e.departmentId, () => department),
-    manager: references(e.managerId, () => employee, onDelete: .setNull),
-    directReports: referencedBy(() => employee),
-    ownedProjects: referencedBy(() => project),
-    memberships: referencedBy(() => projectMember),
-  ),
-  indexes: (e) => [
-    index((e.departmentId, e.id), name: 'employees_department_id'),
-    index((e.managerId, e.id), name: 'employees_manager_id'),
-  ],
-);
+// Employees, departments and direct managers.
+@Model(table: "employees")
+@Unique(["email"])
+@Index(["departmentId", "id"], name: "employees_department_id", unique: false)
+@Index(["managerId", "id"], name: "employees_manager_id", unique: false)
+@Relation(
+  target: Department,
+  name: "department",
+  fields: ["departmentId"],
+  keys: ["id"],
+  onDelete: .restrict,
+)
+@Relation(
+  target: Employee,
+  name: "manager",
+  fields: ["managerId"],
+  keys: ["id"],
+  onDelete: .setNull,
+)
+@Relation(
+  target: Employee,
+  name: "directReports",
+  fields: ["id"],
+  keys: ["managerId"],
+  constraint: false,
+)
+@Relation(
+  target: Project,
+  name: "ownedProjects",
+  fields: ["id"],
+  keys: ["ownerId"],
+  constraint: false,
+)
+@Relation(
+  target: ProjectMember,
+  name: "memberships",
+  fields: ["id"],
+  keys: ["employeeId"],
+  constraint: false,
+)
+final class Employee({
+  @Id(generated: true) @Column(name: "id") required final int id,
+  @Column(name: "name") required final String name,
+  @Column(name: "email") required final String email,
+  @Column(name: "active")
+  @DatabaseDefault.sql("true")
+  required final bool active,
+  @Column(name: "created_at")
+  @ClientDefault(DateTime.now)
+  required final DateTime createdAt,
+  @Column(name: "department_id") required final int departmentId,
+  @Column(name: "manager_id") required final int? managerId,
+});
 
-// 项目：负责人及项目状态
-final Model project = model(
-  'projects',
-  (
-    id: identity(),
-    name: text(),
-    status: enumeration(
-      ProjectStatus.values,
-      defaultValue: ProjectStatus.draft,
-    ),
-    createdAt: dateTime(clientDefault: DateTime.now),
-    ownerId: integer(),
-  ),
-  relations: (p) => (
-    owner: references(p.ownerId, () => employee),
-    members: referencedBy(() => projectMember),
-  ),
-  indexes: (p) => [index((p.ownerId, p.id), name: 'projects_owner_id')],
-);
+// Projects, their owners and status.
+@Model(table: "projects")
+@Index(["ownerId", "id"], name: "projects_owner_id", unique: false)
+@Relation(
+  target: Employee,
+  name: "owner",
+  fields: ["ownerId"],
+  keys: ["id"],
+  onDelete: .restrict,
+)
+@Relation(
+  target: ProjectMember,
+  name: "members",
+  fields: ["id"],
+  keys: ["projectId"],
+  constraint: false,
+)
+final class Project({
+  @Id(generated: true) @Column(name: "id") required final int id,
+  @Column(name: "name") required final String name,
+  @Column(
+    name: "status",
+    labels: {
+      ProjectStatus.draft: "draft",
+      ProjectStatus.active: "active",
+      ProjectStatus.archived: "archived",
+    },
+  )
+  @DatabaseDefault.sql("'draft'")
+  required final ProjectStatus status,
+  @Column(name: "created_at")
+  @ClientDefault(DateTime.now)
+  required final DateTime createdAt,
+  @Column(name: "owner_id") required final int ownerId,
+});
 
-// 项目成员：员工与项目的多对多关系，包含角色和加入时间
-final projectMember = model(
-  'project_members',
-  (
-    projectId: integer(),
-    employeeId: integer(),
-    role: enumeration(MemberRole.values, defaultValue: MemberRole.member),
-    joinedAt: dateTime(clientDefault: DateTime.now),
-  ),
-  primaryKey: (m) => (m.projectId, m.employeeId),
-  relations: (m) => (
-    project: references(m.projectId, () => project, onDelete: .cascade),
-    employee: references(m.employeeId, () => employee, onDelete: .cascade),
-  ),
-  indexes: (m) => [
-    index((
-      m.employeeId,
-      m.projectId,
-    ), name: 'project_members_employee_project'),
-  ],
-);
+// Project membership records the employee, role and joining time.
+@Model(table: "project_members")
+@Index(
+  ["employeeId", "projectId"],
+  name: "project_members_employee_project",
+  unique: false,
+)
+@Relation(
+  target: Project,
+  name: "project",
+  fields: ["projectId"],
+  keys: ["id"],
+  onDelete: .cascade,
+)
+@Relation(
+  target: Employee,
+  name: "employee",
+  fields: ["employeeId"],
+  keys: ["id"],
+  onDelete: .cascade,
+)
+final class ProjectMember({
+  @Id(generated: false)
+  @Column(name: "project_id")
+  required final int projectId,
+  @Id(generated: false)
+  @Column(name: "employee_id")
+  required final int employeeId,
+  @Column(
+    name: "role",
+    labels: {MemberRole.maintainer: "maintainer", MemberRole.member: "member"},
+  )
+  @DatabaseDefault.sql("'member'")
+  required final MemberRole role,
+  @Column(name: "joined_at")
+  @ClientDefault(DateTime.now)
+  required final DateTime joinedAt,
+});

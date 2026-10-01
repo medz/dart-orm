@@ -3,6 +3,18 @@ import 'package:orm/migrate.dart';
 
 final schema = SchemaSnapshot([
   TableSchema(
+    "owners",
+    columns: [
+      Column("id", Codecs.integer),
+      Column("sample_id", Codecs.integer, integerBits: 32),
+    ],
+    primaryKey: ["id"],
+
+    foreignKeys: [
+      ForeignKey(["sample_id"], "samples", ["id"], onDelete: "RESTRICT"),
+    ],
+  ),
+  TableSchema(
     "samples",
     columns: [
       Column("id", Codecs.integer, generated: true, integerBits: 32),
@@ -18,17 +30,5 @@ final schema = SchemaSnapshot([
       ),
     ],
     primaryKey: ["id"],
-  ),
-  TableSchema(
-    "owners",
-    columns: [
-      Column("id", Codecs.integer),
-      Column("sample_id", Codecs.integer, integerBits: 32),
-    ],
-    primaryKey: ["id"],
-
-    foreignKeys: [
-      ForeignKey(["sample_id"], "samples", ["id"], onDelete: "RESTRICT"),
-    ],
   ),
 ]);

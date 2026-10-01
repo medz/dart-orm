@@ -55,7 +55,7 @@ void main() {
         return result;
       }
 
-      test('imports records, identities, defaults and constraints then baselines unchanged rows', () async {
+      test('imports annotated DTOs, identities, defaults and constraints then baselines unchanged rows', () async {
         final integer = getInt();
         await db.execute(
           SqlCommand(
@@ -78,8 +78,16 @@ void main() {
         );
         final draft = await importSchema(db.sql);
         expect(draft.issues, isEmpty);
-        expect(draft.entities, {'accounts': 'accounts', 'notes': 'notes'});
-        expect(draft.dart, contains('.identity()'));
+        expect(draft.entities, {'accounts': 'Accounts', 'notes': 'Notes'});
+        expect(draft.dart, contains('@Id(generated: true)'));
+        expect(draft.dart, contains('final class Accounts'));
+        expect(draft.dart, contains('required this.id'));
+        expect(draft.dart, contains('@DatabaseDefault.sql("0")'));
+        expect(draft.dart, isNot(contains('model(')));
+        expect(draft.dart, isNot(contains('references(')));
+        if (backend == 'postgres') {
+          expect(draft.dart, contains('namespace: "orm_import_tests"'));
+        }
         final client = await generate(draft);
         final snapshot = client.snapshot;
         expect((await verifySchema(db.sql, snapshot)).differences, isEmpty);
@@ -112,8 +120,8 @@ import 'schema.orm.dart';
 Future<void> main() async {
   final db = $connection;
   try {
-    final account = await db.accounts.create(email: 'created');
-    final note = await db.notes.create(id: const Change.set(8), accountId: Change.set(account.id), body: 'new');
+    final Accounts account = await db.accounts.create(email: 'created');
+    final Notes note = await db.notes.create(id: const Change.set(8), accountId: Change.set(account.id), body: 'new');
     final joined = await db.notes.byId(note.id).select((n) => (n.body, n.notesAccounts.select((a) => a.email).required()).map((body, email) => (body: body, email: email))).single();
     if (joined != (body: 'new', email: 'created')) throw StateError('Typed relation lost values');
     await db.accounts.byId(account.id).delete().execute();
@@ -248,7 +256,7 @@ Future<void> main() => consumer.main();
         final integer = getInt();
         await db.execute(
           SqlCommand(
-            'CREATE TABLE owners (tenant $integer NOT NULL, id $integer NOT NULL, parent_tenant $integer, parent_id $integer, PRIMARY KEY(tenant, id), FOREIGN KEY(parent_tenant, parent_id) REFERENCES owners(tenant, id) ON DELETE SET NULL)',
+            'CREATE TABLE owners (id $integer NOT NULL, tenant $integer NOT NULL, parent_tenant $integer, parent_id $integer, PRIMARY KEY(tenant, id), FOREIGN KEY(parent_tenant, parent_id) REFERENCES owners(tenant, id) ON DELETE SET NULL)',
           ),
         );
         await db.execute(
@@ -266,7 +274,16 @@ Future<void> main() => consumer.main();
         );
         final draft = await importSchema(db.sql);
         expect(draft.issues, isEmpty);
+        expect(draft.dart, contains('@Relation('));
+        expect(draft.dart, contains('inverse:'));
+        expect(draft.dart, contains('@Index('));
         final result = await generate(draft);
+        expect(
+          result.snapshot.tables
+              .singleWhere((t) => t.name == 'owners')
+              .primaryKey,
+          ['tenant', 'id'],
+        );
         expect(
           (await verifySchema(db.sql, result.snapshot)).differences,
           isEmpty,
@@ -289,17 +306,28 @@ Future<void> main() => consumer.main();
         );
         await db.execute(
           SqlCommand(
-            'CREATE TABLE computed (id $integer NOT NULL PRIMARY KEY, doubled $integer GENERATED ALWAYS AS (id * 2) STORED)',
+            'CREATE TABLE computed (id $integer NOT NULL PRIMARY KEY, doubled $integer GENERATED ALWAYS AS (id * 2) STORED, CONSTRAINT positive_id CHECK (id > 0))',
           ),
         );
         final draft = await importSchema(db.sql);
         expect(draft.entities.keys, ['computed', 'supported']);
         expect(
           draft.issues.map((i) => i.code),
-          containsAll(['IMPORT.TYPE', 'IMPORT.COMPUTED_SQL']),
+          containsAll([
+            'IMPORT.TYPE',
+            'IMPORT.COMPUTED_SQL',
+            'IMPORT.CHECK_SQL',
+          ]),
         );
         expect(draft.hasBlockingIssues, true);
-        await generate(draft);
+        expect(draft.dart, contains('@Computed('));
+        expect(draft.dart, contains('@Check('));
+        expect(draft.dart, contains('name: "positive_id"'));
+        final client = await generate(draft);
+        expect(
+          (await verifySchema(db.sql, client.snapshot)).differences,
+          isEmpty,
+        );
         expect(
           (await importSchema(db.sql, tables: ['missing'])).issues.single.code,
           'IMPORT.MISSING',
@@ -359,9 +387,11 @@ Future<void> main() => consumer.main();
               ),
             );
             final draft = await importSchema(db.sql);
-            expect(draft.dart, contains('document: text('));
-            expect(draft.dart, contains('timestamp: text('));
-            expect(draft.dart, contains('flag: integer('));
+            expect(draft.dart, contains('final String? document;'));
+            expect(draft.dart, contains('final String? timestamp;'));
+            expect(draft.dart, contains('final int flag;'));
+            expect(draft.dart, contains("import 'dart:typed_data';"));
+            expect(draft.dart, contains('final Uint8List? data;'));
             await generate(draft);
           } else {
             await db.execute(
@@ -370,8 +400,9 @@ Future<void> main() => consumer.main();
               ),
             );
             final draft = await importSchema(db.sql);
-            expect(draft.dart, contains('json('));
-            expect(draft.dart, contains('document: json('));
+            expect(draft.dart, contains('final SqlJson? document;'));
+            expect(draft.dart, contains('final DateTime? timestamp;'));
+            expect(draft.dart, contains('final bool flag;'));
             final result = await generate(draft);
             expect(
               (await verifySchema(db.sql, result.snapshot)).differences,
