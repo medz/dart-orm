@@ -17,6 +17,9 @@ import 'schema/diagnostics.dart';
 /// Use `models` for a recursive model source directory, `database` for the target
 /// engine, and `default_namespace` for PostgreSQL's default physical namespace.
 /// Individual libraries can instead be selected with `generate_for`.
+/// Models must not depend on their generated destinations, including inactive
+/// conditional imports/exports. build_runner owns output cleanup; application
+/// sources must never occupy those declared output slots.
 builder.Builder ormBuilder(builder.BuilderOptions options) {
   if (options.config.keys.any(
     (key) => !{'database', 'models', 'default_namespace'}.contains(key),
@@ -78,6 +81,7 @@ final class _OrmBuilder implements builder.Builder {
     }
     final output = input.changeExtension('.orm.dart');
     final (unit, library) = await _resolveSchema(step);
+    _validateOutputs([unit], [output, input.changeExtension('.snapshot.dart')]);
     final result = await generateResolvedSchema(
       unit,
       library,
@@ -184,6 +188,10 @@ final class _OrmDirectoryBuilder implements builder.Builder {
     }
     final output = builder.AssetId(package, layout.output);
     final library = units.first.declaredFragment!.element;
+    _validateOutputs(units, [
+      output,
+      builder.AssetId(package, '$root.snapshot.dart'),
+    ]);
     final result = await generateResolvedSchema(
       units.first,
       library,
@@ -200,6 +208,28 @@ final class _OrmDirectoryBuilder implements builder.Builder {
       snapshot,
     );
   }
+}
+
+void _validateOutputs(
+  List<CompilationUnit> units,
+  List<builder.AssetId> outputs,
+) {
+  final libraries = units
+      .map((unit) => unit.declaredFragment!.element)
+      .toList();
+  final converter = libraries.first.session.uriConverter;
+  final paths = <String>{};
+  for (final output in outputs) {
+    final path = converter.uriToPath(output.uri);
+    if (path == null) {
+      throw GenerationException(
+        'Cannot resolve generated output $output.',
+        code: 'SCHEMA.OUTPUT',
+      );
+    }
+    paths.add(path);
+  }
+  validateSchemaOutputs(libraries, paths, paths: p.posix);
 }
 
 String _importPath(Uri uri, String package, String output) {

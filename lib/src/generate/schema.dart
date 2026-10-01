@@ -118,7 +118,7 @@ Future<GeneratedSchema> generateSchema(
     for (final path in sources) {
       roots.add(await resolvePath(path));
     }
-    _validateOutputSources(roots.map((result) => result.libraryElement), {
+    validateSchemaOutputs(roots.map((result) => result.libraryElement), {
       output,
       _schemaSnapshotPath(output),
       requestedOutput,
@@ -161,10 +161,12 @@ Future<GeneratedSchema> generateSchema(
 // Protect every source dependency, not just files selected by the root layout.
 // Resolve existing output links before comparing identities so file links and
 // hard links cannot turn generation into a write to an application source.
-void _validateOutputSources(
+void validateSchemaOutputs(
   Iterable<LibraryElement> roots,
-  Set<String> outputs,
-) {
+  Set<String> outputs, {
+  p.Context? paths,
+}) {
+  final pathContext = paths ?? p.context;
   final existing = [
     for (final output in outputs)
       if (File(output).existsSync()) File(output).resolveSymbolicLinksSync(),
@@ -172,7 +174,7 @@ void _validateOutputSources(
   final visited = <LibraryElement>{};
   final visitedSources = <String>{};
   void scan(AnalysisSession session, String source) {
-    source = p.normalize(p.absolute(source));
+    source = pathContext.normalize(pathContext.absolute(source));
     if (!visitedSources.add(source)) return;
     final file = File(source);
     final target = file.existsSync() ? file.resolveSymbolicLinksSync() : null;

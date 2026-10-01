@@ -54,7 +54,7 @@ filename inside the source directory or choose an output outside it. Collisions
 are rejected before either output is written. The CLI checks source errors and
 resolves imports through the project's package configuration.
 
-Neither the client nor snapshot may overwrite a selected source or any of its
+Standalone and CLI generation cannot overwrite a selected source or any of its
 transitive imports and exports, including every conditional branch and its
 dependencies. This includes barrel libraries, relationship
 targets, mixins and business helpers outside the selected directory. Filesystem
@@ -98,6 +98,12 @@ member names.
 `lib/models.snapshot.dart`. Set `options.database: postgres` for PostgreSQL
 namespace rules. Use the CLI's output path for other locations. build_runner
 owns its output cleanup and cache; do not edit either manually.
+
+The builders also reject dependencies on their own client or snapshot destination,
+including inactive conditional imports and exports. Keep application libraries
+out of these declared output slots: build_runner owns them and can remove
+conflicting files even when a build fails. Standalone/CLI file-preservation
+guarantees do not control build_runner's cleanup.
 
 ## Model directories
 

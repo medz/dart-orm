@@ -22,6 +22,45 @@ void main() {
     }
   });
 
+  for (final directory in [false, true]) {
+    for (final snapshot in [false, true]) {
+      test(
+        '${directory ? 'directory' : 'file'} builder rejects an inactive dependency on its ${snapshot ? 'snapshot' : 'client'} output',
+        () async {
+          const stem = 'lib/fixture/models';
+          final root = directory ? '$stem/user.dart' : '$stem.dart';
+          final output = '$stem.${snapshot ? 'snapshot' : 'orm'}.dart';
+          final prefix = directory ? '../' : '';
+          final files = TestReaderWriter(
+            rootPackage: 'orm',
+            flattenOutput: true,
+          );
+          await files.testing.loadIsolateSources();
+          final result = await testBuilder(
+            directory
+                ? ormBuilder(
+                    BuilderOptions({'models': stem, 'database': 'postgres'}),
+                  )
+                : _OnlyRoot('orm|$root', {'database': 'postgres'}),
+            {
+              'orm|$root':
+                  "import '${prefix}stub.dart' if (dart.library.js_interop) '${prefix}models.${snapshot ? 'snapshot' : 'orm'}.dart';\n$_user",
+              'orm|lib/fixture/stub.dart': "const platformLabel = 'native';\n",
+              'orm|$output': "const platformLabel = 'application source';\n",
+            },
+            rootPackage: 'orm',
+            readerWriter: files,
+            generateFor: directory ? null : {'orm|$root'},
+            flattenOutput: true,
+          );
+          expect(result.succeeded, false);
+          expect(result.errors.join('\n'), contains('SCHEMA.OUTPUT'));
+          expect(result.outputs, isEmpty);
+        },
+      );
+    }
+  }
+
   test(
     'individual build assets detect DTOs and preserve standalone parity',
     () async {
