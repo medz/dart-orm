@@ -28,6 +28,39 @@ void main() {
     },
   );
 
+  test('generated NULL database defaults beat constructor values', () async {
+    final fixture = await BuildFixture.create(ormPath: Directory.current.path);
+    try {
+      await fixture.file('lib/schema.dart').delete();
+      await fixture.write('lib/models.dart', '''
+import 'package:orm/schema.dart';
+@Model() final class User({
+  @Id(generated: true) required final int id,
+  @DatabaseDefault(null) final int? score = 7,
+  @DatabaseDefault.sql('NULL') final String? note = 'constructor',
+});
+''');
+      await fixture.write('orm.config.dart', '''
+import 'package:orm/config.dart';
+void main() => defineConfig(database: .sqlite, models: 'lib/models.dart',
+  output: 'lib/models.orm.dart', migrations: 'migrations');
+''');
+      await fixture.write('bin/null_defaults.dart', _nullDefaultConsumer);
+      await fixture.run(['run', 'orm', 'generate']);
+      expect(
+        await fixture.file('lib/models.orm.dart').readAsString(),
+        isNot(contains('clientDefault:')),
+      );
+      final result = await fixture.run([
+        'run',
+        'orm_build_fixture:null_defaults',
+      ]);
+      expect(result.output, contains('explicit-null-default-ok'));
+    } finally {
+      await fixture.dispose();
+    }
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
   test('fresh annotated client compiles and executes original DTOs on SQLite', () async {
     final fixture = await BuildFixture.create(ormPath: Directory.current.path);
     try {
@@ -175,6 +208,37 @@ void main() {
     }
   }, timeout: const Timeout(Duration(minutes: 4)));
 }
+
+const _nullDefaultConsumer = r'''
+import 'package:orm/migrate.dart';
+import 'package:orm/sqlite.dart';
+import 'package:orm_build_fixture/models.orm.dart';
+
+void check(bool condition, String message) {
+  if (!condition) throw StateError(message);
+}
+Future<void> main() async {
+  final db = await sqlite(const SqliteOptions.memory());
+  try {
+    final migration = Migration.create('0001_initial', appSchema, dialect: .sqlite);
+    await Migrator(db.sql).apply([migration]);
+    check((await verifySchema(db.sql, migration.snapshot!)).matches, 'apply->verify drift');
+    final omitted = await db.user.create();
+    check(omitted.score == null && omitted.note == null, 'Omission used constructor defaults');
+    final explicit = await db.user.create(score: .set(null), note: .set(null));
+    check(explicit.score == null && explicit.note == null, 'Explicit null was replaced');
+    final supplied = await db.user.create(score: .set(9), note: .set('supplied'));
+    check(supplied.score == 9 && supplied.note == 'supplied', 'Explicit values were lost');
+    await db.user.byId(omitted.id).patch(note: .set('updated'));
+    final patched = await db.user.byId(omitted.id).single();
+    check(patched.score == null && patched.note == 'updated', 'Omitted patch used fallback');
+    final read = await db.user.byId(explicit.id).single();
+    check(read.score == null && read.note == null, 'Read used constructor defaults');
+    check((await verifySchema(db.sql, migration.snapshot!)).matches, 'DML changed schema verification');
+    print('explicit-null-default-ok');
+  } finally { await db.close(); }
+}
+''';
 
 const _consumer = r'''
 import 'package:orm/migrate.dart';

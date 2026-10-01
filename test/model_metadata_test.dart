@@ -3,6 +3,7 @@ library;
 
 import 'dart:io';
 
+import 'package:orm/driver.dart' show SqlDialect;
 import 'package:orm/generate.dart';
 import 'package:test/test.dart';
 
@@ -30,6 +31,44 @@ final class Job({@Id(generated:true) required final int id,
     expect(result.dart, contains('models.Status.waiting: "pending"'));
     expect(result.snapshot.tables.single.columns.last.defaultSql, "'pending'");
   });
+
+  test(
+    'explicit NULL database defaults suppress constructor fallbacks',
+    () async {
+      for (final dialect in SqlDialect.values) {
+        final file = File('${root.path}/models.dart');
+        await file.writeAsString('''
+import 'package:orm/schema.dart';
+@Model() final class User({
+  @Id(generated: true) required final int id,
+  @DatabaseDefault(null) final int? score = 7,
+  @DatabaseDefault.sql('NULL') final String? note = 'constructor',
+});
+''');
+        final result = await generateSchema(file.path, dialect: dialect);
+        expect(
+          result.snapshot.tables.single.columns
+              .skip(1)
+              .map((c) => c.defaultSql),
+          ['NULL', 'NULL'],
+        );
+        expect(result.dart, isNot(contains('clientDefault:')));
+        expect(result.snapshotDart, isNot(contains('constructor')));
+      }
+      await expectLater(
+        generate('''
+@Model() final class User({@DatabaseDefault(null) final int score = 7});
+'''),
+        throwsA(
+          isA<GenerationException>().having(
+            (e) => e.code,
+            'code',
+            'SCHEMA.DEFAULT',
+          ),
+        ),
+      );
+    },
+  );
 
   test(
     'source methods and imported constants survive normal generation',

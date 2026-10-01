@@ -537,6 +537,7 @@ Future<SchemaVerification> verifySchema(
 
 String? _columnDefault(String? value, Column<Object?> column) {
   var normalized = normalizeDefault(value);
+  if (column.nullable && isNullDefault(normalized)) return null;
   var temporalPrefix = '';
   if (normalized != null &&
       column.temporalPrecision != null &&
@@ -563,6 +564,7 @@ String? _columnDefault(String? value, Column<Object?> column) {
       );
     }
   }
+  if (column.nullable && isNullDefault(normalized)) return null;
   if (normalized != null &&
       normalized.startsWith("'") &&
       normalized.endsWith("'")) {
@@ -597,6 +599,7 @@ String? _columnDefault(String? value, Column<Object?> column) {
         );
   final prefix = unwrapped == null ? '' : 'decimal cast:';
   normalized = unwrapped == null ? normalized : normalizeDefault(unwrapped)!;
+  if (column.nullable && isNullDefault(normalized)) return null;
   // PostgreSQL removes the quotes from a NUMERIC literal. Compare finite
   // literals by value, leaving arbitrary SQL expressions unchanged.
   final literal = normalized.startsWith("'") && normalized.endsWith("'")
@@ -639,6 +642,36 @@ String? normalizeDefault(String? value) {
     ),
     (match) => match[1]!,
   );
+}
+
+// Compare nullable NULL defaults with absent defaults without changing stored
+// schema metadata. Only built-in casts are safe: a domain can reject NULL, and
+// arbitrary functions or the string literal 'NULL' must remain distinct.
+bool isNullDefault(String? value) {
+  if (value == null) return false;
+  const type =
+      r'(?:(?:pg_catalog\.)?(?:smallint|integer|bigint|int2|int4|int8|int|boolean|bool|text|bytea|blob|jsonb?|numeric|decimal|real|double precision|float4|float8|date|time|timestamp|datetime|char|character varying|character|varchar|binary)|(?:signed|unsigned)(?:\s+integer)?)'
+      r'(?:\s*\(\s*\d+(?:\s*,\s*-?\d+)?\s*\))?'
+      r'(?:\s+(?:with|without)\s+time\s+zone)?';
+  final postfix = RegExp(
+    '^(.*)::\\s*$type\$',
+    caseSensitive: false,
+    dotAll: true,
+  );
+  final cast = RegExp(
+    '^CAST\\s*\\((.*)\\s+AS\\s+$type\\s*\\)\$',
+    caseSensitive: false,
+    dotAll: true,
+  );
+  var expression = value;
+  for (var depth = 0; depth < 128; depth++) {
+    final normalized = normalizeDefault(expression)!;
+    if (normalized.toUpperCase() == 'NULL') return true;
+    final match = postfix.firstMatch(normalized) ?? cast.firstMatch(normalized);
+    if (match == null) return false;
+    expression = match[1]!.trim();
+  }
+  return false;
 }
 
 String? _instantDefault(String literal, int digits) {

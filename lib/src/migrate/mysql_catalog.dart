@@ -6,7 +6,12 @@ import '../../schema_model.dart'
     show Column, ComputedColumn, ForeignKey, IndexSchema;
 import '../../values.dart' show Codecs, Decimal;
 import 'catalog.dart'
-    show CatalogObject, SchemaVerification, TableInfo, normalizeDefault;
+    show
+        CatalogObject,
+        SchemaVerification,
+        TableInfo,
+        isNullDefault,
+        normalizeDefault;
 import 'checks.dart' show CheckInfo;
 import 'columns.dart' show ColumnInfo;
 import 'mysql_schema.dart'
@@ -139,6 +144,7 @@ Object? _mysqlExpressionTree(List<String> input) {
 
 String _mysqlDefaultExpression(String? expression, Column<Object?> column) {
   if (expression == null) return '';
+  if (column.nullable && isNullDefault(expression)) return '';
   final sql = normalizeDefault(expression)!;
   if (sql.toUpperCase() == 'NULL') return '';
   final clock = RegExp(
