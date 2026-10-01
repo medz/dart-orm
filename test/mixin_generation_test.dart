@@ -253,6 +253,25 @@ mixin Fields {
     },
   );
 
+  test('explicit null is a valid nullable mixin placeholder', () async {
+    final file = await source('explicit_null_placeholder', '''
+mixin Fields { @Id() int id = 0; String? note = null; }
+@Model() class User with Fields {
+  User({required int id, required String? note}) {
+    this.id = id;
+    this.note = note;
+  }
+}
+''');
+    final result = await generateSchema(file.path);
+    final note = result.snapshot.tables.single.columns.singleWhere(
+      (column) => column.name == 'note',
+    );
+    expect(note.nullable, true);
+    expect(note.defaultSql, isNull);
+    expect(result.dart, isNot(contains('clientDefault:')));
+  });
+
   test(
     'mixin-owning libraries follow the independent-library boundary',
     () async {
