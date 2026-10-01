@@ -48,7 +48,9 @@ final class GeneratedSchema {
 ///
 /// [outputPath] determines relative imports and defaults to the source basename
 /// with an `.orm.dart` extension. Invalid declarations or output collisions throw
-/// [GenerationException]. Directory outputs must not be discovered as schema
+/// [GenerationException]. Neither output may overwrite a selected source or its
+/// transitive imports and exports, including filesystem aliases. Directory
+/// outputs must not be discovered as schema
 /// inputs on later runs. Application default factories are never executed.
 Future<GeneratedSchema> generateSchema(
   String sourcePath, {
@@ -59,7 +61,8 @@ Future<GeneratedSchema> generateSchema(
   final input = p.normalize(p.absolute(sourcePath));
   final root = SchemaLayout.stem(input);
   final layout = SchemaLayout(input, directory: await Directory(root).exists());
-  final output = p.normalize(p.absolute(outputPath ?? layout.output));
+  final requestedOutput = p.absolute(outputPath ?? layout.output);
+  final output = p.normalize(requestedOutput);
   if (layout.directory &&
       SchemaLayout.declaration(output) &&
       (layout.includes(output) || p.dirname(output) == root)) {
@@ -83,9 +86,7 @@ Future<GeneratedSchema> generateSchema(
   if (sources.isEmpty) {
     throw GenerationException('No schema files found for $sourcePath.');
   }
-  if (p.extension(output) != '.dart' ||
-      sources.contains(output) ||
-      sources.contains(_schemaSnapshotPath(output))) {
+  if (p.extension(output) != '.dart') {
     throw const GenerationException(
       'Client and snapshot outputs must be separate Dart files from the source.',
     );
@@ -116,6 +117,12 @@ Future<GeneratedSchema> generateSchema(
     for (final path in sources) {
       roots.add(await resolvePath(path));
     }
+    _validateOutputSources(roots.map((result) => result.libraryElement), {
+      output,
+      _schemaSnapshotPath(output),
+      requestedOutput,
+      _schemaSnapshotPath(requestedOutput),
+    });
     String importPath(Uri uri) => uri.scheme == 'file'
         ? p
               .relative(uri.toFilePath(), from: p.dirname(output))
@@ -147,6 +154,46 @@ Future<GeneratedSchema> generateSchema(
     );
   } finally {
     await contexts.dispose();
+  }
+}
+
+// Protect every source dependency, not just files selected by the root layout.
+// Resolve existing output links before comparing identities so file links and
+// hard links cannot turn generation into a write to an application source.
+void _validateOutputSources(
+  Iterable<LibraryElement> roots,
+  Set<String> outputs,
+) {
+  final existing = [
+    for (final output in outputs)
+      if (File(output).existsSync()) File(output).resolveSymbolicLinksSync(),
+  ];
+  final visited = <LibraryElement>{};
+  void check(LibraryElement library) {
+    if (!visited.add(library)) return;
+    for (final fragment in library.fragments) {
+      final source = p.normalize(p.absolute(fragment.source.fullName));
+      if (outputs.contains(source) ||
+          existing.any(
+            (output) => FileSystemEntity.identicalSync(source, output),
+          )) {
+        throw GenerationException(
+          'Client and snapshot outputs must not overwrite source dependencies: '
+          '$source. Choose a separate output path.',
+          code: 'SCHEMA.OUTPUT',
+        );
+      }
+      for (final dependency in fragment.importedLibraries) {
+        check(dependency);
+      }
+    }
+    for (final dependency in library.exportedLibraries) {
+      check(dependency);
+    }
+  }
+
+  for (final root in roots) {
+    check(root);
   }
 }
 
