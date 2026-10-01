@@ -39,7 +39,8 @@ bool isAnnotatedModel(Element element) =>
 
 /// Resolves original class identities from roots, exports and relation targets.
 /// Unrelated imports do not become model roots.
-Future<List<ClassDeclaration>> annotatedSources(
+Future<({List<ClassDeclaration> models, List<MixinDeclaration> mixins})>
+annotatedSources(
   List<CompilationUnit> roots,
   Future<CompilationUnit> Function(LibraryElement) resolve,
 ) async {
@@ -59,6 +60,7 @@ Future<List<ClassDeclaration>> annotatedSources(
         if (element is ClassElement && isAnnotatedModel(element)) element,
   ];
   final result = <ClassElement, ClassDeclaration>{};
+  final mixins = <MixinElement, MixinDeclaration>{};
   for (var index = 0; index < pending.length; index++) {
     final element = pending[index];
     if (result.containsKey(element)) continue;
@@ -76,9 +78,35 @@ Future<List<ClassDeclaration>> annotatedSources(
       );
     }
     result[element] = declaration;
+    for (final applied in element.mixins) {
+      final mixin = applied.element;
+      if (mixin is! MixinElement) {
+        failAt(
+          declaration,
+          'MIXIN',
+          'Use a plain mixin declaration, not a mixin class.',
+        );
+      }
+      if (mixins.containsKey(mixin)) continue;
+      final mixinUnit = units[mixin.library] ??= await resolve(mixin.library);
+      validateModelLibrary(mixinUnit);
+      final mixinNode = mixinUnit.declarations
+          .whereType<MixinDeclaration>()
+          .where((node) => node.declaredFragment!.element == mixin)
+          .firstOrNull;
+      if (mixinNode == null) {
+        failAt(
+          declaration,
+          'MIXIN',
+          'Declare reusable mixins in independent source libraries.',
+        );
+      }
+      mixins[mixin] = mixinNode;
+    }
     for (final owner in <Element>[
       element,
       ...element.fields,
+      for (final mixin in element.mixins) ...mixin.element.fields,
       ...element.constructors.expand(
         (constructor) => constructor.formalParameters,
       ),
@@ -94,13 +122,14 @@ Future<List<ClassDeclaration>> annotatedSources(
       }
     }
   }
-  return result.values.toList();
+  return (models: result.values.toList(), mixins: mixins.values.toList());
 }
 
 /// Reads annotated scalar DTOs without instantiating application classes.
 final class AnnotationReader(
   final List<ClassDeclaration> declarations,
   final DartNames names, {
+  final List<MixinDeclaration> mixins = const [],
   final SqlDialect? dialect,
   final String? defaultNamespace,
 }) {
@@ -112,7 +141,7 @@ final class AnnotationReader(
   final _relations = <(ModelEntity, String?, ElementAnnotation)>[];
 
   List<ModelEntity> read() {
-    for (final node in declarations) {
+    for (final node in <AstNode>[...declarations, ...mixins]) {
       node.accept(_AnnotationNodes(_annotationNodes));
     }
     _validateMetadata();
@@ -181,12 +210,11 @@ final class AnnotationReader(
         'Use a public concrete non-generic model class whose name does not shadow a database member.',
       );
     }
-    if (element.supertype?.isDartCoreObject != true ||
-        node.withClause != null) {
+    if (element.supertype?.isDartCoreObject != true) {
       failAt(
         node,
         'MODEL',
-        'Mapped DTOs must directly extend Object without mixins. Inherited storage and constructor effects are not supported.',
+        'Mapped DTOs must directly extend Object. Superclass storage and constructor effects are not supported.',
       );
     }
     final constructor = element.constructors
@@ -214,11 +242,7 @@ final class AnnotationReader(
       constructorBody = declaration?.body;
       initializers = declaration?.initializers ?? const [];
     }
-    if (constructorBody != null &&
-            constructorBody is! EmptyFunctionBody &&
-            !(constructorBody is BlockFunctionBody &&
-                constructorBody.block.statements.isEmpty) ||
-        initializers.any((initializer) => initializer is! AssertInitializer)) {
+    if (initializers.any((initializer) => initializer is! AssertInitializer)) {
       failAt(
         node,
         'MODEL',
@@ -227,17 +251,17 @@ final class AnnotationReader(
     }
     final parameterNodes = <String, FormalParameter>{};
     node.accept(_ParameterNodes(parameterNodes, constructor));
+    final storage = _storage(node);
+    final assigned = _mixinAssignments(
+      node,
+      constructor,
+      constructorBody,
+      storage,
+    );
     final fields = <ModelField>[];
     for (final parameter in constructor.formalParameters) {
       final parameterNode = parameterNodes[parameter.name] ?? node;
-      final field = element.fields
-          .where(
-            (f) =>
-                !f.isStatic &&
-                f.name == parameter.name &&
-                !f.isOriginGetterSetter,
-          )
-          .firstOrNull;
+      final field = storage[parameter.name];
       final owners = <Element>[parameter, ?field];
       if (_combined(owners, 'Ignore', parameterNode) != null) {
         if (owners.any(
@@ -262,11 +286,14 @@ final class AnnotationReader(
         }
         continue;
       }
-      if (field == null || parameter is! FieldFormalParameterElement) {
+      if (field == null ||
+          !(parameter is FieldFormalParameterElement &&
+                  parameter.field == field ||
+              assigned.contains(field))) {
         failAt(
           parameterNode,
           'FIELD',
-          'Persistent parameters must directly declare or initialize fields (final T field or this.field). Use @Ignore() for optional nonpersistent inputs.',
+          'Persistent parameters must directly declare or initialize fields (final T field or this.field), or assign a mixin field with this.field = field. Use @Ignore() for optional nonpersistent inputs.',
         );
       }
       if (field.isLate ||
@@ -304,9 +331,7 @@ final class AnnotationReader(
       );
       fields.add(modelField);
     }
-    for (final field in element.fields.where(
-      (f) => !f.isStatic && !f.isOriginGetterSetter,
-    )) {
+    for (final field in storage.values) {
       if (!fields.any((mapped) => mapped.name == field.name) &&
           _annotations(field, 'Ignore').isEmpty &&
           !constructor.formalParameters.any(
@@ -403,9 +428,7 @@ final class AnnotationReader(
       _relations.add((model, null, annotation));
     }
     for (final parameter in constructor.formalParameters) {
-      final field = element.fields
-          .where((f) => f.name == parameter.name)
-          .firstOrNull;
+      final field = storage[parameter.name];
       final annotation = _combined(
         [parameter, ?field],
         'Relation',
@@ -415,6 +438,143 @@ final class AnnotationReader(
         _relations.add((model, parameter.name, annotation));
       }
     }
+  }
+
+  Map<String, FieldElement> _storage(ClassDeclaration node) {
+    final model = node.declaredFragment!.element;
+    final fields = <String, FieldElement>{
+      for (final field in model.fields)
+        if (!field.isStatic && !field.isOriginGetterSetter) field.name!: field,
+    };
+    for (final applied in model.mixins) {
+      final mixin = applied.element as MixinElement;
+      if (mixin.typeParameters.isNotEmpty ||
+          mixin.superclassConstraints.any((type) => !type.isDartCoreObject)) {
+        failAt(
+          node,
+          'MIXIN',
+          'Reusable mixins must be nongeneric and have only Object as their superclass constraint.',
+        );
+      }
+      final declaration = mixins.singleWhere(
+        (node) => node.declaredFragment!.element == mixin,
+      );
+      for (final field in mixin.fields.where(
+        (field) => !field.isStatic && !field.isOriginGetterSetter,
+      )) {
+        if (fields.containsKey(field.name) ||
+            model.fields.any(
+              (own) => !own.isStatic && own.name == field.name,
+            ) ||
+            model.mixins.any(
+              (other) =>
+                  other.element != mixin &&
+                  other.element.fields.any(
+                    (otherField) =>
+                        !otherField.isStatic && otherField.name == field.name,
+                  ),
+            )) {
+          failAt(
+            node,
+            'MIXIN',
+            'Mixin field ${field.name} conflicts with another instance field or accessor.',
+          );
+        }
+        final variable = declaration.body.members
+            .whereType<FieldDeclaration>()
+            .expand((field) => field.fields.variables)
+            .singleWhere(
+              (variable) => variable.declaredFragment!.element == field,
+            );
+        if (_annotations(field, 'Ignore').isNotEmpty &&
+            field.metadata.annotations.any(
+              (annotation) =>
+                  _annotationName(annotation) != null &&
+                  _annotationName(annotation) != 'Ignore',
+            )) {
+          failAt(
+            variable,
+            'ANNOTATION',
+            '@Ignore cannot be combined with persistent mapping metadata.',
+          );
+        }
+        if (_annotations(field, 'Ignore').isEmpty &&
+            (field.isLate ||
+                field.isFinal ||
+                field.isAbstract ||
+                field.isExternal ||
+                variable.initializer != null &&
+                    !_passiveInitializer(variable.initializer!))) {
+          failAt(
+            variable,
+            'MIXIN',
+            'Persistent mixin fields must be mutable, non-late storage with a constant initializer (or implicit null). Constructor parameters supply their persisted values.',
+          );
+        }
+        fields[field.name!] = field;
+      }
+    }
+    return fields;
+  }
+
+  Set<FieldElement> _mixinAssignments(
+    ClassDeclaration node,
+    ConstructorElement constructor,
+    FunctionBody? body,
+    Map<String, FieldElement> storage,
+  ) {
+    final assigned = <FieldElement>{};
+    if (body == null || body is EmptyFunctionBody) return assigned;
+    if (body is BlockFunctionBody &&
+        !body.isAsynchronous &&
+        !body.isGenerator) {
+      for (final statement in body.block.statements) {
+        if (statement case ExpressionStatement(
+          expression: AssignmentExpression(
+            leftHandSide: PropertyAccess(
+              target: ThisExpression(),
+              :final propertyName,
+            ),
+            rightHandSide: SimpleIdentifier(:final element),
+            :final operator,
+            :final writeElement,
+          ),
+        )) {
+          final field = storage[propertyName.name];
+          final setter = writeElement;
+          if (operator.lexeme == '=' &&
+              field != null &&
+              field.enclosingElement is MixinElement &&
+              setter is SetterElement &&
+              setter.isOriginVariable &&
+              setter.variable.baseElement == field &&
+              element is FormalParameterElement &&
+              element.enclosingElement == constructor &&
+              element.name == field.name &&
+              assigned.add(field)) {
+            continue;
+          }
+        }
+        failAt(
+          statement,
+          'MODEL',
+          'The mapped constructor must directly store mixin parameters with this.field = field exactly once, with no other executable statements.',
+        );
+      }
+      return assigned;
+    }
+    failAt(
+      node,
+      'MODEL',
+      'The mapped constructor must directly store supplied values without asynchronous or transforming bodies.',
+    );
+  }
+
+  bool _passiveInitializer(Expression expression) {
+    final constant = expression.computeConstantValue();
+    return constant != null &&
+        constant.value != null &&
+        constant.diagnostics.isEmpty;
   }
 
   ModelField _field(
@@ -785,10 +945,15 @@ final class AnnotationReader(
     String name,
     AstNode node,
   ) {
-    final annotations = <int, ElementAnnotation>{};
+    final annotations = <(Uri, int), ElementAnnotation>{};
     for (final owner in owners) {
       for (final annotation in _annotations(owner, name)) {
-        annotations[_node(annotation).offset] = annotation;
+        final syntax = _node(annotation);
+        final unit = syntax.root as CompilationUnit;
+        // A primary parameter and its induced field share one annotation, but
+        // equal offsets in separate model/mixin libraries are distinct metadata.
+        annotations[(unit.declaredFragment!.source.uri, syntax.offset)] =
+            annotation;
       }
     }
     if (annotations.length > 1) {

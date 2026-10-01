@@ -41,7 +41,8 @@ final class GeneratedSchema {
 /// [defaultNamespace], then PostgreSQL defaults to `public`. Other engines reject
 /// explicit namespaces. A model source must not import generated clients.
 /// Selected roots and libraries owning models found through exports or relations
-/// must have neither `part` nor `part of` directives, matching build_runner.
+/// and libraries owning applied mixins must have neither `part` nor `part of`
+/// directives, matching build_runner.
 /// A sibling `{root}.dart` can contribute models or exports. Single-file
 /// generation without a dialect retains engine-neutral metadata.
 ///
@@ -91,6 +92,14 @@ Future<GeneratedSchema> generateSchema(
   }
   final contexts = AnalysisContextCollection(includedPaths: [p.dirname(root)]);
   try {
+    void validateResolvedUnit(ResolvedUnitResult result) {
+      validateModelLibrary(result.unit, source: Uri.file(result.path));
+      final errors = result.diagnostics.where(
+        (e) => e.severity.name.toLowerCase() == 'error',
+      );
+      if (errors.isNotEmpty) throw GenerationException(errors.join('\n'));
+    }
+
     Future<ResolvedUnitResult> resolvePath(String path) async {
       final result = await contexts
           .contextFor(path)
@@ -99,11 +108,7 @@ Future<GeneratedSchema> generateSchema(
       if (result is! ResolvedUnitResult) {
         throw GenerationException('Cannot analyze $path.');
       }
-      validateModelLibrary(result.unit, source: Uri.file(path));
-      final errors = result.diagnostics.where(
-        (e) => e.severity.name.toLowerCase() == 'error',
-      );
-      if (errors.isNotEmpty) throw GenerationException(errors.join('\n'));
+      validateResolvedUnit(result);
       return result;
     }
 
@@ -121,8 +126,21 @@ Future<GeneratedSchema> generateSchema(
       resolved.unit,
       resolved.libraryElement,
       importPath,
-      resolve: (library) async =>
-          (await resolvePath(library.firstFragment.source.fullName)).unit,
+      resolve: (library) async {
+        // Imported model/mixin libraries can live outside the selected roots.
+        // Keep their original session and identity rather than rediscovering
+        // them through the root-only analysis context collection.
+        final result = await library.session.getResolvedLibraryByElement(
+          library,
+        );
+        final path = library.firstFragment.source.fullName;
+        final unit = result is ResolvedLibraryResult
+            ? result.unitWithPath(path)
+            : null;
+        if (unit == null) throw GenerationException('Cannot analyze $path.');
+        validateResolvedUnit(unit);
+        return unit.unit;
+      },
       additionalRoots: [for (final result in roots.skip(1)) result.unit],
       dialect: dialect,
       defaultNamespace: defaultNamespace,
@@ -142,7 +160,8 @@ Future<GeneratedSchema> generateResolvedSchema(
   String? defaultNamespace,
 }) async {
   final names = DartNames(library.uri, importUri);
-  final classes = await annotatedSources([unit, ...additionalRoots], resolve);
+  final sources = await annotatedSources([unit, ...additionalRoots], resolve);
+  final classes = sources.models;
   if (classes.isEmpty) {
     throw const GenerationException('No @Model class declarations found.');
   }
@@ -171,6 +190,7 @@ Future<GeneratedSchema> generateResolvedSchema(
   final schema = AnnotationReader(
     classes,
     names,
+    mixins: sources.mixins,
     dialect: dialect,
     defaultNamespace: defaultNamespace,
   ).read();

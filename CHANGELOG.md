@@ -1,3 +1,7 @@
+## Unreleased
+
+- Add optional plain mixins for shared annotated storage fields and business methods. Named constructor parameters must assign same-name, same-type mixin fields directly; original DTO identity, defaults and typed relations are preserved. Ordinary models remain supported without mixins. Reject ambiguous field/accessor conflicts, repeated metadata, transforming constructors and unsupported inheritance.
+
 ## 6.0.0-beta.5
 
 Breaking model and configuration API change: replace Record declarations with

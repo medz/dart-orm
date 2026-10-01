@@ -127,14 +127,70 @@ Use a public, concrete, nongeneric class with an unnamed generative constructor
 and named field parameters (`final T name` or `this.name`). Persistent values
 must directly initialize their same-name fields. Fields cannot be late. Mutable
 or final model fields are supported; generated reads still construct a complete
-object. Classes directly extend Object without mixins. Constructor bodies and
-transforming initializers are rejected so reads retain database values. Inherited
-storage and metadata merging are not supported by this entrypoint.
+object. Classes directly extend Object; superclass storage and constructor effects
+are not supported. Transforming initializers and executable constructor bodies
+are rejected, except for the direct optional mixin assignments described below.
 
 Static fields, methods and derived getters are not columns. `@Ignore()` excludes
 nonpersistent fields; ignored constructor parameters must be optional. A stored
 instance field that the constructor cannot supply is rejected instead of silently
 omitted. A model source must not depend on its generated client.
+
+## Optional shared fields and methods
+
+Ordinary models do not need a mixin. When several DTOs share storage and business
+methods, a plain, nongeneric mixin can declare the fields and their annotations
+once. Each DTO keeps its own named constructor and original class identity:
+
+```dart
+mixin SharedFields {
+  @Id(generated: true)
+  int id = 0;
+  @DatabaseDefault(true)
+  bool active = false;
+  String describe() => '$id: $active';
+}
+
+@Model()
+final class Memo with SharedFields {
+  final String title;
+  Memo({required int id, required this.title, bool active = false}) {
+    this.id = id;
+    this.active = active;
+  }
+}
+```
+
+Generated create/read/relation results are the original `Memo`, including
+`SharedFields.describe()`. Field annotations on the mixin apply independently
+to each model; class-level keys, indexes and relations remain on the model.
+Imported mixin libraries and relation targets are resolved statically, without
+executing application factories or constructors. Like model libraries, a library
+owning an applied mixin cannot contain `part` or `part of` directives.
+
+Persistent mixin fields must be mutable, non-late storage with constant
+initializers or implicit null. Every field needs a same-name, exactly same-type
+named constructor parameter, including nullability, and exactly one
+`this.field = field` statement. No casts, calculations, extra statements or
+parameter renaming are accepted. The stored values supplied to reads therefore
+remain unchanged. Ordinary model fields still use `this.field` or primary
+constructor field parameters. `@Ignore()` can exclude mixin-only business state.
+
+Mixin initializers (`id = 0`, `active = false`) are construction placeholders;
+they never provide generated insert defaults. Constructor parameter constants
+provide client fallbacks under the same precedence rules as ordinary models.
+In the example, the generated identity and database `true` default beat the
+constructor values; an explicit `active: .set(false)` still wins.
+
+Generation rejects fields/accessors shared under the same name by multiple
+mixins or redeclared by the model. Repeating a mapping annotation on both the
+mixin field and constructor parameter is an error, not an override. Final or
+late persistent mixin storage, generic mixins, mixin classes, superclass storage,
+and mixins with superclass constraints other than Object are outside this
+supported mapping. Derived getters and methods remain ordinary Dart members.
+See the complete [shared-field example](https://github.com/medz/dart-orm/blob/main/example/annotated/mixins.dart).
+
+## Scalar storage
 
 Scalar Dart types select the existing codecs: `int`, `String`, `bool`, `double`,
 `BigInt`, `DateTime`, `Uint8List`, `Decimal`, `LocalDate`, `LocalTime`,
