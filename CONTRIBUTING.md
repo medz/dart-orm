@@ -100,7 +100,7 @@ All names below refer to files under `test/` with the `_test.dart` suffix.
 | Sessions, transactions and failure recovery | `transaction`, `retry`, `acquisition`, `stream`, `session_connection`, `runtime_lifecycle_review` |
 | Subscriptions and execution observations | `watch`, `observation` |
 | Migration history, catalog and recovery | `migration`, `migration_target`, `migration_recovery`, `backfill`, `schema_version`, `import` |
-| MySQL and MariaDB behavior | `mysql_driver`, `mysql_database`, `mysql_import`, `mysql_transaction_boundary`, `mysql_migration` |
+| MySQL and MariaDB behavior | `mysql_driver`, `mysql_database`, `mysql_import`, `mysql_transaction_boundary`, `mysql_migration`, `mysql_generated_consumer` |
 
 Use real database URLs to enable the server suites. Tests create their own tables
 or schemas; MySQL/MariaDB recovery tests require permission to create isolated
