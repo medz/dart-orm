@@ -112,11 +112,13 @@ Directory roots discover model sources recursively for every engine. A sibling
 `.snapshot.dart` files are excluded. Outputs remain `lib/models.orm.dart` and
 `lib/models.snapshot.dart`; a wrapper source file is not required.
 
-Every other discovered Dart file must be an independent library. Both the CLI
-and builder reject `part of` inputs, including unrelated generated `.g.dart`
-parts inside the selected directory. Keep those parts outside the model layout
-or select individual model libraries instead. Generation does not silently skip
-discovered parts or treat their declarations as separate libraries.
+Every other discovered Dart file must be an independent library with neither
+`part` nor `part of` directives. Both the CLI and builder enforce this for selected
+roots and libraries owning models reached through exports or relationship targets.
+Moving a part outside the selected directory does not make its owning model
+library supported. Declare models in separate libraries connected by imports or
+exports instead. Unrelated imported business libraries do not become model roots.
+Generation does not silently skip discovered parts or load their model declarations.
 
 The CLI accepts `lib/models`, `lib/models/` or `lib/models.dart` for this root.
 Folder names do not determine physical namespaces. For PostgreSQL,

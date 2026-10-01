@@ -165,7 +165,7 @@ void main() {
   );
 
   test(
-    'independent model roots keep unrelated parts outside the layout',
+    'owning model libraries reject parts outside the discovered layout',
     () async {
       await source(
         'schema/user.dart',
@@ -176,12 +176,20 @@ void main() {
       await helper.writeAsString(
         "part of '../schema/user.dart';\nconst generatedHelper = 1;\n",
       );
-      final directory = await generateSchema('${project.path}/schema');
-      final standalone = await generateSchema(
-        '${project.path}/schema/user.dart',
-      );
-      expect(directory.snapshot.tables.map((t) => t.name), ['users']);
-      expect(standalone.snapshot.checksum, directory.snapshot.checksum);
+      for (final entry in ['schema', 'schema/user.dart']) {
+        await expectLater(
+          generateSchema('${project.path}/$entry'),
+          throwsA(
+            isA<GenerationException>()
+                .having((e) => e.code, 'code', 'SCHEMA.LIBRARY')
+                .having(
+                  (e) => e.source?.path,
+                  'owner path',
+                  endsWith('/schema/user.dart'),
+                ),
+          ),
+        );
+      }
     },
   );
 

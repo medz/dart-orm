@@ -10,6 +10,7 @@ import '../../driver.dart' show SqlDialect;
 import 'exception.dart';
 import 'schema.dart';
 import 'schema/layout.dart';
+import 'schema/diagnostics.dart';
 
 /// Factory used by build_runner's build.yaml registration.
 ///
@@ -70,8 +71,9 @@ final class _OrmBuilder implements builder.Builder {
   Future<void> build(builder.BuildStep step) async {
     final input = step.inputId;
     if (!await step.resolver.isLibrary(input)) {
-      throw const GenerationException(
-        'Select a model library, not a part file.',
+      throw GenerationException(
+        'Select an independent model library, not a part file: $input',
+        code: 'SCHEMA.LIBRARY',
       );
     }
     final output = input.changeExtension('.orm.dart');
@@ -115,6 +117,7 @@ final class _OrmBuilder implements builder.Builder {
       if (node is! CompilationUnit) {
         throw GenerationException('Cannot resolve model source $input.');
       }
+      validateModelLibrary(node);
       final resolvedLibrary = node.declaredFragment!.element;
       try {
         // Resolver's syntax check omits semantic errors. Check those through
@@ -173,6 +176,7 @@ final class _OrmDirectoryBuilder implements builder.Builder {
       if (!await step.resolver.isLibrary(source)) {
         throw GenerationException(
           'Use independent Dart model libraries: $source',
+          code: 'SCHEMA.LIBRARY',
         );
       }
       final (unit, _) = await resolver._resolveSchema(step, source);

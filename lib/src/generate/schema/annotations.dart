@@ -10,6 +10,7 @@ import 'package:analyzer/dart/element/type_system.dart';
 
 import '../../../schema_model.dart';
 import '../model.dart';
+import '../exception.dart';
 import '../source.dart';
 import '../types.dart';
 import 'diagnostics.dart';
@@ -42,6 +43,9 @@ Future<List<ClassDeclaration>> annotatedSources(
   List<CompilationUnit> roots,
   Future<CompilationUnit> Function(LibraryElement) resolve,
 ) async {
+  for (final unit in roots) {
+    validateModelLibrary(unit);
+  }
   final units = <LibraryElement, CompilationUnit>{
     for (final unit in roots) unit.declaredFragment!.element: unit,
   };
@@ -59,9 +63,18 @@ Future<List<ClassDeclaration>> annotatedSources(
     final element = pending[index];
     if (result.containsKey(element)) continue;
     final unit = units[element.library] ??= await resolve(element.library);
+    validateModelLibrary(unit);
     final declaration = unit.declarations
         .whereType<ClassDeclaration>()
-        .firstWhere((node) => node.declaredFragment!.element == element);
+        .where((node) => node.declaredFragment!.element == element)
+        .firstOrNull;
+    if (declaration == null) {
+      throw GenerationException(
+        'Model ${element.name} must be declared in its independent source library.',
+        code: 'SCHEMA.LIBRARY',
+        source: element.library.uri,
+      );
+    }
     result[element] = declaration;
     for (final owner in <Element>[
       element,
