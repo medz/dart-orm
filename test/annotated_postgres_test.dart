@@ -1,6 +1,7 @@
 @Tags(['postgres'])
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:orm/postgres.dart';
@@ -23,9 +24,13 @@ void main() {
       );
       try {
         await fixture.file('lib/schema.dart').delete();
+        final factoryProbe = fixture.file('factory-executed.txt');
+        final source = await File('example/annotated/models.dart')
+            .readAsString();
         await fixture.write(
           'lib/models.dart',
-          await File('example/annotated/models.dart').readAsString(),
+          "import 'dart:io';\n${source.replaceFirst("String nextMarker() => 'marker-\${++markerCalls}';", 'String nextMarker() { probeFactory(); return \'marker-\${++markerCalls}\'; }').replaceFirst('DateTime nextInstant() {', 'DateTime nextInstant() { probeFactory();')}\n"
+              'void probeFactory() => File(${jsonEncode(factoryProbe.path)}).writeAsStringSync("called");\n',
         );
         await fixture.write('orm.config.dart', '''
 import 'package:orm/config.dart';
@@ -41,7 +46,17 @@ void main() => defineConfig(
         expect(await fixture.file('lib/models.orm.dart').exists(), false);
         expect(await fixture.file('lib/models.snapshot.dart').exists(), false);
         await fixture.run(['run', 'orm', 'generate']);
+        expect(
+          await factoryProbe.exists(),
+          false,
+          reason: 'Generation must not execute application factories.',
+        );
         await fixture.run(['run', 'orm', 'migrate', 'create', '0001_initial']);
+        expect(
+          await factoryProbe.exists(),
+          false,
+          reason: 'Migration creation must not execute application factories.',
+        );
         final migration = await fixture
             .file('migrations/m0001_initial.dart')
             .readAsString();
@@ -52,6 +67,12 @@ void main() => defineConfig(
           'orm_build_fixture:annotated',
         ]);
         expect(result.output, contains('annotated-postgres-ok'));
+        expect(
+          await factoryProbe.exists(),
+          true,
+          reason:
+              'Actual inserts must exercise the cross-process factory probe.',
+        );
       } finally {
         try {
           // Only this consumer's unique namespace is eligible for cleanup.
@@ -102,7 +123,7 @@ Future<void> main() async {
     check((await verifySchema(db.sql, physical.schema)).matches,
         'Generated metadata differs from the PostgreSQL catalog.');
     check(original.markerCalls == 0 && original.instantCalls == 0,
-        'Generation or migration executed application default factories.');
+        'Applying the saved migration executed application default factories.');
 
     final User created = await db.user.create(email: 'fresh@example.com');
     final original.User row = created;
