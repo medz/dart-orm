@@ -7,17 +7,17 @@ schema and migrations in Dart. SQLite, PostgreSQL, MySQL and MariaDB share a typ
 query API, with explicit database capabilities and transaction boundaries.
 
 [Get started](#get-started) · [Guides](https://github.com/medz/dart-orm/blob/main/doc/README.md) ·
-[API reference](https://pub.dev/documentation/orm/6.0.0-beta.4/) ·
-[Examples](https://github.com/medz/dart-orm/tree/main/example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.4)
+[API reference](https://pub.dev/documentation/orm/6.0.0-beta.5/) ·
+[Examples](https://github.com/medz/dart-orm/tree/main/example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.5)
 
 > **6.0 beta:** a new implementation requiring Dart 3.13+. This is a breaking
 > replacement for the Prisma-based 5.x client. Read the [release notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md)
 > before upgrading an existing application.
 
-These `main`-branch examples use the unreleased annotated model and filter APIs.
-Regenerate clients and review the [release notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#unreleased).
-For the published 6.0.0-beta.4 package, use its
-[tagged guide](https://github.com/medz/dart-orm/blob/orm-v6.0.0-beta.4/README.md).
+These examples target `6.0.0-beta.5`, including its annotated model and filter APIs.
+Regenerate clients and review the [migration notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#600-beta5).
+Use the [tagged guide](https://github.com/medz/dart-orm/blob/orm-v6.0.0-beta.5/README.md)
+for this release's exact behavior.
 
 ## Annotated Dart models
 
@@ -43,12 +43,12 @@ PostgreSQL namespaces are independent of source folders. See
 
 ## Get started
 
-Create a Dart application and use the repository version for these examples:
+Create a Dart application and install this release:
 
 ```sh
 dart create -t console my_app
 cd my_app
-dart pub add "orm@{git:{url: https://github.com/medz/dart-orm, ref: main}}"
+dart pub add orm:6.0.0-beta.5
 ```
 
 This is an application, so add a top-level entry to its `pubspec.yaml`:

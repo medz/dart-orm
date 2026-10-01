@@ -1,9 +1,18 @@
-## Unreleased
+## 6.0.0-beta.5
+
+Breaking model and configuration API change: replace Record declarations with
+ordinary annotated DTOs and `OrmConfig` entrypoints with `void defineConfig`.
+Regenerate clients and migrate application configuration. Keep historical
+migration files unchanged.
 
 - Replace Record declarations with ordinary annotated DTOs in `package:orm/schema.dart`, preserving original class identity and business methods in full-row results. Regenerate clients; the old declaration helpers are removed.
 - Add `void defineConfig` in `package:orm/config.dart` for generation without existing client, snapshot or migration registry imports. Configuration paths are relative to the configuration file.
 - Keep omitted create values distinct from explicit values/null with typed `Change`; constructor constants provide client-only fallbacks. Explicit client/database defaults and generated identities take precedence.
 - Resolve PostgreSQL namespaces independently of source folders. Set explicit namespace metadata when migrating old folder-based declarations. Replace `OrmConfig` project entrypoints with `defineConfig`; frozen migration files and the production `runMigrationCli` API remain independent and unchanged.
+- Use the exact DTO class name as the default physical table name; set `@Model(table: ...)` to retain an existing table identity.
+- Enforce independent model libraries in standalone/CLI and build_runner generation, including exported and related models. Reject `part` and `part of` with a source-level diagnostic before writing outputs.
+- Normalize nullable SQL NULL defaults during catalog verification without changing constructor-default precedence, saved snapshots or migration checksums.
+- Reject `@DatabaseDefault` on a generated identity during annotation validation. Explicit `@ClientDefault` remains supported on identities.
 
 Breaking filter API refactor: regenerate clients and migrate application queries.
 There are no compatibility aliases. This changes query construction only; keep
