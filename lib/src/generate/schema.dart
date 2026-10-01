@@ -163,10 +163,8 @@ Future<GeneratedSchema> generateSchema(
 // hard links cannot turn generation into a write to an application source.
 void validateSchemaOutputs(
   Iterable<LibraryElement> roots,
-  Set<String> outputs, {
-  p.Context? paths,
-}) {
-  final pathContext = paths ?? p.context;
+  Set<String> outputs,
+) {
   final existing = [
     for (final output in outputs)
       if (File(output).existsSync()) File(output).resolveSymbolicLinksSync(),
@@ -174,6 +172,7 @@ void validateSchemaOutputs(
   final visited = <LibraryElement>{};
   final visitedSources = <String>{};
   void scan(AnalysisSession session, String source) {
+    final pathContext = session.resourceProvider.pathContext;
     source = pathContext.normalize(pathContext.absolute(source));
     if (!visitedSources.add(source)) return;
     final file = File(source);
@@ -202,7 +201,9 @@ void validateSchemaOutputs(
       ]) {
         final value = literal.stringValue;
         if (value == null) continue;
-        final path = session.uriConverter.uriToPath(file.uri.resolve(value));
+        final path = session.uriConverter.uriToPath(
+          pathContext.toUri(source).resolve(value),
+        );
         if (path != null) scan(session, path);
       }
     }
