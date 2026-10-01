@@ -585,6 +585,13 @@ final class AnnotationReader(
       );
     }
     final dbAnnotation = _combined(owners, 'DatabaseDefault', node);
+    if (generated && dbAnnotation != null) {
+      failAt(
+        _node(dbAnnotation),
+        'DEFAULT',
+        'Generated identity fields cannot declare @DatabaseDefault. Use @ClientDefault for an optional client value.',
+      );
+    }
     final database = dbAnnotation?.computeConstantValue();
     String? defaultSql;
     if (database != null) {

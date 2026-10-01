@@ -39,6 +39,8 @@ final class Model {
 /// Includes a field in the primary key, in constructor declaration order.
 final class Id {
   /// Whether the database generates this single integer-storage key.
+  ///
+  /// Generated keys reject [DatabaseDefault] and may use [ClientDefault].
   final bool generated;
 
   /// Marks a primary-key field. Generated keys may be omitted on creation.
@@ -170,6 +172,7 @@ final class ClientDefault {
 /// Constructor constants are client-side fallbacks only; they do not imply this
 /// annotation or a SQL DEFAULT. An explicit client factory takes precedence over
 /// this default. Actual database values always populate complete DTO reads.
+/// A generated [Id] already owns its database default and rejects this annotation.
 final class DatabaseDefault {
   /// Scalar constant to encode as a SQL default, or null for [DatabaseDefault.sql].
   final Object? value;

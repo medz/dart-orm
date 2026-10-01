@@ -63,6 +63,9 @@ Generated creation parameters with defaults use `Change<T>`:
 A field can combine `@ClientDefault` with `@DatabaseDefault`. Omission uses the
 client factory; `.defaultValue()` uses the database default. Specify a database
 constant or a SQL expression, not two database-default annotations.
+A generated `@Id(generated: true)` cannot also declare `@DatabaseDefault`:
+the identity already supplies its database value. It may declare `@ClientDefault`;
+omission then uses that factory and `.defaultValue()` selects the database identity.
 `.defaultValue()` requires a database default or identity; it does not rerun a
 client factory. A nullable factory returning null stores SQL NULL.
 Patches and conflict updates keep omitted fields unchanged. SQLite does not
