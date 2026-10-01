@@ -571,34 +571,10 @@ final class AnnotationReader(
   }
 
   bool _passiveInitializer(Expression expression) {
-    if (expression is SimpleStringLiteral ||
-        expression is IntegerLiteral ||
-        expression is DoubleLiteral ||
-        expression is BooleanLiteral ||
-        expression is NullLiteral) {
-      return true;
-    }
-    if (expression is ParenthesizedExpression) {
-      return _passiveInitializer(expression.expression);
-    }
-    if (expression is PrefixExpression &&
-        expression.operator.lexeme == '-' &&
-        (expression.operand.staticType?.isDartCoreInt == true ||
-            expression.operand.staticType?.isDartCoreDouble == true)) {
-      return _passiveInitializer(expression.operand);
-    }
-    final referenced = switch (expression) {
-      Identifier() => expression.element,
-      PropertyAccess() => expression.propertyName.element,
-      _ => null,
-    };
-    final variable = referenced is PropertyAccessorElement
-        ? referenced.variable
-        : referenced;
-    if (variable is VariableElement && variable.isConst) return true;
-    return expression is InstanceCreationExpression && expression.isConst ||
-        expression is ListLiteral && expression.constKeyword != null ||
-        expression is SetOrMapLiteral && expression.constKeyword != null;
+    final constant = expression.computeConstantValue();
+    return constant != null &&
+        constant.value != null &&
+        constant.diagnostics.isEmpty;
   }
 
   ModelField _field(

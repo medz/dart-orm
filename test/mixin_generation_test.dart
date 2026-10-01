@@ -219,6 +219,41 @@ mixin Business {
   );
 
   test(
+    'constant expression placeholders never become insert defaults',
+    () async {
+      final file = await source('constant_expressions', r'''
+mixin Fields {
+  @Id() int id = 1 << 4;
+  bool enabled = !false;
+  int flags = ~3;
+  int count = true ? (2 + 3) * 4 : 0;
+  String label = 'value-${1 + 2}';
+  bool same = identical(1, 1);
+}
+@Model() class User with Fields {
+  User({required int id, required bool enabled, required int flags,
+    required int count, required String label, required bool same}) {
+    this.id = id;
+    this.enabled = enabled;
+    this.flags = flags;
+    this.count = count;
+    this.label = label;
+    this.same = same;
+  }
+}
+''');
+      final result = await generateSchema(file.path);
+      expect(result.snapshot.tables.single.columns, hasLength(6));
+      for (final column in result.snapshot.tables.single.columns) {
+        expect(column.defaultSql, isNull);
+      }
+      expect(result.dart, isNot(contains('clientDefault:')));
+      expect(result.dart, contains('required bool enabled'));
+      expect(result.dart, contains('required String label'));
+    },
+  );
+
+  test(
     'mixin-owning libraries follow the independent-library boundary',
     () async {
       await source('parts/shared', '''
@@ -363,6 +398,27 @@ mixin Fields { final int value = 1; }
     '''
 int effect() => throw StateError('must not execute');
 mixin Fields { int id = effect(); }
+@Model() class User with Fields { User({required int id}) { this.id = id; } }
+''',
+    'constant initializer',
+  ),
+  (
+    'initializer_overloaded_operator',
+    '''
+class Effect {
+  const Effect();
+  int operator +(int value) => throw StateError('must not execute');
+}
+const effect = Effect();
+mixin Fields { int id = effect + 1; }
+@Model() class User with Fields { User({required int id}) { this.id = id; } }
+''',
+    'constant initializer',
+  ),
+  (
+    'initializer_constant_error',
+    '''
+mixin Fields { int id = 1 ~/ 0; }
 @Model() class User with Fields { User({required int id}) { this.id = id; } }
 ''',
     'constant initializer',
