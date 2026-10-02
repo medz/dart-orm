@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:meta/meta.dart' show internal;
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 import 'acquisition.dart';
 import 'events.dart';
 import 'mysql_transaction.dart';

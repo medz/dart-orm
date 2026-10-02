@@ -1,3 +1,5 @@
+import 'package:orm/orm.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate_cli.dart';
@@ -14,8 +16,10 @@ Future<void> main(List<String> args) => runMigrationCli(
   schema: schema,
   connect: ({required readOnly}) async {
     final path = Platform.environment['ORM_SQLITE_PATH'] ?? 'app.sqlite';
-    return (await sqlite(
-      readOnly ? SqliteOptions.readOnly(path) : SqliteOptions.file(path),
+    return (Database.fromSql(
+      await sqlite(
+        readOnly ? SqliteOptions.readOnly(path) : SqliteOptions.file(path),
+      ),
     )).sql;
   },
 );

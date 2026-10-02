@@ -1,4 +1,5 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
+import 'package:orm/driver.dart';
 import 'package:orm/migrate.dart';
 
 import 'm0001_initial.dart' as m0;

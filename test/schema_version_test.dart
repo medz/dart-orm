@@ -1,6 +1,11 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -35,16 +40,23 @@ final history = versionHistory(SqlDialect.sqlite);
 final initial = history[0], expand = history[1], contract = history[2];
 
 void main() {
-  runTests('sqlite', () => sqlite(const SqliteOptions.memory()));
+  runTests(
+    'sqlite',
+    () =>
+        sqlite(const SqliteOptions.memory())
+            .then((sql) => Database.fromSql(sql)),
+  );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url != null) {
     runTests('postgres', () async {
-      final db = postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: .disable,
-          schema: 'orm_version_tests',
-          maxConnections: 1,
+      final db = Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: .disable,
+            schema: 'orm_version_tests',
+            maxConnections: 1,
+          ),
         ),
       );
       await db.execute(
@@ -56,14 +68,14 @@ void main() {
   test('SQLite version gate works on an explicitly read-only file', () async {
     final directory = await Directory.systemTemp.createTemp('orm-version-');
     final path = '${directory.path}/db.sqlite';
-    final writer = await sqlite(SqliteOptions.file(path));
+    final writer = Database.fromSql(await sqlite(SqliteOptions.file(path)));
     try {
       await Migrator(writer.sql).apply([initial]);
       await writer.table(users).createRow((u) => [u.email.set('retained')]);
     } finally {
       await writer.close();
     }
-    final reader = await sqlite(SqliteOptions.readOnly(path));
+    final reader = Database.fromSql(await sqlite(SqliteOptions.readOnly(path)));
     try {
       expect(
         (await Migrator(reader.sql).requireVersion([initial])).id,

@@ -17,7 +17,7 @@ final class Line({
 
 final row = await db.line.create(price: 4, quantity: 3, label: 'cat');
 print(row.total); // 12
-await db.line.byId(row.id).patch(quantity: .set(5)); // total becomes 20
+await db.line.byId(row.id).patch(quantity: 5); // total becomes 20
 final totals = await db.line.select((r) => r.total).get();
 print(totals); // [20]
 ```

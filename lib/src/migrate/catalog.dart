@@ -1,11 +1,11 @@
 import 'dart:convert' show jsonEncode;
 
-import '../../driver.dart' show Backend, SqlCommand, SqlDialect;
-import '../../values.dart' show OrmException;
-import '../../runtime.dart' show SqlDatabase;
-import '../../schema_model.dart' show Column, ForeignKey, IndexSchema;
-import '../../values.dart'
-    show Codecs, Decimal, InstantPrecision, LocalDate, LocalDateTime, LocalTime;
+import '../driver/driver.dart';
+import '../runtime/database.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
+import '../values/decimal.dart';
+import '../values/temporal.dart';
 import 'checks.dart' show CheckInfo, matchChecks;
 import 'columns.dart'
     show ColumnInfo, inspectColumns, matchesCollation, matchesDecimalDigits;

@@ -3,8 +3,12 @@ import 'dart:convert';
 import 'package:analyzer/dart/ast/token.dart' show Keyword;
 import 'package:dart_style/dart_style.dart';
 
-import '../../migrate.dart';
-import '../../runtime.dart';
+import '../driver/driver.dart';
+import '../migrate/catalog.dart';
+import '../migrate/columns.dart';
+import '../runtime/database.dart';
+import '../runtime/options.dart';
+import '../values/codec.dart';
 import 'model.dart';
 import 'source.dart';
 
@@ -653,6 +657,19 @@ ImportedSchema _importDeclarations(
     b.writeln("import 'dart:typed_data';");
   }
   b.writeln("import 'package:orm/schema.dart';");
+  if (infos.values.any(
+    (info) => info.columns.any(
+      (column) => const {
+        'decimal',
+        'date',
+        'time',
+        'localDateTime',
+        'json',
+      }.contains(_importColumn(column, dialect)),
+    ),
+  )) {
+    b.writeln("import 'package:orm/values.dart';");
+  }
   for (final info in infos.values) {
     final entity = entities[info.name]!;
     b.writeln(

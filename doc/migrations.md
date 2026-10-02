@@ -46,8 +46,8 @@ Projects can also call the lower-level `runMigrationCli` in their own executable
 
 ```dart
 import 'package:orm/migrate_cli.dart';
-import 'package:orm/runtime.dart';
-import 'package:orm/drivers/sqlite.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/sqlite.dart';
 import '../lib/models.snapshot.dart';
 import '../migrations/migrations.g.dart';
 

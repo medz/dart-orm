@@ -1,6 +1,11 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/postgres.dart';
@@ -18,19 +23,23 @@ void main() {
         final sqlEvents = <QueryEvent>[], decodeEvents = <DecodeEvent>[];
         setUp(() async {
           if (dialect == .sqlite) {
-            db = await sqlite(
-              const SqliteOptions.memory(),
-              onQuery: sqlEvents.add,
+            db = Database.fromSql(
+              await sqlite(
+                const SqliteOptions.memory(),
+                onQuery: sqlEvents.add,
+              ),
               onDecode: decodeEvents.add,
             );
           } else {
-            db = postgres(
-              PostgresOptions(
-                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-                tls: .disable,
-                schema: 'orm_selection_tests',
+            db = Database.fromSql(
+              postgres(
+                PostgresOptions(
+                  url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                  tls: .disable,
+                  schema: 'orm_selection_tests',
+                ),
+                onQuery: sqlEvents.add,
               ),
-              onQuery: sqlEvents.add,
               onDecode: decodeEvents.add,
             );
             await db.execute(

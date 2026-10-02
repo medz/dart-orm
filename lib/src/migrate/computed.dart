@@ -1,7 +1,6 @@
-import '../../driver.dart' show Backend, SqlDialect;
-import '../../runtime.dart' show SqlDatabase;
-import '../../schema_model.dart'
-    show Column, ComputedColumn, ComputedStorage, TableSchema;
+import '../driver/driver.dart';
+import '../runtime/database.dart';
+import '../schema/model.dart';
 import 'checks.dart' show checkExpressions;
 import 'columns.dart' show ColumnInfo, temporalCollationKind;
 import 'schema.dart' show coerceColumn, columnStorageType;

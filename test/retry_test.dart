@@ -1,6 +1,11 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -15,19 +20,26 @@ Matcher code(String code) =>
 const retry = TransactionRetry(delay: Duration.zero);
 
 Future<void> main() async {
-  final probe = await sqlite(const SqliteOptions.memory());
+  final probe = Database.fromSql(await sqlite(const SqliteOptions.memory()));
   final sqliteCancellation = probe.capabilities.cancellation;
   await probe.close();
-  runTests('sqlite', () => sqlite(const SqliteOptions.memory()));
+  runTests(
+    'sqlite',
+    () =>
+        sqlite(const SqliteOptions.memory())
+            .then((sql) => Database.fromSql(sql)),
+  );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url != null) {
     runTests('postgres', () async {
-      final db = postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: .disable,
-          schema: 'orm_retry_tests',
-          maxConnections: 1,
+      final db = Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: .disable,
+            schema: 'orm_retry_tests',
+            maxConnections: 1,
+          ),
         ),
       );
       await db.execute(
@@ -43,7 +55,8 @@ Future<void> main() async {
         'orm-retry-snapshot-',
       );
       final options = SqliteOptions.file('${directory.path}/db.sqlite');
-      final base = await sqlite(options), other = await sqlite(options);
+      final base = Database.fromSql(await sqlite(options)),
+          other = Database.fromSql(await sqlite(options));
       final errors = <SqliteFailure>[];
       final db = Database(
         base.driver,
@@ -101,7 +114,8 @@ Future<void> main() async {
           journal: .delete,
           busyTimeout: const Duration(milliseconds: 20),
         );
-        final base = await sqlite(options), reader = await sqlite(options);
+        final base = Database.fromSql(await sqlite(options)),
+            reader = Database.fromSql(await sqlite(options));
         final driver = _FaultDriver(base.driver);
         final release = Completer<void>(), entered = Completer<void>();
         final cancellation = CancellationToken();
@@ -600,12 +614,14 @@ void runTests(String name, Future<Database<Backend>> Function() open) {
     });
 
     if (name == 'postgres') {
-      Future<Database<Postgres>> concurrent() async => postgres(
-        PostgresOptions(
-          url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-          tls: .disable,
-          schema: 'orm_retry_tests',
-          maxConnections: 1,
+      Future<Database<Postgres>> concurrent() async => Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+            tls: .disable,
+            schema: 'orm_retry_tests',
+            maxConnections: 1,
+          ),
         ),
       );
       test('real unknown COMMIT response prohibits opted-in retry', () async {

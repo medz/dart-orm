@@ -1,3 +1,7 @@
+import 'package:orm/driver.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
 import 'package:orm/orm.dart';
 import 'package:test/test.dart' hide allOf, anyOf;
 
@@ -317,7 +321,7 @@ void textExpressionTests(
             .select((r) => (r.id, r.note.contains('%')).row)
             .asCte('text_matches');
         expect(
-          await cte.query
+          await cte
               .where((r) => r.ref((f) => f.note.contains('%')).eq(.value(true)))
               .get(),
           [(1, true)],

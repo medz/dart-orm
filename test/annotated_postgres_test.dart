@@ -1,6 +1,9 @@
 @Tags(['postgres'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -19,8 +22,8 @@ void main() {
       );
       final namespace =
           'orm_annotated_${pid}_${DateTime.now().microsecondsSinceEpoch}';
-      final admin = postgres(
-        PostgresOptions(url: Uri.parse(url!), tls: .disable),
+      final admin = Database.fromSql(
+        postgres(PostgresOptions(url: Uri.parse(url!), tls: .disable)),
       );
       try {
         await fixture.file('lib/schema.dart').delete();
@@ -92,7 +95,9 @@ void main() => defineConfig(
   );
 }
 
-const _consumer = r'''
+const _consumer = r'''import 'package:orm/orm.dart';
+import 'package:orm/driver.dart';
+import 'package:orm/sql.dart';
 import 'dart:io';
 import 'package:orm/migrate.dart';
 import 'package:orm/postgres.dart';
@@ -108,11 +113,11 @@ void check(bool condition, String message) {
 Future<void> main() async {
   final namespace = physical.schema.tables.first.namespace!;
   final events = <QueryEvent>[];
-  final db = postgres(PostgresOptions(
+  final db = Database.fromSql(postgres(PostgresOptions(
     url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
     tls: .disable,
     schema: namespace,
-  ), onQuery: events.add);
+  ), onQuery: events.add));
   try {
     await db.execute(SqlCommand('CREATE SCHEMA "$namespace"'));
     final migrator = Migrator(db.sql);
@@ -131,7 +136,7 @@ Future<void> main() async {
         'Generated identity or original DTO business method was lost.');
     check(row.active && row.marker == 'marker-1' && row.score == 7,
         'Database/client defaults and constructor fallback were not preserved.');
-    await db.user.byId(row.id).patch(name: .set('Changed'), nickname: .set(null));
+    await db.user.byId(row.id).update(userPatch.values(name: .set('Changed'), nickname: .set(null)));
     final original.User patched = await db.user.byId(row.id).single();
     check(patched.greeting() == 'Hello, Changed' && patched.nickname == null,
         'Patch/read lost original DTO identity or explicit null.');
@@ -151,7 +156,7 @@ Future<void> main() async {
         .select((u) => u.posts.many()).single();
     check(posts.single.summary() == 'Fresh (draft)' && events.length == 2,
         'Inverse relation lost original DTOs or batched loading.');
-    check(await db.user.byId(row.id).delete().execute() == 1,
+    check(await db.user.byId(row.id).delete() == 1,
         'Delete did not report the affected row.');
     check(await db.user.count() == 0 && await db.post.count() == 0,
         'Delete/cascade left generated rows behind.');

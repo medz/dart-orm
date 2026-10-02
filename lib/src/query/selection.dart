@@ -14,6 +14,8 @@ typedef RowDecoder<T> = T Function(List<Object?> row);
 ///
 /// SQL expressions are scalar selections. Record composition and [map] combine
 /// decoded values into application results without evaluating Dart code in SQL.
+/// Use this type for reusable result helpers. Named SQL output fields belong to
+/// a flat `Projection`, rather than to arbitrary Dart result properties.
 abstract class Selection<T> {
   /// Base constructor for typed projections and their Dart result mappings.
   const Selection();
@@ -57,6 +59,14 @@ final class SelectionPlan {
     } finally {
       _present = saved;
     }
+  }
+
+  /// Registers an independently exported SQL slot for this binding occurrence.
+  /// Expression deduplication does not define logical output identity.
+  int appendSlot(Expr<Object?> expression) {
+    require(expression);
+    columns.add(expression);
+    return columns.length - 1;
   }
 
   final Map<SqlNode, int> _indices = {};

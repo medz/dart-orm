@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:postgres/postgres.dart' as pg;
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 import 'failure.dart';
 
 final class PostgresConnection implements SqlConnection {

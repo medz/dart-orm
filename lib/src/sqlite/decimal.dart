@@ -1,6 +1,7 @@
 import 'package:sqlite3/common.dart' as native;
 
-import '../../values.dart';
+import '../values/codec.dart';
+import '../values/decimal.dart';
 
 void registerDecimalFunctions(native.CommonDatabase db) {
   db.createAggregateFunction(

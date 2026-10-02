@@ -1,9 +1,9 @@
 import 'dart:convert' show jsonEncode;
 
-import '../../driver.dart' show Backend, SqlCommand, SqlDialect;
-import '../../runtime.dart' show SqlDatabase;
-import '../../schema_model.dart' show CheckSchema, TableSchema;
-import '../../values.dart' show Codecs, OrmException;
+import '../driver/driver.dart';
+import '../runtime/database.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
 import 'catalog.dart' show inspectTable;
 import 'sql_utils.dart' show quoteIdentifier, quoteQualified;
 import 'sqlite_checks.dart' show sqliteName, sqliteTokens;

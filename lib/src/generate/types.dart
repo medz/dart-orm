@@ -17,11 +17,40 @@ const valueLibraryUris = {
 
 /// Resolve symbols by defining library rather than copying source import text.
 final class DartNames(final Uri source, final String Function(Uri) importUri) {
-  late final factoryImports = FactoryImports(importUri);
+  late final factoryImports = FactoryImports(importUri, allocatePrefix);
   final Map<Uri, String> _prefixes = {};
   final Map<Uri, Set<String>> _exports = {};
+  final Set<String> _usedNames = {};
+  late final String sourcePrefix = allocatePrefix('models');
   bool usesSource = false;
   bool typedData = false;
+  bool usesValues = false;
+
+  /// Reserve declaration and local identifiers before rendering any references.
+  /// Named input parameters can shadow prefixes just as top-level bindings can.
+  void reserveDeclarations(Iterable<CompilationUnitMember> declarations) {
+    final identifier = RegExp(r'^[a-zA-Z_$][a-zA-Z0-9_$]*$');
+    for (final declaration in declarations) {
+      var token = declaration.beginToken;
+      while (true) {
+        if (identifier.hasMatch(token.lexeme)) _usedNames.add(token.lexeme);
+        if (identical(token, declaration.endToken)) break;
+        token = token.next!;
+      }
+    }
+  }
+
+  void reserveNames(Iterable<String> names) => _usedNames.addAll(names);
+
+  /// Allocates every generated import prefix from one shared namespace.
+  String allocatePrefix(String preferred) {
+    var candidate = preferred;
+    for (var suffix = 2; !_usedNames.add(candidate); suffix++) {
+      candidate = '$preferred$suffix';
+    }
+    return candidate;
+  }
+
   Iterable<(String, Set<String>)> get exports sync* {
     final counts = <String, int>{};
     for (final symbols in _exports.values) {
@@ -38,17 +67,19 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
   void exportType(DartType value) {
     final element =
         value.alias?.element ?? (value is InterfaceType ? value.element : null);
-    if (element != null) {
-      final uri = element.library.uri;
-      if (!uri.toString().startsWith('dart:') &&
-          !valueLibraryUris.contains(uri.toString())) {
-        _exports.putIfAbsent(uri, () => {}).add(element.name!);
-      }
-    }
+    if (element != null) exportElement(element);
     if (value is InterfaceType) {
       for (final argument in value.typeArguments) {
         exportType(argument);
       }
+    }
+  }
+
+  void exportElement(Element element) {
+    final uri = element.library!.uri;
+    if (!uri.toString().startsWith('dart:') &&
+        !valueLibraryUris.contains(uri.toString())) {
+      _exports.putIfAbsent(uri, () => {}).add(element.name!);
     }
   }
 
@@ -68,6 +99,7 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
     final uri = library.uri;
     if (uri == source) usesSource = true;
     if (uri.toString() == 'dart:typed_data') typedData = true;
+    if (valueLibraryUris.contains(uri.toString())) usesValues = true;
     if ({
       'dart:core',
       'dart:typed_data',
@@ -77,8 +109,11 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
       return element.name!;
     }
     final prefix = uri == source
-        ? 'models'
-        : _prefixes.putIfAbsent(uri, () => 'types${_prefixes.length}');
+        ? sourcePrefix
+        : _prefixes.putIfAbsent(
+            uri,
+            () => allocatePrefix('types${_prefixes.length}'),
+          );
     return '$prefix.${element.name}';
   }
 

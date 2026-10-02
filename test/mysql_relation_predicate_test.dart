@@ -1,6 +1,10 @@
 @Tags(['mysql-suite'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+
 import 'dart:io';
 
 import 'package:orm/mysql.dart';
@@ -23,11 +27,11 @@ void main() {
         ? mysql(
             MysqlOptions(url: url, tls: tls),
             onQuery: observe,
-          )
+          ).then((sql) => Database.fromSql(sql))
         : mariadb(
             MariadbOptions(url: url, tls: tls),
             onQuery: observe,
-          );
+          ).then((sql) => Database.fromSql(sql));
     relationPredicateTests(
       engine,
       (observe) async {

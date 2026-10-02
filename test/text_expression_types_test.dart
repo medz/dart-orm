@@ -37,7 +37,7 @@ void main() {
         'Expr<String> j = nullable.upper();',
       ];
       await file.writeAsString(
-        "import 'package:orm/orm.dart';\n"
+        "import 'package:orm/sql.dart';\n"
         'void check(Expr<int> number, Expr<String> text, Expr<String?> nullable) {\n'
         '${[...valid, ...invalid].join('\n')}\n}\n',
       );

@@ -209,7 +209,7 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 4)));
 }
 
-const _nullDefaultConsumer = r'''
+const _nullDefaultConsumer = r'''import 'package:orm/orm.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
 import 'package:orm_build_fixture/models.orm.dart';
@@ -218,18 +218,18 @@ void check(bool condition, String message) {
   if (!condition) throw StateError(message);
 }
 Future<void> main() async {
-  final db = await sqlite(const SqliteOptions.memory());
+  final db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
   try {
     final migration = Migration.create('0001_initial', appSchema, dialect: .sqlite);
     await Migrator(db.sql).apply([migration]);
     check((await verifySchema(db.sql, migration.snapshot!)).matches, 'apply->verify drift');
     final omitted = await db.user.create();
     check(omitted.score == null && omitted.note == null, 'Omission used constructor defaults');
-    final explicit = await db.user.create(score: .set(null), note: .set(null));
+    final explicit = await db.user.create(score: null, note: null);
     check(explicit.score == null && explicit.note == null, 'Explicit null was replaced');
-    final supplied = await db.user.create(score: .set(9), note: .set('supplied'));
+    final supplied = await db.user.create(score: 9, note: 'supplied');
     check(supplied.score == 9 && supplied.note == 'supplied', 'Explicit values were lost');
-    await db.user.byId(omitted.id).patch(note: .set('updated'));
+    await db.user.byId(omitted.id).update(userPatch.values(note: .set('updated')));
     final patched = await db.user.byId(omitted.id).single();
     check(patched.score == null && patched.note == 'updated', 'Omitted patch used fallback');
     final read = await db.user.byId(explicit.id).single();
@@ -240,7 +240,9 @@ Future<void> main() async {
 }
 ''';
 
-const _consumer = r'''
+const _consumer = r'''import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
 
@@ -256,7 +258,7 @@ Future<void> main() async {
   check(original.markerCalls == 0, 'Importing a DTO executed its client factory.');
   check(original.instantCalls == 0, 'Importing a DTO executed its clock factory.');
   final events = <QueryEvent>[];
-  final db = await sqlite(const SqliteOptions.memory(), onQuery: events.add);
+  final db = Database.fromSql(await sqlite(const SqliteOptions.memory(), onQuery: events.add));
   try {
     await Migrator(db.sql).apply([
       Migration.create('0001_initial', appSchema, dialect: db.dialect),
@@ -284,13 +286,13 @@ Future<void> main() async {
         'Constructor defaults must be explicitly bound as client values.');
 
     final User second = await db.user.create(
-      id: .set(40),
+      id: 40,
       email: 'second@example.com',
-      name: .set('Explicit'),
-      nickname: .set(null),
-      active: .set(false),
-      marker: .set('manual'),
-      score: .set(0),
+      name: 'Explicit',
+      nickname: null,
+      active: false,
+      marker: 'manual',
+      score: 0,
     );
     check(second.id == 40 && second.greeting() == 'Hello, Explicit',
         'Explicit generated keys and constructor values were lost.');
@@ -299,21 +301,21 @@ Future<void> main() async {
     check(second.marker == 'manual' && original.markerCalls == 1,
         'Explicit values must bypass client factories.');
 
-    await db.user.byId(first.id).patch(
+    await db.user.byId(first.id).update(userPatch.values(
       name: .set('Changed'),
       nickname: .keep(),
-    );
+    ));
     final original.User patched = await db.user.byId(first.id).single();
     check(patched.greeting() == 'Hello, Changed' && patched.nickname == 'guest',
         'Patch keep must preserve the stored value.');
     check(patched.active && patched.score == 7 && patched.marker == 'marker-1',
         'A partial patch must not reset omitted defaults.');
     check(original.markerCalls == 1, 'Patch must not run insert factories.');
-    await db.user.byId(first.id).patch(nickname: .set(null));
+    await db.user.byId(first.id).update(userPatch.values(nickname: .set(null)));
     check((await db.user.byId(first.id).single()).nickname == null,
         'Patch must distinguish explicit null from keep.');
     try {
-      await db.user.byId(first.id).patch();
+      await db.user.byId(first.id).update(userPatch.values());
       throw StateError('An empty patch must retain its explicit error.');
     } on OrmException catch (error) {
       check(error.code == 'MUTATION.EMPTY', 'Unexpected empty patch error.');
@@ -322,7 +324,7 @@ Future<void> main() async {
     final User again = await db.user.create(email: 'third@example.com');
     check(again.marker == 'marker-2' && original.markerCalls == 2,
         'Each omitted insert must evaluate its factory exactly once.');
-    await db.user.byId(again.id).delete().execute();
+    await db.user.byId(again.id).delete();
 
     final before = DateTime.now().toUtc();
     final Post post = await db.post.create(
@@ -339,12 +341,12 @@ Future<void> main() async {
     final Post secondPost = await db.post.create(
       authorId: first.id,
       title: 'Explicit timestamp',
-      published: .set(true),
-      createdAt: .set(explicitTime),
-      status: .set('published'),
+      published: true,
+      createdAt: explicitTime,
+      status: 'published',
     );
     check(original.instantCalls == 1, 'Explicit timestamp ran its factory.');
-    await db.post.byId(secondPost.id).patch(title: .set('Explicit timestamp'));
+    await db.post.byId(secondPost.id).update(postPatch.values(title: .set('Explicit timestamp')));
     check((await db.post.byId(secondPost.id).single()).published,
         'A patch/read must retain true rather than reapplying constructor false.');
 
@@ -367,7 +369,7 @@ Future<void> main() async {
     check(events.length == 2, 'To-many navigation must use two batched queries.');
 
     try {
-      await db.user.create(email: 'first@example.com', marker: .set('duplicate'));
+      await db.user.create(email: 'first@example.com', marker: 'duplicate');
       throw StateError('The database must enforce @Unique.');
     } on SqliteFailure catch (error) {
       check(error.code == 19, 'Unexpected unique constraint failure.');
@@ -378,7 +380,7 @@ Future<void> main() async {
     } on SqliteFailure catch (error) {
       check(error.code == 19, 'Unexpected foreign-key constraint failure.');
     }
-    await db.user.byId(first.id).delete().execute();
+    await db.user.byId(first.id).delete();
     check(await db.post.count() == 0, 'ON DELETE CASCADE did not remove posts.');
     check(await db.user.count() == 1, 'Cascade removed an unrelated user.');
     check((await db.user.byId(second.id).single()).marker == 'manual',

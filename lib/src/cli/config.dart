@@ -1,4 +1,5 @@
-import '../../migrate.dart' show SchemaRenames, SqlDialect;
+import '../driver/driver.dart';
+import '../migrate/diff.dart';
 import 'config_entrypoint.dart';
 import 'migration.dart' show MigrationConnection;
 

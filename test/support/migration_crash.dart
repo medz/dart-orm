@@ -1,3 +1,5 @@
+import 'package:orm/orm.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -10,20 +12,22 @@ Future<void> crashMigration(
   List<String> args,
 ) async {
   var observed = false;
-  final db = postgres(
-    PostgresOptions(
-      url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-      tls: .disable,
-      schema: args[0],
-      maxConnections: 1,
+  final db = Database.fromSql(
+    postgres(
+      PostgresOptions(
+        url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+        tls: .disable,
+        schema: args[0],
+        maxConnections: 1,
+      ),
+      onQuery: (event) {
+        if (event.error != null) return;
+        if (event.sql == args[1]) observed = true;
+        if (observed && (args[2] == 'statement' || event.sql == 'COMMIT')) {
+          exit(91);
+        }
+      },
     ),
-    onQuery: (event) {
-      if (event.error != null) return;
-      if (event.sql == args[1]) observed = true;
-      if (observed && (args[2] == 'statement' || event.sql == 'COMMIT')) {
-        exit(91);
-      }
-    },
   );
   try {
     await Migrator(db.sql).apply(migrations);

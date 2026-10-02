@@ -1,10 +1,10 @@
 import 'dart:convert' show jsonEncode, utf8;
 
-import '../../driver.dart' show Backend, SqlCommand, SqlDialect, SqlResult;
-import '../../runtime.dart' show SqlDatabase;
-import '../../schema_model.dart'
-    show Column, ComputedColumn, ForeignKey, IndexSchema;
-import '../../values.dart' show Codecs, Decimal;
+import '../driver/driver.dart';
+import '../runtime/database.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
+import '../values/decimal.dart';
 import 'catalog.dart'
     show
         CatalogObject,

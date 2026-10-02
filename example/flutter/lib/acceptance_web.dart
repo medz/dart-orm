@@ -1,3 +1,6 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 import 'package:flutter/foundation.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
@@ -24,8 +27,8 @@ Future<Map<String, Object?>> runAcceptance({
   }
 
   try {
-    final db = database = await sqlite(
-      const SqliteOptions.persistent('flutter-example'),
+    final db = database = Database.fromSql(
+      await sqlite(const SqliteOptions.persistent('flutter-example')),
     );
     report['sqlite'] = (await db.execute(SqlCommand('SELECT sqlite_version()')))
         .rows

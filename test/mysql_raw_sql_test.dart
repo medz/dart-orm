@@ -1,6 +1,12 @@
 @Tags(['database', 'mysql-suite'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -34,9 +40,13 @@ void main() {
             .returns(shape);
         setUp(() async {
           db = engine == 'mysql'
-              ? await mysql(MysqlOptions(url: Uri.parse(address!), tls: tls))
-              : await mariadb(
-                  MariadbOptions(url: Uri.parse(address!), tls: tls),
+              ? Database.fromSql(
+                  await mysql(MysqlOptions(url: Uri.parse(address!), tls: tls)),
+                )
+              : Database.fromSql(
+                  await mariadb(
+                    MariadbOptions(url: Uri.parse(address!), tls: tls),
+                  ),
                 );
           await db.raw(Sql('DROP TABLE IF EXISTS orm_raw_sql'));
           await db.raw(

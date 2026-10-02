@@ -3,15 +3,20 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../drivers/mysql.dart';
-import '../../drivers/mariadb.dart';
-import '../../drivers/postgres.dart';
-import '../../drivers/sqlite.dart';
-import '../../generate.dart';
-import '../../migrate.dart';
-import '../../runtime.dart';
+import '../driver/driver.dart';
+import '../generate/import.dart';
+import '../generate/migrations.dart';
+import '../generate/schema.dart';
 import '../generate/schema/layout.dart';
+import '../migrate/catalog.dart';
+import '../mysql/driver.dart';
+import '../mysql/options.dart';
+import '../postgres/driver.dart';
+import '../postgres/options.dart';
+import '../runtime/database.dart';
 import '../sqlite/assets_io.dart';
+import '../sqlite/driver.dart';
+import '../sqlite/options.dart';
 import 'arguments.dart';
 import 'output.dart';
 

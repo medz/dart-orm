@@ -7,17 +7,17 @@ schema and migrations in Dart. SQLite, PostgreSQL, MySQL and MariaDB share a typ
 query API, with explicit database capabilities and transaction boundaries.
 
 [Get started](#get-started) · [Guides](https://github.com/medz/dart-orm/blob/main/doc/README.md) ·
-[API reference](https://pub.dev/documentation/orm/6.0.0-beta.5/) ·
-[Examples](https://github.com/medz/dart-orm/tree/main/example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.5)
+[Published API reference](https://pub.dev/documentation/orm/6.0.0-beta.6/) ·
+[Examples](https://github.com/medz/dart-orm/tree/main/example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.6)
 
 > **6.0 beta:** a new implementation requiring Dart 3.13+. This is a breaking
 > replacement for the Prisma-based 5.x client. Read the [release notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md)
 > before upgrading an existing application.
 
-These examples target `6.0.0-beta.5`, including its annotated model and filter APIs.
-Regenerate clients and review the [migration notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#600-beta5).
-Use the [tagged guide](https://github.com/medz/dart-orm/blob/orm-v6.0.0-beta.5/README.md)
-for this release's exact behavior.
+These examples target the current repository API, including unreleased breaking
+changes. Regenerate clients and review the [migration notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#unreleased).
+For the published `6.0.0-beta.6` package, use its
+[tagged guide](https://github.com/medz/dart-orm/blob/orm-v6.0.0-beta.6/README.md).
 
 ## Annotated Dart models
 
@@ -43,13 +43,15 @@ PostgreSQL namespaces are independent of source folders. See
 
 ## Get started
 
-Create a Dart application and install this release:
+Create a Dart application using the current repository API:
 
 ```sh
 dart create -t console my_app
 cd my_app
-dart pub add orm:6.0.0-beta.5
+dart pub add "orm@{git: {url: https://github.com/medz/dart-orm.git, ref: main}}"
 ```
+
+This dependency tracks `main`; use a commit or release tag to pin its API.
 
 This is an application, so add a top-level entry to its `pubspec.yaml`:
 
@@ -86,11 +88,13 @@ dart run orm migrate apply
 Replace `bin/my_app.dart` with:
 
 ```dart
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 import 'package:my_app/models.orm.dart';
 import 'package:orm/sqlite.dart';
 
 Future<void> main() async {
-  final db = await sqlite(const SqliteOptions.file('app.sqlite'));
+  final db = Database.fromSql(await sqlite(const SqliteOptions.file('app.sqlite')));
   try {
     final Task task = await db.task.create(title: 'Ship something useful');
 
@@ -102,7 +106,7 @@ Future<void> main() async {
     print(pending);
 
     await db.transaction((tx) async {
-      await tx.task.byId(task.id).patch(done: .set(true));
+      await tx.task.byId(task.id).patch(done: true);
     });
   } finally {
     await db.close();
@@ -173,9 +177,10 @@ Use the layer your application needs:
 | Import | Purpose |
 | --- | --- |
 | `values.dart`, `schema_model.dart` | Domain values, codecs and physical schema metadata |
-| `driver.dart`, `drivers/*.dart` | SQL contracts and database adapters |
-| `runtime.dart` | Raw SQL sessions, transactions and cursor ownership |
-| `sql.dart`, `orm.dart` | Typed SQL construction and model execution |
+| `driver.dart` | SQL contracts and execution controls |
+| `sqlite.dart`, `postgres.dart`, `mysql.dart`, `mariadb.dart` | Engine factories and drivers |
+| `sql.dart` | Typed SQL, raw execution, sessions and transactions |
+| `orm.dart` | Typed model queries, writes and subscriptions |
 | `schema.dart`, `generate.dart`, `migrate.dart`, `cli.dart` | Declarations, generation, migration and project tooling |
 
 Compile typed SQL offline, use a driver without model generation, or run saved
@@ -191,5 +196,5 @@ migrations without importing today's application models. See [API boundaries](ht
 - [Contributing and validation](https://github.com/medz/dart-orm/blob/main/CONTRIBUTING.md)
 
 Starting with the next release after `6.0.0-beta.6`, project-owned code uses the
-[MIT License](LICENSE), copyright © 2022–2026 Seven Du. Earlier releases and
+[MIT License](https://github.com/medz/dart-orm/blob/main/LICENSE), copyright © 2022–2026 Seven Du. Earlier releases and
 historical tags retain their original licenses.

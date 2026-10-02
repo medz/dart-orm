@@ -1,3 +1,8 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -19,22 +24,26 @@ void main() {
         final statements = <QueryEvent>[];
         setUp(() async {
           if (dialect == SqlDialect.sqlite) {
-            db = await sqlite(
-              const SqliteOptions.memory(),
-              onQuery: statements.add,
-              onAcquire: acquired.add,
+            db = Database.fromSql(
+              await sqlite(
+                const SqliteOptions.memory(),
+                onQuery: statements.add,
+                onAcquire: acquired.add,
+              ),
               onDecode: decoded.add,
             );
           } else {
-            db = postgres(
-              PostgresOptions(
-                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-                tls: .disable,
-                schema: 'orm_observation_tests',
-                maxConnections: 1,
+            db = Database.fromSql(
+              postgres(
+                PostgresOptions(
+                  url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                  tls: .disable,
+                  schema: 'orm_observation_tests',
+                  maxConnections: 1,
+                ),
+                onQuery: statements.add,
+                onAcquire: acquired.add,
               ),
-              onQuery: statements.add,
-              onAcquire: acquired.add,
               onDecode: decoded.add,
             );
             await db.execute(
@@ -221,7 +230,8 @@ void main() {
         test(
           'cursor batches and returning writes produce decoding observations',
           () async {
-            await db.user
+            await db.user.database
+                .table(userTable)
                 .insertMany([
                   2,
                   3,

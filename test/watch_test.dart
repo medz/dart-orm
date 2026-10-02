@@ -1,6 +1,12 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -21,11 +27,11 @@ void main() {
       final directory = await Directory.systemTemp.createTemp(
         'orm-watch-external-',
       );
-      final db = await sqlite(
-        SqliteOptions.file('${directory.path}/data.sqlite'),
+      final db = Database.fromSql(
+        await sqlite(SqliteOptions.file('${directory.path}/data.sqlite')),
       );
-      final external = await sqlite(
-        SqliteOptions.file('${directory.path}/data.sqlite'),
+      final external = Database.fromSql(
+        await sqlite(SqliteOptions.file('${directory.path}/data.sqlite')),
       );
       _Snapshots<String>? result;
       try {
@@ -35,7 +41,9 @@ void main() {
         final user = await db.user.create(email: 'before');
         result = _Snapshots(db.user.select((u) => u.email).watch());
         expect(await result.next(), ['before']);
-        await external.user.byId(user.id).patch(email: .set('external'));
+        await external.user
+            .byId(user.id)
+            .update(userPatch.values(email: .set('external')));
         await db.execute(SqlCommand('SELECT 1'));
         await Future<void>.delayed(Duration.zero);
         expect(result.rows.length, 1);
@@ -52,19 +60,24 @@ void main() {
   );
   runTests(
     'sqlite',
-    (observe) => sqlite(const SqliteOptions.memory(), onQuery: observe),
+    (observe) => sqlite(
+      const SqliteOptions.memory(),
+      onQuery: observe,
+    ).then((sql) => Database.fromSql(sql)),
   );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url != null) {
     runTests('postgres', (observe) async {
-      final db = postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: .disable,
-          schema: 'orm_watch_tests',
-          maxConnections: 1,
+      final db = Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: .disable,
+            schema: 'orm_watch_tests',
+            maxConnections: 1,
+          ),
+          onQuery: observe,
         ),
-        onQuery: observe,
       );
       await db.execute(
         SqlCommand('CREATE SCHEMA IF NOT EXISTS orm_watch_tests'),
@@ -139,9 +152,11 @@ void runTests(
         ),
         isEmpty,
       );
-      await db.user.byId(user.id).patch(email: .set('second'));
+      await db.user
+          .byId(user.id)
+          .update(userPatch.values(email: .set('second')));
       expect(await result.next(), ['second']);
-      await db.user.byId(user.id).delete().execute();
+      await db.user.byId(user.id).delete();
       expect(await result.next(), isEmpty);
     });
 
@@ -180,7 +195,9 @@ void runTests(
         await db.transaction((tx) async {
           await expectLater(
             tx.savepoint((child) async {
-              await child.user.byId(user.id).patch(email: .set('rolled-back'));
+              await child.user
+                  .byId(user.id)
+                  .update(userPatch.values(email: .set('rolled-back')));
               throw StateError('recoverable');
             }),
             throwsStateError,
@@ -192,8 +209,9 @@ void runTests(
         await db.transaction((tx) async {
           await tx.savepoint((child) async {
             await child.savepoint(
-              (nested) =>
-                  nested.user.byId(user.id).patch(email: .set('committed')),
+              (nested) => nested.user
+                  .byId(user.id)
+                  .update(userPatch.values(email: .set('committed'))),
             );
           });
           expect(result.rows.length, 1);
@@ -209,14 +227,17 @@ void runTests(
         final result = watch(db.user.select((u) => u.email).watch());
         expect(await result.next(), ['unique']);
         await expectLater(db.user.create(email: 'unique'), throwsA(anything));
-        await db.user.byId(999).patch(email: .set('absent'));
-        await db.user
+        await db.user.byId(999).update(userPatch.values(email: .set('absent')));
+        await db.user.database
+            .table(userTable)
             .insert((u) => [u.email.set('unique')])
             .onConflictDoNothing()
             .execute();
         await expectLater(
           db.transaction((tx) async {
-            await tx.user.byId(user.id).patch(email: .set('temporary'));
+            await tx.user
+                .byId(user.id)
+                .update(userPatch.values(email: .set('temporary')));
             try {
               await tx.execute(SqlCommand('SELECT broken_column FROM users'));
             } catch (_) {}
@@ -235,13 +256,15 @@ void runTests(
           db.user.orderBy((u) => [u.id.asc()]).select((u) => u.email).watch(),
         );
         expect(await result.next(), isEmpty);
-        final ids = await db.user
+        final ids = await db.user.database
+            .table(userTable)
             .insertMany(['a', 'b', 'c'], (u, email) => [u.email.set(email)])
             .returning((u) => u.id)
             .get();
         expect(ids.length, 3);
         expect(await result.next(), ['a', 'b', 'c']);
-        await db.user
+        await db.user.database
+            .table(userTable)
             .insert((u) => [u.email.set('b'), u.score.set(7)])
             .onConflictUpdate(
               target: (u) => [u.email],
@@ -281,7 +304,9 @@ void runTests(
             .watch(),
       );
       expect(await authors.next(), ['author']);
-      await db.user.byId(user.id).patch(email: .set('updated'));
+      await db.user
+          .byId(user.id)
+          .update(userPatch.values(email: .set('updated')));
       expect(await authors.next(), ['updated']);
       expect(await children.next(), [
         [('post', 'updated')],
@@ -298,7 +323,7 @@ void runTests(
         final total = db.post.select((p) => p.id.count()).scalar();
         final subquery = watch(db.user.select((u) => total).watch());
         final cte = db.post.select((p) => p.title).asCte('titles');
-        final titles = watch(cte.query.watch());
+        final titles = watch(cte.watch());
         expect(await hasPosts.next(), isEmpty);
         expect(await subquery.next(), [0]);
         expect(await titles.next(), isEmpty);
@@ -314,10 +339,12 @@ void runTests(
       await post(user.id);
       final result = watch(db.post.select((p) => p.title).watch());
       expect(await result.next(), ['post']);
-      await db.user.byId(user.id).patch(email: .set('no cascade'));
+      await db.user
+          .byId(user.id)
+          .update(userPatch.values(email: .set('no cascade')));
       await barrier();
       expect(result.rows.length, 1);
-      await db.user.byId(user.id).delete().execute();
+      await db.user.byId(user.id).delete();
       expect(await result.next(), isEmpty);
     });
 
@@ -414,7 +441,7 @@ void runTests(
         );
         expect(await joined.next(), ['post']);
         expect(await viaCte.next(), ['post']);
-        await db.post.byId(1).patch(title: .set('joined'));
+        await db.post.byId(1).update(postPatch.values(title: .set('joined')));
         expect(await joined.next(), ['joined']);
         expect(await viaCte.next(), ['joined']);
       },
@@ -491,7 +518,7 @@ void runTests(
         // The connection was released after producing the old rows, while the
         // read's Future is deliberately held. A second view shares this driver.
         final other = Database(intercepted.driver);
-        await other.user.byId(1).patch(email: .set('after'));
+        await other.user.byId(1).update(userPatch.values(email: .set('after')));
         release.complete();
         expect(await result.next(), ['after']);
         expect(result.rows.length, 1);
@@ -514,7 +541,9 @@ void runTests(
         );
         await result.waitForError();
         expect(result.errors.single, isA<FormatException>());
-        await db.user.byId(user.id).patch(email: .set('good'));
+        await db.user
+            .byId(user.id)
+            .update(userPatch.values(email: .set('good')));
         expect(await result.next(), ['good']);
       },
     );
@@ -532,7 +561,9 @@ void runTests(
         expect(await one.next(), ['shared']);
         expect(await two.next(), ['shared']);
         await one.close();
-        await db.user.byId(1).patch(email: .set('still open'));
+        await db.user
+            .byId(1)
+            .update(userPatch.values(email: .set('still open')));
         expect(await two.next(), ['still open']);
         expect(one.rows.length, 2);
       },
@@ -645,7 +676,9 @@ void runTests(
         expect(await result.next(), ['before']);
         final external = await open((_) {});
         try {
-          await external.user.byId(user.id).patch(email: .set('external'));
+          await external.user
+              .byId(user.id)
+              .update(userPatch.values(email: .set('external')));
           await barrier();
           expect(result.rows.length, 1);
           db.invalidate([userSchema]);

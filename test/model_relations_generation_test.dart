@@ -98,7 +98,9 @@ Future<void> main(List<String> args) => consumer.main(args);
   }
 }
 
-const _consumer = r'''
+const _consumer = r'''import 'package:orm/orm.dart';
+import 'package:orm/driver.dart';
+import 'package:orm/sql.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:orm/migrate.dart';
@@ -109,17 +111,17 @@ import 'runtime.orm.dart';
 Future<void> main(List<String> args) async {
   final events = <QueryEvent>[];
   if (args.single == 'sqlite') {
-    await verify(await sqlite(const SqliteOptions.memory(), onQuery: events.add), events);
+    await verify(Database.fromSql(await sqlite(const SqliteOptions.memory(), onQuery: events.add)), events);
     return;
   }
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url == null) return;
-  final admin = postgres(PostgresOptions(url: Uri.parse(url), tls: PostgresTls.disable));
+  final admin = Database.fromSql(postgres(PostgresOptions(url: Uri.parse(url), tls: PostgresTls.disable)));
   const schema = 'orm_named_relation_tests';
   try {
     await admin.execute(SqlCommand('CREATE SCHEMA "$schema"'));
     try {
-      await verify(postgres(PostgresOptions(url: Uri.parse(url), schema: schema, tls: PostgresTls.disable), onQuery: events.add), events);
+      await verify(Database.fromSql(postgres(PostgresOptions(url: Uri.parse(url), schema: schema, tls: PostgresTls.disable), onQuery: events.add)), events);
     } finally {
       await admin.execute(SqlCommand('DROP SCHEMA "$schema" CASCADE'));
     }
@@ -143,7 +145,7 @@ Future<void> verify(Database<Backend> db, List<QueryEvent> events) async {
     final author = await db.article.byId(written.id).select((a) => a.author.select((p) => p.name).one()).single();
     final oneQueries = events.length;
     final reviewer = await db.article.byId(written.id).select((a) => a.reviewer.select((p) => p.name).one()).single();
-    await db.article.byId(written.id).patch(reviewerId: .set(null));
+    await db.article.byId(written.id).update(articlePatch.values(reviewerId: .set(null)));
     final clearedReviewer = await db.article.byId(written.id).select((a) => a.reviewer.select((p) => p.name).one()).single();
     print(jsonEncode({'engine': db.dialect.name, 'authored': authored, 'reviewed': reviewed, 'author': author, 'reviewer': reviewer, 'clearedReviewer': clearedReviewer, 'manyQueries': manyQueries, 'oneQueries': oneQueries}));
   } finally {

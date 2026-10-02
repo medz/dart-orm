@@ -1,9 +1,9 @@
 // MySQL and MariaDB DDL recovery against complete table states.
 
-import '../../driver.dart' show Backend, SqlCommand;
-import '../../runtime.dart' show SqlDatabase;
-import '../../schema_model.dart' show TableSchema;
-import '../../values.dart' show OrmException;
+import '../driver/driver.dart';
+import '../values/codec.dart';
+import '../runtime/database.dart';
+import '../schema/model.dart';
 import 'backfill.dart'
     show BackfillBudget, BackfillPaused, backfillChunk, verifyBackfill;
 import 'catalog.dart' show SchemaVerification, verifySchema;

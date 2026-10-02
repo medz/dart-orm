@@ -1,6 +1,9 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -58,13 +61,15 @@ void main() {
             ], code: 1);
             expect(await File(path).exists(), false);
             expect(await File(source).exists(), false);
-            db = await sqlite(SqliteOptions.file(path));
+            db = Database.fromSql(await sqlite(SqliteOptions.file(path)));
           } else {
-            db = postgres(
-              PostgresOptions(
-                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-                tls: .disable,
-                schema: schema,
+            db = Database.fromSql(
+              postgres(
+                PostgresOptions(
+                  url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                  tls: .disable,
+                  schema: schema,
+                ),
               ),
             );
             await db.execute(

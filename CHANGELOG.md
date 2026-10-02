@@ -1,5 +1,26 @@
 ## Unreleased
 
+Breaking beta API change: regenerate clients and update imports, database setup,
+selections and writes. Keep reviewed migration definitions and fingerprints.
+See [the API guide](doc/api.md) for a complete model-to-transaction example.
+
+- Separate engine-created `SqlDatabase` from the ORM view created with
+  `Database.fromSql`. Public entrypoints have explicit ownership; remove the
+  `runtime.dart` and `drivers/*.dart` facades.
+- Preserve typed model patches across filters and helper functions. Literal
+  `create` and `patch` calls distinguish omission from explicit null; generated
+  insert/patch inputs compose through `overlay` and `WriteValue` intents.
+- Execute ordinary model writes immediately and expose advanced descriptions
+  through `.plan`. Each plan terminal prepares fresh values; explicit `prepare()`
+  captures values for replay, including read-only byte snapshots. Reject known
+  invalid mutation shapes before input callbacks and client defaults.
+- Keep `Selection<R>` for arbitrary result assembly. Add `@Projection` classes
+  and named records whose generated `.sql(...)` bindings retain typed output
+  fields for CTEs and set operations. Import `sql.dart` for query selection.
+- Preserve relationship batching, explicit session ownership and transaction
+  boundaries across typed model operations. Decode owned batch RETURNING
+  results before committing.
+
 - Switch project-owned code to the MIT License, copyright © 2022–2026 Seven Du,
   starting with the next release after `6.0.0-beta.6`. Earlier releases and
   historical tags retain their original licenses.

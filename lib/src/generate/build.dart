@@ -6,11 +6,11 @@ import 'package:build/build.dart' as builder;
 import 'package:glob/glob.dart';
 import 'package:path/path.dart' as p;
 
-import '../../driver.dart' show SqlDialect;
+import '../driver/driver.dart';
 import 'exception.dart';
 import 'schema.dart';
-import 'schema/layout.dart';
 import 'schema/diagnostics.dart';
+import 'schema/layout.dart';
 
 /// Factory used by build_runner's build.yaml registration.
 ///

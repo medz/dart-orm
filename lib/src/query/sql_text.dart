@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 import 'nodes.dart';
 
 /// @nodoc

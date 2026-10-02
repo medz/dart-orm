@@ -1,3 +1,9 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
@@ -35,7 +41,8 @@ Future<void> check(String name, Future<void> Function() body) async {
   checks.add({'name': name, 'milliseconds': watch.elapsedMilliseconds});
 }
 
-Future<Database<Sqlite>> memory() => sqlite(const SqliteOptions.memory());
+Future<Database<Sqlite>> memory() =>
+    sqlite(const SqliteOptions.memory()).then((sql) => Database.fromSql(sql));
 Future<void> initialize(Database<Sqlite> db) => Migrator(db.sql)
     .apply([
       Migration.create('0001_browser', appSchema, dialect: SqlDialect.sqlite),
@@ -107,7 +114,9 @@ Future<void> main() async {
             .cast<Map<String, Object?>>(),
       );
       final name = web.window.sessionStorage.getItem('orm_database')!;
-      final recovered = await sqlite(SqliteOptions.persistent(name));
+      final recovered = Database.fromSql(
+        await sqlite(SqliteOptions.persistent(name)),
+      );
       try {
         await check('page reload recovers committed rows and rolls back interrupted transaction', () async {
           expect(
@@ -228,14 +237,13 @@ Future<void> main() async {
             'Nested optional decoding differs',
           );
           await rejects(
-            () => isolated.user
-                .where((u) => u.id.count().gt(.value(0)))
-                .delete()
-                .execute(),
+            () =>
+                isolated.user.where((u) => u.id.count().gt(.value(0))).delete(),
             code: 'QUERY.AGGREGATE',
           );
           await rejects(
-            () => isolated.user
+            () => isolated.user.database
+                .table(userTable)
                 .insert((u) => [u.email.set('invalid')])
                 .returning((_) => fields({}))
                 .get(),
@@ -261,10 +269,10 @@ Future<void> main() async {
           );
           final explicit = await isolated.user.create(
             email: 'explicit',
-            nickname: .set(null),
+            nickname: null,
           );
           expect(explicit.nickname == null, 'Explicit null used Dart factory');
-          final batch = isolated.user.insertMany([
+          final batch = isolated.user.database.table(userTable).insertMany([
             'batch-a',
             'batch-b',
           ], (u, email) => [u.email.set(email)]);
@@ -301,7 +309,9 @@ Future<void> main() async {
           );
           await isolated.user
               .byId(row.id)
-              .patch(email: .set('edited'), nickname: .set(null));
+              .update(
+                userPatch.values(email: .set('edited'), nickname: .set(null)),
+              );
           final updated = await isolated.user.single();
           expect(
             updated.emailSize == 6 && updated.upperNickname == null,
@@ -446,8 +456,12 @@ Future<void> main() async {
                 rows[1].posts.join(',') == 'b4,b3',
             '$rows',
           );
-          await db.user.byId(a.id).patch(nickname: .set('named'));
-          await db.user.byId(a.id).patch(nickname: .set(null));
+          await db.user
+              .byId(a.id)
+              .update(userPatch.values(nickname: .set('named')));
+          await db.user
+              .byId(a.id)
+              .update(userPatch.values(nickname: .set(null)));
           expect(
             (await db.user.byId(a.id).single()).nickname == null,
             'Explicit NULL failed',
@@ -549,6 +563,33 @@ Future<void> main() async {
           );
           final total = await db.value.select((v) => v.amount.sum()).single();
           expect(total == amount, 'Decimal aggregate changed');
+          final bytes = Uint8List.fromList([1, 2]);
+          final plan = db.value
+              .byId(row.id)
+              .plan
+              .update(valuePatch(bytes: bytes));
+          final prepared = plan.prepare();
+          final captured = prepared.compile().parameters.first as Uint8List;
+          bytes[0] = 9;
+          expect(captured[0] == 1, 'Prepared bytes changed with caller buffer');
+          var readOnly = false;
+          try {
+            captured.buffer.asUint8List()[0] = 99;
+          } on UnsupportedError {
+            readOnly = true;
+          }
+          expect(readOnly, 'Compiled bytes expose mutable storage');
+          await prepared.execute();
+          await prepared.execute();
+          expect(
+            (await db.value.byId(row.id).single()).bytes.join(',') == '1,2',
+            'Prepared byte replay changed',
+          );
+          await plan.execute();
+          expect(
+            (await db.value.byId(row.id).single()).bytes.join(',') == '9,2',
+            'Plan did not prepare fresh bytes',
+          );
         },
       );
       await check('explicit unsupported cancellation', () async {
@@ -660,7 +701,7 @@ Future<void> main() async {
             SqliteOptions.memory(
               web: SqliteWebOptions(wasm: Uri.parse('/missing.wasm')),
             ),
-          ),
+          ).then((sql) => Database.fromSql(sql)),
         );
         await rejects(
           () => sqlite(
@@ -670,7 +711,7 @@ Future<void> main() async {
                 openTimeout: const Duration(seconds: 2),
               ),
             ),
-          ),
+          ).then((sql) => Database.fromSql(sql)),
         );
         final healthy = await memory();
         await healthy.close();
@@ -680,7 +721,9 @@ Future<void> main() async {
       'unified entry rejects native paths and mismatched browser assets',
       () async {
         await rejects(
-          () => sqlite(const SqliteOptions.file('native.sqlite')),
+          () =>
+              sqlite(const SqliteOptions.file('native.sqlite'))
+                  .then((sql) => Database.fromSql(sql)),
           code: 'CAPABILITY.STORAGE',
         );
         await rejects(
@@ -688,7 +731,7 @@ Future<void> main() async {
             SqliteOptions.memory(
               web: SqliteWebOptions(worker: Uri.parse('/mismatched-worker.js')),
             ),
-          ),
+          ).then((sql) => Database.fromSql(sql)),
           code: 'DRIVER.PROTOCOL',
         );
         await rejects(
@@ -698,7 +741,7 @@ Future<void> main() async {
                 worker: Uri.parse('/mismatched-worker.js?protocol=old'),
               ),
             ),
-          ),
+          ).then((sql) => Database.fromSql(sql)),
           code: 'DRIVER.PROTOCOL',
         );
         await rejects(
@@ -709,7 +752,7 @@ Future<void> main() async {
                     'sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
               ),
             ),
-          ),
+          ).then((sql) => Database.fromSql(sql)),
           code: 'DRIVER.ASSET',
         );
         final healthy = await memory();
@@ -722,11 +765,13 @@ Future<void> main() async {
         final options = SqliteOptions.persistent(
           'browser-${DateTime.now().millisecondsSinceEpoch}',
         );
-        var persistent = await sqlite(options);
+        var persistent = Database.fromSql(await sqlite(options));
         try {
           await initialize(persistent);
           await persistent.user.create(email: 'persisted');
-          await rejects(() => sqlite(options));
+          await rejects(
+            () => sqlite(options).then((sql) => Database.fromSql(sql)),
+          );
           expect(
             (await persistent.user.single()).email == 'persisted',
             'Failed competing open disturbed the owner',
@@ -734,7 +779,7 @@ Future<void> main() async {
         } finally {
           await persistent.close();
         }
-        persistent = await sqlite(options);
+        persistent = Database.fromSql(await sqlite(options));
         try {
           expect(
             (await persistent.user.single()).email == 'persisted',
@@ -746,7 +791,9 @@ Future<void> main() async {
       },
     );
     final name = 'reload-${DateTime.now().millisecondsSinceEpoch}';
-    final persistent = await sqlite(SqliteOptions.persistent(name));
+    final persistent = Database.fromSql(
+      await sqlite(SqliteOptions.persistent(name)),
+    );
     await initialize(persistent);
     await persistent.user.create(email: 'durable');
     await persistent.transaction((tx) async {

@@ -1,3 +1,4 @@
+import 'package:orm/orm.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
 

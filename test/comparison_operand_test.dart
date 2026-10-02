@@ -1,6 +1,9 @@
 @Tags(['core'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';

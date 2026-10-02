@@ -1,6 +1,11 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -12,13 +17,23 @@ import 'support/tables.dart';
 import 'support/advanced.dart';
 
 void main() {
-  runDatabaseTests('sqlite', () => sqlite(const SqliteOptions.memory()));
+  runDatabaseTests(
+    'sqlite',
+    () =>
+        sqlite(const SqliteOptions.memory())
+            .then((sql) => Database.fromSql(sql)),
+  );
   final postgresUrl = Platform.environment['ORM_TEST_POSTGRES'];
   if (postgresUrl != null) {
     runDatabaseTests(
       'postgres',
-      () async => postgres(
-        PostgresOptions(url: Uri.parse(postgresUrl), tls: PostgresTls.disable),
+      () async => Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(postgresUrl),
+            tls: PostgresTls.disable,
+          ),
+        ),
       ),
     );
   }

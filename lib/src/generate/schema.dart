@@ -8,10 +8,13 @@ import 'package:analyzer/dart/element/element.dart';
 import 'package:dart_style/dart_style.dart';
 import 'package:path/path.dart' as p;
 
-import '../../migrate.dart';
+import '../driver/driver.dart';
+import '../migrate/snapshot.dart';
+import '../migrate/source.dart';
 import 'emitter.dart';
 import 'exception.dart';
 import 'schema/annotations.dart';
+import 'schema/projections.dart';
 import 'schema/layout.dart';
 import 'schema/diagnostics.dart';
 import 'source.dart';
@@ -239,10 +242,26 @@ Future<GeneratedSchema> generateResolvedSchema(
   final names = DartNames(library.uri, importUri);
   final sources = await annotatedSources([unit, ...additionalRoots], resolve);
   final classes = sources.models;
-  if (classes.isEmpty) {
-    throw const GenerationException('No @Model class declarations found.');
+  final projectionDeclarations = await projectionSources([
+    unit,
+    ...additionalRoots,
+  ], resolve);
+  if (classes.isEmpty && projectionDeclarations.isEmpty) {
+    throw const GenerationException(
+      'No @Model classes or @Projection declarations found.',
+    );
   }
-  for (final declaration in classes) {
+  final declarations = <CompilationUnitMember>[
+    ...classes,
+    ...projectionDeclarations,
+  ];
+  names.reserveDeclarations([...declarations, ...sources.mixins]);
+  names.reserveNames([
+    for (final declaration in declarations)
+      if (projectionElement(declaration)?.name case final name?)
+        '${name[0].toLowerCase()}${name.substring(1)}',
+  ]);
+  for (final declaration in declarations) {
     final visited = <LibraryElement>{};
     void checkDependencies(LibraryElement owner) {
       if (!visited.add(owner)) return;
@@ -262,7 +281,7 @@ Future<GeneratedSchema> generateResolvedSchema(
       }
     }
 
-    checkDependencies(declaration.declaredFragment!.element.library);
+    checkDependencies(projectionElement(declaration)!.library!);
   }
   final schema = AnnotationReader(
     classes,
@@ -271,12 +290,13 @@ Future<GeneratedSchema> generateResolvedSchema(
     dialect: dialect,
     defaultNamespace: defaultNamespace,
   ).read();
+  final projections = readProjections(projectionDeclarations, names, schema);
   final snapshot = SchemaSnapshot([
     for (final table in schema) table.snapshot(),
   ]);
   return GeneratedSchema(
     DartFormatter(languageVersion: library.languageVersion.effective)
-        .format(emitSchema(schema, names)),
+        .format(emitSchema(schema, names, projections: projections)),
     dialect == null ? snapshot : snapshot.forDialect(dialect),
   );
 }

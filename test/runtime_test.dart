@@ -1,9 +1,15 @@
 @Tags(['core'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+import 'package:orm/sqlite.dart';
+import 'package:orm/mysql.dart';
+import 'package:orm/mariadb.dart';
+
 import 'dart:async';
 
-import 'package:orm/runtime.dart';
 import 'package:test/test.dart';
 
 void main() {

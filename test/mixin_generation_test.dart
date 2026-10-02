@@ -142,13 +142,16 @@ import 'relations.dart';
           await fixture.write('$directory/domain/code.dart', '''
 final class Code { final String value; const Code(this.value); }
 ''');
-          await fixture.write('$directory/codecs/code.dart', '''
+          await fixture.write(
+            '$directory/codecs/code.dart',
+            '''import 'package:orm/values.dart';
 import 'package:orm/schema.dart';
 import '../domain/code.dart';
 Code decodeCode(Object? value) => Code(value as String);
 String encodeCode(Code value) => value.value;
 const codeCodec = Codec<Code>.text(decodeCode, encodeCode);
-''');
+''',
+          );
           await fixture.write('$directory/factories/code.dart', '''
 import '../domain/code.dart';
 Code nextCode() => throw StateError('Generation must not execute factories.');

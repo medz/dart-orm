@@ -1,6 +1,6 @@
-import '../../driver.dart' show SqlDialect;
-import '../../schema_model.dart' show Column, IndexSchema, TableSchema;
-import '../../values.dart' show OrmException;
+import '../driver/driver.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
 import 'checks.dart' show checkDelta;
 import 'diff.dart' show SchemaRenames;
 import 'migration.dart' show Migration;

@@ -1,6 +1,10 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -11,14 +15,21 @@ import 'package:test/test.dart';
 import 'support/nominal/schema.orm.dart';
 
 void main() {
-  runNominalTests('sqlite', () => sqlite(const SqliteOptions.memory()));
+  runNominalTests(
+    'sqlite',
+    () =>
+        sqlite(const SqliteOptions.memory())
+            .then((sql) => Database.fromSql(sql)),
+  );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url != null) {
     const schema = 'orm_nominal_tests';
     late Database<Postgres> admin;
     setUpAll(() async {
-      admin = postgres(
-        PostgresOptions(url: Uri.parse(url), tls: PostgresTls.disable),
+      admin = Database.fromSql(
+        postgres(
+          PostgresOptions(url: Uri.parse(url), tls: PostgresTls.disable),
+        ),
       );
       await admin.execute(SqlCommand('CREATE SCHEMA IF NOT EXISTS "$schema"'));
     });
@@ -28,11 +39,13 @@ void main() {
     });
     runNominalTests(
       'postgres',
-      () async => postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: PostgresTls.disable,
-          schema: schema,
+      () async => Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: PostgresTls.disable,
+            schema: schema,
+          ),
         ),
       ),
     );
@@ -70,11 +83,15 @@ void runNominalTests(String name, Future<Database<Backend>> Function() open) {
         expect(account.total, 5);
         await db.account
             .byId(account.id)
-            .patch(label: .set('Account'), enabled: .set(true));
+            .update(
+              accountPatch.values(label: .set('Account'), enabled: .set(true)),
+            );
         final Account updated = await db.account.byId(account.id).single();
         expect(updated.label, 'Account');
         expect(updated.enabled, true);
-        await db.account.byId(account.id).patch(label: .set(null));
+        await db.account
+            .byId(account.id)
+            .update(accountPatch.values(label: .set(null)));
         expect((await db.account.byId(account.id).single()).label, isNull);
       },
     );
@@ -116,7 +133,7 @@ void runNominalTests(String name, Future<Database<Backend>> Function() open) {
             .single();
         expect(card.id, owner.id);
         expect(card.notes, ['hello']);
-        await db.account.byId(owner.id).delete().execute();
+        await db.account.byId(owner.id).delete();
         expect(await db.note.count(), 0);
       },
     );

@@ -1,3 +1,8 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 
 import 'package:orm/migrate.dart';
@@ -6,7 +11,7 @@ import 'package:orm/sqlite.dart';
 import '../../example/schema.orm.dart';
 
 Future<void> main() async {
-  final db = await sqlite(const SqliteOptions.memory());
+  final db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
   try {
     final initial = Migration.create(
       '0001_initial',
@@ -87,7 +92,8 @@ Future<void> main() async {
     });
     await acquired.future;
     try {
-      await db.user
+      await db.user.database
+          .table(userTable)
           .insert((u) => [u.email.set('must-not-execute@example.com')])
           .execute(
             options: const ExecutionOptions(

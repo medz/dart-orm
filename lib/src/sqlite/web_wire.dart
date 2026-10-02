@@ -1,7 +1,8 @@
 import 'dart:js_interop';
 import 'dart:typed_data';
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 
 /// Structured clone transports blobs as typed arrays and large integers as
 /// tagged decimal text. It never sends Dart class instances to another worker.

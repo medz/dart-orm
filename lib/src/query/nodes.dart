@@ -1,7 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:meta/meta.dart';
 
-import '../../driver.dart';
-import '../../schema_model.dart' show TableSchema;
+import '../driver/driver.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
+import '../values/decimal.dart';
 import 'context.dart';
 import 'expression.dart';
 import 'joins.dart';
@@ -47,11 +51,22 @@ final class ColumnNode(final TableRef table, final String name)
 
 /// @nodoc
 @internal
-final class ParameterNode(
-  final Object? value, {
-  final String? sqlType,
-  final String? storageType,
-}) extends SqlNode {
+final class ParameterNode extends SqlNode {
+  final Object? value;
+  final String? sqlType;
+  final String? storageType;
+
+  // Capture mutable built-in storage once, when the encoded value is bound.
+  // The read-only view also protects replays from compiled parameter access.
+  ParameterNode(Object? value, {this.sqlType, this.storageType})
+    : value = value is Uint8List
+          ? Uint8List.fromList(value).asUnmodifiableView()
+          : value;
+
+  // SqlValue has already captured and validated its immutable storage. Reuse it
+  // when compiling raw SQL rather than copying its bytes on every compilation.
+  ParameterNode.captured(this.value, {this.sqlType, this.storageType});
+
   @override
   String writeSql(SqlWriter w) {
     final parameter = w.parameter(value, storageType: storageType ?? sqlType);

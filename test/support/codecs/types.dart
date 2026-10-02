@@ -1,6 +1,6 @@
-import 'dart:convert';
+import 'package:orm/values.dart';
 
-import 'package:orm/schema.dart';
+import 'dart:convert';
 
 extension type const PersonId(int value) {
   static const codec = Codec<PersonId>.integer(_decode, _encode);

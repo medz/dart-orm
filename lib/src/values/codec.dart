@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:meta/meta.dart';
+
 import 'decimal.dart';
 import 'temporal.dart';
 
@@ -29,6 +31,10 @@ final class SqlReal {
 /// A codec defines a storage family and symmetric conversion functions. Use
 /// [nullable] for SQL NULL and [map] for domain-specific Dart types.
 final class Codec<T> {
+  /// @nodoc
+  @internal
+  Type get valueType => T;
+
   /// Logical storage family used when rendering and binding SQL.
   final String sqlType;
   // Nullable wrappers share a comparison identity, while remaining distinct
@@ -206,6 +212,9 @@ abstract final class Codecs {
   );
 
   /// Binary data as [Uint8List].
+  ///
+  /// Encode and decode retain the supplied buffer. SQL parameter binding owns
+  /// any snapshot needed for reusable expressions and prepared writes.
   static final bytes = Codec<Uint8List>(
     'blob',
     (v) => v as Uint8List,

@@ -1,4 +1,4 @@
-import '../../values.dart';
+import '../values/codec.dart';
 
 /// SQL engine used for quoting, parameter syntax, and capability validation.
 enum SqlDialect {
@@ -21,6 +21,11 @@ final class SqlCommand {
   final String sql;
 
   /// Bound values in placeholder order; the constructor copies this list.
+  ///
+  /// Elements are retained, not cloned. Commands compiled from typed expressions
+  /// contain read-only snapshots for byte parameters. Callers constructing a
+  /// command directly own its payload objects and must keep them stable until
+  /// execution completes, and across any intended replays.
   final List<Object?> parameters;
 
   /// Creates a command without parsing SQL or opening a connection.

@@ -1,4 +1,4 @@
-import '../../values.dart' show Codec;
+import '../values/codec.dart' show Codec;
 
 import 'model.dart' show ComputedStorage;
 
@@ -42,6 +42,26 @@ final class Model {
 
   /// Marks a class for static generation.
   const Model({this.table, this.namespace});
+}
+
+/// Declares a named flat SQL projection without a physical table.
+///
+/// Put this on a public nongeneric class with an unnamed constructor using named
+/// parameters, or on a typedef for a named record. Generation emits a typed
+/// expression-binding function and derived query fields. Every constructor
+/// parameter or record field is an explicitly required expression at binding.
+/// The expression supplies its codec; no column or storage annotation is needed.
+/// An abstract class must expose a factory returning a concrete implementation;
+/// an abstract generative constructor cannot materialize a result.
+///
+/// Class projections construct the original DTO after decoding, retaining its
+/// methods. Constructor validation or transformation runs only when results are
+/// materialized. Derived SQL fields always refer to the bound SQL slots, before
+/// such Dart constructor logic. Projections never enter schema snapshots or
+/// migration history, and generation never executes the DTO constructor.
+final class Projection {
+  /// Marks a class or named-record typedef for projection generation.
+  const Projection();
 }
 
 /// Includes a field in the primary key, in constructor declaration order.

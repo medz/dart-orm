@@ -1,6 +1,12 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -31,13 +37,18 @@ void main() {
       late String path;
       final commands = <SqlCommand>[];
       Future<Database<Backend>> open() async {
-        if (backend == 'sqlite') return sqlite(SqliteOptions.file(path));
-        final result = postgres(
-          PostgresOptions(
-            url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-            tls: .disable,
-            schema: 'orm_backfill_tests',
-            maxConnections: 1,
+        if (backend == 'sqlite') {
+          return sqlite(SqliteOptions.file(path))
+              .then((sql) => Database.fromSql(sql));
+        }
+        final result = Database.fromSql(
+          postgres(
+            PostgresOptions(
+              url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+              tls: .disable,
+              schema: 'orm_backfill_tests',
+              maxConnections: 1,
+            ),
           ),
         );
         await result.execute(
@@ -486,19 +497,23 @@ void main() {
                 history: history,
                 directory: directory.path,
                 connect: ({required readOnly}) async => backend == 'sqlite'
-                    ? (await sqlite(
-                        readOnly
-                            ? SqliteOptions.readOnly(path)
-                            : SqliteOptions.file(path),
+                    ? (Database.fromSql(
+                        await sqlite(
+                          readOnly
+                              ? SqliteOptions.readOnly(path)
+                              : SqliteOptions.file(path),
+                        ),
                       )).sql
-                    : postgres(
-                        PostgresOptions(
-                          url: Uri.parse(
-                            Platform.environment['ORM_TEST_POSTGRES']!,
+                    : Database.fromSql(
+                        postgres(
+                          PostgresOptions(
+                            url: Uri.parse(
+                              Platform.environment['ORM_TEST_POSTGRES']!,
+                            ),
+                            tls: .disable,
+                            schema: 'orm_backfill_tests',
+                            maxConnections: 1,
                           ),
-                          tls: .disable,
-                          schema: 'orm_backfill_tests',
-                          maxConnections: 1,
                         ),
                       ).sql,
               ),

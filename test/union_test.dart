@@ -1,6 +1,11 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -18,19 +23,24 @@ Matcher code(String expected) =>
 void main() {
   runTests(
     'sqlite',
-    (observe) => sqlite(const SqliteOptions.memory(), onQuery: observe),
+    (observe) => sqlite(
+      const SqliteOptions.memory(),
+      onQuery: observe,
+    ).then((sql) => Database.fromSql(sql)),
   );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url != null) {
     runTests('postgres', (observe) async {
-      final db = postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: .disable,
-          schema: 'orm_union_tests',
-          maxConnections: 1,
+      final db = Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: .disable,
+            schema: 'orm_union_tests',
+            maxConnections: 1,
+          ),
+          onQuery: observe,
         ),
-        onQuery: observe,
       );
       await db.execute(
         SqlCommand('CREATE SCHEMA IF NOT EXISTS orm_union_tests'),
@@ -177,7 +187,7 @@ void runTests(
         unorderedEquals([(1, 1), (2, 0)]),
       );
       expect(
-        await left.asCte('repeated').query.unionAll(right).get(),
+        await left.asCte('repeated').unionAll(right).get(),
         unorderedEquals([(1, 1), (2, 0)]),
       );
     });
@@ -206,11 +216,9 @@ void runTests(
           unorderedEquals(['one', 'one', 'two']),
         );
         final cte = a.unionAll(b).asCte('names');
-        final exported = cte.query.select(
-          (c) => c.ref((u) => u.ref((u) => u.email)),
-        );
+        final exported = cte.select((c) => c.ref((u) => u.ref((u) => u.email)));
         expect(await exported.stream(batchSize: 1).toList(), ['one', 'one']);
-        expect(await cte.query.unionAll(c).count(), 3);
+        expect(await cte.unionAll(c).count(), 3);
       },
     );
 
@@ -225,8 +233,8 @@ void runTests(
             .table(postsTable)
             .select((p) => (p.id, p.title).row)
             .asCte('same');
-        expect(await a.query.union(b.query).count(), 4);
-        final joined = a.query.unionAll(b.query).asCte('combined').alias();
+        expect(await a.union(b).count(), 4);
+        final joined = a.unionAll(b).asCte('combined').alias();
         final source = db
             .table(users)
             .join(
@@ -359,24 +367,34 @@ void runTests(
         throwsA(code('QUERY.UNION_SELECTION')),
       );
       expect(
-        () => a.asCte('mapped').query.union(b),
+        () => a.asCte('mapped').union(b),
         throwsA(code('QUERY.UNION_SELECTION')),
       );
       expect(events, isEmpty);
     });
 
     test('codecs and nullability cannot silently change across operands', () {
-      final a = db.table(users).select<Object?>((u) => u.email);
-      final b = db.table(users).select<Object?>((u) => u.id);
+      final a = db
+          .table(users)
+          .select<Selection<Object?>, Object?>((u) => u.email);
+      final b = db
+          .table(users)
+          .select<Selection<Object?>, Object?>((u) => u.id);
       expect(() => a.union(b), throwsA(code('QUERY.UNION_CODEC')));
       expect(
-        () => a.union(db.table(users).select<Object?>((u) => u.nickname)),
+        () => a.union(
+          db
+              .table(users)
+              .select<Selection<Object?>, Object?>((u) => u.nickname),
+        ),
         throwsA(code('QUERY.UNION_CODEC')),
       );
       final custom = Codecs.text.map<String>((v) => v.toUpperCase(), (v) => v);
       final encoded = db
           .table(users)
-          .select<Object?>((u) => sql(['', ''], [u.email], custom));
+          .select<Selection<Object?>, Object?>(
+            (u) => sql(['', ''], [u.email], custom),
+          );
       expect(() => a.union(encoded), throwsA(code('QUERY.UNION_CODEC')));
       expect(events, isEmpty);
     });
@@ -445,10 +463,9 @@ void runTests(
       expect(events, isEmpty);
     });
 
-    test('compound mutations and mixed sessions fail before SQL', () async {
+    test('compound keysets and mixed sessions fail before SQL', () async {
       final source = db.table(users).select((u) => u.email);
       final query = source.union(source);
-      expect(() => query.delete().compile(), throwsA(code('MUTATION.QUERY')));
       expect(
         () => query.seekAfter((u) => [u.ref((u) => u.email).cursor('one')]),
         throwsA(code('QUERY.CURSOR')),

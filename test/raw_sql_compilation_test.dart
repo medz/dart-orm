@@ -1,6 +1,9 @@
 @Tags(['core'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/values.dart';
+
 import 'dart:typed_data';
 
 import 'package:orm/sql.dart';

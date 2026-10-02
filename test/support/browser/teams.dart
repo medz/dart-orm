@@ -1,3 +1,5 @@
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
 
@@ -6,10 +8,12 @@ import '../../../example/teams/schema.orm.dart';
 Future<void> checkTeams() async {
   final events = <QueryEvent>[];
   final acquired = <AcquisitionEvent>[], decoded = <DecodeEvent>[];
-  final db = await sqlite(
-    const SqliteOptions.memory(),
-    onQuery: events.add,
-    onAcquire: acquired.add,
+  final db = Database.fromSql(
+    await sqlite(
+      const SqliteOptions.memory(),
+      onQuery: events.add,
+      onAcquire: acquired.add,
+    ),
     onDecode: decoded.add,
   );
   void expect(bool value, String message) {
@@ -29,7 +33,7 @@ Future<void> checkTeams() async {
       await tx.membership.create(
         teamId: 10,
         userId: 1,
-        role: .set(MembershipRole.owner),
+        role: MembershipRole.owner,
         joinedAt: DateTime.utc(2026, 1, 1),
       );
       await tx.membership.create(
@@ -142,17 +146,17 @@ Future<void> checkTeams() async {
       'Mixed projection evaluation order differs',
     );
     await db.transaction((tx) async {
-      await tx.team.byId(10).patch(name: .set('Kernel'));
+      await tx.team.byId(10).update(teamPatch.values(name: .set('Kernel')));
       await tx.membership
           .byId(teamId: 10, userId: 2)
-          .patch(role: .set(MembershipRole.owner));
+          .update(membershipPatch.values(role: .set(MembershipRole.owner)));
     });
     expect(
       (await query.get())[1].single ==
           (team: 'Kernel', role: MembershipRole.owner),
       'Transaction did not retain payload/endpoint changes',
     );
-    await db.team.byId(10).delete().execute();
+    await db.team.byId(10).delete();
     expect(
       await db.membership.count() == 1 && await db.user.count() == 3,
       'Cascade removed an endpoint or retained invalid associations',

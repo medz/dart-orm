@@ -1,7 +1,15 @@
 import 'package:meta/meta.dart' show internal;
 
-import '../../runtime.dart';
-import '../../sql.dart';
+import '../driver/driver.dart';
+import '../query/context.dart';
+import '../query/query.dart';
+import '../query/table.dart';
+import '../runtime/database.dart';
+import '../runtime/events.dart';
+import '../runtime/options.dart';
+import '../runtime/transaction.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
 import 'changes.dart';
 import 'observation.dart';
 import 'observation.dart' as observation;
@@ -116,6 +124,7 @@ class Database<B extends Backend> extends QueryContext {
 
   /// @nodoc
   @internal
+  @override
   void checkActive() => sql.checkActive();
 
   /// @nodoc

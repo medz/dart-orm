@@ -48,8 +48,8 @@ Column names default to snake_case; `@Column(name: 'existing_column')` overrides
 
 ```dart
 final User created = await db.user.create(email: 'seven@example.com');
-await db.user.byId(created.id).patch(nickname: .set('Seven'));
-await db.user.byId(created.id).patch(nickname: .set(null));
+await db.user.byId(created.id).patch(nickname: 'Seven');
+await db.user.byId(created.id).patch(nickname: null);
 final List<String> titles = await db.user.byId(created.id)
     .select((u) => u.posts.select((p) => p.title).many()).single();
 ```
@@ -62,12 +62,12 @@ Generated inserts have a separate contract:
 
 - Non-null columns without defaults are required
 - Nullable columns without defaults can be omitted and become SQL NULL
-- Identities and defaulted fields use `Change<T>`: omission keeps the default;
-  `.set(value)` explicitly supplies a value
+- Identities and defaulted fields accept literal values; omission keeps the default
 - Computed columns are absent from generated inserts and patches
 
-All patch parameters use `Change<T>`. Omission leaves a column unchanged;
-`.set(null)` clears a nullable column. Relations load only through explicit
+Generated `userPatch(...)` accepts literal values. Omission leaves a column unchanged;
+`nickname: null` clears a nullable column. Use `userPatch.values(...)` for explicit
+write intents, and `userPatch.overlay([request, policy])` for ordered composition. Relations load only through explicit
 selections. No relation placeholders, lazy queries, equality, serialization or
 `copyWith` methods are injected into your model.
 
@@ -119,7 +119,7 @@ changing them needs an explicit data migration, not an inferred label rename.
 `@DatabaseDefault.sql('CURRENT_TIMESTAMP')` declares trusted SQL. `@ClientDefault`
 references a public synchronous factory, called only for omitted insert values.
 It can coexist with a database default: omission uses the client factory;
-`.defaultValue()` explicitly requests the database default.
+Use `.databaseDefault()` in the input factory's `.values(...)` call to request the database default.
 
 A constant constructor default is a client-side fallback when no identity,
 database default or explicit client factory takes precedence. It creates no SQL

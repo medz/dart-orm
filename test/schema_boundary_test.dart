@@ -1,3 +1,8 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -119,12 +124,14 @@ final class Item {
         );
         final generated = await generateSchema(file.path, dialect: dialect);
         final Database<Backend> db = dialect == .sqlite
-            ? await sqlite(const SqliteOptions.memory())
-            : postgres(
-                PostgresOptions(
-                  url: Uri.parse(url!),
-                  tls: .disable,
-                  schema: 'orm_schema_boundary_tests',
+            ? Database.fromSql(await sqlite(const SqliteOptions.memory()))
+            : Database.fromSql(
+                postgres(
+                  PostgresOptions(
+                    url: Uri.parse(url!),
+                    tls: .disable,
+                    schema: 'orm_schema_boundary_tests',
+                  ),
                 ),
               );
         try {

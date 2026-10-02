@@ -1,6 +1,6 @@
 import 'package:meta/meta.dart' show internal;
 
-import '../../driver.dart';
+import '../driver/driver.dart';
 
 /// Engine-specific settings applied before a transaction callback starts.
 ///

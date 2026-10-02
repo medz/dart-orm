@@ -1,3 +1,6 @@
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
 
@@ -6,7 +9,7 @@ import 'schema.orm.dart';
 import 'types.dart';
 
 Future<void> main() async {
-  final db = await sqlite(const SqliteOptions.memory());
+  final db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
   try {
     await Migrator(
       db.sql,

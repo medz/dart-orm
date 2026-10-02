@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
-import '../../schema_model.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
 import 'expression.dart';
 import 'joins.dart';
 import 'mutation.dart';
@@ -64,6 +65,9 @@ final class Field<T> extends ReadField<T> {
   }
 
   /// Assigns a bound value, including NULL when the field is nullable.
+  ///
+  /// Encodes now and captures byte storage as a read-only snapshot. Other
+  /// custom codec storage objects remain caller-owned.
   Assignment set(T value) =>
       _assign(ParameterNode(codec.encode(value), storageType: codec.sqlType));
 
@@ -121,45 +125,4 @@ final class Table<R, F extends Fields> {
 
   /// Creates an independent alias for a join or self-join.
   TableAlias<R, F> alias() => TableAlias.internal(this);
-}
-
-/// A patch value that distinguishes omission, assignment and SQL DEFAULT.
-///
-/// Use `.keep()` to omit, `.set(value)` to write, or `.defaultValue()` to request
-/// the database default. Setting null is legal only for a nullable field.
-sealed class Change<T> {
-  /// Base constructor for the closed set of patch operations.
-  const Change();
-
-  /// Leaves the field out of the update.
-  const factory Change.keep() = _Keep<T>;
-
-  /// Writes the supplied value, including an explicitly allowed null.
-  const factory Change.set(T value) = _Set<T>;
-
-  /// Requests the database default for this field.
-  const factory Change.defaultValue() = _Default<T>;
-}
-
-final class _Keep<T> extends Change<T> {
-  const _Keep();
-}
-
-final class _Set<T> extends Change<T> {
-  final T value;
-  const _Set(this.value);
-}
-
-final class _Default<T> extends Change<T> {
-  const _Default();
-}
-
-/// Converts a generated patch input into zero or one SQL assignment.
-extension ChangeField<T> on Field<T> {
-  /// Omits unchanged fields and builds assignments for the other cases.
-  List<Assignment> change(Change<T> change) => switch (change) {
-    _Keep<T>() => [],
-    _Set<T>(:final value) => [set(value)],
-    _Default<T>() => [defaultValue()],
-  };
 }

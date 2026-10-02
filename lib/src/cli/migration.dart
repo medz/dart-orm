@@ -1,9 +1,17 @@
 import 'dart:async';
 import 'dart:io';
 
-import '../../generate.dart';
-import '../../migrate.dart';
-import '../../runtime.dart';
+import '../driver/driver.dart';
+import '../generate/migrations.dart';
+import '../migrate/catalog.dart';
+import '../migrate/diff.dart';
+import '../migrate/history.dart' show Migrator;
+import '../migrate/migration.dart';
+import '../migrate/snapshot.dart';
+import '../migrate/source.dart';
+import '../migrate/step.dart';
+import '../runtime/database.dart';
+import '../values/codec.dart';
 import 'output.dart';
 
 /// Opens a runtime owned and closed by one migration CLI invocation.

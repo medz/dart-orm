@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:mysql_client_plus/exception.dart' as mysql;
 import 'package:mysql_client_plus/mysql_client_plus.dart' as mysql;
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 import 'failure.dart';
 import 'values.dart';
 

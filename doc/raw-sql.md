@@ -1,7 +1,8 @@
 # Raw SQL with optional types
 
 `Sql` stores trusted SQL and separately bound values. It has no connection and
-needs no query generator. Import `package:orm/orm.dart` or a database entrypoint.
+needs no query generator. Import `package:orm/sql.dart` and the chosen engine
+entrypoint. The SQL runtime returned by the engine factory can execute it directly.
 
 ```dart
 final result = await db.raw(Sql(

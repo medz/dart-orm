@@ -45,6 +45,13 @@ Run subprocess consumers from an independent `BuildFixture` package. This keeps
 native-asset copying and macOS signing away from the test runner's loaded SQLite
 library while retaining parallel suites.
 
+For type-rejection fixtures, prove the same imports and generated entrypoints
+with positive cases first. Require diagnostics at each invalid consumer case and
+reject errors in the fixture setup; an obsolete getter or missing import is not
+evidence of a type boundary. Compiler subprocesses must identify the intended
+consumer error as well as returning nonzero. Check inference-sensitive API
+changes in both the analyzer and actual kernel/AOT consumers.
+
 ## Documentation and public APIs
 
 Keep public entrypoints explicit and add `///` comments at the declarations they

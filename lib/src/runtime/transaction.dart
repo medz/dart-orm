@@ -3,7 +3,8 @@ import 'dart:math' as math;
 
 import 'package:meta/meta.dart' show internal;
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 
 /// Explicit opt-in: callback logic must be safe to repeat after rollback.
 /// The budget counts every scheduled retry, including commit-only retries.

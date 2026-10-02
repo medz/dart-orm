@@ -1,6 +1,9 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+
 import 'dart:io';
 
 import 'package:orm/postgres.dart';
@@ -20,7 +23,9 @@ void main() {
         final namespace =
             'orm_mixin_${pid}_${DateTime.now().microsecondsSinceEpoch}';
         final admin = engine == 'postgres'
-            ? postgres(PostgresOptions(url: Uri.parse(url!), tls: .disable))
+            ? Database.fromSql(
+                postgres(PostgresOptions(url: Uri.parse(url!), tls: .disable)),
+              )
             : null;
         try {
           await fixture.file('lib/schema.dart').delete();
@@ -71,7 +76,9 @@ void main() => defineConfig(database: .$engine, models: 'lib/models.dart',
   }
 }
 
-const _consumer = r'''
+const _consumer = r'''import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/driver.dart';
 import 'dart:io';
 import 'package:orm/migrate.dart';
 import 'package:orm/postgres.dart';
@@ -89,10 +96,10 @@ Future<void> main(List<String> args) async {
   final engine = args.single;
   final namespace = physical.schema.tables.first.namespace;
   final Database<Backend> db = engine == 'sqlite'
-      ? await sqlite(const SqliteOptions.memory())
-      : postgres(PostgresOptions(
+      ? Database.fromSql(await sqlite(const SqliteOptions.memory()))
+      : Database.fromSql(postgres(PostgresOptions(
           url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-          tls: .disable, schema: namespace));
+          tls: .disable, schema: namespace)));
   try {
     if (engine == 'postgres') {
       await db.execute(SqlCommand('CREATE SCHEMA "$namespace"'));
@@ -109,12 +116,12 @@ Future<void> main(List<String> args) async {
     check(memo.active && memo.note == 'guest' && memo.local == 'local',
         'Mixin initializers replaced database/constructor defaults.');
     final original.Task task = await db.task.create(memoId: memo.id, title: 'Task',
-        label: .set('manual'), active: .set(false), note: .set(null));
+        label: 'manual', active: false, note: null);
     check(task.describe() == '${task.id}: manual' && !task.active && task.note == null,
         'Explicit values/null lost precedence over defaults.');
     check(original.labelCalls == 1, 'An explicit insert executed the shared factory.');
 
-    await db.memo.byId(memo.id).patch(label: .set('changed'), note: .set(null));
+    await db.memo.byId(memo.id).update(memoPatch.values(label: .set('changed'), note: .set(null)));
     final original.Memo patched = await db.memo.byId(memo.id).single();
     check(patched.describe() == '${memo.id}: changed' && patched.note == null && patched.active,
         'Patch/read transformed stored mixin values or reapplied defaults.');
@@ -125,7 +132,7 @@ Future<void> main(List<String> args) async {
         .select((m) => m.tasks.many()).single();
     check(related.describe() == patched.describe() && tasks.single.describe() == task.describe(),
         'Relation mapping lost original DTO mixin methods.');
-    await db.memo.byId(memo.id).delete().execute();
+    await db.memo.byId(memo.id).delete();
     check(await db.memo.count() == 0 && await db.task.count() == 0,
         'Mixin keys or cascade deletion did not work.');
     print('mixin-$engine-ok');

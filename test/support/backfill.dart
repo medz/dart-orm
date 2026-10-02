@@ -1,3 +1,6 @@
+import 'package:orm/driver.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/orm.dart';
 

@@ -1,6 +1,10 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -22,18 +26,19 @@ void main() {
         final events = <QueryEvent>[];
         setUp(() async {
           if (dialect == SqlDialect.sqlite) {
-            db = await sqlite(
-              const SqliteOptions.memory(),
-              onQuery: events.add,
+            db = Database.fromSql(
+              await sqlite(const SqliteOptions.memory(), onQuery: events.add),
             );
           } else {
-            db = postgres(
-              PostgresOptions(
-                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-                tls: .disable,
-                schema: 'orm_many_to_many_tests',
+            db = Database.fromSql(
+              postgres(
+                PostgresOptions(
+                  url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                  tls: .disable,
+                  schema: 'orm_many_to_many_tests',
+                ),
+                onQuery: events.add,
               ),
-              onQuery: events.add,
             );
             await db.execute(
               SqlCommand(
@@ -48,15 +53,15 @@ void main() {
             Migration.create('0001_teams', appSchema, dialect: db.dialect),
           ]);
           await db.transaction((tx) async {
-            await tx.user.insertMany(
+            await tx.user.database.table(userTable).insertMany(
               [(1, 'Ada'), (2, 'Ben'), (3, 'Cy'), (4, 'Dee')],
               (u, value) => [u.id.set(value.$1), u.name.set(value.$2)],
             ).execute();
-            await tx.team.insertMany(
+            await tx.team.database.table(teamTable).insertMany(
               [(10, 'Core'), (20, 'Docs'), (30, 'Tools'), (40, 'Empty')],
               (t, value) => [t.id.set(value.$1), t.name.set(value.$2)],
             ).execute();
-            await tx.membership.insertMany(
+            await tx.membership.database.table(membershipTable).insertMany(
               [
                 (10, 1, MembershipRole.owner, day1),
                 (10, 2, MembershipRole.member, day2),
@@ -331,7 +336,9 @@ void main() {
             db.transaction((tx) async {
               await tx.membership
                   .byId(teamId: 10, userId: 1)
-                  .patch(role: .set(MembershipRole.member));
+                  .update(
+                    membershipPatch.values(role: .set(MembershipRole.member)),
+                  );
               await tx.user.create(id: 5, name: 'Eve');
               await tx.team.create(id: 50, name: 'New');
               await tx.membership.create(teamId: 50, userId: 5, joinedAt: day2);
@@ -354,7 +361,8 @@ void main() {
 
         test('composite-key conflict updates preserve membership dates and unlinking keeps endpoints', () async {
           await db.transaction((tx) async {
-            final rows = await tx.membership
+            final rows = await tx.membership.database
+                .table(membershipTable)
                 .insert(
                   (m) => [
                     m.teamId.set(10),
@@ -372,13 +380,13 @@ void main() {
                 .returning((m) => (m.role, m.joinedAt).row)
                 .get();
             expect(rows, [(MembershipRole.owner, day2)]);
-            await tx.membership.byId(teamId: 10, userId: 1).delete().execute();
+            await tx.membership.byId(teamId: 10, userId: 1).delete();
           });
           expect(await db.user.count(), 4);
           expect(await db.team.count(), 4);
           expect(await db.membership.count(), 5);
-          await db.team.byId(20).delete().execute();
-          await db.user.byId(1).delete().execute();
+          await db.team.byId(20).delete();
+          await db.user.byId(1).delete();
           expect(await db.membership.count(), 2);
           expect(await db.user.count(), 3);
           expect(await db.team.count(), 3);
@@ -417,10 +425,14 @@ void main() {
               MembershipRole.owner,
             ));
             await db.transaction((tx) async {
-              await tx.team.byId(10).patch(name: .set('Kernel'));
+              await tx.team
+                  .byId(10)
+                  .update(teamPatch.values(name: .set('Kernel')));
               await tx.membership
                   .byId(teamId: 10, userId: 1)
-                  .patch(role: .set(MembershipRole.member));
+                  .update(
+                    membershipPatch.values(role: .set(MembershipRole.member)),
+                  );
             });
             expect(
               await iterator.moveNext().timeout(const Duration(seconds: 5)),
@@ -430,7 +442,7 @@ void main() {
               'Kernel',
               MembershipRole.member,
             ));
-            await db.team.byId(10).delete().execute();
+            await db.team.byId(10).delete();
             expect(
               await iterator.moveNext().timeout(const Duration(seconds: 5)),
               true,

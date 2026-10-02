@@ -1,9 +1,9 @@
 // Transactional execution of reviewed SQL and SQLite table rebuilds.
 
-import '../../driver.dart' show Backend, SqlCommand, SqlDialect;
-import '../../runtime.dart' show SqlDatabase;
-import '../../schema_model.dart' show CheckSchema;
-import '../../values.dart' show OrmException;
+import '../driver/driver.dart';
+import '../values/codec.dart';
+import '../runtime/database.dart';
+import '../schema/model.dart';
 import 'catalog.dart' show inspectTable, verifySchema;
 import 'checks.dart' show dropCheck, matchChecks;
 import 'schema.dart' show coerceColumn, createIndexSql, createTable;

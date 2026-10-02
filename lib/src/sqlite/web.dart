@@ -2,11 +2,11 @@ import 'dart:js_interop';
 
 import 'package:web/web.dart' as web;
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 import 'opened.dart';
 import 'options.dart';
 import 'web_build.dart';
-
 import 'web_client.dart';
 
 Future<OpenedSqlite> connectSqlite(SqliteOptions options) async {

@@ -2,7 +2,8 @@ import 'dart:isolate';
 
 import 'package:sqlite3/sqlite3.dart' as native;
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 import 'execution.dart';
 import 'failure.dart';
 import 'native_protocol.dart';

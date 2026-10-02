@@ -1,3 +1,9 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 import 'dart:async';
 import 'dart:typed_data';
@@ -37,29 +43,30 @@ void main() {
     (observe, decode) => sqlite(
       const SqliteOptions.memory(),
       onQuery: observe,
-      onDecode: decode,
-    ),
+    ).then((sql) => Database.fromSql(sql, onDecode: decode)),
   );
   final pgUrl = Platform.environment['ORM_TEST_POSTGRES'];
   if (pgUrl != null) {
     shared(
       'postgres',
-      (observe, decode) async => postgres(
-        PostgresOptions(
-          url: Uri.parse(pgUrl),
-          tls: PostgresTls.disable,
-          maxConnections: 2,
-          schema: 'orm_raw_sql_tests',
+      (observe, decode) async => Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(pgUrl),
+            tls: PostgresTls.disable,
+            maxConnections: 2,
+            schema: 'orm_raw_sql_tests',
+          ),
+          onQuery: observe,
         ),
-        onQuery: observe,
         onDecode: decode,
       ),
     );
   }
 
   test('detached description executes against independent SQLite databases', () async {
-    final first = await sqlite(const SqliteOptions.memory());
-    final second = await sqlite(const SqliteOptions.memory());
+    final first = Database.fromSql(await sqlite(const SqliteOptions.memory()));
+    final second = Database.fromSql(await sqlite(const SqliteOptions.memory()));
     try {
       for (final (db, name) in [(first, 'first'), (second, 'second')]) {
         await db.raw(

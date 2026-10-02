@@ -1,9 +1,12 @@
+import 'package:orm/driver.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+import 'package:orm/sqlite.dart';
+import 'package:orm/postgres.dart';
+
 import 'dart:async';
 import 'dart:io';
 
-import 'package:orm/drivers/postgres.dart';
-import 'package:orm/drivers/sqlite.dart';
-import 'package:orm/runtime.dart';
 import 'package:test/test.dart';
 
 Matcher _code(String code) =>

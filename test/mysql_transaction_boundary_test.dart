@@ -1,11 +1,14 @@
 @Tags(['mysql-suite'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+import 'package:orm/mysql.dart';
+import 'package:orm/mariadb.dart';
+
 import 'dart:io';
 
-import 'package:orm/drivers/mysql.dart';
-import 'package:orm/drivers/mariadb.dart';
-import 'package:orm/runtime.dart';
 import 'package:test/test.dart';
 
 Matcher _code(String code) =>

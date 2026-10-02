@@ -1,6 +1,10 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/values.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -24,15 +28,17 @@ void main() {
         directory = await Directory('.dart_tool/orm-import-tests/$backend')
             .create(recursive: true);
         if (backend == 'sqlite') {
-          db = await sqlite(
-            SqliteOptions.file('${directory.path}/data.sqlite'),
+          db = Database.fromSql(
+            await sqlite(SqliteOptions.file('${directory.path}/data.sqlite')),
           );
         } else {
-          db = postgres(
-            PostgresOptions(
-              url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-              tls: .disable,
-              schema: 'orm_import_tests',
+          db = Database.fromSql(
+            postgres(
+              PostgresOptions(
+                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                tls: .disable,
+                schema: 'orm_import_tests',
+              ),
             ),
           );
           await db.execute(
@@ -116,15 +122,17 @@ void main() {
           '''
 import 'dart:io';
 import 'package:orm/$backend.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 import 'schema.orm.dart';
 Future<void> main() async {
-  final db = $connection;
+  final db = Database.fromSql($connection);
   try {
     final Accounts account = await db.accounts.create(email: 'created');
-    final Notes note = await db.notes.create(id: const Change.set(8), accountId: Change.set(account.id), body: 'new');
+    final Notes note = await db.notes.create(id: 8, accountId: account.id, body: 'new');
     final joined = await db.notes.byId(note.id).select((n) => (n.body, n.notesAccounts.select((a) => a.email).required()).map((body, email) => (body: body, email: email))).single();
     if (joined != (body: 'new', email: 'created')) throw StateError('Typed relation lost values');
-    await db.accounts.byId(account.id).delete().execute();
+    await db.accounts.byId(account.id).delete();
     final remaining = await db.notes.byId(note.id).single();
     if (remaining.accountId != 1) throw StateError('SET DEFAULT was not preserved');
     print('Imported typed client preserves rows, defaults and relations.');
@@ -134,10 +142,6 @@ Future<void> main() async {
               .replaceAll(
                 "import 'dart:io';",
                 backend == 'sqlite' ? '' : "import 'dart:io';",
-              )
-              .replaceAll(
-                'id: const Change.set(8)',
-                backend == 'sqlite' ? 'id: const Change.set(8)' : 'id: 8',
               ),
         );
         final analysis = await Process.run(Platform.resolvedExecutable, [
@@ -364,8 +368,10 @@ Future<void> main() => consumer.main();
           throwsArgumentError,
         );
         if (backend == 'sqlite') {
-          final readOnly = await sqlite(
-            SqliteOptions.readOnly('${directory.path}/data.sqlite'),
+          final readOnly = Database.fromSql(
+            await sqlite(
+              SqliteOptions.readOnly('${directory.path}/data.sqlite'),
+            ),
           );
           try {
             expect((await importSchema(readOnly.sql)).entities.keys, [

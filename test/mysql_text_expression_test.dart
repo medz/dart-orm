@@ -1,6 +1,8 @@
 @Tags(['mysql-suite'])
 library;
 
+import 'package:orm/orm.dart';
+
 import 'dart:io';
 
 import 'package:orm/mariadb.dart';
@@ -19,8 +21,12 @@ void main() {
     textExpressionTests(
       engine,
       () async => engine == 'mysql'
-          ? await mysql(MysqlOptions(url: Uri.parse(address!), tls: tls))
-          : await mariadb(MariadbOptions(url: Uri.parse(address!), tls: tls)),
+          ? Database.fromSql(
+              await mysql(MysqlOptions(url: Uri.parse(address!), tls: tls)),
+            )
+          : Database.fromSql(
+              await mariadb(MariadbOptions(url: Uri.parse(address!), tls: tls)),
+            ),
       skip: address == null
           ? 'Set $variable for live database validation.'
           : false,

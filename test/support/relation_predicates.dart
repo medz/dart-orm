@@ -1,3 +1,7 @@
+import 'package:orm/driver.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/orm.dart';
 import 'package:test/test.dart' hide allOf, anyOf;
@@ -49,8 +53,16 @@ void relationPredicateTests(
       tearDown(() => db.close());
 
       test('all six field comparisons preserve equality and ordering without parameters', () async {
-        await db.event.byId(1).update((e) => [e.score.set(10)]).execute();
-        await db.event.byId(2).update((e) => [e.score.set(-1)]).execute();
+        await db.event.database
+            .table(eventTable)
+            .where((row) => row.id.eq(.value(1)))
+            .update((e) => [e.score.set(10)])
+            .execute();
+        await db.event.database
+            .table(eventTable)
+            .where((row) => row.id.eq(.value(2)))
+            .update((e) => [e.score.set(-1)])
+            .execute();
         observations.clear();
         final rows = await db.event
             .orderBy((e) => [e.id.asc()])
@@ -127,10 +139,7 @@ void relationPredicateTests(
         );
         expect(observations, hasLength(1));
         observations.clear();
-        expect(
-          await query.update((e) => [e.title.set('matched')]).execute(),
-          2,
-        );
+        expect(await query.update(eventPatch(title: 'matched')), 2);
         expect(observations, hasLength(1));
         expect(
           await db.event
@@ -141,7 +150,7 @@ void relationPredicateTests(
           [2, 4],
         );
         observations.clear();
-        expect(await query.delete().execute(), 2);
+        expect(await query.delete(), 2);
         expect(observations, hasLength(1));
         expect(
           await db.event.orderBy((e) => [e.id.asc()]).select((e) => e.id).get(),
@@ -227,7 +236,9 @@ void relationPredicateTests(
         expect(observations.single.sql, contains('EXISTS'));
         observations.clear();
         expect(
-          await query.update((e) => [e.score.increment(100)]).execute(),
+          await query.update(
+            eventPatch.values(score: .expression((e) => e.score.plus(100))),
+          ),
           2,
         );
         expect(observations, hasLength(1));
@@ -243,7 +254,7 @@ void relationPredicateTests(
           [1, 2],
         );
         observations.clear();
-        expect(await query.delete().execute(), 2);
+        expect(await query.delete(), 2);
         expect(observations, hasLength(1));
         expect(observations.single.sql, startsWith('DELETE'));
         expect(observations.single.sql, contains('EXISTS'));
@@ -265,21 +276,18 @@ void relationPredicateTests(
           if (db.dialect == SqlDialect.mysql) {
             observations.clear();
             await expectLater(
-              query.update((a) => [a.note.set('changed')]).execute(),
+              query.update(accountPatch(note: 'changed')),
               throwsA(_code('CAPABILITY.MUTATION_SELF_REFERENCE')),
             );
             await expectLater(
-              query.delete().execute(),
+              query.delete(),
               throwsA(_code('CAPABILITY.MUTATION_SELF_REFERENCE')),
             );
             expect(observations, isEmpty);
             return;
           }
-          expect(
-            await query.update((a) => [a.note.set('changed')]).execute(),
-            1,
-          );
-          expect(await query.delete().execute(), 1);
+          expect(await query.update(accountPatch(note: 'changed')), 1);
+          expect(await query.delete(), 1);
           expect(observations, hasLength(3));
         },
       );
@@ -303,21 +311,25 @@ void relationPredicateTests(
           if (db.dialect == SqlDialect.mysql) {
             observations.clear();
             await expectLater(
-              query.update((e) => [e.score.increment(100)]).execute(),
+              query.update(
+                eventPatch.values(score: .expression((e) => e.score.plus(100))),
+              ),
               throwsA(_code('CAPABILITY.MUTATION_SELF_REFERENCE')),
             );
             await expectLater(
-              query.delete().execute(),
+              query.delete(),
               throwsA(_code('CAPABILITY.MUTATION_SELF_REFERENCE')),
             );
             expect(observations, isEmpty);
             return;
           }
           expect(
-            await query.update((e) => [e.score.increment(100)]).execute(),
+            await query.update(
+              eventPatch.values(score: .expression((e) => e.score.plus(100))),
+            ),
             2,
           );
-          expect(await query.delete().execute(), 2);
+          expect(await query.delete(), 2);
           expect(observations, hasLength(3));
         },
       );
@@ -330,20 +342,17 @@ void relationPredicateTests(
         observations.clear();
         if (db.dialect == SqlDialect.mysql) {
           await expectLater(
-            query.update((a) => [a.note.set('changed')]).execute(),
+            query.update(accountPatch(note: 'changed')),
             throwsA(_code('CAPABILITY.MUTATION_SELF_REFERENCE')),
           );
           await expectLater(
-            query.delete().execute(),
+            query.delete(),
             throwsA(_code('CAPABILITY.MUTATION_SELF_REFERENCE')),
           );
           expect(observations, isEmpty);
         } else {
-          expect(
-            await query.update((a) => [a.note.set('changed')]).execute(),
-            1,
-          );
-          expect(await query.delete().execute(), 1);
+          expect(await query.update(accountPatch(note: 'changed')), 1);
+          expect(await query.delete(), 1);
           expect(observations, hasLength(2));
         }
       });
@@ -379,20 +388,17 @@ void relationPredicateTests(
         observations.clear();
         if (db.dialect == SqlDialect.mysql) {
           await expectLater(
-            query.update((a) => [a.note.set('changed')]).execute(),
+            query.update(accountPatch(note: 'changed')),
             throwsA(_code('CAPABILITY.MUTATION_SELF_REFERENCE')),
           );
           await expectLater(
-            query.delete().execute(),
+            query.delete(),
             throwsA(_code('CAPABILITY.MUTATION_SELF_REFERENCE')),
           );
           expect(observations, isEmpty);
         } else {
-          expect(
-            await query.update((a) => [a.note.set('changed')]).execute(),
-            1,
-          );
-          expect(await query.delete().execute(), 1);
+          expect(await query.update(accountPatch(note: 'changed')), 1);
+          expect(await query.delete(), 1);
           expect(observations, hasLength(2));
         }
       });
@@ -568,16 +574,16 @@ void relationPredicateTests(
       );
 
       test('nested many-to-many filters and filtered counts use a single statement', () async {
-        await db.user.insertMany([
+        await db.user.database.table(teams.userTable).insertMany([
           (1, 'Ada'),
           (2, 'Ben'),
           (3, 'Cy'),
         ], (u, row) => [u.id.set(row.$1), u.name.set(row.$2)]).execute();
-        await db.team.insertMany([
+        await db.team.database.table(teams.teamTable).insertMany([
           (10, 'Core'),
           (20, 'Docs'),
         ], (t, row) => [t.id.set(row.$1), t.name.set(row.$2)]).execute();
-        await db.membership.insertMany(
+        await db.membership.database.table(teams.membershipTable).insertMany(
           [(10, 1), (20, 1), (20, 2)],
           (m, row) => [
             m.teamId.set(row.$1),
@@ -639,13 +645,12 @@ void relationPredicateTests(
           final query = db.event.where((e) => e.author.where(predicate).any());
           await expectLater(query.get(), throwsA(_code('QUERY.AGGREGATE')));
           await expectLater(
-            query.update((e) => [e.score.increment(1)]).execute(),
+            query.update(
+              eventPatch.values(score: .expression((e) => e.score.plus(1))),
+            ),
             throwsA(_code('QUERY.AGGREGATE')),
           );
-          await expectLater(
-            query.delete().execute(),
-            throwsA(_code('QUERY.AGGREGATE')),
-          );
+          await expectLater(query.delete(), throwsA(_code('QUERY.AGGREGATE')));
           await expectLater(
             db.event.where((e) => e.author.where(predicate).none()).get(),
             throwsA(_code('QUERY.AGGREGATE')),
@@ -684,13 +689,12 @@ void relationPredicateTests(
         ];
         for (final query in queries) {
           await expectLater(
-            query.update((e) => [e.score.increment(1)]).execute(),
+            query.update(
+              eventPatch.values(score: .expression((e) => e.score.plus(1))),
+            ),
             throwsA(_code('MUTATION.QUERY')),
           );
-          await expectLater(
-            query.delete().execute(),
-            throwsA(_code('MUTATION.QUERY')),
-          );
+          await expectLater(query.delete(), throwsA(_code('MUTATION.QUERY')));
         }
         expect(observations, isEmpty);
       });

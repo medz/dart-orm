@@ -20,8 +20,6 @@
 /// {@canonicalFor model.TableSchema}
 library;
 
-export 'values.dart';
-export 'driver.dart' show SqlDialect;
 export 'src/schema/model.dart'
     show
         CheckSchema,

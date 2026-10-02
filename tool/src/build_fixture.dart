@@ -11,8 +11,10 @@ final class BuildFixture {
     required String ormPath,
     int models = 1,
   }) async {
+    final temporary = await Directory.systemTemp.createTemp('orm-build-');
+    // Match analyzer/build-runner paths and native file-watch events on macOS.
     final result = BuildFixture._(
-      await Directory.systemTemp.createTemp('orm-build-'),
+      Directory(await temporary.resolveSymbolicLinks()),
     );
     await result.write('pubspec.yaml', '''
 name: orm_build_fixture

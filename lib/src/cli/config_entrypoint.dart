@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../migrate.dart' show MigrationHistory, SchemaRenames, SqlDialect;
+import '../driver/driver.dart';
+import '../migrate/diff.dart';
+import '../migrate/source.dart';
 import 'migration.dart' show MigrationConnection;
 import 'output.dart';
 import 'runner.dart';

@@ -1,12 +1,16 @@
 @Tags(['mysql-suite'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+import 'package:orm/mysql.dart';
+import 'package:orm/mariadb.dart';
+
 import 'dart:io';
 
-import 'package:orm/drivers/mysql.dart';
-import 'package:orm/drivers/mariadb.dart';
 import 'package:orm/migrate.dart';
-import 'package:orm/runtime.dart';
 import 'package:test/test.dart';
 
 import '../tool/src/build_fixture.dart';
@@ -170,7 +174,7 @@ void main() {
       }
       await fixture.write(
         'bin/check.dart',
-        "import 'package:orm/migrate.dart';\n${imports.join('\n')}\nvoid main() { ${assertions.join('\n')} print('frozen-mysql-history-ok'); }",
+        "import 'package:orm/migrate.dart';\nimport 'package:orm/driver.dart';\n${imports.join('\n')}\nvoid main() { ${assertions.join('\n')} print('frozen-mysql-history-ok'); }",
       );
       final result = await fixture.run(['run', 'orm_build_fixture:check']);
       expect(result.output, contains('frozen-mysql-history-ok'));

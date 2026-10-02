@@ -1,6 +1,12 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -12,14 +18,21 @@ import '../example/schema.orm.dart';
 import '../example/schema.snapshot.dart' as physical;
 
 void main() {
-  runGeneratedTests('sqlite', () => sqlite(const SqliteOptions.memory()));
+  runGeneratedTests(
+    'sqlite',
+    () =>
+        sqlite(const SqliteOptions.memory())
+            .then((sql) => Database.fromSql(sql)),
+  );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url != null) {
     const schema = 'orm_generated_tests';
     late Database<Postgres> admin;
     setUpAll(() async {
-      admin = postgres(
-        PostgresOptions(url: Uri.parse(url), tls: PostgresTls.disable),
+      admin = Database.fromSql(
+        postgres(
+          PostgresOptions(url: Uri.parse(url), tls: PostgresTls.disable),
+        ),
       );
       await admin.execute(SqlCommand('CREATE SCHEMA IF NOT EXISTS "$schema"'));
     });
@@ -29,11 +42,13 @@ void main() {
     });
     runGeneratedTests(
       'postgres',
-      () async => postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: PostgresTls.disable,
-          schema: schema,
+      () async => Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: PostgresTls.disable,
+            schema: schema,
+          ),
         ),
       ),
     );
@@ -64,7 +79,7 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
         final user = await db.transaction((tx) async {
           final user = await tx.user.create(
             email: 'seven@example.com',
-            score: .set(10),
+            score: 10,
           );
           await tx.post.create(
             authorId: user.id,
@@ -74,9 +89,13 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
           return user;
         });
         expect(user.score, 10);
-        await db.user.byId(user.id).patch(nickname: .set('Seven'));
+        await db.user
+            .byId(user.id)
+            .update(userPatch.values(nickname: .set('Seven')));
         expect((await db.user.byId(user.id).single()).nickname, 'Seven');
-        await db.user.byId(user.id).patch(nickname: .set(null));
+        await db.user
+            .byId(user.id)
+            .update(userPatch.values(nickname: .set(null)));
         final titles = await db.user
             .byId(user.id)
             .select((u) => u.posts.select((p) => p.title).many())
@@ -84,7 +103,7 @@ void runGeneratedTests(String name, Future<Database<Backend>> Function() open) {
         expect(titles, ['Hello']);
         expect((await db.post.single()).createdAt, time);
         expect(await verifyColumns(db.sql, appSchema), isEmpty);
-        await db.user.byId(user.id).delete().execute();
+        await db.user.byId(user.id).delete();
         expect(await db.post.count(), 0);
       },
     );

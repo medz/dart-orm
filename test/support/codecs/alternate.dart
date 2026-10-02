@@ -1,4 +1,4 @@
-import 'package:orm/schema.dart';
+import 'package:orm/values.dart';
 
 // A distinct domain type with the same short name exercises generated imports.
 final class Email {

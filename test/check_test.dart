@@ -1,3 +1,8 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -16,13 +21,15 @@ void main() {
         late Database<Backend> db;
         setUp(() async {
           if (dialect == SqlDialect.sqlite) {
-            db = await sqlite(const SqliteOptions.memory());
+            db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
           } else {
-            db = postgres(
-              PostgresOptions(
-                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-                schema: 'orm_check_tests',
-                tls: .disable,
+            db = Database.fromSql(
+              postgres(
+                PostgresOptions(
+                  url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                  schema: 'orm_check_tests',
+                  tls: .disable,
+                ),
               ),
             );
             await db.execute(
@@ -41,7 +48,7 @@ void main() {
           expect(row.stock, 0);
           expect(row.discount, isNull);
           for (final action in <Future<Object?> Function()>[
-            () => db.product.create(stock: .set(-1), price: 10, state: 'draft'),
+            () => db.product.create(stock: -1, price: 10, state: 'draft'),
             () => db.product.create(price: -1, state: 'draft'),
             () => db.product.create(price: 10, discount: 11, state: 'draft'),
             () => db.product.create(price: 10, state: 'unknown'),
@@ -55,7 +62,9 @@ void main() {
           }
           expect(await db.product.count(), 1);
           await expectLater(
-            db.product.byId(row.id).patch(discount: .set(-1)),
+            db.product
+                .byId(row.id)
+                .update(productPatch.values(discount: .set(-1))),
             throwsA(anything),
           );
           final info = await inspectTable(db.sql, 'products');

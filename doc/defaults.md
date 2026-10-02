@@ -20,8 +20,8 @@ final class Entry({
 // After generation:
 final created = await db.entry.create(); // Dart timestamp/label; database id.
 print(created.label); // draft
-await db.entry.create(label: .set('manual'));
-await db.entry.create(state: .defaultValue()); // SQL supplies "server".
+await db.entry.create(label: 'manual');
+await db.entry.plan.insert(entryInsert.values(state: .databaseDefault())).row(); // SQL supplies "server".
 ```
 
 Factories can be public top-level functions, static methods or constructor
@@ -51,33 +51,37 @@ so a constructor fallback never hides a missing selected field.
 
 ## Creation and updates
 
-Generated creation parameters with defaults use `Change<T>`:
+Generated `create(...)`, `userInsert(...)` and `userPatch(...)` accept literal
+values. Omission remains distinct from explicitly supplying null. Use the
+factory's `.values(...)` when you need an explicit write intent:
 
-| Creation input | Behavior |
+| Input | Behavior |
 | --- | --- |
-| Omitted or `.keep()` | Use the client default if declared; otherwise omit the SQL column |
-| `.set(value)` | Use the explicit value without calling that field's factory |
-| `.set(null)` on a nullable field | Store SQL NULL without calling the factory |
-| `.defaultValue()` | Use the database default or identity without calling the factory |
+| Omitted or `.keep()` in an insert | Use its client default, otherwise omit the SQL column |
+| Literal value or `.set(value)` | Store the value without calling that field's factory |
+| Explicit null or `.set(null)` | Store SQL NULL in a nullable column |
+| `.databaseDefault()` | Use the database default or identity without calling the factory |
+| Omitted or `.keep()` in a patch | Leave the stored value unchanged |
 
 A field can combine `@ClientDefault` with `@DatabaseDefault`. Omission uses the
-client factory; `.defaultValue()` uses the database default. Specify a database
+client factory; `.databaseDefault()` uses the database default. Specify a database
 constant or a SQL expression, not two database-default annotations.
 A generated `@Id(generated: true)` cannot also declare `@DatabaseDefault`:
 the identity already supplies its database value. It may declare `@ClientDefault`;
-omission then uses that factory and `.defaultValue()` selects the database identity.
-`.defaultValue()` requires a database default or identity; it does not rerun a
+omission then uses that factory and `.databaseDefault()` selects the database identity.
+`.databaseDefault()` requires a database default or identity; it does not rerun a
 client factory. A nullable factory returning null stores SQL NULL.
 Patches and conflict updates keep omitted fields unchanged. SQLite does not
 support UPDATE SET DEFAULT.
 
-`create`, `createRow`, `insert` and `insertMany` share this behavior. Factories run
-once per omitted column per input row while constructing an insert. Batch values
-are prepared in input order. Compilation, conflict-clause construction and
-repeated execution of that prepared mutation retain those values. Construct a
-fresh insert when fresh values are needed. An INSERT prepares defaults even if
-ON CONFLICT later skips or updates the row; only explicit conflict assignments
-change stored values. Raw `db.execute` SQL bypasses client factories.
+Model writes defer factory evaluation until a terminal or explicit `prepare()`.
+A prepared mutation retains those values across compilation, conflict-clause
+construction and replay. Calling another terminal on the original model write
+prepares fresh values. Handwritten Table `insert`/`insertMany` prepare immediately;
+`create` and `createRow` prepare and execute together. They share structural/scope
+validation before factories and evaluate defaults in input-row/schema-column order.
+An INSERT prepares defaults even when ON CONFLICT later skips or updates the row;
+only explicit conflict assignments change stored values. Raw SQL bypasses factories.
 
 Factory errors propagate before that INSERT is sent, but earlier factories may
 already have run. Rollback does not reverse Dart side effects or return consumed
@@ -97,7 +101,7 @@ or an explicit backfill for existing rows. Migrations never run today's client
 factory or constructor to populate historical data.
 
 A database identity may also have an explicit client factory. Omission inserts
-the client ID; `.defaultValue()` asks the database to generate one. PostgreSQL
+the client ID; `.databaseDefault()` asks the database to generate one. PostgreSQL
 does not advance its identity sequence for an explicit ID; SQLite rowid
 allocation considers existing rowids. Coordinate uniqueness when mixing sources.
 

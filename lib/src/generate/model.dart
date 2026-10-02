@@ -1,4 +1,6 @@
-import '../../schema_model.dart';
+import '../driver/driver.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
 import 'exception.dart';
 
 bool isMysqlDialect(SqlDialect dialect) =>
@@ -52,7 +54,12 @@ const generatedTypeNames = {
   'Query',
   'QueryContext',
   'TableSet',
-  'Change',
+  'WriteValue',
+  'WriteValueField',
+  'Assignment',
+  'Mutation',
+  'BatchInsert',
+  'ArgumentError',
   'Relation',
   'IndexSchema',
   'ForeignKey',
@@ -65,6 +72,7 @@ const generatedTypeNames = {
   'bool',
   'DateTime',
   'List',
+  'Iterable',
   'Map',
   'Set',
   'Object',
@@ -85,6 +93,8 @@ const generatedTypeNames = {
   'ResultShape',
   'ResultColumn',
   'SqlDialect',
+  '_writeAbsent',
+  '_writeLiteral',
 };
 
 final class ModelField {
@@ -243,3 +253,50 @@ final class ModelRelation(
 
 String columnSymbol(ModelEntity entity, ModelField field) =>
     '_${entity.binding}${field.name[0].toUpperCase()}${field.name.substring(1)}';
+
+/// One static result layout, independent of all physical table metadata.
+final class ModelProjection {
+  final String symbol;
+  final String rowType;
+  final List<ProjectionMember> members;
+  final bool record;
+  const ModelProjection(
+    this.symbol,
+    this.rowType,
+    this.members, {
+    this.record = false,
+  });
+  String get binding => '${symbol[0].toLowerCase()}${symbol.substring(1)}';
+  String get fieldsType => '${symbol}Fields';
+  String get descriptor => '_${binding}Projection';
+  String slot(ProjectionMember member) =>
+      '_${binding}Slot${members.indexOf(member)}';
+}
+
+final class ProjectionMember {
+  final String name;
+  final String type;
+  const ProjectionMember(this.name, this.type);
+}
+
+Iterable<String> modelGeneratedSymbols(ModelEntity model) => [
+  model.row,
+  model.fieldsType,
+  model.setType,
+  '${model.symbol}Creator',
+  '_${model.symbol}Creator',
+  '${model.symbol}Patcher',
+  '_${model.symbol}Patcher',
+  '${model.symbol}Writes',
+  '${model.symbol}Patch',
+  '${model.symbol}Insert',
+  '${model.symbol}PatchFactory',
+  '${model.symbol}InsertFactory',
+  '_${model.symbol}PatchFactory',
+  '_${model.symbol}InsertFactory',
+  '${model.binding}Patch',
+  '${model.binding}Insert',
+  '${model.binding}Schema',
+  '${model.binding}Table',
+  for (final field in model.fields) columnSymbol(model, field),
+];

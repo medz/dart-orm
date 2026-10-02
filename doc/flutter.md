@@ -11,10 +11,12 @@ or transaction session to the code that needs it:
 
 ```dart
 import 'package:orm/sqlite.dart';
+import 'package:orm/orm.dart';
 
-Future<Database<Sqlite>> openDatabase({String? nativePath}) => sqlite(
-  SqliteOptions.persistent('notes', nativePath: nativePath),
-);
+Future<Database<Sqlite>> openDatabase({String? nativePath}) async =>
+    Database.fromSql(await sqlite(
+      SqliteOptions.persistent('notes', nativePath: nativePath),
+    ));
 ```
 
 Supply an application-owned file path on native platforms. The ORM does not choose

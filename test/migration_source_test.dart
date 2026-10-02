@@ -1,6 +1,11 @@
 @Tags(['core'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -178,8 +183,8 @@ void main() {
         );
         migrations.add(m);
       }
-      final db = await sqlite(
-        SqliteOptions.file(fixture.file('database.sqlite').path),
+      final db = Database.fromSql(
+        await sqlite(SqliteOptions.file(fixture.file('database.sqlite').path)),
       );
       try {
         await Migrator(db.sql).apply(migrations);
@@ -189,14 +194,14 @@ void main() {
       } finally {
         await db.close();
       }
-      await fixture.write('bin/migrate.dart', r'''
+      await fixture.write('bin/migrate.dart', r'''import 'package:orm/orm.dart';
 import 'package:orm/migrate_cli.dart';
 import 'package:orm/sqlite.dart';
 import '../lib/migrations/migrations.g.dart';
 Future<void> main(List<String> args) => runMigrationCli(args,
   history: migrationHistory,
   directory: 'lib/migrations',
-  connect: ({required readOnly}) async => (await sqlite(readOnly ? SqliteOptions.readOnly('database.sqlite') : SqliteOptions.file('database.sqlite'))).sql,
+  connect: ({required readOnly}) async => (Database.fromSql(await sqlite(readOnly ? SqliteOptions.readOnly('database.sqlite') : SqliteOptions.file('database.sqlite')))).sql,
 );
 ''');
       Future<Map<String, Object?>> command(
@@ -248,8 +253,10 @@ Future<void> main(List<String> args) => runMigrationCli(args,
       expect((await command(['check']))['valid'], true);
       // Re-recording source cannot change an independently applied DB fingerprint.
       await command(['plan'], code: 1);
-      final read = await sqlite(
-        SqliteOptions.readOnly(fixture.file('database.sqlite').path),
+      final read = Database.fromSql(
+        await sqlite(
+          SqliteOptions.readOnly(fixture.file('database.sqlite').path),
+        ),
       );
       try {
         expect(
@@ -294,7 +301,7 @@ Future<void> main(List<String> args) => runMigrationCli(args,
         directory: '${fixture.directory.path}/lib/migrations',
         history: MigrationHistory([], dialect: SqlDialect.sqlite),
       );
-      await fixture.write('bin/migrate.dart', """
+      await fixture.write('bin/migrate.dart', """import 'package:orm/orm.dart';
 import 'package:orm/migrate_cli.dart';
 import 'package:orm/sqlite.dart';
 import 'package:orm/src/cli/migration.dart';
@@ -302,7 +309,7 @@ import '../lib/target.dart';
 import '../lib/migrations/migrations.g.dart';
 Future<void> main(List<String> args) => runMigrationCli(args,
   directory: 'lib/migrations', history: migrationHistory, schema: schema,
-  connect: ({required readOnly}) async => (await sqlite(readOnly ? const SqliteOptions.readOnly('database.sqlite') : const SqliteOptions.file('database.sqlite'))).sql,
+  connect: ({required readOnly}) async => (Database.fromSql(await sqlite(readOnly ? const SqliteOptions.readOnly('database.sqlite') : const SqliteOptions.file('database.sqlite')))).sql,
 );
 """);
       await fixture.run([
@@ -342,7 +349,7 @@ Future<void> main(List<String> args) => runMigrationCli(args,
       expect((await run('apply'))['applied'], ['0001_initial']);
       expect((await run('apply'))['applied'], isEmpty);
       expect((await run('verify'))['matches'], true);
-      final db = await sqlite(SqliteOptions.readOnly(path));
+      final db = Database.fromSql(await sqlite(SqliteOptions.readOnly(path)));
       try {
         expect(
           (await db.execute(SqlCommand('SELECT id, name FROM people'))).rows,

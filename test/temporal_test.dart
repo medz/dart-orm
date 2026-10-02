@@ -1,3 +1,9 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -194,13 +200,15 @@ void main() {
       late Database<Backend> db;
       setUp(() async {
         if (backend == 'sqlite') {
-          db = await sqlite(const SqliteOptions.memory());
+          db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
         } else {
-          db = postgres(
-            PostgresOptions(
-              url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-              tls: .disable,
-              schema: 'orm_temporal_tests',
+          db = Database.fromSql(
+            postgres(
+              PostgresOptions(
+                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                tls: .disable,
+                schema: 'orm_temporal_tests',
+              ),
             ),
           );
           await db.execute(
@@ -260,7 +268,9 @@ void main() {
             (id: row.id, day: day, time: LocalTime(12, 30), starts: null),
           );
           final stamp = LocalDateTime.parse('2024-02-29 12:34:56.000001');
-          await db.appointment.byId(row.id).patch(starts: Change.set(stamp));
+          await db.appointment
+              .byId(row.id)
+              .update(appointmentPatch.values(starts: .set(stamp)));
           expect((await db.appointment.byId(row.id).single()).starts, stamp);
           expect(
             await db.appointment
@@ -276,7 +286,7 @@ void main() {
           );
           await db.appointment
               .byId(row.id)
-              .patch(starts: const Change.set(null));
+              .update(appointmentPatch.values(starts: .set(null)));
           expect((await db.appointment.single()).starts, null);
         },
       );
@@ -302,7 +312,7 @@ void main() {
             expect(
               (await db.appointment.create(
                 day: dates[i],
-                time: Change.set(time),
+                time: time,
                 starts: stamps[i],
               )).starts,
               stamps[i],
@@ -454,7 +464,7 @@ void main() {
           for (var i = 0; i < times.length; i++) {
             await db.appointment.create(
               day: LocalDate(2024, 1, 1),
-              time: Change.set(times[i]),
+              time: times[i],
               starts: stamps[i],
             );
           }
@@ -500,7 +510,7 @@ void main() {
               .select((a) => a.starts)
               .asCte('local_starts');
           expect(
-            await cte.query
+            await cte
                 .where((a) => a.ref((s) => s.starts).gt(.value(stamps[3])))
                 .get(),
             [stamps[0]],

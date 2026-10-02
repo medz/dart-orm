@@ -1,8 +1,10 @@
-/// Typed SQL construction, projections and query inspection.
+/// Parameterized SQL execution, typed expressions and query inspection.
 ///
 /// [SqlBuilder] compiles a query without opening a connection. Select a scalar,
 /// a typed Record with `.row`, or map selected values into an application model.
-/// Executing a query requires binding it to an ORM database session.
+/// [SqlDatabase] executes [Sql] without model declarations or generation. Typed
+/// table queries bind to an ORM view of that same runtime. Named [Projection]
+/// outputs retain their field names through CTE and UNION composition.
 ///
 /// {@category Queries}
 /// {@canonicalFor context.QueryContext}
@@ -34,9 +36,9 @@
 /// {@canonicalFor table.Field}
 /// {@canonicalFor table.NumericField}
 /// {@canonicalFor table.Table}
-/// {@canonicalFor table.Change}
-/// {@canonicalFor table.ChangeField}
 /// {@canonicalFor query.Query}
+/// {@canonicalFor query.SelectQuery}
+/// {@canonicalFor query.TableQuery}
 /// {@canonicalFor query.TableSet}
 /// {@canonicalFor plan.PlannedColumn}
 /// {@canonicalFor plan.PlannedJoin}
@@ -53,7 +55,7 @@
 /// {@canonicalFor joins.WindowFrame}
 /// {@canonicalFor joins.rowNumber}
 /// {@canonicalFor joins.rank}
-/// {@canonicalFor cte.Cte}
+/// {@canonicalFor cte.DerivedQuery}
 /// {@canonicalFor cte.CteFields}
 /// {@canonicalFor cursor.NullOrder}
 /// {@canonicalFor cursor.CursorTerm}
@@ -79,10 +81,24 @@
 /// {@canonicalFor result.Result5}
 /// {@canonicalFor result.Result6}
 /// {@canonicalFor raw_execution.SqlExecution}
+/// {@canonicalFor database.SqlDatabase}
+/// {@canonicalFor database.SqlDatabaseStreaming}
+/// {@canonicalFor events.QueryOperation}
+/// {@canonicalFor events.QueryEvent}
+/// {@canonicalFor events.AcquisitionEvent}
+/// {@canonicalFor options.TransactionOptions}
+/// {@canonicalFor options.Isolation}
+/// {@canonicalFor options.PostgresTransaction}
+/// {@canonicalFor options.SqliteTransactionMode}
+/// {@canonicalFor options.SqliteTransaction}
+/// {@canonicalFor options.MysqlTransaction}
+/// {@canonicalFor options.MariadbTransaction}
+/// {@canonicalFor transaction.TransactionRetry}
+/// {@canonicalFor sql_check.SqlCheck}
+/// {@canonicalFor sql_check.checkSqlQuery}
 library;
 
-export 'driver.dart';
-export 'schema_model.dart';
+export 'src/query/runtime_execution.dart' show RuntimeSqlExecution;
 export 'src/query/context.dart' show QueryContext, SqlBuilder;
 export 'src/query/expression.dart'
     show
@@ -110,23 +126,26 @@ export 'src/query/selection.dart'
         Selection6,
         fields;
 export 'src/query/table.dart'
-    show
-        TableRef,
-        Fields,
-        ReadField,
-        Field,
-        NumericField,
-        Table,
-        Change,
-        ChangeField;
-export 'src/query/query.dart' show Query, TableSet;
+    show TableRef, Fields, ReadField, Field, NumericField, Table;
+export 'src/query/query.dart' show Query, SelectQuery, TableQuery, TableSet;
+export 'src/query/write_value.dart' show WriteValue, WriteValueField;
 export 'src/query/plan.dart'
     show PlannedColumn, PlannedJoin, QueryPlan, RelationLoadPlan;
 export 'src/query/mutation.dart' show Assignment, Mutation, Returning;
 export 'src/query/relation.dart' show ToOneStrategy, Relation;
 export 'src/query/batch.dart' show BatchInsert, BatchReturning;
 export 'src/query/joins.dart' show TableAlias, WindowFrame, rowNumber, rank;
-export 'src/query/cte.dart' show Cte, CteFields;
+export 'src/query/cte.dart' show DerivedQuery, CteFields, QueryCtes;
+export 'src/query/projection.dart'
+    show
+        Slot,
+        SlotBinding,
+        ProjectionType,
+        ProjectionFields,
+        ProjectionOutput,
+        Projection,
+        SelectedQuery,
+        ProjectedSql;
 export 'src/query/cursor.dart' show NullOrder, CursorTerm, KeysetQuery;
 export 'src/query/union.dart'
     show SqlRow2, SqlRow3, SqlRow4, SqlRow5, SqlRow6, SetQueries, UnionFields;
@@ -137,3 +156,18 @@ export 'src/query/raw_sql.dart'
 export 'src/query/result.dart'
     show ResultShape, ResultColumn, Result2, Result3, Result4, Result5, Result6;
 export 'src/query/raw_execution.dart' show SqlExecution;
+
+export 'src/runtime/database.dart' show SqlDatabase, SqlDatabaseStreaming;
+export 'src/runtime/events.dart'
+    show QueryOperation, QueryEvent, AcquisitionEvent;
+export 'src/runtime/options.dart'
+    show
+        TransactionOptions,
+        Isolation,
+        PostgresTransaction,
+        SqliteTransactionMode,
+        SqliteTransaction,
+        MysqlTransaction,
+        MariadbTransaction;
+export 'src/runtime/transaction.dart' show TransactionRetry;
+export 'src/query/sql_check.dart' show SqlCheck, checkSqlQuery;

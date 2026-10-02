@@ -1,3 +1,8 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -49,17 +54,22 @@ void main() {
   );
   runTests(
     'sqlite',
-    (observe) => sqlite(const SqliteOptions.memory(), onQuery: observe),
+    (observe) => sqlite(
+      const SqliteOptions.memory(),
+      onQuery: observe,
+    ).then((sql) => Database.fromSql(sql)),
   );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url != null) {
     test('PostgreSQL native pool timeout is classified before entering the callback', () async {
-      final db = postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: .disable,
-          maxConnections: 1,
-          poolTimeout: const Duration(milliseconds: 50),
+      final db = Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: .disable,
+            maxConnections: 1,
+            poolTimeout: const Duration(milliseconds: 50),
+          ),
         ),
       );
       final entered = Completer<void>(), release = Completer<void>();
@@ -93,13 +103,15 @@ void main() {
     test(
       'PostgreSQL connection establishment timeout does not cap pool waiting',
       () async {
-        final db = postgres(
-          PostgresOptions(
-            url: Uri.parse(url),
-            tls: .disable,
-            maxConnections: 1,
-            connectTimeout: const Duration(milliseconds: 200),
-            poolTimeout: const Duration(seconds: 2),
+        final db = Database.fromSql(
+          postgres(
+            PostgresOptions(
+              url: Uri.parse(url),
+              tls: .disable,
+              maxConnections: 1,
+              connectTimeout: const Duration(milliseconds: 200),
+              poolTimeout: const Duration(seconds: 2),
+            ),
           ),
         );
         final entered = Completer<void>(), release = Completer<void>();
@@ -131,14 +143,16 @@ void main() {
       tags: 'postgres',
     );
     runTests('postgres', (observe) async {
-      final db = postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: .disable,
-          schema: 'orm_acquire_tests',
-          maxConnections: 1,
+      final db = Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: .disable,
+            schema: 'orm_acquire_tests',
+            maxConnections: 1,
+          ),
+          onQuery: observe,
         ),
-        onQuery: observe,
       );
       await db.execute(
         SqlCommand('CREATE SCHEMA IF NOT EXISTS orm_acquire_tests'),

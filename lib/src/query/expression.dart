@@ -1,7 +1,8 @@
 import 'package:meta/meta.dart';
 
-import '../../driver.dart';
-import '../../schema_model.dart';
+import '../values/codec.dart';
+import '../values/decimal.dart';
+import '../values/temporal.dart';
 import 'cursor.dart';
 import 'joins.dart';
 import 'nodes.dart';
@@ -224,6 +225,10 @@ class Expr<T> extends Selection<T> implements Operand<T> {
 }
 
 /// Creates a bound SQL value using an explicit storage codec.
+///
+/// Encoding happens now. Byte storage is copied into a read-only snapshot;
+/// subsequent changes to the source buffer do not change this expression.
+/// Other custom codec storage objects remain caller-owned.
 Expr<T> value<T>(T value, Codec<T> codec) => Expr.internal(
   ParameterNode(codec.encode(value), sqlType: codec.sqlType),
   codec,

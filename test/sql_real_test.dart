@@ -1,6 +1,10 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/postgres.dart';
@@ -13,11 +17,13 @@ void main() {
       '${dialect.name} explicitly typed REAL parameters preserve floating storage',
       () async {
         final Database<Backend> db = dialect == SqlDialect.sqlite
-            ? await sqlite(const SqliteOptions.memory())
-            : postgres(
-                PostgresOptions(
-                  url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-                  tls: PostgresTls.disable,
+            ? Database.fromSql(await sqlite(const SqliteOptions.memory()))
+            : Database.fromSql(
+                postgres(
+                  PostgresOptions(
+                    url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                    tls: PostgresTls.disable,
+                  ),
                 ),
               );
         try {

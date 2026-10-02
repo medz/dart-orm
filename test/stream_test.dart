@@ -1,6 +1,11 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -34,19 +39,24 @@ pg.Endpoint endpointFor(String url) {
 void main() {
   runTests(
     'sqlite',
-    (observe) => sqlite(const SqliteOptions.memory(), onQuery: observe),
+    (observe) => sqlite(
+      const SqliteOptions.memory(),
+      onQuery: observe,
+    ).then((sql) => Database.fromSql(sql)),
   );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url != null) {
     runTests('postgres', (observe) async {
-      final db = postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: PostgresTls.disable,
-          schema: 'orm_stream_tests',
-          maxConnections: 1,
+      final db = Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: PostgresTls.disable,
+            schema: 'orm_stream_tests',
+            maxConnections: 1,
+          ),
+          onQuery: observe,
         ),
-        onQuery: observe,
       );
       await db.execute(
         SqlCommand('CREATE SCHEMA IF NOT EXISTS orm_stream_tests'),

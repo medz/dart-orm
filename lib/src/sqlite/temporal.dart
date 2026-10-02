@@ -1,6 +1,7 @@
 import 'package:sqlite3/common.dart' as native;
 
-import '../../values.dart';
+import '../values/codec.dart';
+import '../values/temporal.dart';
 
 void registerTemporalFunctions(native.CommonDatabase db) {
   Object round(Object value, String kind, int digits) => switch (kind) {

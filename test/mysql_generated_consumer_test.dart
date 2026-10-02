@@ -1,6 +1,9 @@
 @Tags(['database', 'mysql-suite'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+
 import 'dart:io';
 
 import 'package:orm/mariadb.dart';
@@ -40,8 +43,10 @@ void main() => defineConfig(
         );
         final url = Uri.parse(address!);
         final Database<Backend> admin = engine == 'mysql'
-            ? await mysql(MysqlOptions(url: url, tls: tls))
-            : await mariadb(MariadbOptions(url: url, tls: tls));
+            ? Database.fromSql(await mysql(MysqlOptions(url: url, tls: tls)))
+            : Database.fromSql(
+                await mariadb(MariadbOptions(url: url, tls: tls)),
+              );
         final namespace =
             'orm_generated_${engine}_${pid}_${DateTime.now().microsecondsSinceEpoch}';
         var created = false;
@@ -147,7 +152,10 @@ mixin SharedFields {
 
 ''';
 
-const _consumer = r'''
+const _consumer = r'''import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/driver.dart';
+import 'package:orm/values.dart';
 import 'dart:io';
 import 'package:orm/mysql.dart';
 import 'package:orm/mariadb.dart';
@@ -170,8 +178,8 @@ Future<void> main(List<String> args) async {
   final url = Uri.parse(Platform.environment['ORM_GENERATED_URL']!);
   final tls = MysqlTls.values.byName(Platform.environment['ORM_GENERATED_TLS']!);
   final Database<Backend> db = args.single == 'mysql'
-      ? await mysql(MysqlOptions(url: url, tls: tls))
-      : await mariadb(MariadbOptions(url: url, tls: tls));
+      ? Database.fromSql(await mysql(MysqlOptions(url: url, tls: tls)))
+      : Database.fromSql(await mariadb(MariadbOptions(url: url, tls: tls)));
   try {
     check(db.dialect.name == args.single && history.migrationDialect == db.dialect, 'fixed engine');
     check(initial.migration.checksum == initial.migrationChecksum, 'immutable saved fingerprint');
@@ -218,9 +226,9 @@ Future<void> main(List<String> args) async {
     final original.Task task = await db.task.create(
       memoId: memo.id,
       title: 'Task',
-      label: .set('manual'),
-      active: .set(false),
-      note: .set(null),
+      label: 'manual',
+      active: false,
+      note: null,
     );
     check(
       task.describe() == '${task.id}: manual' &&
@@ -228,7 +236,7 @@ Future<void> main(List<String> args) async {
           task.note == null,
       'explicit values/null',
     );
-    await db.memo.byId(memo.id).patch(label: .set('Changed'), note: .set(null));
+    await db.memo.byId(memo.id).update(memoPatch.values(label: .set('Changed'), note: .set(null)));
     final original.Memo read = await db.memo.byId(memo.id).single();
     check(
       read.describe() == '${memo.id}: Changed' &&
@@ -249,7 +257,7 @@ Future<void> main(List<String> args) async {
       'typed original relations',
     );
     check(original.labelCalls == 1, 'factories only run for omitted creates');
-    await db.memo.byId(memo.id).delete().execute();
+    await db.memo.byId(memo.id).delete();
     check(
       await db.memo.count() == 0 && await db.task.count() == 0,
       'CRUD and cascade',

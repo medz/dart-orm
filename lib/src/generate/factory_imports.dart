@@ -50,7 +50,10 @@ final class FactoryTarget {
 
 /// Imports used only for client-default references whose public entrypoint must
 /// survive generation. Ordinary type and codec references retain their identity.
-final class FactoryImports(final String Function(Uri) importUri) {
+final class FactoryImports(
+  final String Function(Uri) importUri,
+  final String Function(String) allocatePrefix,
+) {
   final Map<(String, String), String> _prefixes = {};
 
   Iterable<String> get directives => _prefixes.entries.map(
@@ -573,7 +576,7 @@ final class FactoryImports(final String Function(Uri) importUri) {
     final entry = (directEntry ?? entries.first, symbol.name!);
     final generated = _prefixes.putIfAbsent(
       entry,
-      () => 'factories${_prefixes.length}',
+      () => allocatePrefix('factories${_prefixes.length}'),
     );
     return '$generated.${symbol.name}';
   }

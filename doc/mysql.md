@@ -7,7 +7,8 @@ Opening a MySQL driver against MariaDB, or the reverse, fails before use.
 ## Use the driver alone
 
 ```dart
-import 'package:orm/drivers/mysql.dart';
+import 'package:orm/mysql.dart';
+import 'package:orm/driver.dart';
 
 final driver = await MysqlDriver.open(
   MysqlOptions(url: Uri.parse('mysql://user:password@localhost/app')),
@@ -24,7 +25,7 @@ try {
 }
 ```
 
-For MariaDB, import `package:orm/drivers/mariadb.dart` and use
+For MariaDB, import `package:orm/mariadb.dart` and use
 `MariadbDriver.open(MariadbOptions(...))`. Its URL may use `mariadb://` or
 `mysql://`; the server identity must still be MariaDB. These libraries do not
 import ORM models, query builders, generation, or migration tooling.
@@ -38,13 +39,15 @@ names; generated identities come from the server response as `lastInsertId`.
 
 ## Typed queries and mutations
 
-Import `package:orm/mysql.dart` and open `mysql(MysqlOptions(...))` for a
-`Database<Mysql>`, or use `package:orm/mariadb.dart` and
-`mariadb(MariadbOptions(...))`. The independent `SqlBuilder` can also compile
+Import `package:orm/mysql.dart` and await `mysql(MysqlOptions(...))` for a
+`SqlDatabase<Mysql>`, or use `package:orm/mariadb.dart` and
+`mariadb(MariadbOptions(...))`. Import `orm.dart` and use
+`Database.fromSql(engine)` for generated model access. The independent `SqlBuilder` can also compile
 the same queries without opening a connection. Bind values separately; the
 compiler orders positional parameters by their final SQL occurrence.
 
-Neither adapter advertises `RETURNING`. `createRow` instead inserts and reads
+Neither adapter advertises `RETURNING`. Generated `create(...)` (or the manual
+SQL table's `createRow`) instead inserts and reads
 the result by primary key on the same transaction connection. It starts a
 transaction when necessary and reuses an existing transaction. Primary keys
 must be supplied as literal assignments, with at most one omitted generated
@@ -52,10 +55,11 @@ identity; tables without a primary key and keys computed by arbitrary SQL are
 rejected before insertion. Precision-coerced primary-key assignments are also
 currently rejected because the stored key can differ from the input. A failed
 read or decode marks the transaction failed, even if application code catches
-the exception. Plain `insert(...).execute()` remains available when no returned
-row is needed.
+the exception. Generated `insert(input)` executes and returns the affected-row
+count when no returned row is needed.
 
-Use `onDuplicateKeyUpdate` explicitly for native MySQL/MariaDB upserts. Any
+Use `table.plan.insert(input).prepare()` before `onDuplicateKeyUpdate`
+explicitly for native MySQL/MariaDB upserts. Any
 duplicate primary or unique key can cause the update; callers cannot select a
 particular conflict target. `onConflictUpdate` and `onConflictDoNothing` are
 rejected. A self-assignment would still run update triggers, so it is not a
@@ -75,7 +79,7 @@ final unique = db.table(documents)
     .select((row) => row.document)
     .distinct()
     .asCte('unique_documents');
-final values = await unique.query.get();
+final values = await unique.get();
 ```
 
 JSON equality follows the selected engine. MySQL has native JSON storage;

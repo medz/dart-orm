@@ -1,9 +1,11 @@
 import 'package:meta/meta.dart';
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 import 'context.dart';
 import 'mutation.dart';
 import 'nodes.dart';
+import 'preparation.dart';
 import 'query.dart';
 import 'selection.dart';
 import 'table.dart';
@@ -42,6 +44,7 @@ final class BatchInsert<F extends Fields> {
   /// @nodoc
   @internal
   List<SqlCommand> compileQuery([SelectionPlan? selection]) {
+    preflightAssignments(queryState.source, insertRows);
     final commands = <SqlCommand>[];
     var chunk = <List<Assignment>>[];
     List<String>? shape;
@@ -80,7 +83,9 @@ final class BatchInsert<F extends Fields> {
       final columns = [for (final a in actual) a.field.definition.name];
       final writer = SqlWriter(
         database.dialect,
-        {queryState.source: 't0'},
+        // VALUES has no current target row, just like Mutation's real writer.
+        // A scalar subquery may introduce the same occurrence as its source.
+        {},
         database: database,
         exactDecimal: database.capabilities.exactDecimal,
         temporal: database.capabilities.temporal,
@@ -114,14 +119,15 @@ final class BatchInsert<F extends Fields> {
   /// A row that alone exceeds the parameter limit is rejected. An empty batch
   /// returns an empty command list.
   List<SqlCommand> compile() => compileQuery();
-  Future<SqlResult> _run({
+  Future<T> _run<T>({
+    required T Function(QueryContext, SqlResult) complete,
     SelectionPlan? selection,
     ExecutionOptions options = const ExecutionOptions(),
   }) async {
     options.check();
     final commands = compileQuery(selection);
-    if (commands.isEmpty) return const SqlResult([]);
-    Future<SqlResult> execute(QueryContext db) async {
+    if (commands.isEmpty) return complete(database, const SqlResult([]));
+    Future<T> execute(QueryContext db) async {
       var count = 0;
       final rows = <List<Object?>>[];
       try {
@@ -137,12 +143,13 @@ final class BatchInsert<F extends Fields> {
           rows.addAll(result.rows);
         }
       } catch (_) {
-        // Cancellation can happen between statements, after earlier chunks
-        // succeeded. Catching it must not allow a partial batch to commit.
-        if (db.inTransaction) db.markFailed();
+        // A failed statement/cancellation cannot commit earlier chunks.
+        db.markFailed();
         rethrow;
       }
-      return SqlResult(rows, affectedRows: count);
+      // An owned transaction commits only after typed results are accepted.
+      // In an explicit transaction the caller chooses whether to catch this.
+      return complete(db, SqlResult(rows, affectedRows: count));
     }
 
     return database.inTransaction
@@ -153,9 +160,8 @@ final class BatchInsert<F extends Fields> {
   /// Executes all chunks atomically and returns their total affected-row count.
   ///
   /// An empty batch returns zero without acquiring a connection.
-  Future<int> execute({
-    ExecutionOptions options = const ExecutionOptions(),
-  }) async => (await _run(options: options)).affectedRows;
+  Future<int> execute({ExecutionOptions options = const ExecutionOptions()}) =>
+      _run(options: options, complete: (_, result) => result.affectedRows);
 
   /// Prepares typed scalar projections from every inserted chunk's RETURNING.
   ///
@@ -182,18 +188,21 @@ final class BatchReturning<R> {
 
   /// Executes every chunk in one transaction and decodes the returned rows.
   ///
-  /// Decoding happens after the batch executes. Use an enclosing transaction
-  /// when a decoding exception must roll back the inserted data.
+  /// Decoding completes before the batch's owned transaction commits. Inside
+  /// an existing transaction, let decoding errors escape if they must roll back.
   Future<List<R>> get({
     ExecutionOptions options = const ExecutionOptions(),
   }) async {
     final plan = SelectionPlan();
     final decode = querySelection.bindSelection(plan);
-    final result = await _batch._run(selection: plan, options: options);
-    return _batch.database.observeDecode(
-      null,
-      result.rows.length,
-      () => [for (final row in result.rows) decode(row)],
+    return _batch._run(
+      selection: plan,
+      options: options,
+      complete: (db, result) => db.observeDecode(
+        null,
+        result.rows.length,
+        () => [for (final row in result.rows) decode(row)],
+      ),
     );
   }
 }

@@ -1,6 +1,9 @@
 @Tags(['core'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';

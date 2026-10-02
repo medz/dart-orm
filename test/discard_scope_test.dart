@@ -1,8 +1,9 @@
 @Tags(['sqlite'])
 library;
 
-import 'package:orm/runtime.dart' show SqlDatabase;
-import 'package:orm/sql.dart' show SqlCommand;
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart' show SqlDatabase;
 import 'package:orm/sqlite.dart'
     show Sqlite, SqliteFailure, SqliteOptions, sqlite;
 import 'package:orm/values.dart' show OrmException;
@@ -15,7 +16,7 @@ void main() {
   late SqlDatabase<Sqlite> db;
 
   setUp(() async {
-    db = (await sqlite(const SqliteOptions.memory())).sql;
+    db = (Database.fromSql(await sqlite(const SqliteOptions.memory()))).sql;
     await db.execute(SqlCommand('CREATE TABLE items (id INTEGER PRIMARY KEY)'));
   });
   tearDown(() => db.close());

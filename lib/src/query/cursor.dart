@@ -1,10 +1,9 @@
-import 'package:meta/meta.dart';
-
 import 'dart:convert';
 import 'dart:typed_data';
 
-import '../../driver.dart';
-import '../../schema_model.dart';
+import 'package:meta/meta.dart';
+
+import '../values/codec.dart';
 import 'expression.dart';
 import 'nodes.dart';
 import 'query.dart';

@@ -1,6 +1,11 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -14,13 +19,20 @@ import 'support/codecs/schema.snapshot.dart' as physical;
 import 'support/codecs/types.dart';
 
 void main() {
-  runCodecTests('sqlite', () => sqlite(const SqliteOptions.memory()));
+  runCodecTests(
+    'sqlite',
+    () =>
+        sqlite(const SqliteOptions.memory())
+            .then((sql) => Database.fromSql(sql)),
+  );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url != null) {
     const schema = 'orm_codec_tests';
     late Database<Postgres> admin;
     setUpAll(() async {
-      admin = postgres(PostgresOptions(url: Uri.parse(url), tls: .disable));
+      admin = Database.fromSql(
+        postgres(PostgresOptions(url: Uri.parse(url), tls: .disable)),
+      );
       await admin.execute(SqlCommand('CREATE SCHEMA IF NOT EXISTS "$schema"'));
     });
     tearDownAll(() async {
@@ -29,8 +41,10 @@ void main() {
     });
     runCodecTests(
       'postgres',
-      () async => postgres(
-        PostgresOptions(url: Uri.parse(url), tls: .disable, schema: schema),
+      () async => Database.fromSql(
+        postgres(
+          PostgresOptions(url: Uri.parse(url), tls: .disable, schema: schema),
+        ),
       ),
     );
   }
@@ -90,12 +104,14 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
         expect((await projection.single()).email.value, value.email.value);
         await db.person
             .byId(id)
-            .patch(
-              email: .set(const Email('updated@example.com')),
-              membership: .set(.cancelled),
-              previousMembership: .set(.pending),
-              tags: .set([]),
-              location: .set(null),
+            .update(
+              personPatch.values(
+                email: .set(const Email('updated@example.com')),
+                membership: .set(.cancelled),
+                previousMembership: .set(.pending),
+                tags: .set([]),
+                location: .set(null),
+              ),
             );
         final updated = await db.person.byId(id).single();
         expect(updated.email.value, 'updated@example.com');
@@ -114,7 +130,9 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
             .single,
         ['pending-payment'],
       );
-      await db.person.byId(value.id).patch(membership: .set(.cancelled));
+      await db.person
+          .byId(value.id)
+          .update(personPatch.values(membership: .set(.cancelled)));
       expect(
         (await db.execute(SqlCommand('SELECT membership FROM people')))
             .rows
@@ -181,7 +199,7 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
         ]) {
           await db.person
               .byId(value.id)
-              .patch(details: .set(SqlJson(document)));
+              .update(personPatch.values(details: .set(SqlJson(document))));
           final result = await db.person
               .byId(value.id)
               .select((p) => p.details)
@@ -194,7 +212,9 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
           )).rows.single.single;
           expect(Codecs.json.decode(raw), document);
         }
-        await db.person.byId(value.id).patch(details: .set(null));
+        await db.person
+            .byId(value.id)
+            .update(personPatch.values(details: .set(null)));
         expect((await db.person.single()).details, isNull);
       },
     );
@@ -205,7 +225,9 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
         SqlCommand('UPDATE people SET location = ${parameter(1)}', ['null']),
       );
       await expectLater(db.person.single(), throwsA(isA<TypeError>()));
-      await db.person.byId(value.id).patch(location: .set(null));
+      await db.person
+          .byId(value.id)
+          .update(personPatch.values(location: .set(null)));
       expect((await db.person.single()).location, isNull);
     });
 
@@ -245,7 +267,8 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
     test(
       'custom values participate in atomic batch writes and native upsert',
       () async {
-        final ids = await db.person
+        final ids = await db.person.database
+            .table(personTable)
             .insertMany(
               [1, 2, 3],
               (p, i) => [
@@ -258,7 +281,8 @@ void runCodecTests(String name, Future<Database<Backend>> Function() open) {
             .returning((p) => p.id)
             .get();
         expect(ids.map((id) => id.value), [1, 2, 3]);
-        await db.person
+        await db.person.database
+            .table(personTable)
             .insert(
               (p) => [
                 p.email.set(const Email('batch1@example.com')),

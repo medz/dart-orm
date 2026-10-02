@@ -1,7 +1,7 @@
 @Tags(['core'])
 library;
 
-import 'package:orm/orm.dart';
+import 'package:orm/values.dart';
 import 'package:test/test.dart';
 
 Decimal d(String s) => Decimal.parse(s);

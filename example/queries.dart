@@ -1,3 +1,7 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -25,7 +29,7 @@ Future<Map<String, Object?>> queryCookbook(
     final z = await tx.user.create(
       email: 'z@example.com',
       nickname: 'Z',
-      score: .set(2),
+      score: 2,
     );
     final a = await tx.user.create(email: 'a@example.com');
     await tx.post.create(
@@ -90,7 +94,7 @@ Future<Map<String, Object?>> queryCookbook(
       .having((p) => p.id.count().gt(.value(1)))
       .select((p) => (p.authorId, p.id.count()).row)
       .asCte('author_totals');
-  final active = await totals.query
+  final active = await totals
       .orderBy((c) => [c.ref((p) => p.authorId).asc()])
       .get();
   check(
@@ -158,7 +162,7 @@ Future<Map<String, Object?>> queryCookbook(
   final empty = await db.user.create(
     email: 'empty@example.com',
     nickname: '100%_ready',
-    score: .set(10),
+    score: 10,
   );
   const keyword = '%_';
   final filtered = db.user.where(
@@ -255,11 +259,9 @@ Future<Map<String, Object?>> queryCookbook(
           .any(),
     );
     final before = await matched.get();
-    final updated = await matched
-        .update((p) => [p.title.set('Archived')])
-        .execute();
+    final updated = await matched.patch(title: 'Archived');
     final after = await matched.get();
-    final deleted = await matched.delete().execute();
+    final deleted = await matched.delete();
     check(
       before.length == 2 &&
           updated == 2 &&
@@ -277,9 +279,11 @@ Future<void> main() async {
   final url = Platform.environment['ORM_EXAMPLE_POSTGRES'];
   final schema = 'orm_example_${pid}_${DateTime.now().microsecondsSinceEpoch}';
   final Database<Backend> db = url == null
-      ? await sqlite(const SqliteOptions.memory())
-      : postgres(
-          PostgresOptions(url: Uri.parse(url), tls: .disable, schema: schema),
+      ? Database.fromSql(await sqlite(const SqliteOptions.memory()))
+      : Database.fromSql(
+          postgres(
+            PostgresOptions(url: Uri.parse(url), tls: .disable, schema: schema),
+          ),
         );
   var created = false;
   try {

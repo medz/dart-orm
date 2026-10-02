@@ -1,6 +1,9 @@
 @Tags(['postgres'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -17,8 +20,8 @@ void main() {
       final fixture = await BuildFixture.create(
         ormPath: Directory.current.path,
       );
-      final admin = postgres(
-        PostgresOptions(url: Uri.parse(url!), tls: .disable),
+      final admin = Database.fromSql(
+        postgres(PostgresOptions(url: Uri.parse(url!), tls: .disable)),
       );
       final name =
           'orm_namespace_${pid}_${DateTime.now().microsecondsSinceEpoch}';
@@ -51,14 +54,18 @@ class Profile {
           fixture.file('lib/schema').path,
           dialect: .postgres,
         );
-        await fixture.write('bin/namespaces.dart', r'''
+        await fixture.write(
+          'bin/namespaces.dart',
+          r'''import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/driver.dart';
 import 'dart:io';
 import 'package:orm/postgres.dart';
 import 'package:orm/migrate.dart';
 import '../lib/schema.orm.dart';
 
 Future<void> main() async {
-  final db = postgres(PostgresOptions(url: Uri.parse(Platform.environment['ORM_NAMESPACE_TEST_URL']!), tls: .disable));
+  final db = Database.fromSql(postgres(PostgresOptions(url: Uri.parse(Platform.environment['ORM_NAMESPACE_TEST_URL']!), tls: .disable)));
   try {
     final initial = Migration.create('0001_initial', appSchema, dialect: .postgres);
     await Migrator(db.sql).apply([initial]);
@@ -78,7 +85,8 @@ Future<void> main() async {
     print('namespace-client-ok');
   } finally { await db.close(); }
 }
-''');
+''',
+        );
         final result = await Process.run(
           Platform.resolvedExecutable,
           ['run', 'orm_build_fixture:namespaces'],

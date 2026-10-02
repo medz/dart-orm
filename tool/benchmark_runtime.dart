@@ -1,3 +1,6 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
@@ -330,13 +333,17 @@ Future<void> _worker(String backend) async {
   final temp = await Directory.systemTemp.createTemp('orm-runtime-');
   final schema = 'orm_runtime_${DateTime.now().microsecondsSinceEpoch}';
   final Database<Backend> db = backend == 'sqlite_wal'
-      ? await sqlite(SqliteOptions.file('${temp.path}/data.sqlite'))
-      : postgres(
-          PostgresOptions(
-            url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-            tls: .disable,
-            schema: schema,
-            maxConnections: 4,
+      ? Database.fromSql(
+          await sqlite(SqliteOptions.file('${temp.path}/data.sqlite')),
+        )
+      : Database.fromSql(
+          postgres(
+            PostgresOptions(
+              url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+              tls: .disable,
+              schema: schema,
+              maxConnections: 4,
+            ),
           ),
         );
   var created = false;

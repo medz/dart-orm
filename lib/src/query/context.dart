@@ -1,7 +1,8 @@
 import 'package:meta/meta.dart';
 
-import '../../driver.dart';
-import '../../schema_model.dart';
+import '../driver/driver.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
 import 'query.dart';
 import 'table.dart';
 
@@ -22,6 +23,10 @@ abstract class QueryContext {
 
   /// Whether this view borrows one leased connection.
   bool get inSession => false;
+
+  /// @nodoc
+  @internal
+  void checkActive() {}
 
   /// Binds a manual or generated table definition to this context.
   TableSet<R, F> table<R, F extends Fields>(Table<R, F> definition) =>

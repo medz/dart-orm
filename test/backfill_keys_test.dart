@@ -1,3 +1,8 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -15,13 +20,15 @@ void main() {
       late Database<Backend> db;
       setUp(() async {
         if (backend == 'sqlite') {
-          db = await sqlite(const SqliteOptions.memory());
+          db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
         } else {
-          db = postgres(
-            PostgresOptions(
-              url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-              tls: .disable,
-              schema: 'orm_backfill_key_tests',
+          db = Database.fromSql(
+            postgres(
+              PostgresOptions(
+                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                tls: .disable,
+                schema: 'orm_backfill_key_tests',
+              ),
             ),
           );
           await db.execute(

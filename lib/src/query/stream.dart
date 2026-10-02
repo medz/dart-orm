@@ -1,4 +1,4 @@
-import '../../driver.dart';
+import '../driver/driver.dart';
 import 'query.dart';
 import 'relation.dart';
 import 'table.dart';

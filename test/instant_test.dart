@@ -1,3 +1,9 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -110,13 +116,15 @@ Future<void> main() => consumer.main();
       late Database<Backend> db;
       setUp(() async {
         if (backend == 'sqlite') {
-          db = await sqlite(const SqliteOptions.memory());
+          db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
         } else {
-          db = postgres(
-            PostgresOptions(
-              url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-              tls: .disable,
-              schema: 'orm_instant_tests',
+          db = Database.fromSql(
+            postgres(
+              PostgresOptions(
+                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                tls: .disable,
+                schema: 'orm_instant_tests',
+              ),
             ),
           );
           await db.execute(
@@ -234,9 +242,7 @@ Future<void> main() => consumer.main();
         final source = db.event.select((e) => e.at),
             cte = source.asCte('times');
         expect(
-          await cte.query
-              .where((c) => c.ref((e) => e.at).gt(.value(epoch)))
-              .get(),
+          await cte.where((c) => c.ref((e) => e.at).gt(.value(epoch))).get(),
           [next],
         );
         expect(
