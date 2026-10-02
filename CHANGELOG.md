@@ -1,8 +1,9 @@
-## Unreleased
+## 6.0.0-beta.7
 
 Breaking beta API change: regenerate clients and update imports, database setup,
 selections and writes. Keep reviewed migration definitions and fingerprints.
-See [the API guide](doc/api.md) for a complete model-to-transaction example.
+See the [beta.7 migration guide](doc/upgrade-beta7.md) and
+[API guide](doc/api.md) for the updated workflow.
 
 - Separate engine-created `SqlDatabase` from the ORM view created with
   `Database.fromSql`. Public entrypoints have explicit ownership; remove the
@@ -17,12 +18,15 @@ See [the API guide](doc/api.md) for a complete model-to-transaction example.
 - Keep `Selection<R>` for arbitrary result assembly. Add `@Projection` classes
   and named records whose generated `.sql(...)` bindings retain typed output
   fields for CTEs and set operations. Import `sql.dart` for query selection.
+- Query CTEs directly after `asCte`; remove the old `.query` hop. Use generated
+  `.sql(...)` projections for named output fields or `ref(...)` for exported
+  expressions.
 - Preserve relationship batching, explicit session ownership and transaction
   boundaries across typed model operations. Decode owned batch RETURNING
   results before committing.
 
 - Switch project-owned code to the MIT License, copyright © 2022–2026 Seven Du,
-  starting with the next release after `6.0.0-beta.6`. Earlier releases and
+  in this first MIT release, `6.0.0-beta.7`. Earlier releases and
   historical tags retain their original licenses.
 
 ## 6.0.0-beta.6
