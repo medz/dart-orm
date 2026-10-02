@@ -119,13 +119,20 @@ root = pathlib.Path(output)
 root.mkdir()  # Refuse an existing destination.
 with tarfile.open(archive, 'r:gz') as package:
     names = set()
-    for entry in package.getmembers():
+    entries = package.getmembers()
+    for entry in entries:
         path = pathlib.PurePosixPath(entry.name)
         if (path.is_absolute() or '..' in path.parts or
                 path.as_posix() in names or not (entry.isfile() or entry.isdir())):
             raise ValueError(f'Unsafe archive member: {entry.name}')
         names.add(path.as_posix())
-    package.extractall(root, filter='data')
+    for entry in entries:
+        target = root.joinpath(*pathlib.PurePosixPath(entry.name).parts)
+        if entry.isdir():
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(package.extractfile(entry).read())
 PY
 dart run tool/test_package.dart /tmp/orm-release-package /tmp/orm-consumer.json
 ```
@@ -141,6 +148,20 @@ are removed. Server coverage remains in the real-database CI matrix.
 After merging, repeat these checks on the final clean main and keep only its
 archive as the candidate for publication. After publishing, install the official
 hosted version in an independent pub cache and validate it separately.
+
+For the beta.6 migration upgrade, safely unpack the official beta.6 archive and
+the candidate archive, then run:
+
+```sh
+dart run tool/test_migration_upgrade.dart /tmp/orm-beta6-package /tmp/orm-release-package /tmp/orm-upgrade.json
+```
+
+This independent SQLite consumer generates and applies history with beta.6,
+preserves the database, changes the dependency and application imports/API, proves
+unpatched historical imports fail, and adds only the required imports to the saved
+migration and registry. Beta.7 `check/status/verify/apply` must preserve compiled
+definitions, recorded/calculated checksums, journal timestamps, data, physical
+schema and database bytes; already applied migrations must not run again.
 
 ## Choose regression suites by behavior
 

@@ -11,8 +11,9 @@ dart analyze
 ```
 
 For build_runner projects, use `dart run build_runner build` instead of the CLI
-generation command. Keep reviewed migration files and their fingerprints
-unchanged. This API upgrade does not itself rename tables or authorize schema
+generation command. Keep reviewed migration operations, frozen schema declarations
+and saved fingerprints unchanged; historical Dart libraries need the import
+adjustments below. This API upgrade does not itself rename tables or authorize schema
 changes. Review a new migration only when the physical schema changes.
 The [beta.6 guide](https://github.com/medz/dart-orm/blob/orm-v6.0.0-beta.6/README.md)
 remains available for applications staying on that version.
@@ -44,6 +45,52 @@ with the matching public `<engine>.dart`. Import `values.dart`, `driver.dart`
 and `schema_model.dart` when using their types directly. `select` is an extension
 from `sql.dart`; every library calling it must import that module. Neither
 `orm.dart` nor a generated client re-exports it.
+
+## Existing migration history
+
+Beta.6 migration and registry sources could import only `migrate.dart` because
+that library re-exported physical schema, codec and engine types. Beta.7 gives
+those types explicit library owners. Update imports in existing historical
+libraries before running migration commands:
+
+| Historical source | Additional imports when those symbols are used |
+| --- | --- |
+| `migrations/m0001_*.dart` | `driver.dart` for `SqlDialect`; `schema_model.dart` for `TableSchema`, `Column`, keys, indexes and constraints; `values.dart` for `Codecs` and `Codec` |
+| `migrations/migrations.g.dart` | `driver.dart` for `SqlDialect` |
+| Separately saved physical snapshots | `schema_model.dart` and `values.dart`; `driver.dart` if the source uses `SqlDialect` |
+
+Keep `migrate.dart` for `Migration`, migration steps, `SchemaSnapshot` and
+`MigrationHistory`. A typical saved migration now starts with:
+
+```dart
+import 'package:orm/migrate.dart';
+import 'package:orm/driver.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+```
+
+Add only the imports required by each historical library. Keep the registry's
+static migration imports, entry order and fixed engine intact. Do not regenerate
+applied migrations from current models or run `migrate record` to accept changes.
+Do not edit applied operations, SQL, frozen schema declarations, migration IDs,
+history links or saved `migrationChecksum` constants.
+
+An import edit changes Dart file bytes, but not the migration fingerprint:
+checksums cover the compiled operation/schema/engine/history data, rather than
+source bytes or formatting. After the imports and application connection setup
+are adjusted, validate the existing database:
+
+```sh
+dart run orm migrate check
+dart run orm migrate status
+dart run orm migrate verify
+dart run orm migrate apply
+```
+
+With no new migrations, `apply` reports no migrations applied. Existing data and
+the database's recorded checksums remain unchanged. If `check` reports a checksum
+mismatch, stop and investigate the compiled definitions; do not refresh the
+saved checksum or rewrite history to bypass it.
 
 ## Ordinary writes and advanced plans
 

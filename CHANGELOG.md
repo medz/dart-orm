@@ -8,6 +8,9 @@ See the [beta.7 migration guide](doc/upgrade-beta7.md) and
 - Separate engine-created `SqlDatabase` from the ORM view created with
   `Database.fromSql`. Public entrypoints have explicit ownership; remove the
   `runtime.dart` and `drivers/*.dart` facades.
+- Adjust direct imports in existing migration and registry libraries after the
+  module split. Preserve applied operations, frozen schema declarations and
+  saved checksums; import edits do not require accepting new fingerprints.
 - Preserve typed model patches across filters and helper functions. Literal
   `create` and `patch` calls distinguish omission from explicit null; generated
   insert/patch inputs compose through `overlay` and `WriteValue` intents.
