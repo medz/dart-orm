@@ -217,6 +217,8 @@ typedef _FieldLabels = branch.Labels;
 typedef _FieldAlias = _FieldLabels;
 typedef _Dependent<T extends helpers.Token, U extends List<T?>> = Map<T,U>;
 String rawFactory() => 'PLATFORM';
+extension Defaults on String { static String next() => 'PLATFORM'; }
+extension type TypedDefaults(int value) { static String next() => 'PLATFORM'; }
 mixin Fields {
   @Id(generated: true) int id = 0;
   @ClientDefault(rawFactory) String label = '';
@@ -229,6 +231,8 @@ mixin Fields {
   @ClientDefault(helpers.alias) String aliasLabel = '';
   @ClientDefault(branch.branchFactory) String externalLabel = '';
   @ClientDefault(_FieldAlias.next) String mixinAlias = '';
+  @ClientDefault(Defaults.next) String extensionLabel = '';
+  @ClientDefault(TypedDefaults.next) String extensionTypeLabel = '';
   @DatabaseDefault(true) bool active = false;
   String? note;
   @Ignore() final String local = 'local';
@@ -288,6 +292,7 @@ final class Memo with chosen.Fields {
     String aliasLabel = 'constructor',
     String externalLabel = 'constructor',
     String mixinAlias = 'constructor',
+    String extensionLabel = 'constructor', String extensionTypeLabel = 'constructor',
     bool active = false, String? note = 'guest'}) {
     this.id = id; this.label = label; this.wrapped = wrapped;
     this.exported = exported; this.active = active; this.note = note;
@@ -296,6 +301,7 @@ final class Memo with chosen.Fields {
     this.typedLabel = typedLabel;
     this.dependentLabel = dependentLabel;
     this.mixinAlias = mixinAlias;
+    this.extensionLabel = extensionLabel; this.extensionTypeLabel = extensionTypeLabel;
   }
 }
 ''',
@@ -314,7 +320,7 @@ import 'migrations/migrations.g.dart' as saved;
 void check(bool value, String message) { if (!value) throw StateError(message); }
 Future<Map<String,Object?>> acceptance() async {
   final target = original.Memo(id: 0, title: 'probe').platform;
-  final bindings = {for(final name in ['label','wrapped','exported','static_label','generic_label','alias_label','local_alias','external_label','mixin_alias','typed_label','nested_label','dependent_label'])
+  final bindings = {for(final name in ['label','wrapped','exported','static_label','generic_label','alias_label','local_alias','external_label','mixin_alias','typed_label','nested_label','dependent_label','extension_label','extension_type_label'])
     name: memoSchema.columns.singleWhere((c) => c.name == name).clientDefault!()};
   check(bindings.values.every((value) => value == target), 'Factory binding differs from model target: $bindings/$target');
   final db = await sqlite(const SqliteOptions.memory());
@@ -329,6 +335,7 @@ Future<Map<String,Object?>> acceptance() async {
     final original.Memo row = await db.memo.create(title: 'omitted');
     check(row.label == target && row.wrapped == target && row.exported == target && row.active && row.note == 'guest', 'Stored omission/default precedence');
     check(row.staticLabel == target && row.genericLabel == target && row.aliasLabel == target && row.localAlias == target && row.externalLabel == target && row.mixinAlias == target && row.typedLabel == target && row.nestedLabel == target && row.dependentLabel == target, 'Stored static/generic/const/local-alias/external/mixin-alias factory values');
+    check(row.extensionLabel == target && row.extensionTypeLabel == target, 'Stored extension/extension-type static factory values');
     check(row.describe() == '$target:${row.id}:$target', 'Original DTO/mixin method');
     final explicit = await db.memo.create(title: 'explicit', label: .set('manual'), active: .set(false), note: .set(null));
     check(explicit.label == 'manual' && !explicit.active && explicit.note == null, 'Explicit values/null');

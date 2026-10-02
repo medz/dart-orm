@@ -1149,6 +1149,100 @@ import 'facade.dart';
     expect(result.dart, contains('factories1.make<factories0.Token>'));
   });
 
+  test('nested conditional routes exclude incompatible values of one variable', () async {
+    await write('shared.dart', "String next() => 'shared';");
+    for (final value in ['native', 'a', 'b']) {
+      await write('fields_$value.dart', '''
+import 'package:orm/schema.dart';
+import 'shared.dart';
+export 'shared.dart';
+mixin Fields { @Id() int id = 0; @ClientDefault(next) String label = ''; }
+''');
+    }
+    await write('wrong.dart', '''
+import 'package:orm/schema.dart';
+String next() => 'wrong';
+mixin Fields { @Id() int id = 0; @ClientDefault(next) String label = ''; }
+''');
+    for (final value in ['a', 'b']) {
+      final other = value == 'a' ? 'b' : 'a';
+      await write(
+        'facade_$value.dart',
+        "export 'fields_$value.dart' if (mode == '$other') 'wrong.dart' show Fields; export 'shared.dart';",
+      );
+    }
+    const source = '''
+import 'package:orm/schema.dart';
+import 'fields_native.dart' if (mode == 'a') 'facade_a.dart' if (mode == 'b') 'facade_b.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+''';
+    await generate(source);
+    // A different variable can equal 'b' while mode equals 'a'; this mismatch
+    // remains reachable and must still be rejected.
+    await write(
+      'facade_a.dart',
+      "export 'fields_a.dart' if (other == 'b') 'wrong.dart' show Fields; export 'shared.dart';",
+    );
+    await expectLater(
+      generate(source),
+      throwsA(
+        isA<GenerationException>().having(
+          (e) => e.code,
+          'code',
+          'SCHEMA.DEFAULT',
+        ),
+      ),
+    );
+  });
+
+  for (final extensionType in [false, true]) {
+    test(
+      'conditional ${extensionType ? 'extension type' : 'named extension'} static factories retain their public identity',
+      () async {
+        for (final platform in ['native', 'web']) {
+          await write('fields_$platform.dart', '''
+import 'package:orm/schema.dart';
+${extensionType ? 'extension type Defaults(int value)' : 'extension Defaults on String'} {
+ static String next() => '$platform';
+}
+mixin Fields { @Id() int id = 0; @ClientDefault(Defaults.next) String label = ''; }
+''');
+        }
+        final result = await generate('''
+import 'package:orm/schema.dart';
+import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+''');
+        expect(result.dart, contains('factories0.Defaults.next'));
+        await write(
+          'probe.dart',
+          "import 'client.dart'; void main() { if (rowSchema.columns.last.clientDefault!() != 'native') throw StateError('Wrong factory'); }",
+        );
+        final native = await Process.run(Platform.resolvedExecutable, [
+          'run',
+          '${root.path}/probe.dart',
+        ]);
+        expect(
+          native.exitCode,
+          0,
+          reason: '${native.stdout}\n${native.stderr}',
+        );
+        final web = await Process.run(Platform.resolvedExecutable, [
+          'compile',
+          'js',
+          '${root.path}/probe.dart',
+          '-o',
+          '${root.path}/probe.js',
+        ]);
+        expect(web.exitCode, 0, reason: '${web.stdout}\n${web.stderr}');
+      },
+    );
+  }
+
   test('inactive outer facade cannot replace the annotation with another same-name symbol', () async {
     await write('other.dart', "String next() => 'wrong';");
     for (final platform in ['native', 'web']) {

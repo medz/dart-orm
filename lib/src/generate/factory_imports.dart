@@ -629,6 +629,8 @@ final class FactoryImports(final String Function(Uri) importUri) {
         ClassDeclaration() => node.namePart.typeName.lexeme == name,
         MixinDeclaration() => node.name.lexeme == name,
         EnumDeclaration() => node.namePart.typeName.lexeme == name,
+        ExtensionDeclaration() => node.name?.lexeme == name,
+        ExtensionTypeDeclaration() => node.namePart.typeName.lexeme == name,
         GenericTypeAlias() => node.name.lexeme == name,
         TopLevelVariableDeclaration() => node.variables.variables.any(
           (variable) => variable.name.lexeme == name,
@@ -640,22 +642,34 @@ final class FactoryImports(final String Function(Uri) importUri) {
     // Inactive branches have syntax, but no resolved namespace. Follow public
     // exports to declaration identities while retaining conditional choices.
     // Prefix-normalized tokens and identical names alone do not prove identity.
-    var activeConditions = <String, bool>{};
-    String condition(Configuration config) =>
-        '${config.name.toSource()}=${config.value?.stringValue ?? 'true'}';
-    Iterable<(StringLiteral, Map<String, bool>)> branches(
+    // Each environment variable has one value. Retain both a selected value
+    // and earlier exclusions, so nested comparisons cannot select two values
+    // of the same variable at once.
+    var activeConditions = <String, (String?, Set<String>)>{};
+    String conditionKey(Map<String, (String?, Set<String>)> conditions) {
+      final keys = conditions.keys.toList()..sort();
+      return [
+        for (final key in keys)
+          '$key:${conditions[key]!.$1}:${(conditions[key]!.$2.toList()..sort()).join(',')}',
+      ].join('|');
+    }
+
+    Iterable<(StringLiteral, Map<String, (String?, Set<String>)>)> branches(
       StringLiteral uri,
       NodeList<Configuration> configurations,
-      Map<String, bool> inherited,
+      Map<String, (String?, Set<String>)> inherited,
     ) sync* {
-      final remaining = Map<String, bool>.of(inherited);
+      final remaining = Map<String, (String?, Set<String>)>.of(inherited);
       for (final config in configurations) {
-        final key = condition(config);
-        if (remaining[key] != false) {
-          yield (config.uri, {...remaining, key: true});
+        final key = config.name.toSource();
+        final value = config.value?.stringValue ?? 'true';
+        final (selected, excluded) = remaining[key] ?? (null, <String>{});
+        if ((selected == null || selected == value) &&
+            !excluded.contains(value)) {
+          yield (config.uri, {...remaining, key: (value, excluded)});
         }
-        if (remaining[key] == true) return;
-        remaining[key] = false;
+        if (selected == value) return;
+        remaining[key] = (selected, {...excluded, value});
       }
       yield (uri, remaining);
     }
@@ -668,7 +682,10 @@ final class FactoryImports(final String Function(Uri) importUri) {
       String name,
       Set<(String, String)> visiting,
     ) {
-      String? resolve(StringLiteral literal) {
+      String? resolve(
+        StringLiteral literal,
+        Map<String, (String?, Set<String>)> conditions,
+      ) {
         final value = literal.stringValue!;
         if (Uri.parse(value).isScheme('dart')) {
           return factorySymbol.library!.uri.toString() == value
@@ -676,26 +693,30 @@ final class FactoryImports(final String Function(Uri) importUri) {
               : null;
         }
         final next = path(file, value);
-        return next == null ? null : origin(next, name, visiting);
+        if (next == null) return null;
+        final previous = activeConditions;
+        activeConditions = conditions;
+        try {
+          return origin(next, name, visiting);
+        } finally {
+          activeConditions = previous;
+        }
       }
 
       final choices = branches(uri, configurations, activeConditions).toList();
-      if (choices.length == 1) return resolve(choices.single.$1);
-      final base = resolve(uri);
-      if (base == null) return null;
-      final identities = <String>[];
-      for (final config in configurations) {
-        final selected = resolve(config.uri);
+      final identities = <(String, String)>[];
+      for (final choice in choices) {
+        final selected = resolve(choice.$1, choice.$2);
         if (selected == null) return null;
-        identities.add(
-          '${config.name.toSource()}=${config.value?.toSource()}:$selected',
-        );
+        identities.add((conditionKey(choice.$2), selected));
       }
-      if (configurations.isEmpty ||
-          identities.every((branch) => branch.endsWith(':$base'))) {
-        return base;
+      if (identities.every((branch) => branch.$2 == identities.first.$2)) {
+        return identities.first.$2;
       }
-      return '$base|${identities.join('|')}';
+      return [
+        for (final (conditions, identity) in identities)
+          '$conditions:$identity',
+      ].join('|');
     }
 
     origin = (file, name, visiting) {
@@ -868,12 +889,8 @@ final class FactoryImports(final String Function(Uri) importUri) {
     final visited = <(String, String)>{};
     var found = 0;
     String? publicEntrypointFile;
-    void visit(String file, Map<String, bool> conditions) {
-      final keys = conditions.keys.toList()..sort();
-      if (!visited.add((
-        file,
-        [for (final key in keys) '$key:${conditions[key]}'].join('|'),
-      ))) {
+    void visit(String file, Map<String, (String?, Set<String>)> conditions) {
+      if (!visited.add((file, conditionKey(conditions)))) {
         return;
       }
       activeConditions = conditions;
@@ -890,17 +907,7 @@ final class FactoryImports(final String Function(Uri) importUri) {
         found++;
         if (!publicEntrypoint &&
             prefix == null &&
-            result.unit.declarations.any(
-              (node) => switch (node) {
-                FunctionDeclaration() => node.name.lexeme == symbol,
-                ClassDeclaration() => node.namePart.typeName.lexeme == symbol,
-                GenericTypeAlias() => node.name.lexeme == symbol,
-                TopLevelVariableDeclaration() => node.variables.variables.any(
-                  (variable) => variable.name.lexeme == symbol,
-                ),
-                _ => false,
-              },
-            )) {
+            declares(result.unit, symbol)) {
           valid = false;
           return;
         }
