@@ -32,6 +32,9 @@ String emitSchema(List<ModelEntity> schema, DartNames names) {
   for (final (uri, prefix) in names.imports) {
     b.writeln('import ${dartLiteral(uri)} as $prefix;');
   }
+  for (final directive in names.factoryImports.directives) {
+    b.writeln(directive);
+  }
   b.writeln('');
   for (final entity in schema) {
     for (final f in entity.fields) {

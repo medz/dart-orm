@@ -96,7 +96,7 @@ All names below refer to files under `test/` with the `_test.dart` suffix.
 | Filter groups, text and comparison types | `predicate_groups`, `predicate_groups_database`, `predicate_groups_types`, `comparison_operand`, `text_expression`, `text_expression_types`, and their `mysql_*` database entrypoints |
 | Keys, relationships and batched loading | `relation`, `relation_predicate`, `mysql_relation_predicate`, `many_to_many`, `unconstrained_relation` |
 | Values and custom codecs | `integer`, `custom_codec`, `temporal`, `temporal_precision`, `decimal`, `decimal_division`, `decimal_average` |
-| Defaults, generated values and constraints | `client_default`, `identity_default_generation`, `null_default`, `mysql_null_default`, `computed`, `check` |
+| Defaults, generated values and constraints | `client_default`, `conditional_default_generation`, `identity_default_generation`, `null_default`, `mysql_null_default`, `computed`, `check` |
 | Sessions, transactions and failure recovery | `transaction`, `retry`, `acquisition`, `stream`, `session_connection`, `runtime_lifecycle_review` |
 | Subscriptions and execution observations | `watch`, `observation` |
 | Migration history, catalog and recovery | `migration`, `migration_target`, `migration_recovery`, `backfill`, `schema_version`, `import` |
@@ -123,6 +123,10 @@ OPFS storage, reopen/upgrade, constraints, transactions, cursors, subscriptions,
 value transport and explicit rejection of unsupported interruption. They use real
 Chrome and record JS/WASM mode. The Flutter Web runner also verifies release
 packaging, nested routes and configurations with and without isolation headers.
+Each Chrome job also generates a fresh conditional-default consumer, runs native
+and browser SQLite against the same client/saved migrations, and checks original
+DTO/mixin methods plus explicit value/null and omission behavior. Run just this
+consumer with `dart run tool/test_conditional_defaults.dart [--wasm]`.
 
 For Android, follow the [APK upgrade and restart workflow](https://github.com/medz/dart-orm/blob/main/example/flutter/README.md). Browser,
 Android and native server validation are separate: one passing target does not

@@ -111,9 +111,10 @@ Annotated DTO generation is verified by native SQLite, PostgreSQL, MySQL and
 MariaDB vertical slices. Independent consumers generate clients and saved
 migrations, execute CRUD and relations, and retain original DTO classes and
 business methods.
-Browser/Flutter acceptance exercises existing annotated fixtures. Fresh
-independent-consumer generation, DTO/mixin business methods and saved-migration
-workflows require separate validation on those targets.
+Browser acceptance also generates a fresh independent conditional-default
+consumer and verifies original DTO/mixin methods and saved migrations in Chrome
+JS/WASM. Flutter acceptance exercises existing annotated fixtures; fresh
+independent-consumer workflows require separate validation on Flutter targets.
 Remote/serverless transports, replica routing and alternative pools require
 separate adapters.
 

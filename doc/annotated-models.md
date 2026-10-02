@@ -110,7 +110,46 @@ fallbacks.
 method or constructor tear-off with no required arguments. Generation does not
 execute it. Each generated create call prepares a new insert and obtains its
 own omitted client defaults; re-executing an already prepared low-level mutation
-retains that mutation's values. `@DatabaseDefault.sql('CURRENT_TIMESTAMP')` uses
+retains that mutation's values. Generated factory references preserve the public
+import/export entrypoint used by the annotation, including conditional imports
+and indirect exports. A public factory declared alongside a conditional mixin
+is selected through the model's mixin import; expose the factory through that
+entrypoint when using `show`/`hide`. Each platform must provide the same public
+symbol and a compatible zero-required-argument signature. Target compilation
+checks that signature; generation never substitutes a host implementation to
+bypass a missing or incompatible platform symbol. A fixed-library wrapper whose
+body delegates to conditional code remains a compatible alternative. Local
+private typedef qualifiers are expanded along their alias chain to the first
+public type while retaining its import route and constructor type arguments.
+Public aliases keep their own entrypoint. For external factories used by a
+conditional mixin, expose the symbol through the mixin entrypoint or use the
+same factory expression and public import route in every branch. Generation
+checks those routes before retaining a shared fixed-library wrapper. A private
+alias inside a conditional mixin needs its first public target exposed through
+that mixin entrypoint and a consistent alias mapping across branches. Missing
+or ambiguous routes and unresolved alias arguments produce a located
+`SCHEMA.DEFAULT` diagnostic instead of fixing the factory to the host branch.
+Explicit generic arguments, including nested named/record types and local
+private typedef chains to named types, retain their own public import/export
+routes as well as the factory route. Different import prefixes and field
+declaration grouping between mixin branches do not change this contract.
+Inactive package branches are resolved through the consumer package config.
+Omitted arguments of a public generic type retain their omission, so its target
+entrypoint supplies its bounds. Private alias bounds retain their own syntax when
+expanded, substituting earlier inferred parameters into dependent bounds. For
+example, `T extends helpers.Token, U extends List<T?>` retains both the Token
+entrypoint and the nullable substitution into U, including omitted private
+constructor aliases. An exposed branch symbol must have the same declaration
+as that branch's annotation reference; a matching name alone is insufficient.
+An inferred argument without a provable conditional public route must
+be spelled explicitly; generation reports `SCHEMA.DEFAULT` instead of importing
+the host implementation. Branches must keep the same factory expression and
+private alias mapping after import-prefix normalization; generation does not
+prove arbitrary semantically equivalent rewrites. A private alias ending at a
+function/record body or bare type parameter does not expose a named public
+target; spell that argument directly or use a public named alias.
+
+`@DatabaseDefault.sql('CURRENT_TIMESTAMP')` uses
 trusted SQL. Scalar database constants are encoded and quoted by generation. For a custom
 codec, use `@DatabaseDefault.sql` with an already encoded database expression;
 generation never executes an application encoder to infer a default.
