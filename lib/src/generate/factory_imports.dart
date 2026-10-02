@@ -618,7 +618,10 @@ final class FactoryImports(final String Function(Uri) importUri) {
           directive.uri,
           ...directive.configurations.map((config) => config.uri),
         ]) {
-          final next = path(file, literal.stringValue!);
+          final value = literal.stringValue!;
+          // SDK libraries cannot declare this user-owned annotated mixin.
+          if (Uri.parse(value).isScheme('dart')) continue;
+          final next = path(file, value);
           if (next == null) {
             valid = false;
           } else {

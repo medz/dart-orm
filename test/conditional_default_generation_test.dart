@@ -457,7 +457,7 @@ mixin Fields { @Id() int id = 0; @ClientDefault(DateTime.now) DateTime? createdA
         await write('fields_web.dart', fields);
         await write(
           'facade.dart',
-          "export 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';",
+          "export 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart'; export 'dart:typed_data';",
         );
         await generate('''
 import 'package:orm/schema.dart';
