@@ -913,6 +913,275 @@ import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';
     },
   );
 
+  for (final nullable in [false, true]) {
+    test(
+      'dependent private generic bounds retain ${nullable ? 'nullable' : 'nonnullable'} parameter syntax',
+      () async {
+        await write(
+          'shared.dart',
+          'class Token {}\nString make<T>() => T.toString();',
+        );
+        for (final platform in ['native', 'web']) {
+          final prefix = platform == 'native' ? 'n' : 'x';
+          await write('fields_$platform.dart', '''
+import 'package:orm/schema.dart';
+import 'shared.dart' as $prefix;
+typedef _Local<T extends $prefix.Token, U extends List<T${nullable ? '?' : ''}>> = Map<T,U>;
+mixin Fields { @Id() int id = 0; @ClientDefault($prefix.make<_Local>) String label = ''; }
+''');
+        }
+        final result = await generate('''
+import 'package:orm/schema.dart';
+import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+''');
+        expect(
+          result.dart,
+          contains(
+            'types0.make<Map<types0.Token, List<types0.Token${nullable ? '?' : ''}>>>',
+          ),
+        );
+      },
+    );
+  }
+
+  test(
+    'three dependent nullable bounds preserve original callback semantics',
+    () async {
+      await write(
+        'shared.dart',
+        'class Token {}\nString make<T>() => T.toString();',
+      );
+      for (final platform in ['native', 'web']) {
+        await write('fields_$platform.dart', '''
+import 'package:orm/schema.dart';
+import 'shared.dart' as h;
+typedef _Local<T extends h.Token, U extends List<T?>, V extends Map<T,U?>> = Map<U,V>;
+const original = ClientDefault(h.make<_Local>);
+mixin Fields { @Id() int id = 0; @ClientDefault(h.make<_Local>) String label = ''; }
+''');
+      }
+      await generate('''
+import 'package:orm/schema.dart';
+import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+''');
+      await write('probe.dart', r'''
+import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart' as original;
+import 'client.dart';
+void main() {
+ final expected = original.original.factory();
+ final actual = rowSchema.columns.last.clientDefault!();
+ if (actual != expected) throw StateError('$actual != $expected');
+ print(actual);
+}
+''');
+      final run = await Process.run(Platform.resolvedExecutable, [
+        'run',
+        '${root.path}/probe.dart',
+      ]);
+      expect(run.exitCode, 0, reason: '${run.stdout}\n${run.stderr}');
+      expect(
+        run.stdout,
+        contains('Map<List<Token?>, Map<Token, List<Token?>?>>'),
+      );
+    },
+  );
+
+  test(
+    'omitted private constructor aliases retain dependent nullable bounds',
+    () async {
+      for (final platform in ['native', 'web']) {
+        await write('$platform.dart', r'''
+class Token {}
+class Box<A,B> { Box(); String toString() => '$A/$B'; }
+typedef Public<A,B> = Box<A,B>;
+''');
+      }
+      await write('models.dart', '''
+import 'package:orm/schema.dart';
+import 'native.dart' if (dart.library.js_interop) 'web.dart' as h;
+typedef _Inner<T extends h.Token,U extends List<T?>> = h.Public<U,T>;
+typedef _Outer<T extends h.Token,U extends List<T?>> = _Inner<T,U>;
+const original = ClientDefault(_Outer.new);
+String expected() => original.factory().toString();
+@ClientDefault(_Outer.new) final Object value = Object();
+''');
+      final path = File('${root.path}/models.dart').absolute.path;
+      final contexts = AnalysisContextCollection(
+        includedPaths: [root.absolute.path],
+      );
+      try {
+        final unit =
+            await contexts.contextFor(path).currentSession.getResolvedUnit(path)
+                as ResolvedUnitResult;
+        final annotation = unit.unit.declarations
+            .whereType<TopLevelVariableDeclaration>()
+            .last
+            .metadata
+            .single;
+        final expression =
+            annotation.arguments!.arguments.single.argumentExpression
+                as ConstructorReference;
+        final names = DartNames(
+          unit.libraryElement.uri,
+          (uri) => uri.toString(),
+        );
+        final reference = names.factoryReference(
+          expression,
+          expression.constructorName.element as ExecutableElement,
+          expression.staticType as FunctionType,
+          annotation,
+        );
+        expect(
+          reference,
+          'factories0.Public<List<factories1.Token?>, factories1.Token>.new',
+        );
+        await write('probe.dart', '''
+import 'models.dart' as original;
+${names.factoryImports.directives.join('\n')}
+void main() {
+ final expected = original.expected();
+ final actual = $reference().toString();
+ if (actual != expected) throw StateError('Callback differs');
+ print(actual);
+}
+''');
+        final run = await Process.run(Platform.resolvedExecutable, [
+          'run',
+          '${root.path}/probe.dart',
+        ]);
+        expect(run.exitCode, 0, reason: '${run.stdout}\n${run.stderr}');
+        expect(run.stdout, contains('List<Token?>/Token'));
+        final compile = await Process.run(Platform.resolvedExecutable, [
+          'compile',
+          'js',
+          '${root.path}/probe.dart',
+          '-o',
+          '${root.path}/probe.js',
+        ]);
+        expect(
+          compile.exitCode,
+          0,
+          reason: '${compile.stdout}\n${compile.stderr}',
+        );
+      } finally {
+        await contexts.dispose();
+      }
+    },
+  );
+
+  for (final typeArgument in [false, true]) {
+    test(
+      'conditional public entrypoint rejects a same-name ${typeArgument ? 'type argument' : 'factory'} with a different identity',
+      () async {
+        await write(
+          'shared.dart',
+          'class Token {}\nString make<T>() => T.toString();',
+        );
+        await write(
+          'other.dart',
+          "class Token {}\nString next() => 'external-web';",
+        );
+        await write('fields_native.dart', '''
+import 'package:orm/schema.dart';
+import 'shared.dart' as h;
+export 'shared.dart';
+String next() => 'native';
+mixin Fields { @Id() int id = 0; @ClientDefault(${typeArgument ? 'h.make<h.Token>' : 'next'}) String label = ''; }
+''');
+        await write('fields_web.dart', '''
+import 'package:orm/schema.dart';
+import 'shared.dart' as h;
+import 'other.dart' as x;
+export 'shared.dart';
+String next() => 'wrong-local-web';
+mixin Fields { @Id() int id = 0; @ClientDefault(${typeArgument ? 'h.make<x.Token>' : 'x.next'}) String label = ''; }
+''');
+        await expectLater(
+          generate('''
+import 'package:orm/schema.dart';
+import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+'''),
+          throwsA(
+            isA<GenerationException>()
+                .having((e) => e.code, 'code', 'SCHEMA.DEFAULT')
+                .having((e) => e.line, 'line', greaterThan(0)),
+          ),
+        );
+      },
+    );
+  }
+
+  test('public conditional mixin routes retain shared reexports and unrelated SDK exports', () async {
+    await write('shared.dart', "class Token {}\nString make<T>() => 'shared';");
+    await write(
+      'helper_facade.dart',
+      "export 'shared.dart'; export 'dart:typed_data';",
+    );
+    for (final platform in ['native', 'web']) {
+      final prefix = platform == 'native' ? 'h' : 'x';
+      await write('fields_$platform.dart', '''
+import 'package:orm/schema.dart';
+import 'helper_facade.dart' as $prefix;
+export 'shared.dart';
+mixin Fields { @Id() int id = 0; @ClientDefault($prefix.make<$prefix.Token>) String label = ''; }
+''');
+    }
+    await write(
+      'facade.dart',
+      "export 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart'; export 'dart:typed_data';",
+    );
+    final result = await generate('''
+import 'package:orm/schema.dart';
+import 'facade.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+''');
+    expect(result.dart, contains('factories1.make<factories0.Token>'));
+  });
+
+  test('inactive outer facade cannot replace the annotation with another same-name symbol', () async {
+    await write('other.dart', "String next() => 'wrong';");
+    for (final platform in ['native', 'web']) {
+      await write('fields_$platform.dart', '''
+import 'package:orm/schema.dart';
+String next() => '$platform';
+mixin Fields { @Id() int id = 0; @ClientDefault(next) String label = ''; }
+''');
+      await write(
+        'facade_$platform.dart',
+        platform == 'native'
+            ? "export 'fields_native.dart';"
+            : "export 'fields_web.dart' show Fields; export 'other.dart';",
+      );
+    }
+    await expectLater(
+      generate('''
+import 'package:orm/schema.dart';
+import 'facade_native.dart' if (dart.library.js_interop) 'facade_web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+'''),
+      throwsA(
+        isA<GenerationException>().having(
+          (e) => e.code,
+          'code',
+          'SCHEMA.DEFAULT',
+        ),
+      ),
+    );
+  });
+
   test('shared wrapper imports may use different branch prefixes', () async {
     await write('shared.dart', "String next() => 'shared';");
     for (final platform in ['native', 'web']) {

@@ -1,6 +1,7 @@
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
+import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
 
 import 'schema/diagnostics.dart';
@@ -13,11 +14,25 @@ Expression unwrapFactory(Expression value) {
   return value;
 }
 
+/// A factory type occurrence retained until public routes have been resolved.
+final class FactoryTypeUse {
+  final DartType type;
+  final TypeAnnotation? spelling;
+  final Map<TypeParameterElement, FactoryTypeUse> environment;
+  final bool omitted;
+  FactoryTypeUse(
+    this.type, {
+    this.spelling,
+    Map<TypeParameterElement, FactoryTypeUse> environment = const {},
+    this.omitted = false,
+  }) : environment = Map.unmodifiable(environment);
+}
+
 /// A factory-only public qualifier, with constructor arguments in that scope.
 final class FactoryTarget {
   final Element symbol;
   final AstNode spelling;
-  final List<String>? arguments;
+  final List<FactoryTypeUse>? arguments;
   final bool expanded;
   final List<GenericTypeAlias> aliases;
   final String? reference;
@@ -46,14 +61,9 @@ final class FactoryImports(final String Function(Uri) importUri) {
     AstNode context, {
     FunctionType? constructor,
     NamedType? typeSpelling,
+    DartType? instantiatedType,
     String? fieldName,
-    Map<TypeParameterElement, String> environment = const {},
-    required String Function(
-      DartType,
-      Map<TypeParameterElement, String>,
-      TypeAnnotation?,
-    )
-    render,
+    Map<TypeParameterElement, FactoryTypeUse> environment = const {},
   }) {
     final owner = expression.root as CompilationUnit;
     var alias = typeSpelling == null
@@ -62,7 +72,7 @@ final class FactoryImports(final String Function(Uri) importUri) {
               ? typeSpelling.element as TypeAliasElement
               : null);
     AstNode spelling = typeSpelling ?? expression;
-    List<String>? arguments;
+    List<FactoryTypeUse>? arguments;
     var expanded = false;
     if (constructor != null || typeSpelling != null) {
       final value = unwrapFactory(
@@ -78,12 +88,20 @@ final class FactoryImports(final String Function(Uri) importUri) {
           'Cannot resolve the constructor alias qualifier.',
         );
       }
-      arguments = _arguments(named, environment, render, expression);
-      if (alias != null && arguments.length != alias.typeParameters.length) {
+      arguments = _arguments(
+        named,
+        environment,
+        expression,
+        inferredArguments: constructor?.returnType.alias?.typeArguments,
+        instantiatedType: instantiatedType ?? constructor?.returnType,
+      );
+      if (alias != null &&
+          alias.isPrivate &&
+          arguments.length != alias.typeParameters.length) {
         final inferred = constructor?.returnType.alias;
         if (inferred?.element == alias) {
           arguments = inferred!.typeArguments
-              .map((type) => render(type, {}, null))
+              .map((type) => FactoryTypeUse(type, omitted: true))
               .toList();
         } else {
           failAt(
@@ -120,7 +138,7 @@ final class FactoryImports(final String Function(Uri) importUri) {
         );
       }
       expandedAliases.add(declaration!);
-      final environment = <TypeParameterElement, String>{};
+      final environment = <TypeParameterElement, FactoryTypeUse>{};
       if (arguments != null) {
         if (arguments.length != alias.typeParameters.length) {
           failAt(
@@ -132,7 +150,7 @@ final class FactoryImports(final String Function(Uri) importUri) {
         for (var index = 0; index < arguments.length; index++) {
           environment[alias.typeParameters[index]] = arguments[index];
         }
-        arguments = _arguments(body, environment, render, expression);
+        arguments = _arguments(body, environment, expression);
       }
       symbol = body.element!;
       spelling = body;
@@ -157,23 +175,32 @@ final class FactoryImports(final String Function(Uri) importUri) {
     );
   }
 
-  List<String> _arguments(
+  List<FactoryTypeUse> _arguments(
     NamedType type,
-    Map<TypeParameterElement, String> environment,
-    String Function(
-      DartType,
-      Map<TypeParameterElement, String>,
-      TypeAnnotation?,
-    )
-    render,
-    Expression expression,
-  ) {
+    Map<TypeParameterElement, FactoryTypeUse> environment,
+    Expression expression, {
+    List<DartType>? inferredArguments,
+    DartType? instantiatedType,
+  }) {
     final explicit = type.typeArguments?.arguments;
     if (explicit != null) {
+      final materialized = instantiatedType?.alias?.element == type.element
+          ? instantiatedType!.alias!.typeArguments
+          : instantiatedType is InterfaceType &&
+                instantiatedType.element == type.element
+          ? instantiatedType.typeArguments
+          : null;
       return [
-        for (final argument in explicit)
-          if (argument.type case final resolved?)
-            render(resolved, environment, argument)
+        for (var index = 0; index < explicit.length; index++)
+          if ((materialized != null && index < materialized.length
+                  ? materialized[index]
+                  : explicit[index].type)
+              case final resolved?)
+            FactoryTypeUse(
+              resolved,
+              spelling: explicit[index],
+              environment: environment,
+            )
           else
             failAt(
               expression,
@@ -191,8 +218,9 @@ final class FactoryImports(final String Function(Uri) importUri) {
       return [];
     }
     final resolved = type.type;
-    final inferred =
+    var inferred =
         resolved?.alias?.typeArguments ??
+        inferredArguments ??
         (resolved is InterfaceType
             ? resolved.typeArguments
             : const <DartType>[]);
@@ -202,15 +230,119 @@ final class FactoryImports(final String Function(Uri) importUri) {
         .where((node) => node.declaredFragment!.element == type.element)
         .firstOrNull;
     final parameters = declaration?.typeParameters?.typeParameters;
-    TypeAnnotation? inferredSpelling(int index) {
-      final bound = parameters == null ? null : parameters[index].bound;
-      return bound?.type == inferred[index] ? bound : null;
+    // An omitted constructor tear-off can retain a generic signature instead of
+    // an instantiated alias. Its local declaration still supplies the bounds.
+    if (resolved == null && inferred.isEmpty && declaration != null) {
+      inferred = [
+        for (final parameter in parameters ?? <TypeParameter>[])
+          parameter.bound?.type ??
+              unit.declaredFragment!.element.typeProvider.dynamicType,
+      ];
     }
+    final uses = <FactoryTypeUse>[];
+    final inferredEnvironment = Map<TypeParameterElement, FactoryTypeUse>.of(
+      environment,
+    );
+    for (var index = 0; index < inferred.length; index++) {
+      final parameter = parameters == null || index >= parameters.length
+          ? null
+          : parameters[index];
+      final bound = parameter?.bound;
+      final spelling =
+          bound?.type != null &&
+              _matchesBound(
+                bound!.type!,
+                inferred[index],
+                inferredEnvironment,
+                expression,
+              )
+          ? bound
+          : null;
+      final use = FactoryTypeUse(
+        // Analyzer's instantiated alias types erase nullable dependent bounds.
+        // Retain the proven source bound and substitute its parameters at render.
+        spelling?.type ?? inferred[index],
+        spelling: spelling,
+        environment: inferredEnvironment,
+        omitted: true,
+      );
+      uses.add(use);
+      if (parameter?.declaredFragment?.element case final element?) {
+        inferredEnvironment[element] = use;
+      }
+    }
+    return uses;
+  }
 
-    return [
-      for (var index = 0; index < inferred.length; index++)
-        render(inferred[index], environment, inferredSpelling(index)),
-    ];
+  // Compare the analyzer's inferred argument against the bound after earlier
+  // parameter substitutions. Keep the bound AST and environment for rendering;
+  // public-route validation still occurs for every resulting type occurrence.
+  bool _matchesBound(
+    DartType template,
+    DartType actual,
+    Map<TypeParameterElement, FactoryTypeUse> environment,
+    Expression expression, {
+    Set<TypeParameterElement> visiting = const {},
+  }) {
+    if (template is TypeParameterType) {
+      final use = environment[template.element];
+      if (use == null || visiting.contains(template.element)) return false;
+      var source = use.type;
+      if (template.nullabilitySuffix == NullabilitySuffix.question) {
+        final types = (expression.root as CompilationUnit)
+            .declaredFragment!
+            .element
+            .typeSystem;
+        source = types.promoteToNonNull(source);
+        actual = types.promoteToNonNull(actual);
+      }
+      return _matchesBound(
+        source,
+        actual,
+        use.environment,
+        expression,
+        visiting: {...visiting, template.element},
+      );
+    }
+    if (template == actual) return true;
+    if (template.nullabilitySuffix != actual.nullabilitySuffix) return false;
+    bool matches(DartType left, DartType right) =>
+        _matchesBound(left, right, environment, expression, visiting: visiting);
+    if (template is InterfaceType && actual is InterfaceType) {
+      return template.element == actual.element &&
+          template.typeArguments.length == actual.typeArguments.length &&
+          [
+            for (var index = 0; index < template.typeArguments.length; index++)
+              matches(
+                template.typeArguments[index],
+                actual.typeArguments[index],
+              ),
+          ].every((value) => value);
+    }
+    if (template is RecordType && actual is RecordType) {
+      return template.positionalFields.length ==
+              actual.positionalFields.length &&
+          template.namedFields.length == actual.namedFields.length &&
+          [
+            for (
+              var index = 0;
+              index < template.positionalFields.length;
+              index++
+            )
+              matches(
+                template.positionalFields[index].type,
+                actual.positionalFields[index].type,
+              ),
+            for (var index = 0; index < template.namedFields.length; index++)
+              template.namedFields[index].name ==
+                      actual.namedFields[index].name &&
+                  matches(
+                    template.namedFields[index].type,
+                    actual.namedFields[index].type,
+                  ),
+          ].every((value) => value);
+    }
+    return false;
   }
 
   bool _conditionalOwner(
@@ -305,6 +437,9 @@ final class FactoryImports(final String Function(Uri) importUri) {
           publicEntrypoint: true,
           aliases: target.aliases,
           fieldName: fieldName,
+          referenceSpelling: target.spelling is NamedType
+              ? target.spelling as NamedType
+              : null,
         )) {
           failAt(
             expression,
@@ -476,6 +611,143 @@ final class FactoryImports(final String Function(Uri) importUri) {
       for (final config in directive.configurations)
         '${config.name.toSource()}=${config.value?.toSource()}:${base.resolve(config.uri.stringValue!)}',
     ].join('|');
+    bool visible(NodeList<Combinator> combinators, String name) =>
+        combinators.every(
+          (combinator) => switch (combinator) {
+            ShowCombinator() => combinator.shownNames.any(
+              (node) => node.name == name,
+            ),
+            HideCombinator() => !combinator.hiddenNames.any(
+              (node) => node.name == name,
+            ),
+          },
+        );
+
+    bool declares(CompilationUnit unit, String name) => unit.declarations.any(
+      (node) => switch (node) {
+        FunctionDeclaration() => node.name.lexeme == name,
+        ClassDeclaration() => node.namePart.typeName.lexeme == name,
+        MixinDeclaration() => node.name.lexeme == name,
+        EnumDeclaration() => node.namePart.typeName.lexeme == name,
+        GenericTypeAlias() => node.name.lexeme == name,
+        TopLevelVariableDeclaration() => node.variables.variables.any(
+          (variable) => variable.name.lexeme == name,
+        ),
+        _ => false,
+      },
+    );
+
+    // Inactive branches have syntax, but no resolved namespace. Follow public
+    // exports to declaration identities while retaining conditional choices.
+    // Prefix-normalized tokens and identical names alone do not prove identity.
+    var activeConditions = <String, bool>{};
+    String condition(Configuration config) =>
+        '${config.name.toSource()}=${config.value?.stringValue ?? 'true'}';
+    Iterable<(StringLiteral, Map<String, bool>)> branches(
+      StringLiteral uri,
+      NodeList<Configuration> configurations,
+      Map<String, bool> inherited,
+    ) sync* {
+      final remaining = Map<String, bool>.of(inherited);
+      for (final config in configurations) {
+        final key = condition(config);
+        if (remaining[key] != false) {
+          yield (config.uri, {...remaining, key: true});
+        }
+        if (remaining[key] == true) return;
+        remaining[key] = false;
+      }
+      yield (uri, remaining);
+    }
+
+    late String? Function(String, String, Set<(String, String)>) origin;
+    String? exportedOrigin(
+      String file,
+      StringLiteral uri,
+      NodeList<Configuration> configurations,
+      String name,
+      Set<(String, String)> visiting,
+    ) {
+      String? resolve(StringLiteral literal) {
+        final value = literal.stringValue!;
+        if (Uri.parse(value).isScheme('dart')) {
+          return factorySymbol.library!.uri.toString() == value
+              ? '$value#$name'
+              : null;
+        }
+        final next = path(file, value);
+        return next == null ? null : origin(next, name, visiting);
+      }
+
+      final choices = branches(uri, configurations, activeConditions).toList();
+      if (choices.length == 1) return resolve(choices.single.$1);
+      final base = resolve(uri);
+      if (base == null) return null;
+      final identities = <String>[];
+      for (final config in configurations) {
+        final selected = resolve(config.uri);
+        if (selected == null) return null;
+        identities.add(
+          '${config.name.toSource()}=${config.value?.toSource()}:$selected',
+        );
+      }
+      if (configurations.isEmpty ||
+          identities.every((branch) => branch.endsWith(':$base'))) {
+        return base;
+      }
+      return '$base|${identities.join('|')}';
+    }
+
+    origin = (file, name, visiting) {
+      if (!visiting.add((file, name))) return null;
+      try {
+        final result = session.getParsedUnit(file);
+        if (result is! ParsedUnitResult) return null;
+        if (declares(result.unit, name)) return '$file#$name';
+        final origins = <String>{};
+        for (final directive
+            in result.unit.directives.whereType<ExportDirective>()) {
+          if (!visible(directive.combinators, name)) continue;
+          final selected = exportedOrigin(
+            file,
+            directive.uri,
+            directive.configurations,
+            name,
+            visiting,
+          );
+          if (selected != null) origins.add(selected);
+        }
+        return origins.length == 1 ? origins.single : null;
+      } finally {
+        visiting.remove((file, name));
+      }
+    };
+
+    String? occurrenceOrigin(
+      String file,
+      CompilationUnit unit,
+      String? prefix,
+    ) {
+      if (prefix == null && declares(unit, symbol)) return '$file#$symbol';
+      final origins = <String>{};
+      for (final directive in unit.directives.whereType<ImportDirective>()) {
+        if (directive.prefix?.name != prefix ||
+            directive.deferredKeyword != null ||
+            !visible(directive.combinators, symbol)) {
+          continue;
+        }
+        final selected = exportedOrigin(
+          file,
+          directive.uri,
+          directive.configurations,
+          symbol,
+          {},
+        );
+        if (selected != null) origins.add(selected);
+      }
+      return origins.length == 1 ? origins.single : null;
+    }
+
     bool exposes(ImportDirective directive) => directive.combinators.every(
       (combinator) => switch (combinator) {
         ShowCombinator() => combinator.shownNames.any(
@@ -593,10 +865,18 @@ final class FactoryImports(final String Function(Uri) importUri) {
             : null);
     if (selectedField == null) return false;
     var valid = true;
-    final visited = <String>{};
+    final visited = <(String, String)>{};
     var found = 0;
-    void visit(String file) {
-      if (!visited.add(file)) return;
+    String? publicEntrypointFile;
+    void visit(String file, Map<String, bool> conditions) {
+      final keys = conditions.keys.toList()..sort();
+      if (!visited.add((
+        file,
+        [for (final key in keys) '$key:${conditions[key]}'].join('|'),
+      ))) {
+        return;
+      }
+      activeConditions = conditions;
       final result = session.getParsedUnit(file);
       if (result is! ParsedUnitResult) {
         valid = false;
@@ -674,7 +954,7 @@ final class FactoryImports(final String Function(Uri) importUri) {
           return;
         }
         var routePrefix = branchPrefix;
-        if (referenceSpelling != null && !publicEntrypoint) {
+        if (referenceSpelling != null) {
           final sourceAlias = referenceSpelling
               .thisOrAncestorOfType<GenericTypeAlias>();
           final sourceAnchor = sourceAlias ?? expression;
@@ -701,6 +981,14 @@ final class FactoryImports(final String Function(Uri) importUri) {
             return;
           }
           routePrefix = branchTypes[occurrence].importPrefix?.name.lexeme;
+        }
+
+        if (publicEntrypoint) {
+          final exposed = origin(publicEntrypointFile!, symbol, {});
+          final occurrence = occurrenceOrigin(file, result.unit, routePrefix);
+          if (exposed == null || exposed != occurrence) {
+            valid = false;
+          }
         }
 
         if (!publicEntrypoint &&
@@ -741,10 +1029,12 @@ final class FactoryImports(final String Function(Uri) importUri) {
         )) {
           continue;
         }
-        for (final literal in [
+        for (final branch in branches(
           directive.uri,
-          ...directive.configurations.map((config) => config.uri),
-        ]) {
+          directive.configurations,
+          conditions,
+        )) {
+          final literal = branch.$1;
           final value = literal.stringValue!;
           // SDK libraries cannot declare this user-owned annotated mixin.
           if (Uri.parse(value).isScheme('dart')) continue;
@@ -752,7 +1042,7 @@ final class FactoryImports(final String Function(Uri) importUri) {
           if (next == null) {
             valid = false;
           } else {
-            visit(next);
+            visit(next, branch.$2);
           }
         }
       }
@@ -764,10 +1054,12 @@ final class FactoryImports(final String Function(Uri) importUri) {
               mixin.declaredFragment!.element) {
         continue;
       }
-      for (final literal in [
+      for (final branch in branches(
         directive.uri,
-        ...directive.configurations.map((config) => config.uri),
-      ]) {
+        directive.configurations,
+        const {},
+      )) {
+        final literal = branch.$1;
         final next = path(
           model.declaredFragment!.source.fullName,
           literal.stringValue!,
@@ -775,7 +1067,8 @@ final class FactoryImports(final String Function(Uri) importUri) {
         if (next == null) {
           valid = false;
         } else {
-          visit(next);
+          publicEntrypointFile = next;
+          visit(next, branch.$2);
         }
       }
     }

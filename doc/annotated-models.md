@@ -136,7 +136,12 @@ declaration grouping between mixin branches do not change this contract.
 Inactive package branches are resolved through the consumer package config.
 Omitted arguments of a public generic type retain their omission, so its target
 entrypoint supplies its bounds. Private alias bounds retain their own syntax when
-expanded. An inferred argument without a provable conditional public route must
+expanded, substituting earlier inferred parameters into dependent bounds. For
+example, `T extends helpers.Token, U extends List<T?>` retains both the Token
+entrypoint and the nullable substitution into U, including omitted private
+constructor aliases. An exposed branch symbol must have the same declaration
+as that branch's annotation reference; a matching name alone is insufficient.
+An inferred argument without a provable conditional public route must
 be spelled explicitly; generation reports `SCHEMA.DEFAULT` instead of importing
 the host implementation. Branches must keep the same factory expression and
 private alias mapping after import-prefix normalization; generation does not
