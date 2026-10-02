@@ -3,9 +3,10 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../generate.dart';
-import '../../migrate.dart';
+import '../generate/schema.dart';
 import '../generate/schema/layout.dart';
+import '../migrate/snapshot.dart';
+import '../migrate/source.dart';
 import 'commands.dart';
 import 'config_entrypoint.dart';
 import 'init.dart';

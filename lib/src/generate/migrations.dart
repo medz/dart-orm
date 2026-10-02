@@ -4,7 +4,10 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:path/path.dart' as p;
 
-import '../../migrate.dart';
+import '../driver/driver.dart';
+import '../migrate/migration.dart';
+import '../migrate/source.dart';
+import '../migrate/validation.dart';
 import 'exception.dart';
 import 'source.dart';
 

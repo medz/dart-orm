@@ -1,3 +1,9 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -21,13 +27,15 @@ void main() {
       late Database<Backend> db;
       setUp(() async {
         if (backend == 'sqlite') {
-          db = await sqlite(const SqliteOptions.memory());
+          db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
         } else {
-          db = postgres(
-            PostgresOptions(
-              url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-              tls: .disable,
-              schema: 'orm_precision_tests',
+          db = Database.fromSql(
+            postgres(
+              PostgresOptions(
+                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                tls: .disable,
+                schema: 'orm_precision_tests',
+              ),
             ),
           );
           await db.execute(
@@ -117,7 +125,7 @@ void main() {
             .select((w) => w.amount.constrained(5, 1))
             .asCte('rounded');
         expect(
-          await rounded.query
+          await rounded
               .select((c) => c.ref((w) => w.amount.constrained(5, 1)))
               .get(),
           [d('1000'), d('1000')],
@@ -130,8 +138,9 @@ void main() {
           d('999990'),
         );
         await expectLater(
-          db.wallet
-              .byId(a.id)
+          db.wallet.database
+              .table(walletTable)
+              .where((row) => row.id.eq(.value(a.id)))
               .update((w) => [w.amount.setExpression(w.amount.plus(d('.005')))])
               .execute(),
           throwsA(isA<SqlFailure>()),
@@ -139,12 +148,16 @@ void main() {
         expect((await db.wallet.byId(a.id).single()).amount, d('999.99'));
         await db.wallet
             .byId(a.id)
-            .patch(
-              amount: Change.set(d('1.235')),
-              optional: Change.set(d('2.225')),
+            .update(
+              walletPatch.values(
+                amount: .set(d('1.235')),
+                optional: .set(d('2.225')),
+              ),
             );
         expect((await db.wallet.byId(a.id).single()).amount, d('1.24'));
-        await db.wallet.byId(a.id).patch(optional: const Change.set(null));
+        await db.wallet
+            .byId(a.id)
+            .update(walletPatch.values(optional: .set(null)));
         expect((await db.wallet.byId(a.id).single()).optional, null);
       });
 
@@ -152,7 +165,8 @@ void main() {
         'batch inserts and upserts use column coercion and roll back as a unit',
         () async {
           await create();
-          final ids = await db.price
+          final ids = await db.price.database
+              .table(priceTable)
               .insertMany([
                 '1.234',
                 '2.345',
@@ -160,7 +174,8 @@ void main() {
               .returning((p) => p.id)
               .get();
           expect(ids, [d('1.23'), d('2.35')]);
-          await db.price
+          await db.price.database
+              .table(priceTable)
               .insert((p) => [p.id.set(d('1.234')), p.label.set('updated')])
               .onConflictUpdate(
                 target: (p) => [p.id],
@@ -171,7 +186,7 @@ void main() {
               .execute();
           expect((await db.price.byId(d('1.23')).single()).label, 'updated');
           await expectLater(
-            db.price.insertMany([
+            db.price.database.table(priceTable).insertMany([
               '3.456',
               '99.995',
             ], (p, v) => [p.id.set(d(v)), p.label.set(v)]).execute(),
@@ -421,7 +436,7 @@ void main() {
   }
 
   test('SQLite enforces stored precision and checks default coercion and trusted-schema behavior', () async {
-    final db = await sqlite(const SqliteOptions.memory());
+    final db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
     try {
       final expected = TableSchema(
         'quoted',
@@ -541,7 +556,7 @@ void main() {
           throwsA(isA<GenerationException>()),
         );
       }
-      await file.writeAsString("""
+      await file.writeAsString("""import 'package:orm/values.dart';
 import 'package:orm/schema.dart';
 extension type Money(Decimal value) {
   static const codec = Codec<Money>('decimal', decode, encode);

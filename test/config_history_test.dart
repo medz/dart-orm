@@ -1,6 +1,9 @@
 @Tags(['core'])
 library;
 
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';

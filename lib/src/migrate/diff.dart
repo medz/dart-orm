@@ -1,7 +1,6 @@
-import '../../driver.dart' show SqlDialect;
-import '../../schema_model.dart'
-    show Column, ComputedStorage, ForeignKey, IndexSchema, TableSchema;
-import '../../values.dart' show OrmException;
+import '../driver/driver.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
 import 'checks.dart' show checkDelta, withChecks;
 import 'computed.dart' show materializedColumns;
 import 'migration.dart' show Migration;

@@ -1,3 +1,8 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -53,12 +58,19 @@ TableSchema notes({String target = 'accounts', String onDelete = 'CASCADE'}) =>
     );
 
 void main() {
-  runMigrations('sqlite', () => sqlite(const SqliteOptions.memory()));
+  runMigrations(
+    'sqlite',
+    () =>
+        sqlite(const SqliteOptions.memory())
+            .then((sql) => Database.fromSql(sql)),
+  );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url != null) {
     late Database<Postgres> admin;
     setUpAll(() async {
-      admin = postgres(PostgresOptions(url: Uri.parse(url), tls: .disable));
+      admin = Database.fromSql(
+        postgres(PostgresOptions(url: Uri.parse(url), tls: .disable)),
+      );
       await admin.execute(
         SqlCommand('CREATE SCHEMA IF NOT EXISTS orm_migration_tests'),
       );
@@ -71,11 +83,13 @@ void main() {
     });
     runMigrations(
       'postgres',
-      () async => postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: .disable,
-          schema: 'orm_migration_tests',
+      () async => Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: .disable,
+            schema: 'orm_migration_tests',
+          ),
         ),
       ),
     );

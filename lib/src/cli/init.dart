@@ -3,8 +3,9 @@ import 'dart:io';
 import 'package:dart_style/dart_style.dart';
 import 'package:path/path.dart' as p;
 
-import '../../generate.dart';
-import '../../migrate.dart';
+import '../driver/driver.dart';
+import '../generate/schema.dart';
+import '../migrate/source.dart';
 import 'arguments.dart';
 import 'output.dart';
 
@@ -104,29 +105,29 @@ final class Task({
 String _initialConfig(String engine) {
   final connection = switch (engine) {
     'sqlite' =>
-      '''return SqlDatabase(await SqliteDriver.open(
+      '''return sqlite(
       readOnly
           ? const SqliteOptions.readOnly('app.sqlite')
           : const SqliteOptions.file('app.sqlite'),
-    ));''',
+    );''',
     'postgres' =>
-      '''return SqlDatabase(PostgresDriver(PostgresOptions(
+      '''return postgres(PostgresOptions(
       url: databaseUrl(),
       maxConnections: 1,
-    )));''',
+    ));''',
     'mysql' =>
-      '''return SqlDatabase(await MysqlDriver.open(MysqlOptions(
+      '''return mysql(MysqlOptions(
       url: databaseUrl(),
-    )));''',
+    ));''',
     'mariadb' =>
-      '''return SqlDatabase(await MariadbDriver.open(MariadbOptions(
+      '''return mariadb(MariadbOptions(
       url: databaseUrl(),
-    )));''',
+    ));''',
     _ => throw ArgumentError.value(engine),
   };
   return '''${engine == 'sqlite' ? '' : "import 'dart:io';"}
 import 'package:orm/config.dart';
-import 'package:orm/drivers/$engine.dart';
+import 'package:orm/$engine.dart';
 
 void main() {
   defineConfig(

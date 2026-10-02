@@ -1,13 +1,17 @@
 @Tags(['database', 'mysql-suite'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+import 'package:orm/mysql.dart';
+import 'package:orm/mariadb.dart';
+
 import 'dart:io';
 
-import 'package:orm/drivers/mysql.dart';
-import 'package:orm/drivers/mariadb.dart';
 import 'package:orm/generate.dart';
 import 'package:orm/migrate.dart';
-import 'package:orm/orm.dart';
 import 'package:test/test.dart';
 
 void main() {

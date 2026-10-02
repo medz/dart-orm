@@ -1,3 +1,9 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -18,13 +24,15 @@ void main() {
       late Database<Backend> db;
       setUp(() async {
         if (backend == 'sqlite') {
-          db = await sqlite(const SqliteOptions.memory());
+          db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
         } else {
-          db = postgres(
-            PostgresOptions(
-              url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-              tls: .disable,
-              schema: 'orm_integer_tests',
+          db = Database.fromSql(
+            postgres(
+              PostgresOptions(
+                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                tls: .disable,
+                schema: 'orm_integer_tests',
+              ),
             ),
           );
           await db.execute(
@@ -454,7 +462,8 @@ void main() {
           throwsA(isA<GenerationException>()),
         );
       }
-      await source.writeAsString('''import 'package:orm/schema.dart';
+      await source.writeAsString('''import 'package:orm/values.dart';
+import 'package:orm/schema.dart';
 extension type Identifier(int value) {}
 Identifier decode(Object? value) => Identifier(value as int);
 int encode(Identifier value) => value.value;

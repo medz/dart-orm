@@ -8,7 +8,7 @@
 ///
 /// Generation works without a generated client, snapshot or migration registry.
 /// Migration commands load and validate the selected static history on demand.
-/// Database commands use [MigrationConnection] and close the returned runtime.
+/// Database commands use a migration connection callback and close its runtime.
 /// Registration may be evaluated twice to compile that history; keep I/O inside
 /// the connection factory. Deploy frozen history through `migrate_cli.dart` when
 /// a standalone, ahead-of-time compiled migration executable is needed.
@@ -17,7 +17,4 @@
 /// {@canonicalFor config.defineConfig}
 library;
 
-export 'driver.dart' show SqlDialect;
-export 'migrate.dart' show SchemaRenames;
-export 'runtime.dart' show SqlDatabase;
 export 'src/cli/config.dart' show defineConfig;

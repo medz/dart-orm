@@ -157,8 +157,8 @@ final matched = db.post.where((p) => p.author
   .where((a) => a.email.like('%@example.com')).any());
 
 final posts = await matched.get();
-final changed = await matched.update((p) => [p.title.set('Archived')]).execute();
-final removed = await matched.delete().execute();
+final changed = await matched.patch(title: 'Archived');
+final removed = await matched.delete();
 ```
 
 Each execution evaluates the predicate against the database at that time. A read
@@ -271,12 +271,16 @@ Create and update memberships through their ordinary generated table API:
 
 ```dart
 await db.transaction((tx) async {
-  await tx.membership.create(teamId: 10, userId: 1,
-      role: .set(MembershipRole.owner), joinedAt: DateTime.now());
+  await tx.membership.create(
+    teamId: 10,
+    userId: 1,
+    role: MembershipRole.owner,
+    joinedAt: DateTime.now(),
+  );
   await tx.membership.byId(teamId: 20, userId: 1)
-      .patch(role: .set(MembershipRole.member));
+      .patch(role: MembershipRole.member);
 });
-await db.membership.byId(teamId: 10, userId: 1).delete().execute();
+await db.membership.byId(teamId: 10, userId: 1).delete();
 ```
 
 The composite key rejects duplicate memberships. Both endpoints must already

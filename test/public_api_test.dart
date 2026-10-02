@@ -40,6 +40,9 @@ void main() {
         final runtime = await library('lib/orm.dart');
         final sql = await library('lib/sql.dart');
         final schema = await library('lib/schema.dart');
+        final schemaModel = await library('lib/schema_model.dart');
+        final values = await library('lib/values.dart');
+        final driver = await library('lib/driver.dart');
         final migrate = await library('lib/migrate.dart');
         final generate = await library('lib/generate.dart');
         final builder = await library('lib/builder.dart');
@@ -70,6 +73,9 @@ void main() {
             'ForeignKey',
             'IndexSchema',
             'CheckSchema',
+            'Codec',
+            'Decimal',
+            'ComputedStorage',
           }),
           isEmpty,
           reason: 'Declarations do not expose physical schema construction.',
@@ -78,15 +84,13 @@ void main() {
           exports(schema),
           containsAll([
             'Model',
+            'Projection',
             'Id',
             'Column',
             'Unique',
             'ClientDefault',
             'Computed',
             'Check',
-            'Codec',
-            'Decimal',
-            'ComputedStorage',
           ]),
         );
         expect(
@@ -119,14 +123,36 @@ void main() {
           modelType.methods.where((m) => m.isPublic && m.isStatic),
           isEmpty,
         );
-        expect(exports(runtime), isNot(contains('Migration')));
-        for (final path in ['lib/mysql.dart', 'lib/drivers/mysql.dart']) {
+        expect(exports(runtime), {
+          'Database',
+          'DecodeEvent',
+          'WatchQuery',
+          'WatchSql',
+          'ModelQuery',
+          'ModelTable',
+          'ModelWritePlan',
+          'ModelTableWritePlan',
+          'Write',
+          'WriteRows',
+          'InsertWrite',
+          'BatchWrite',
+        });
+        expect(exports(values), containsAll(['Codec', 'Codecs', 'Decimal']));
+        expect(
+          exports(schemaModel),
+          containsAll(['TableSchema', 'ComputedStorage']),
+        );
+        expect(
+          exports(driver),
+          containsAll(['SqlDialect', 'ExecutionOptions']),
+        );
+        for (final path in ['lib/mysql.dart']) {
           final names = exports(await library(path));
           expect(names, containsAll(['MysqlDriver', 'MysqlOptions']));
           expect(names, isNot(contains('MariadbDriver')));
           expect(names, isNot(contains('MariadbOptions')));
         }
-        for (final path in ['lib/mariadb.dart', 'lib/drivers/mariadb.dart']) {
+        for (final path in ['lib/mariadb.dart']) {
           final names = exports(await library(path));
           expect(names, containsAll(['MariadbDriver', 'MariadbOptions']));
           expect(names, isNot(contains('MysqlDriver')));
@@ -134,7 +160,18 @@ void main() {
         }
         expect(
           exports(migrate),
-          containsAll(['Migration', 'SqlDialect', 'TableSchema', 'Codecs']),
+          containsAll([
+            'Migration',
+            'Migrator',
+            'MigrationHistory',
+            'SchemaSnapshot',
+          ]),
+        );
+        expect(
+          exports(migrate)
+              .intersection({'SqlDialect', 'TableSchema', 'Codecs'}),
+          isEmpty,
+          reason: 'Migration APIs use the unique owner of each shared type.',
         );
         expect(exports(migrate), isNot(contains('generateSchema')));
         expect(exports(generate), isNot(contains('ormBuilder')));
@@ -142,10 +179,20 @@ void main() {
 
         // Resolve every public library, including newly added entrypoints.
         // A show list is required whenever a facade reaches into src directly.
-        final entrypoints = [
-          ...Directory('lib').listSync().whereType<File>(),
-          ...Directory('lib/drivers').listSync().whereType<File>(),
-        ].where((file) => file.path.endsWith('.dart'));
+        final entrypoints =
+            [...Directory('lib').listSync(recursive: true).whereType<File>()]
+                .where(
+                  (file) =>
+                      file.path.endsWith('.dart') &&
+                      !file.path.split('/').contains('src'),
+                );
+        expect(
+          Directory('lib/drivers').existsSync()
+              ? Directory('lib/drivers').listSync().whereType<File>().toList()
+              : <File>[],
+          isEmpty,
+        );
+        expect(File('lib/runtime.dart').existsSync(), isFalse);
         const implementationNames = {
           'SqlNode',
           'SqlWriter',
@@ -222,9 +269,15 @@ void main() {
             'SqlValue',
             'ResultShape',
             'ResultColumn',
+            'Selection',
+            'SelectQuery',
+            'Projection',
+            'ProjectedSql',
           ]),
         );
         expect(exports(sql), isNot(contains('SqlTemplate')));
+        expect(exports(sql), isNot(contains('NoOutput')));
+        expect(client, isNot(contains('SelectQuery')));
         expect(exports(schema), isNot(contains('sqlQuery')));
         expect(exports(generate), isNot(contains('generateQueries')));
 

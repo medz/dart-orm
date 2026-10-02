@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:mysql_client_plus/mysql_client_plus.dart' as mysql;
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 import 'connection.dart';
 import 'options.dart';
 

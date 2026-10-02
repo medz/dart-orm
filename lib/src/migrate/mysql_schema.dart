@@ -1,7 +1,6 @@
-import '../../driver.dart' show SqlCommand, SqlDialect;
-import '../../schema_model.dart'
-    show CheckSchema, Column, ForeignKey, IndexSchema, TableSchema;
-import '../../values.dart' show OrmException;
+import '../driver/driver.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
 import 'catalog.dart' show normalizeDefault;
 import 'schema.dart' show checkDefinition, foreignKey, validateSchema;
 import 'snapshot.dart' show foreignKeyJson;

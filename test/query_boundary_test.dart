@@ -1,3 +1,8 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -24,17 +29,22 @@ void main() {
   });
   run(
     'sqlite',
-    (observe) => sqlite(const SqliteOptions.memory(), onQuery: observe),
+    (observe) => sqlite(
+      const SqliteOptions.memory(),
+      onQuery: observe,
+    ).then((sql) => Database.fromSql(sql)),
   );
   if (Platform.environment['ORM_TEST_POSTGRES'] case final url?) {
     run('postgres', (observe) async {
-      final db = postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: .disable,
-          schema: 'orm_boundary_tests',
+      final db = Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: .disable,
+            schema: 'orm_boundary_tests',
+          ),
+          onQuery: observe,
         ),
-        onQuery: observe,
       );
       await db.execute(
         SqlCommand('DROP SCHEMA IF EXISTS orm_boundary_tests CASCADE'),
@@ -109,7 +119,7 @@ void run(
         await db.transaction((tx) async {
           final rootIds = db.table(users).select((u) => u.id);
           final cte = rootIds.asCte('root_ids').alias();
-          final queries = [
+          final queries = <Query<Object?, Fields>>[
             tx.table(users).where((u) => u.id.isInQuery(rootIds)),
             tx.table(users).select((_) => rootIds.take(1).scalar()),
             tx.table(users).where((_) => rootIds.existsExpression()),
@@ -195,10 +205,7 @@ void run(
           )
           .select((_) => alias.optional(alias.fields.email))
           .asCte('optional_email');
-      expect(await source.query.asCte('rebound_email').query.get(), [
-        'one',
-        null,
-      ]);
+      expect(await source.asCte('rebound_email').get(), ['one', null]);
     });
 
     test('mutation predicates and assignments reject aggregate/window SQL before execution', () async {

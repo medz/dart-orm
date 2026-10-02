@@ -1,3 +1,8 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -162,7 +167,7 @@ void main() {
       () {
         final db = Database(_NoConnection(dialect));
         final cte = db.user.select((u) => u.name).asCte('names');
-        final plan = cte.query.union(db.team.select((t) => t.name)).inspect();
+        final plan = cte.union(db.team.select((t) => t.name)).inspect();
         expect(plan.reads, ['teams', 'users']);
         expect(plan.sql, contains('UNION'));
         expect(plan.sqlTemplateCount, 1);
@@ -186,18 +191,19 @@ void main() {
         final events = <QueryEvent>[];
         setUp(() async {
           if (dialect == SqlDialect.sqlite) {
-            db = await sqlite(
-              const SqliteOptions.memory(),
-              onQuery: events.add,
+            db = Database.fromSql(
+              await sqlite(const SqliteOptions.memory(), onQuery: events.add),
             );
           } else {
-            db = postgres(
-              PostgresOptions(
-                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-                schema: 'orm_plan_tests',
-                tls: .disable,
+            db = Database.fromSql(
+              postgres(
+                PostgresOptions(
+                  url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                  schema: 'orm_plan_tests',
+                  tls: .disable,
+                ),
+                onQuery: events.add,
               ),
-              onQuery: events.add,
             );
             await db.execute(
               SqlCommand('DROP SCHEMA IF EXISTS orm_plan_tests CASCADE'),

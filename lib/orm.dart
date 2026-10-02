@@ -1,25 +1,38 @@
-/// Typed queries, explicit transactions and change subscriptions.
+/// Optional typed model views and query change subscriptions.
 ///
-/// Import a database entrypoint such as `package:orm/sqlite.dart` to open a
-/// connection and use this API. [Database] also accepts an independently created
-/// driver. Generated clients add typed table getters to each database/session.
+/// Add [Database.fromSql] to an existing SQL runtime opened through an engine
+/// entrypoint such as `package:orm/sqlite.dart`. Generated clients add typed
+/// table getters to that view and its borrowed transaction sessions.
 ///
-/// Use [SqlBuilder] to compile queries without connecting, and [SqlDatabase] for
-/// raw SQL execution. Schema declarations and migration tools have separate
-/// entrypoints so application code need not import development tooling.
+/// Import `package:orm/sql.dart` for query expressions and SQL execution. Model
+/// declarations and migration tools have their own explicit entrypoints.
 ///
 /// {@category Databases}
 /// {@canonicalFor database.Database}
 /// {@canonicalFor observation.DecodeEvent}
 /// {@canonicalFor watch.WatchQuery}
 /// {@canonicalFor watch.WatchSql}
-/// {@canonicalFor sql_check.SqlCheck}
-/// {@canonicalFor sql_check.checkSqlQuery}
+/// {@canonicalFor model_query.Write}
+/// {@canonicalFor model_query.WriteRows}
+/// {@canonicalFor model_query.InsertWrite}
+/// {@canonicalFor model_query.BatchWrite}
+/// {@canonicalFor model_query.ModelQuery}
+/// {@canonicalFor model_query.ModelTable}
+/// {@canonicalFor model_query.ModelWritePlan}
+/// {@canonicalFor model_query.ModelTableWritePlan}
 library;
 
-export 'sql.dart';
-export 'runtime.dart';
 export 'src/orm/database.dart' show Database;
 export 'src/orm/observation.dart' show DecodeEvent;
 export 'src/orm/watch.dart' show WatchQuery, WatchSql;
-export 'src/orm/sql_check.dart' show SqlCheck, checkSqlQuery;
+
+export 'src/orm/model_query.dart'
+    show
+        Write,
+        WriteRows,
+        InsertWrite,
+        BatchWrite,
+        ModelQuery,
+        ModelTable,
+        ModelWritePlan,
+        ModelTableWritePlan;

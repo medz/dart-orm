@@ -1,6 +1,10 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -15,15 +19,20 @@ import '../example/company/schema.snapshot.dart' as physical;
 void main() {
   runRecordTests(
     'sqlite',
-    (observe) => sqlite(const SqliteOptions.memory(), onQuery: observe),
+    (observe) => sqlite(
+      const SqliteOptions.memory(),
+      onQuery: observe,
+    ).then((sql) => Database.fromSql(sql)),
   );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url != null) {
     const schema = 'orm_record_schema_tests';
     late Database<Postgres> admin;
     setUpAll(() async {
-      admin = postgres(
-        PostgresOptions(url: Uri.parse(url), tls: PostgresTls.disable),
+      admin = Database.fromSql(
+        postgres(
+          PostgresOptions(url: Uri.parse(url), tls: PostgresTls.disable),
+        ),
       );
       await admin.execute(SqlCommand('CREATE SCHEMA "$schema"'));
     });
@@ -33,13 +42,15 @@ void main() {
     });
     runRecordTests(
       'postgres',
-      (observe) async => postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: PostgresTls.disable,
-          schema: schema,
+      (observe) async => Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: PostgresTls.disable,
+            schema: schema,
+          ),
+          onQuery: observe,
         ),
-        onQuery: observe,
       ),
     );
   }
@@ -126,12 +137,16 @@ void runRecordTests(
           ['worker'],
         );
         expect(events.length, 2);
-        await db.employee.byId(worker.id).patch(name: .set('changed'));
+        await db.employee
+            .byId(worker.id)
+            .update(employeePatch.values(name: .set('changed')));
         expect(
           (await db.employee.byId(worker.id).single()).managerId,
           manager.id,
         );
-        await db.employee.byId(worker.id).patch(managerId: .set(null));
+        await db.employee
+            .byId(worker.id)
+            .update(employeePatch.values(managerId: .set(null)));
         expect((await db.employee.byId(worker.id).single()).managerId, isNull);
         final project = await db.project.create(
           name: 'Schema',
@@ -152,7 +167,9 @@ void runRecordTests(
         );
         await db.projectMember
             .byId(projectId: project.id, employeeId: worker.id)
-            .patch(role: .set(MemberRole.maintainer));
+            .update(
+              projectMemberPatch.values(role: .set(MemberRole.maintainer)),
+            );
         expect((await db.projectMember.single()).role, MemberRole.maintainer);
       },
     );
@@ -199,16 +216,16 @@ void runRecordTests(
           employeeId: worker.id,
         );
         await expectLater(
-          db.department.byId(team.id).delete().execute(),
+          db.department.byId(team.id).delete(),
           throwsA(constraintFailure),
         );
         await expectLater(
-          db.employee.byId(worker.id).delete().execute(),
+          db.employee.byId(worker.id).delete(),
           throwsA(constraintFailure),
         );
-        await db.employee.byId(manager.id).delete().execute();
+        await db.employee.byId(manager.id).delete();
         expect((await db.employee.byId(worker.id).single()).managerId, isNull);
-        await db.project.byId(project.id).delete().execute();
+        await db.project.byId(project.id).delete();
         expect(await db.projectMember.count(), 0);
         expect(await db.employee.count(), 1);
       },

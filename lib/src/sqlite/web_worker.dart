@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:sqlite3/wasm.dart' as sqlite;
 import 'package:web/web.dart' as web;
 
-import '../../driver.dart';
+import '../values/codec.dart';
 import 'execution.dart';
 import 'web_build.dart';
 import 'web_wire.dart';

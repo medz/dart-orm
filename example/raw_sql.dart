@@ -1,3 +1,5 @@
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
 
@@ -15,7 +17,7 @@ SqlQuery<({int id, String email})> userById(int id) => Sql(
 ).returns(userRow);
 
 Future<void> main() async {
-  final db = await sqlite(const SqliteOptions.memory());
+  final db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
   try {
     for (final command in createSchema(appSchema, db.dialect)) {
       await db.execute(command);

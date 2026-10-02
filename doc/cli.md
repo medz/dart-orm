@@ -33,7 +33,8 @@ The configuration contains ordinary Dart and does not import generated files:
 
 ```dart
 import 'package:orm/config.dart';
-import 'package:orm/drivers/sqlite.dart';
+import 'package:orm/sqlite.dart';
+import 'package:orm/sql.dart';
 
 void main() {
   defineConfig(

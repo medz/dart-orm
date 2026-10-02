@@ -21,7 +21,9 @@ void main() {
   Future<File> source(String name, String contents) async {
     final file = File('${fixtures.path}/$name.dart');
     await file.parent.create(recursive: true);
-    await file.writeAsString("import 'package:orm/schema.dart';\n$contents");
+    await file.writeAsString(
+      "import 'package:orm/schema.dart';\nimport 'package:orm/values.dart';\n$contents",
+    );
     return file;
   }
 

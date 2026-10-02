@@ -8,7 +8,8 @@ import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/type.dart';
 import 'package:analyzer/dart/element/type_system.dart';
 
-import '../../../schema_model.dart';
+import '../../driver/driver.dart';
+import '../../schema/model.dart';
 import '../model.dart';
 import '../exception.dart';
 import '../source.dart';
@@ -1153,15 +1154,7 @@ final class AnnotationReader(
           model.fields.length) {
         failAt(node, 'DUPLICATE', 'Duplicate physical column on ${model.row}.');
       }
-      for (final symbol in [
-        model.row,
-        model.fieldsType,
-        model.setType,
-        '${model.symbol}Updates',
-        '${model.binding}Schema',
-        '${model.binding}Table',
-        for (final field in model.fields) columnSymbol(model, field),
-      ]) {
+      for (final symbol in modelGeneratedSymbols(model)) {
         if (!symbols.add(symbol)) {
           failAt(
             node,

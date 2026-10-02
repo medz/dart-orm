@@ -64,9 +64,9 @@ import 'package:my_app/models.orm.dart';
 final User user = await db.user.create(email: 'a@example.com');
 print(user.displayLabel());
 
-await db.user.byId(user.id).patch(nickname: .set(null));
+await db.user.byId(user.id).patch(nickname: null);
 final User updated = await db.user.byId(user.id).single();
-await db.user.byId(user.id).delete().execute();
+await db.user.byId(user.id).delete();
 ```
 
 The generated client imports and reexports the original DTO. It never emits a
@@ -74,17 +74,14 @@ replacement `User` class. Every normal read selects and decodes every mapped
 scalar field, including actual database nulls, then passes all those values to
 the constructor. Business methods and derived getters remain available.
 
-Required creation fields take their declared type directly. Generated fields and
-fields with defaults use `Change<T>` to distinguish omission from an explicit
-value. Use `.set(value)` to provide one, including `.set(null)` for a nullable
-field; `.keep()` is the default omission marker. For example:
+Creation and patch factories accept their declared literal types. Omitted values
+retain defaults or existing values; explicit null clears a nullable field. Use
+the input factory's `.values(...)` for expressions and database-default intent:
 
 ```dart
-final user = await db.user.create(
-  email: 'b@example.com',
-  nickname: .set(null),
-  active: .set(false),
-);
+final user = await db.user.create(email: 'b@example.com',
+  nickname: null,
+  active: false);
 ```
 
 Patches use the same presence representation. Omitted fields remain unchanged;

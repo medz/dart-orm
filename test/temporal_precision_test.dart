@@ -1,3 +1,9 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -22,13 +28,15 @@ void main() {
       late Database<Backend> db;
       setUp(() async {
         if (backend == 'sqlite') {
-          db = await sqlite(const SqliteOptions.memory());
+          db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
         } else {
-          db = postgres(
-            PostgresOptions(
-              url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-              tls: .disable,
-              schema: 'orm_temporal_precision_tests',
+          db = Database.fromSql(
+            postgres(
+              PostgresOptions(
+                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                tls: .disable,
+                schema: 'orm_temporal_precision_tests',
+              ),
             ),
           );
           await db.execute(
@@ -62,15 +70,18 @@ void main() {
         expect(a.rounded, t('12:00'));
         await db.moment
             .byId(a.id)
-            .patch(
-              clock: Change.set(t('23:59:59.9995')),
-              optional: Change.set(t('01:02:03.125')),
+            .update(
+              momentPatch.values(
+                clock: .set(t('23:59:59.9995')),
+                optional: .set(t('01:02:03.125')),
+              ),
             );
         final updated = await db.moment.byId(a.id).single();
         expect(updated.clock, t('24:00'));
         expect(updated.optional, t('01:02:03.13'));
-        await db.moment
-            .byId(a.id)
+        await db.moment.database
+            .table(momentTable)
+            .where((row) => row.id.eq(.value(a.id)))
             .update(
               (m) => [
                 m.clock.setExpression(value(t('01:00:00.7775'), Codecs.time)),
@@ -154,7 +165,7 @@ void main() {
             .select((m) => m.clock.withPrecision(0))
             .asCte('whole_seconds');
         expect(
-          await cte.query
+          await cte
               .select((c) => c.ref((m) => m.clock.withPrecision(0)))
               .single(),
           t('12:00'),
@@ -196,7 +207,7 @@ void main() {
 
       test('rounded keys work in batch writes, upserts and foreign-key relation loading', () async {
         await create();
-        await db.slot.insertMany([
+        await db.slot.database.table(slotTable).insertMany([
           '01:00:00.1235',
           '02:00:00.1235',
         ], (s, v) => [s.time.set(t(v)), s.label.set(v)]).execute();
@@ -207,14 +218,15 @@ void main() {
             .single();
         expect(related, '01:00:00.1235');
         await expectLater(
-          db.slot.insertMany([
+          db.slot.database.table(slotTable).insertMany([
             '03:00:00.1235',
             '01:00:00.1236',
           ], (s, v) => [s.time.set(t(v)), s.label.set(v)]).execute(),
           throwsA(isA<SqlFailure>()),
         );
         expect(await db.slot.count(), 2);
-        await db.slot
+        await db.slot.database
+            .table(slotTable)
             .insert(
               (s) => [s.time.set(t('01:00:00.1238')), s.label.set('updated')],
             )

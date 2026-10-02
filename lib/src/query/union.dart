@@ -1,10 +1,13 @@
 import 'package:meta/meta.dart';
 
-import '../../schema_model.dart';
+import '../driver/driver.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
 import 'cte.dart';
 import 'expression.dart';
 import 'joins.dart';
 import 'nodes.dart';
+import 'projection.dart';
 import 'query.dart';
 import 'selection.dart';
 import 'table.dart';
@@ -106,6 +109,14 @@ extension SetQueries<R, F extends Fields> on Query<R, F> {
         'UNION operands must use the same database/session.',
       );
     }
+    final leftType = projectionTypeOf(querySelection);
+    final rightType = projectionTypeOf(other.querySelection);
+    if (!identical(leftType, rightType)) {
+      throw const OrmException(
+        'QUERY.UNION_CONTRACT',
+        'UNION requires the same declared projection descriptor.',
+      );
+    }
     final shape = sqlRowShape(querySelection);
     if (shape == null || shape != sqlRowShape(other.querySelection)) {
       throw const OrmException(
@@ -181,6 +192,7 @@ extension SetQueries<R, F extends Fields> on Query<R, F> {
 int? sqlRowShape(Selection<Object?> selection) => switch (selection) {
   Expr() => 0,
   _SqlRow(:final columns) => columns.length,
+  Projection(:final bindings) => bindings.length,
   ReboundSelection(:final source?) => sqlRowShape(source),
   _ => null,
 };

@@ -1,6 +1,11 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -16,19 +21,24 @@ Matcher code(String code) =>
 void main() {
   runTests(
     'sqlite',
-    (observe) => sqlite(const SqliteOptions.memory(), onQuery: observe),
+    (observe) => sqlite(
+      const SqliteOptions.memory(),
+      onQuery: observe,
+    ).then((sql) => Database.fromSql(sql)),
   );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url != null) {
     runTests('postgres', (observe) async {
-      final db = postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: .disable,
-          schema: 'orm_transaction_tests',
-          maxConnections: 1,
+      final db = Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: .disable,
+            schema: 'orm_transaction_tests',
+            maxConnections: 1,
+          ),
+          onQuery: observe,
         ),
-        onQuery: observe,
       );
       await db.execute(
         SqlCommand('CREATE SCHEMA IF NOT EXISTS orm_transaction_tests'),
@@ -47,7 +57,8 @@ void main() {
         journal: .delete,
         busyTimeout: const Duration(milliseconds: 40),
       );
-      final writer = await sqlite(options), reader = await sqlite(options);
+      final writer = Database.fromSql(await sqlite(options)),
+          reader = Database.fromSql(await sqlite(options));
       await createTables(writer);
       await writer.table(users).createRow((u) => [u.email.set('initial')]);
       final entered = Completer<void>(), release = Completer<void>();
@@ -107,7 +118,8 @@ void main() {
         '${directory.path}/db.sqlite',
         busyTimeout: const Duration(milliseconds: 150),
       );
-      final writer = await sqlite(options), blocked = await sqlite(options);
+      final writer = Database.fromSql(await sqlite(options)),
+          blocked = Database.fromSql(await sqlite(options));
       final entered = Completer<void>(), release = Completer<void>();
       final owner = writer.transaction((tx) async {
         entered.complete();
@@ -656,12 +668,14 @@ void runTests(
     });
 
     if (name == 'postgres') {
-      Future<Database<Postgres>> concurrent() async => postgres(
-        PostgresOptions(
-          url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-          tls: .disable,
-          schema: 'orm_transaction_tests',
-          maxConnections: 1,
+      Future<Database<Postgres>> concurrent() async => Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+            tls: .disable,
+            schema: 'orm_transaction_tests',
+            maxConnections: 1,
+          ),
         ),
       );
       test(

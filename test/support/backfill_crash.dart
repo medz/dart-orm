@@ -1,3 +1,6 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -9,13 +12,15 @@ Future<void> crashBackfill(
   List<String> args,
 ) async {
   final Database<Backend> base = args[0] == 'sqlite'
-      ? await sqlite(SqliteOptions.file(args[1]))
-      : postgres(
-          PostgresOptions(
-            url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-            tls: .disable,
-            schema: args[1],
-            maxConnections: 1,
+      ? Database.fromSql(await sqlite(SqliteOptions.file(args[1])))
+      : Database.fromSql(
+          postgres(
+            PostgresOptions(
+              url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+              tls: .disable,
+              schema: args[1],
+              maxConnections: 1,
+            ),
           ),
         );
   var writes = 0;

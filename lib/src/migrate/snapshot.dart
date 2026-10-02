@@ -1,12 +1,5 @@
-import '../../driver.dart' show SqlDialect;
-import '../../schema_model.dart'
-    show
-        CheckSchema,
-        Column,
-        ComputedColumn,
-        ForeignKey,
-        IndexSchema,
-        TableSchema;
+import '../driver/driver.dart';
+import '../schema/model.dart';
 import 'computed.dart' show computedJson;
 import 'mysql_schema.dart' show isMysqlFamily, mysqlPhysicalTable;
 import 'schema.dart' show validateSchema;

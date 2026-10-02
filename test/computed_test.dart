@@ -1,3 +1,9 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -43,13 +49,15 @@ void main() {
         late Database<Backend> db;
         setUp(() async {
           if (dialect == SqlDialect.sqlite) {
-            db = await sqlite(const SqliteOptions.memory());
+            db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
           } else {
-            db = postgres(
-              PostgresOptions(
-                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-                schema: 'orm_computed_tests',
-                tls: .disable,
+            db = Database.fromSql(
+              postgres(
+                PostgresOptions(
+                  url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                  schema: 'orm_computed_tests',
+                  tls: .disable,
+                ),
               ),
             );
             await db.execute(
@@ -106,14 +114,15 @@ void main() {
           expect((row.total, row.labelSize, row.normalizedNote), (12, 3, null));
           await db.line
               .byId(row.id)
-              .patch(quantity: .set(5), note: .set('Hello'));
+              .update(linePatch.values(quantity: .set(5), note: .set('Hello')));
           expect(
             await db.line
                 .select((r) => (r.total, r.labelSize, r.normalizedNote).row)
                 .single(),
             (20, 3, 'HELLO'),
           );
-          final inserted = await db.line
+          final inserted = await db.line.database
+              .table(lineTable)
               .insertMany(
                 [2, 3],
                 (r, int q) => [
@@ -125,7 +134,8 @@ void main() {
               .returning((r) => r.total)
               .get();
           expect(inserted, [20, 30]);
-          final updated = await db.line
+          final updated = await db.line.database
+              .table(lineTable)
               .insert(
                 (r) => [
                   r.id.set(row.id),
@@ -160,7 +170,9 @@ void main() {
             [35],
           );
           expect(
-            () => db.line.update((r) => [r.column(r.total.definition).set(1)]),
+            () => db.line.database
+                .table(lineTable)
+                .update((r) => [r.column(r.total.definition).set(1)]),
             throwsA(
               isA<OrmException>().having(
                 (e) => e.code,

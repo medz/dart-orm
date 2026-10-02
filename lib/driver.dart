@@ -5,9 +5,9 @@
 /// generated model decoding. [Capabilities] reports the operations the concrete
 /// engine and adapter can perform.
 ///
-/// Concrete drivers are available from `package:orm/drivers/sqlite.dart`,
-/// `package:orm/drivers/postgres.dart`, `package:orm/drivers/mysql.dart`, and
-/// `package:orm/drivers/mariadb.dart`. Import `package:orm/runtime.dart` when you
+/// Concrete drivers are available from `package:orm/sqlite.dart`,
+/// `package:orm/postgres.dart`, `package:orm/mysql.dart`, and
+/// `package:orm/mariadb.dart`. Import `package:orm/sql.dart` when you
 /// also need managed sessions and transactions.
 ///
 /// {@category Drivers}
@@ -17,19 +17,14 @@
 /// {@canonicalFor driver.Capabilities}
 /// {@canonicalFor driver.Driver}
 /// {@canonicalFor driver.ExecutionOptions}
-/// {@canonicalFor driver.Mariadb}
-/// {@canonicalFor driver.Mysql}
-/// {@canonicalFor driver.Postgres}
 /// {@canonicalFor driver.SqlCommand}
 /// {@canonicalFor driver.SqlConnection}
 /// {@canonicalFor driver.SqlCursor}
 /// {@canonicalFor driver.SqlDialect}
 /// {@canonicalFor driver.SqlFailure}
 /// {@canonicalFor driver.SqlResult}
-/// {@canonicalFor driver.Sqlite}
 library;
 
-export 'values.dart';
 export 'src/driver/driver.dart'
     show
         AcquisitionOptions,
@@ -38,13 +33,9 @@ export 'src/driver/driver.dart'
         Capabilities,
         Driver,
         ExecutionOptions,
-        Mariadb,
-        Mysql,
-        Postgres,
         SqlCommand,
         SqlConnection,
         SqlCursor,
         SqlDialect,
         SqlFailure,
-        SqlResult,
-        Sqlite;
+        SqlResult;

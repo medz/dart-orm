@@ -1,3 +1,9 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -98,7 +104,7 @@ void main() {
   test(
     'explicit namespaces reject unsupported query and migration engines',
     () async {
-      final db = await sqlite(const SqliteOptions.memory());
+      final db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
       addTearDown(db.close);
       expect(
         () => db.table(_users('auth')).compile(),
@@ -159,8 +165,14 @@ void main() {
         first = '${prefix}_A';
         second = '${prefix}_B';
         history = '${prefix}_history';
-        db = postgres(
-          PostgresOptions(url: Uri.parse(url!), tls: .disable, schema: history),
+        db = Database.fromSql(
+          postgres(
+            PostgresOptions(
+              url: Uri.parse(url!),
+              tls: .disable,
+              schema: history,
+            ),
+          ),
         );
         await db.execute(SqlCommand('CREATE SCHEMA "$history"'));
       });
@@ -325,7 +337,7 @@ void main() {
           expect((await session.table(a).get()).single.name, 'Alice');
           expect((await session.table(b).get()).single.name, 'Bob');
           final cte = session.table(b).select((u) => u.id).asCte('Users');
-          expect(await cte.query.get(), [1]);
+          expect(await cte.get(), [1]);
           final alias = b.alias();
           final joined = await session
               .table(a)

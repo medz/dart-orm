@@ -2,7 +2,8 @@ import 'dart:typed_data';
 
 import 'package:postgres/postgres.dart' as pg;
 
-import '../../values.dart';
+import '../values/codec.dart';
+import '../values/temporal.dart';
 
 /// Native calendar values and UTC instants, without integer overflow.
 /// Local calendar types cover PostgreSQL's full finite range; UTC instants

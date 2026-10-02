@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 import 'context.dart';
 import 'joins.dart';
 import 'nodes.dart';
@@ -29,6 +30,34 @@ final class Assignment {
 /// @nodoc
 @internal
 enum MutationKind { insert, update, delete }
+
+/// @nodoc
+@internal
+void preflightMutationQuery(QueryState state) {
+  if (state.limit != null ||
+      state.joins.isNotEmpty ||
+      state.union != null ||
+      state.ctes.isNotEmpty ||
+      state.offset != null ||
+      state.order.isNotEmpty ||
+      state.group.isNotEmpty ||
+      state.having != null ||
+      state.distinct) {
+    throw const OrmException(
+      'MUTATION.QUERY',
+      'Mutations accept a table and WHERE; select keys for paginated mutations.',
+    );
+  }
+  if (state.predicate case final predicate?) {
+    if (aggregate(predicate.expressionNode) ||
+        window(predicate.expressionNode)) {
+      throw const OrmException(
+        'QUERY.AGGREGATE',
+        'Mutation predicates cannot contain aggregate or window functions. Use a subquery.',
+      );
+    }
+  }
+}
 
 /// A prepared insert, update, or delete that performs no I/O until executed.
 ///
@@ -237,20 +266,7 @@ final class Mutation<F extends Fields> {
         'RETURNING selects scalar fields; query relations after the mutation.',
       );
     }
-    if (queryState.limit != null ||
-        queryState.joins.isNotEmpty ||
-        queryState.union != null ||
-        queryState.ctes.isNotEmpty ||
-        queryState.offset != null ||
-        queryState.order.isNotEmpty ||
-        queryState.group.isNotEmpty ||
-        queryState.having != null ||
-        queryState.distinct) {
-      throw const OrmException(
-        'MUTATION.QUERY',
-        'Mutations accept a table and WHERE; select keys for paginated mutations.',
-      );
-    }
+    preflightMutationQuery(queryState);
     final subqueryReads =
         database.dialect == SqlDialect.mysql &&
             mutationKind != MutationKind.insert
@@ -299,15 +315,6 @@ final class Mutation<F extends Fields> {
     }
 
     validate(writeAssignments);
-    if (queryState.predicate case final predicate?) {
-      if (aggregate(predicate.expressionNode) ||
-          window(predicate.expressionNode)) {
-        throw const OrmException(
-          'QUERY.AGGREGATE',
-          'Mutation predicates cannot contain aggregate or window functions. Use a subquery.',
-        );
-      }
-    }
     for (final row in insertRows ?? <List<Assignment>>[]) {
       validate(row);
     }
@@ -349,9 +356,16 @@ final class Mutation<F extends Fields> {
             ' (${values.map((a) => w.quote(a.field.definition.name)).join(', ')})',
           );
           final rows = insertRows ?? [writeAssignments];
-          b.write(
-            ' VALUES ${rows.map((row) => '(${row.where((a) => a.assignedValue != null).map(assigned).join(', ')})').join(', ')}',
-          );
+          // INSERT has no current target row. A scalar subquery supplies its
+          // own source; conflict handlers and RETURNING regain the target below.
+          final targetAlias = w.aliases.remove(queryState.source);
+          try {
+            b.write(
+              ' VALUES ${rows.map((row) => '(${row.where((a) => a.assignedValue != null).map(assigned).join(', ')})').join(', ')}',
+            );
+          } finally {
+            if (targetAlias != null) w.aliases[queryState.source] = targetAlias;
+          }
         }
       case MutationKind.update:
         if (writeAssignments.isEmpty) {

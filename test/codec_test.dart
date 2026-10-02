@@ -1,10 +1,18 @@
 @Tags(['core'])
 library;
 
-import 'package:orm/orm.dart';
+import 'dart:typed_data';
+
+import 'package:orm/values.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('bytes codec retains caller-owned buffers outside SQL binding', () {
+    final bytes = Uint8List.fromList([1, 2]);
+    expect(identical(Codecs.bytes.encode(bytes), bytes), isTrue);
+    expect(identical(Codecs.bytes.decode(bytes), bytes), isTrue);
+  });
+
   test(
     'numeric aggregate text decodes without integer rounding or overflow',
     () {

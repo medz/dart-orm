@@ -1,3 +1,8 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -50,7 +55,9 @@ Future<Map<String, Object?>> runAcceptance({
       phase == 'legacy' ? 'Fresh database' : 'Existing database retained',
     );
     final migrations = migrationHistory.checked.take(version).toList();
-    final db = database = await sqlite(SqliteOptions.file(path));
+    final db = database = Database.fromSql(
+      await sqlite(SqliteOptions.file(path)),
+    );
     report['sqlite'] = (await db.execute(SqlCommand('SELECT sqlite_version()')))
         .rows
         .single
@@ -164,7 +171,7 @@ Future<Map<String, Object?>> runAcceptance({
           snapshots.length == count && (await query.get()).length == 3,
           'Rollback neither persisted nor notified',
         );
-        await db.note.byId(1).patch(done: .set(true));
+        await db.note.byId(1).patch(done: true);
         await waitFor((rows) => rows.first.done);
         check(true, 'Typed patch refreshed watch');
         var ticks = 0;
@@ -249,7 +256,7 @@ Future<Map<String, Object?>> runAcceptance({
     ];
     await db.close();
     database = null;
-    final reader = await sqlite(SqliteOptions.readOnly(path));
+    final reader = Database.fromSql(await sqlite(SqliteOptions.readOnly(path)));
     try {
       check(
         (await reader.execute(SqlCommand('SELECT count(*) FROM notes')))

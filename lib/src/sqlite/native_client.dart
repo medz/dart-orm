@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:ffi' as ffi;
 import 'dart:isolate';
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 import 'failure.dart';
 import 'native_protocol.dart';
 import 'native_server.dart';

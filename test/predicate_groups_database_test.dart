@@ -1,6 +1,8 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/orm.dart';
+
 import 'dart:io';
 
 import 'package:orm/postgres.dart';
@@ -11,15 +13,21 @@ import 'support/predicate_groups.dart';
 
 void main() {
   group('sqlite predicate groups', () {
-    predicateGroupTests(() => sqlite(const SqliteOptions.memory()));
+    predicateGroupTests(
+      () =>
+          sqlite(const SqliteOptions.memory())
+              .then((sql) => Database.fromSql(sql)),
+    );
   }, tags: 'sqlite');
   final address = Platform.environment['ORM_TEST_POSTGRES'];
   group(
     'postgres predicate groups',
     () {
       predicateGroupTests(
-        () async => postgres(
-          PostgresOptions(url: Uri.parse(address!), tls: PostgresTls.disable),
+        () async => Database.fromSql(
+          postgres(
+            PostgresOptions(url: Uri.parse(address!), tls: PostgresTls.disable),
+          ),
         ),
       );
     },

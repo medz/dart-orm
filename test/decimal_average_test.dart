@@ -1,3 +1,8 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -51,13 +56,15 @@ void main() {
       late Database<Backend> db;
       setUp(() async {
         if (backend == 'sqlite') {
-          db = await sqlite(const SqliteOptions.memory());
+          db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
         } else {
-          db = postgres(
-            PostgresOptions(
-              url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-              tls: .disable,
-              schema: 'orm_decimal_average_tests',
+          db = Database.fromSql(
+            postgres(
+              PostgresOptions(
+                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                tls: .disable,
+                schema: 'orm_decimal_average_tests',
+              ),
             ),
           );
           await db.execute(
@@ -108,7 +115,7 @@ void main() {
                 .single(),
             d('2'),
           );
-          await db.entry.byId(2).patch(fee: Change.set(d('4')));
+          await db.entry.byId(2).update(entryPatch.values(fee: .set(d('4'))));
           expect(
             await db.entry.select((e) => e.fee.average(scale: 2)).single(),
             d('4'),
@@ -128,7 +135,7 @@ void main() {
             ['1250', '1450'],
             ['-1250', '-1450'],
           ]) {
-            await db.entry.delete().execute();
+            await db.entry.delete();
             await rows(values);
             final sum = values.map(d).reduce((a, b) => a + b);
             for (final mode in DecimalRounding.values) {
@@ -175,7 +182,7 @@ void main() {
             await db.entry.select((e) => e.amount.average(scale: 0)).single(),
             d('9e131071'),
           );
-          await db.entry.delete().execute();
+          await db.entry.delete();
           await rows(['9e131071', '-9e131071', '1']);
           final actual = await db.entry
               .select(
@@ -186,7 +193,7 @@ void main() {
             actual == d('1').divide(d('3'), scale: 16383, rounding: .halfEven),
             isTrue,
           );
-          await db.entry.delete().execute();
+          await db.entry.delete();
           await rows(['-9e131071', '-9e131071']);
           expect(
             await db.entry.select((e) => e.amount.average(scale: 0)).single(),
@@ -219,7 +226,7 @@ void main() {
                 .single(),
             d('1e-16383'),
           );
-          await db.entry.delete().execute();
+          await db.entry.delete();
           await rows(['5e131071', '5e131071']);
           expect(
             await db.entry
@@ -256,7 +263,7 @@ void main() {
           expect(await grouped.get(), [('b', d('2.5'))]);
           final cte = grouped.asCte('means');
           expect(
-            await cte.query
+            await cte
                 .where(
                   (e) => e
                       .ref((o) => o.amount.average(scale: 1))
@@ -271,7 +278,7 @@ void main() {
               .distinct()
               .asCte('unique_amounts');
           expect(
-            await unique.query
+            await unique
                 .select((e) => e.ref((o) => o.amount).average(scale: 1))
                 .single(),
             d('2'),
@@ -300,7 +307,8 @@ void main() {
             ),
           );
           expect(
-            () => db.entry
+            () => db.entry.database
+                .table(entryTable)
                 .update(
                   (e) => [e.fee.setExpression(e.amount.average(scale: 2))],
                 )
@@ -351,7 +359,7 @@ void main() {
           );
           final cte = db.entry.select(mean).asCte('running_means');
           expect(
-            await cte.query.where((e) => e.ref(mean).gt(.value(d('10')))).get(),
+            await cte.where((e) => e.ref(mean).gt(.value(d('10')))).get(),
             [d('15')],
           );
           expect(
@@ -398,7 +406,8 @@ void main() {
         await rows(['1', '2'], bucket: 'a');
         await rows(['1', '0', '0'], bucket: 'b');
         final source = db.entry;
-        await db.entry
+        await db.entry.database
+            .table(entryTable)
             .where((e) => e.bucket.eq(.value('a')))
             .update(
               (e) => [
@@ -422,7 +431,7 @@ void main() {
           db.transaction((tx) async {
             await tx.entry
                 .where((e) => e.bucket.eq(.value('a')))
-                .patch(fee: Change.set(d('99')));
+                .update(entryPatch.values(fee: .set(d('99'))));
             await tx.entry
                 .where((e) => e.bucket.eq(.value('b')))
                 .select((e) => e.amount.average(scale: 1))
@@ -584,9 +593,7 @@ void main() {
                 .select((e) => e.bucket)
                 .asCte('repeated_anchors');
             expect(
-              await repeated.query
-                  .select((e) => next.average(scale: 1))
-                  .single(),
+              await repeated.select((e) => next.average(scale: 1)).single(),
               d('11'),
             );
             expect(

@@ -1,4 +1,7 @@
 // Review before applying. Applied migrations must remain unchanged.
+import 'package:orm/driver.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
 import 'package:orm/migrate.dart';
 
 const migrationChecksum =

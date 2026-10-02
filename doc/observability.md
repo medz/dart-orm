@@ -71,15 +71,19 @@ issue either command automatically.
 ## Measuring execution phases
 
 ```dart
-final db = await sqlite(
+final engine = await sqlite(
   const SqliteOptions.memory(),
   onAcquire: (event) => print((event.elapsed, event.reusedConnection, event.error)),
   onQuery: (event) => print((event.operation, event.rowCount, event.elapsed)),
+);
+final db = Database.fromSql(
+  engine,
   onDecode: (event) => print((event.inputRows, event.elapsed, event.error)),
 );
 ```
 
-`Database`, `postgres` and `sqlite` accept the same optional hooks.
+Engine factories accept acquisition and SQL observers; the optional ORM view owns
+model decoding observers. Direct `Database(driver, ...)` accepts all three hooks.
 Sessions, transaction attempts and savepoints inherit them.
 
 | Hook | Measured interval | Limits |

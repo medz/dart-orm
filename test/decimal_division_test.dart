@@ -1,6 +1,11 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -21,13 +26,15 @@ void main() {
       late Database<Backend> db;
       setUp(() async {
         if (backend == 'sqlite') {
-          db = await sqlite(const SqliteOptions.memory());
+          db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
         } else {
-          db = postgres(
-            PostgresOptions(
-              url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-              tls: .disable,
-              schema: 'orm_decimal_division_tests',
+          db = Database.fromSql(
+            postgres(
+              PostgresOptions(
+                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                tls: .disable,
+                schema: 'orm_decimal_division_tests',
+              ),
             ),
           );
           await db.execute(
@@ -298,7 +305,7 @@ void main() {
             )
             .asCte('halves');
         expect(
-          await cte.query
+          await cte
               .where(
                 (e) => e
                     .ref(
@@ -340,8 +347,9 @@ void main() {
             fee: d('3'),
             bucket: 'a',
           );
-          await db.entry
-              .byId(row.id)
+          await db.entry.database
+              .table(entryTable)
+              .where((fields) => fields.id.eq(.value(row.id)))
               .update(
                 (e) => [
                   e.amount.setExpression(e.amount.divide(d('4'), scale: 2)),
@@ -353,9 +361,10 @@ void main() {
             db.transaction((tx) async {
               await tx.entry
                   .byId(row.id)
-                  .patch(bucket: const Change.set('changed'));
-              await tx.entry
-                  .byId(row.id)
+                  .update(entryPatch.values(bucket: .set('changed')));
+              await tx.entry.database
+                  .table(entryTable)
+                  .where((fields) => fields.id.eq(.value(row.id)))
                   .update(
                     (e) => [
                       e.amount.setExpression(e.amount.divide(d('3'), scale: 2)),
@@ -434,7 +443,7 @@ void main() {
           final cte = projected.asCte('running_halves');
           expect(await projected.stream().toList(), [d('.5'), d('2')]);
           expect(
-            () => cte.query.where(
+            () => cte.where(
               (e) => e
                   .ref(
                     (o) => o.amount
@@ -447,9 +456,7 @@ void main() {
             throwsA(isA<OrmException>()),
           );
           expect(
-            await cte.query
-                .where((e) => e.ref(running).gt(.value(d('1'))))
-                .get(),
+            await cte.where((e) => e.ref(running).gt(.value(d('1')))).get(),
             [d('2')],
           );
           expect(

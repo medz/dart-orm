@@ -7,6 +7,7 @@
 ///
 /// {@category Declarations}
 /// {@canonicalFor annotations.Model}
+/// {@canonicalFor annotations.Projection}
 /// {@canonicalFor annotations.Column}
 /// {@canonicalFor annotations.Id}
 /// {@canonicalFor annotations.Unique}
@@ -20,11 +21,10 @@
 /// {@canonicalFor annotations.ReferentialAction}
 library;
 
-export 'values.dart';
-export 'schema_model.dart' show ComputedStorage;
 export 'src/schema/annotations.dart'
     show
         Model,
+        Projection,
         Id,
         Column,
         Unique,

@@ -1,6 +1,11 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -16,18 +21,23 @@ Matcher code(String expected) =>
 void main() {
   runTests(
     'sqlite',
-    (observe) => sqlite(const SqliteOptions.memory(), onQuery: observe),
+    (observe) => sqlite(
+      const SqliteOptions.memory(),
+      onQuery: observe,
+    ).then((sql) => Database.fromSql(sql)),
   );
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   if (url != null) {
     runTests('postgres', (observe) async {
-      final db = postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: PostgresTls.disable,
-          schema: 'orm_relation_tests',
+      final db = Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: PostgresTls.disable,
+            schema: 'orm_relation_tests',
+          ),
+          onQuery: observe,
         ),
-        onQuery: observe,
       );
       await db.execute(
         SqlCommand('DROP SCHEMA IF EXISTS orm_relation_tests CASCADE'),
@@ -335,7 +345,7 @@ void runTests(
             ).map((id, owner) => (id: id, owner: owner)),
           )
           .asCte('cards');
-      final rows = await cte.query
+      final rows = await cte
           .orderBy((c) => [c.ref((e) => e.id).asc()])
           .stream(batchSize: 3)
           .toList();

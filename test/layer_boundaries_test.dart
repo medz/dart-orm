@@ -9,6 +9,7 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:orm/driver.dart' as raw;
+import 'package:orm/sqlite.dart' show Sqlite;
 import 'package:orm/migrate.dart' as migrations;
 import 'package:orm/schema_model.dart' as schema;
 import 'package:orm/sql.dart' as sql;
@@ -136,14 +137,14 @@ void main() {
             ('src/values/', 'values.dart'),
             ('src/driver/', 'driver.dart'),
             ('src/query/', 'sql.dart'),
-            ('src/runtime/', 'runtime.dart'),
+            ('src/runtime/', 'runtime'),
             ('src/orm/', 'orm.dart'),
             ('src/migrate/', 'migrate.dart'),
             ('src/generate/', 'generate.dart'),
             ('src/cli/', 'cli.dart'),
-            ('src/sqlite/', 'drivers/sqlite.dart'),
-            ('src/postgres/', 'drivers/postgres.dart'),
-            ('src/mysql/', 'drivers/mysql.dart'),
+            ('src/sqlite/', 'sqlite.dart'),
+            ('src/postgres/', 'postgres.dart'),
+            ('src/mysql/', 'mysql.dart'),
           ]) {
             if (name.startsWith(prefix)) return entry;
           }
@@ -175,7 +176,7 @@ void main() {
             'schema_model.dart',
             'schema.dart',
             'sql.dart',
-            'runtime.dart',
+            'runtime',
             'orm.dart',
             'migrate.dart',
             'generate.dart',
@@ -184,7 +185,7 @@ void main() {
             'schema_model.dart',
             'schema.dart',
             'sql.dart',
-            'runtime.dart',
+            'runtime',
             'orm.dart',
             'migrate.dart',
             'generate.dart',
@@ -192,28 +193,21 @@ void main() {
           'schema_model.dart': {
             'schema.dart',
             'sql.dart',
-            'runtime.dart',
+            'runtime',
             'orm.dart',
             'migrate.dart',
             'generate.dart',
           },
           'schema.dart': {
             'sql.dart',
-            'runtime.dart',
+            'runtime',
             'orm.dart',
             'migrate.dart',
             'generate.dart',
           },
+          // SQL now owns runtime execution; ORM remains a higher optional view.
           'sql.dart': {
-            'runtime.dart',
-            'orm.dart',
-            'migrate.dart',
-            'generate.dart',
-          },
-          'runtime.dart': {
-            'schema_model.dart',
             'schema.dart',
-            'sql.dart',
             'orm.dart',
             'migrate.dart',
             'generate.dart',
@@ -224,38 +218,34 @@ void main() {
             'orm.dart',
             'generate.dart',
           },
-          'drivers/sqlite.dart': {
+          'sqlite.dart': {
             'schema_model.dart',
             'schema.dart',
             'sql.dart',
-            'runtime.dart',
             'orm.dart',
             'migrate.dart',
             'generate.dart',
           },
-          'drivers/postgres.dart': {
+          'postgres.dart': {
             'schema_model.dart',
             'schema.dart',
             'sql.dart',
-            'runtime.dart',
             'orm.dart',
             'migrate.dart',
             'generate.dart',
           },
-          'drivers/mysql.dart': {
+          'mysql.dart': {
             'schema_model.dart',
             'schema.dart',
             'sql.dart',
-            'runtime.dart',
             'orm.dart',
             'migrate.dart',
             'generate.dart',
           },
-          'drivers/mariadb.dart': {
+          'mariadb.dart': {
             'schema_model.dart',
             'schema.dart',
             'sql.dart',
-            'runtime.dart',
             'orm.dart',
             'migrate.dart',
             'generate.dart',
@@ -285,7 +275,12 @@ void main() {
               reason: '${entry.key} imports build tooling',
             );
           }
-          if (!entry.key.startsWith('drivers/')) {
+          if (!{
+            'sqlite.dart',
+            'postgres.dart',
+            'mysql.dart',
+            'mariadb.dart',
+          }.contains(entry.key)) {
             expect(
               closure.map((uri) => uri.toString()),
               isNot(contains('dart:io')),
@@ -326,7 +321,7 @@ final class _Fields extends sql.Fields {
   late final id = column(_id);
 }
 
-final class _RawDriver implements raw.Driver<raw.Sqlite> {
+final class _RawDriver implements raw.Driver<Sqlite> {
   @override
   raw.Capabilities get capabilities => const raw.Capabilities(
     dialect: raw.SqlDialect.sqlite,

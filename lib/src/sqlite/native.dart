@@ -1,8 +1,7 @@
-import '../../driver.dart';
+import '../driver/driver.dart';
+import 'native_client.dart';
 import 'opened.dart';
 import 'options.dart';
-
-import 'native_client.dart';
 
 Future<OpenedSqlite> connectSqlite(SqliteOptions options) async {
   if (options.path.isEmpty ||

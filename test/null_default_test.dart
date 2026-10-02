@@ -1,6 +1,9 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+
 import 'dart:io';
 
 import 'package:orm/postgres.dart';
@@ -11,7 +14,7 @@ import 'support/null_defaults.dart';
 
 void main() {
   test('SQLite NULL defaults survive apply and verify', () async {
-    final db = await sqlite(const SqliteOptions.memory());
+    final db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
     try {
       await checkNullDefaults(db.sql);
     } finally {
@@ -25,18 +28,20 @@ void main() {
     () async {
       final namespace =
           'orm_null_defaults_${pid}_${DateTime.now().microsecondsSinceEpoch}';
-      final admin = postgres(
-        PostgresOptions(url: Uri.parse(url!), tls: .disable),
+      final admin = Database.fromSql(
+        postgres(PostgresOptions(url: Uri.parse(url!), tls: .disable)),
       );
       var created = false;
       try {
         await admin.execute(SqlCommand('CREATE SCHEMA "$namespace"'));
         created = true;
-        final db = postgres(
-          PostgresOptions(
-            url: Uri.parse(url),
-            tls: .disable,
-            schema: namespace,
+        final db = Database.fromSql(
+          postgres(
+            PostgresOptions(
+              url: Uri.parse(url),
+              tls: .disable,
+              schema: namespace,
+            ),
           ),
         );
         try {

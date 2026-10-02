@@ -1,6 +1,12 @@
 @Tags(['mysql-suite'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/mysql.dart';
@@ -83,21 +89,25 @@ void main() {
           Duration queryTimeout = const Duration(seconds: 30),
           void Function(QueryEvent)? onQuery,
         }) async => engine == 'mysql'
-            ? await mysql(
-                MysqlOptions(
-                  url: Uri.parse(address!),
-                  tls: tls,
-                  queryTimeout: queryTimeout,
+            ? Database.fromSql(
+                await mysql(
+                  MysqlOptions(
+                    url: Uri.parse(address!),
+                    tls: tls,
+                    queryTimeout: queryTimeout,
+                  ),
+                  onQuery: onQuery,
                 ),
-                onQuery: onQuery,
               )
-            : await mariadb(
-                MariadbOptions(
-                  url: Uri.parse(address!),
-                  tls: tls,
-                  queryTimeout: queryTimeout,
+            : Database.fromSql(
+                await mariadb(
+                  MariadbOptions(
+                    url: Uri.parse(address!),
+                    tls: tls,
+                    queryTimeout: queryTimeout,
+                  ),
+                  onQuery: onQuery,
                 ),
-                onQuery: onQuery,
               );
         Future<_Row> create(String name, {SqlJson? data}) => db
             .table(_table)
@@ -342,7 +352,7 @@ void main() {
                 .table(_table)
                 .select((r) => (r.name, r.data).row)
                 .asCte('docs');
-            final throughCte = await cte.query
+            final throughCte = await cte
                 .where(
                   (r) =>
                       r.ref((f) => f.data).eq(.value(const SqlJson({'n': 1}))),
@@ -458,7 +468,6 @@ void main() {
               .select((r) => r.data)
               .distinct()
               .asCte('distinct_docs')
-              .query
               .get();
           expect(result.single!.value, {'n': 1});
           final union = await db

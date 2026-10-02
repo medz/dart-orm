@@ -1,5 +1,9 @@
 # Queries
 
+Import `package:orm/sql.dart` alongside your generated client and `orm.dart`.
+It provides the `select` extension for model and SQL queries, result selections
+and expression helpers.
+
 `select` chooses SQL expressions and decodes their values. A scalar expression
 returns its Dart type; `(u.id, u.email).map(...)` constructs a named Record or DTO
 after reading the selected columns. `(u.id, u.email).row` returns a positional
@@ -43,7 +47,7 @@ Text operations accept both `String` and `String?` expressions:
 ```dart
 final matches = db.user.where((u) => u.nickname.contains('50%_off!'));
 final names = await matches.select((u) => u.nickname).get(); // List<String?>
-await matches.update((u) => [u.score.increment(1)]).execute();
+await matches.update(userPatch.values(score: .expression((u) => u.score.plus(1))));
 
 final prefixes = db.user.where((u) => u.email.startsWith('sales_'));
 final suffixes = db.user.where((u) => u.email.endsWith('@example.com'));
@@ -225,7 +229,7 @@ final totals = db.post.groupBy((p) => [p.authorId])
     .having((p) => p.id.count().gt(.value(1)))
     .select((p) => (p.authorId, p.id.count()).row)
     .asCte('author_totals');
-final active = await totals.query
+final active = await totals
     .orderBy((c) => [c.ref((p) => p.authorId).asc()]).get();
 
 final ranks = await db.post.orderBy((p) => [p.id.asc()])
@@ -326,7 +330,7 @@ final recent = db.user.orderBy((u) => [u.id.desc()]).take(10)
 
 final filtered = recent.where((row) => row.ref((u) => u.email).like('a%'));
 final cte = filtered.asCte('recent_names');
-final selected = cte.query.select((c) => c.ref((row) => row.ref((u) => u.email)));
+final selected = cte.select((c) => c.ref((row) => row.ref((u) => u.email)));
 await for (final name in selected.stream(batchSize: 64)) {
   print(name);
 }

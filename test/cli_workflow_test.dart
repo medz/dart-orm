@@ -50,7 +50,7 @@ void main() {
     final declaration = await fixture.file('lib/models.dart').readAsString();
     expect(declaration, contains("@Model(table: 'tasks')"));
     final config = await fixture.file('orm.config.dart').readAsString();
-    expect(config, contains('package:orm/drivers/sqlite.dart'));
+    expect(config, contains('package:orm/sqlite.dart'));
     expect(config, isNot(contains('package:orm/orm.dart')));
     await fixture.write(
       'lib/models.dart',
@@ -137,7 +137,7 @@ void main() {
             .readAsString();
         expect(registry, contains('SqlDialect.$engine'));
         final config = await fixture.file('orm.config.dart').readAsString();
-        expect(config, contains('package:orm/drivers/$engine.dart'));
+        expect(config, contains('package:orm/$engine.dart'));
         // Compile the generated configuration once. Only the connection command
         // should need credentials; the preceding history check must succeed.
         await fixture.write('bin/check_config.dart', '''

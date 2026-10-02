@@ -1,6 +1,6 @@
 import 'package:mysql_client_plus/exception.dart' as mysql;
 
-import '../../driver.dart';
+import '../driver/driver.dart';
 
 /// A server-reported error. Numeric codes are preserved; SQLSTATE is not
 /// exposed by mysql_client_plus and is not guessed from the error message.

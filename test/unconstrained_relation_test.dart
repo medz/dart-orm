@@ -1,6 +1,12 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -23,18 +29,19 @@ void main() {
         final events = <QueryEvent>[];
         setUp(() async {
           if (dialect == SqlDialect.sqlite) {
-            db = await sqlite(
-              const SqliteOptions.memory(),
-              onQuery: events.add,
+            db = Database.fromSql(
+              await sqlite(const SqliteOptions.memory(), onQuery: events.add),
             );
           } else {
-            db = postgres(
-              PostgresOptions(
-                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-                tls: .disable,
-                schema: 'orm_unconstrained_tests',
+            db = Database.fromSql(
+              postgres(
+                PostgresOptions(
+                  url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                  tls: .disable,
+                  schema: 'orm_unconstrained_tests',
+                ),
+                onQuery: events.add,
               ),
-              onQuery: events.add,
             );
             await db.execute(
               SqlCommand(
@@ -128,8 +135,8 @@ void main() {
               true,
             );
             expect(await db.entry.count(), 7);
-            await db.entry.byId(2).patch(owner: .set(1));
-            await db.entry.byId(6).patch(tenant: .set(1));
+            await db.entry.byId(2).update(entryPatch.values(owner: .set(1)));
+            await db.entry.byId(6).update(entryPatch.values(tenant: .set(1)));
             await Migrator(db.sql).apply([first, enforce]);
             expect(
               (await inspectTable(db.sql, 'entries')).foreignKeys.length,
@@ -384,7 +391,7 @@ void main() {
                 true,
               );
               expect(snapshots.current, [1]);
-              await db.account.byId(tenant: 1, id: 1).delete().execute();
+              await db.account.byId(tenant: 1, id: 1).delete();
               expect(
                 await snapshots.moveNext().timeout(const Duration(seconds: 5)),
                 true,
@@ -405,7 +412,7 @@ void main() {
         test('transaction reads observe writes and outer rollback restores targets', () async {
           await expectLater(
             db.transaction((tx) async {
-              await tx.account.byId(tenant: 1, id: 1).delete().execute();
+              await tx.account.byId(tenant: 1, id: 1).delete();
               expect(
                 await tx.entry
                     .byId(1)

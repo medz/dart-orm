@@ -1,6 +1,6 @@
 import 'package:meta/meta.dart' show internal;
 
-import '../../driver.dart';
+import '../values/codec.dart';
 
 /// @nodoc
 @internal

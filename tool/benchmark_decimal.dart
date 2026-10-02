@@ -1,3 +1,8 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -15,12 +20,14 @@ Future<void> main() async {
     if (Platform.environment.containsKey('ORM_TEST_POSTGRES')) 'postgres',
   ]) {
     final Database<Backend> db = backend == 'sqlite'
-        ? await sqlite(const SqliteOptions.memory())
-        : postgres(
-            PostgresOptions(
-              url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-              tls: .disable,
-              schema: schema,
+        ? Database.fromSql(await sqlite(const SqliteOptions.memory()))
+        : Database.fromSql(
+            postgres(
+              PostgresOptions(
+                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                tls: .disable,
+                schema: schema,
+              ),
             ),
           );
     var created = false;

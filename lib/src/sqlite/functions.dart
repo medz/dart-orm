@@ -1,7 +1,6 @@
 import 'package:sqlite3/common.dart' as native;
 
-import '../../driver.dart';
-
+import '../values/codec.dart';
 import 'decimal.dart';
 import 'temporal.dart';
 

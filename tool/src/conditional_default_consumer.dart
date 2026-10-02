@@ -309,7 +309,7 @@ final class Memo with chosen.Fields {
   'lib/facade.dart': "export 'choice.dart' show next, Labels, generic, alias, Token, tokenFactory, nestedFactory, dependentFactory;\n",
   'lib/defaults.dart':
       "import 'facade.dart' as helpers;\nString next() => helpers.next();\n",
-  'lib/acceptance.dart': r'''
+  'lib/acceptance.dart': r'''import 'package:orm/orm.dart';
 import 'package:orm/sqlite.dart';
 import 'package:orm/migrate.dart';
 import 'models.dart' as original;
@@ -323,7 +323,7 @@ Future<Map<String,Object?>> acceptance() async {
   final bindings = {for(final name in ['label','wrapped','exported','static_label','generic_label','alias_label','local_alias','external_label','mixin_alias','typed_label','nested_label','dependent_label','extension_label','extension_type_label'])
     name: memoSchema.columns.singleWhere((c) => c.name == name).clientDefault!()};
   check(bindings.values.every((value) => value == target), 'Factory binding differs from model target: $bindings/$target');
-  final db = await sqlite(const SqliteOptions.memory());
+  final db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
   try {
     check(initial.migration.checksum == initial.migrationChecksum, 'Frozen checksum');
     final migrator = Migrator(db.sql);
@@ -337,12 +337,12 @@ Future<Map<String,Object?>> acceptance() async {
     check(row.staticLabel == target && row.genericLabel == target && row.aliasLabel == target && row.localAlias == target && row.externalLabel == target && row.mixinAlias == target && row.typedLabel == target && row.nestedLabel == target && row.dependentLabel == target, 'Stored static/generic/const/local-alias/external/mixin-alias factory values');
     check(row.extensionLabel == target && row.extensionTypeLabel == target, 'Stored extension/extension-type static factory values');
     check(row.describe() == '$target:${row.id}:$target', 'Original DTO/mixin method');
-    final explicit = await db.memo.create(title: 'explicit', label: .set('manual'), active: .set(false), note: .set(null));
+    final explicit = await db.memo.create(title: 'explicit', label: 'manual', active: false, note: null);
     check(explicit.label == 'manual' && !explicit.active && explicit.note == null, 'Explicit values/null');
-    await db.memo.byId(row.id).patch(label: .set('changed'), note: .set(null));
+    await db.memo.byId(row.id).update(memoPatch.values(label: .set('changed'), note: .set(null)));
     final read = await db.memo.byId(row.id).single();
     check(read.note == null && read.describe() == '$target:${row.id}:changed', 'Read/update DTO method');
-    await db.memo.delete().execute();
+    await db.memo.delete();
     check(await db.memo.count() == 0, 'Delete');
     return {'passed':true,'target':target,'bindings':bindings,'storedOmittedLabel':row.label,
       'fixedWrapperControl':row.wrapped,'indirectExportDefault':row.exported,

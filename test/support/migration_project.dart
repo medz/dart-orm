@@ -1,3 +1,5 @@
+import 'package:orm/driver.dart';
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';

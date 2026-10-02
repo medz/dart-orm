@@ -1,3 +1,6 @@
+import 'package:orm/driver.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
 import 'package:orm/orm.dart';
 import 'package:test/test.dart' hide allOf, anyOf;
 
@@ -18,13 +21,13 @@ void advancedScenarios(Database<Backend> Function() database) {
             ).map((id, count) => (id: id, count: count)),
           )
           .asCte('post_counts');
-      final rows = await counts.query
+      final rows = await counts
           .where((c) => c.ref((p) => p.id.count()).gt(.value(3)))
           .orderBy((c) => [c.ref((p) => p.authorId).asc()])
           .get();
       expect(rows, [(id: 1, count: 4), (id: 2, count: 4), (id: 3, count: 4)]);
       expect(
-        () => counts.query.select((c) => c.ref((p) => p.title)),
+        () => counts.select((c) => c.ref((p) => p.title)),
         throwsA(isA<OrmException>()),
       );
       final alias = counts.alias();
@@ -50,13 +53,13 @@ void advancedScenarios(Database<Backend> Function() database) {
           )
           .select((u) => post.optional(post.fields.title))
           .asCte('optional_posts');
-      expect(await optional.query.get(), ['post1', null, null, null]);
+      expect(await optional.get(), ['post1', null, null, null]);
       expect(
-        () => optional.query.select((c) => c.ref((u) => post.fields.title)),
+        () => optional.select((c) => c.ref((u) => post.fields.title)),
         throwsA(isA<OrmException>()),
       );
       expect(
-        await optional.query
+        await optional
             .select((c) => c.ref((u) => post.nullable(post.fields.title)))
             .get(),
         ['post1', null, null, null],

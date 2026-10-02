@@ -1,13 +1,16 @@
 @Tags(['postgres'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+import 'package:orm/postgres.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:orm/drivers/postgres.dart';
-import 'package:orm/runtime.dart';
 import 'package:test/test.dart';
 
 Matcher _code(String code) =>

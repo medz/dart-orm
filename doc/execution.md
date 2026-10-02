@@ -293,7 +293,7 @@ describe why statement errors alone cannot establish SQLite transaction state.
 final result = await db.transaction((tx) async {
   final user = await tx.user.byId(userId).single();
   await tx.user.where((u) => u.id.eq(.value(userId)))
-      .update((u) => [u.nickname.set(user.email)]).execute();
+      .patch(nickname: user.email);
   return user.email;
 },
   retry: const TransactionRetry(

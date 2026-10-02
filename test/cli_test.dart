@@ -1,3 +1,9 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -18,10 +24,12 @@ void main() {
 
   String databasePath() => '${directory.path}/database.sqlite';
   Future<SqlDatabase<Backend>> connect({required bool readOnly}) async =>
-      (await sqlite(
-        readOnly
-            ? SqliteOptions.readOnly(databasePath())
-            : SqliteOptions.file(databasePath()),
+      (Database.fromSql(
+        await sqlite(
+          readOnly
+              ? SqliteOptions.readOnly(databasePath())
+              : SqliteOptions.file(databasePath()),
+        ),
       )).sql;
 
   Future<Map<String, Object?>> migrate(
@@ -182,7 +190,9 @@ void main() {
         schema.tables,
         dialect: .sqlite,
       );
-      final db = await sqlite(SqliteOptions.file(databasePath()));
+      final db = Database.fromSql(
+        await sqlite(SqliteOptions.file(databasePath())),
+      );
       try {
         for (final sql in createSchema(appSchema, .sqlite)) {
           await db.execute(sql);
@@ -199,7 +209,9 @@ void main() {
         ))['matches'],
         true,
       );
-      final read = await sqlite(SqliteOptions.readOnly(databasePath()));
+      final read = Database.fromSql(
+        await sqlite(SqliteOptions.readOnly(databasePath())),
+      );
       try {
         expect((await read.user.single()).email, 'existing');
         expect(await Migrator(read.sql).history(), hasLength(1));
@@ -274,7 +286,7 @@ void main() {
         schema: name,
         maxConnections: 1,
       );
-      final admin = postgres(options);
+      final admin = Database.fromSql(postgres(options));
       var created = false;
       try {
         await admin.execute(SqlCommand('CREATE SCHEMA "$name"'));
@@ -293,7 +305,8 @@ void main() {
           history: history,
           schema: schema,
           dialect: .postgres,
-          connection: ({required readOnly}) => postgres(options).sql,
+          connection: ({required readOnly}) =>
+              Database.fromSql(postgres(options)).sql,
         );
         expect((await command(['plan'], [first]))['pending'], hasLength(1));
         expect((await command(['status'], [first]))['applied'], isEmpty);

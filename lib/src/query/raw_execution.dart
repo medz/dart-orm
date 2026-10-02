@@ -1,5 +1,5 @@
-import '../../driver.dart';
-import '../../schema_model.dart';
+import '../driver/driver.dart';
+import '../schema/model.dart';
 import 'context.dart';
 import 'raw_sql.dart';
 

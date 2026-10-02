@@ -2,10 +2,10 @@
 
 import 'dart:convert' show base64Decode, base64Encode, jsonEncode;
 
-import '../../driver.dart' show Backend, SqlCommand, SqlDialect, SqlResult;
-import '../../runtime.dart' show SqlDatabase;
-import '../../schema_model.dart' show Column;
-import '../../values.dart' show Codecs, OrmException;
+import '../driver/driver.dart';
+import '../values/codec.dart';
+import '../runtime/database.dart';
+import '../schema/model.dart';
 import 'catalog.dart' show verifySchema;
 import 'migration.dart' show Migration;
 import 'mysql_schema.dart' show isMysqlFamily, mysqlColumnType;

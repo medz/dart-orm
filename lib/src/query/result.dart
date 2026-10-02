@@ -1,4 +1,4 @@
-import '../../driver.dart';
+import '../values/codec.dart';
 
 /// Required result labels and typed decoding, independent of physical tables.
 /// Compositions are validated at construction. Mapping callbacks run once per

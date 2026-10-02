@@ -1,9 +1,8 @@
 import 'dart:convert' show jsonEncode;
 
-import '../../driver.dart' show SqlDialect;
-import '../../schema_model.dart'
-    show CheckSchema, Column, ComputedColumn, TableSchema;
-import '../../values.dart' show OrmException;
+import '../driver/driver.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
 import 'migration.dart' show Migration;
 import 'snapshot.dart' show SchemaSnapshot;
 import 'step.dart'
@@ -55,6 +54,7 @@ String schemaSource(SchemaSnapshot schema) =>
     '''
 // Generated physical schema. Keep historical copies with their migration.
 import 'package:orm/migrate.dart';
+${_schemaImports(schema.tables)}
 
 final schema = ${_snapshotSource(schema)};
 ''';
@@ -65,6 +65,16 @@ String migrationSource(Migration migration) =>
     '''
 // Review before applying. Applied migrations must remain unchanged.
 import 'package:orm/migrate.dart';
+import 'package:orm/driver.dart';
+${_schemaImports([
+      ...?migration.snapshot?.tables,
+      for (final step in migration.steps) ...switch (step) {
+          Backfill(:final table) => [table],
+          CheckedTableSql(:final before, :final after) => [?before, ?after],
+          RebuildTable(:final before, :final after) => [before, after],
+          _ => <TableSchema>[],
+        },
+    ])}
 
 const migrationChecksum = ${_dartValue(migration.checksum)};
 final migration = Migration.steps(
@@ -91,6 +101,7 @@ String migrationHistorySource(
   return '''
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 import 'package:orm/migrate.dart';
+import 'package:orm/driver.dart';
 ${[for (var i = 0; i < names.length; i++) "import 'm${names[i]}.dart' as m$i;"].join('\n')}
 
 const migrationDialect = SqlDialect.${dialect.name};
@@ -188,3 +199,9 @@ String _dartValue(Object? value) => switch (value) {
     'Unsupported migration literal.',
   ),
 };
+
+String _schemaImports(Iterable<TableSchema> tables) => [
+  if (tables.isNotEmpty) "import 'package:orm/schema_model.dart';",
+  if (tables.any((table) => table.columns.isNotEmpty))
+    "import 'package:orm/values.dart';",
+].join('\n');

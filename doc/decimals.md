@@ -144,7 +144,7 @@ To average unique values, deduplicate the input projection first:
 
 ```dart
 final unique = db.invoice.select((i) => i.total).distinct().asCte('unique_totals');
-final mean = await unique.query.select(
+final mean = await unique.select(
   (i) => i.ref((source) => source.total).average(scale: 2, rounding: .halfEven),
 ).single();
 ```

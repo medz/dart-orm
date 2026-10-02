@@ -1,6 +1,8 @@
 @Tags(['core'])
 library;
 
+import 'package:orm/driver.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -158,7 +160,9 @@ void main() {
       reason: '${generated.stdout}\n${generated.stderr}',
     );
     expect(jsonDecode(generated.stdout as String), {
-      'generated': fixture.file('lib/generated/client.orm.dart').path,
+      'generated': await fixture
+          .file('lib/generated/client.orm.dart')
+          .resolveSymbolicLinks(),
     });
     expect(await fixture.file('lib/generated/client.orm.dart').exists(), true);
     final snapshot = await fixture

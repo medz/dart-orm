@@ -1,6 +1,6 @@
 import 'package:meta/meta.dart';
 
-import '../../schema_model.dart';
+import '../schema/model.dart';
 import 'nodes.dart';
 import 'query.dart';
 import 'table.dart';

@@ -1,10 +1,12 @@
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
 
 import 'schema.orm.dart';
 
 Future<void> main() async {
-  final db = await sqlite(const SqliteOptions.memory());
+  final db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
   try {
     await Migrator(
       db.sql,
@@ -18,7 +20,7 @@ Future<void> main() async {
       );
       return user;
     });
-    await db.user.byId(user.id).patch(nickname: .set('Seven'));
+    await db.user.byId(user.id).patch(nickname: 'Seven');
     final cards = await db.user
         .select(
           (u) => (

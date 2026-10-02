@@ -3,7 +3,9 @@ import 'dart:typed_data';
 
 import 'package:mysql_client_plus/mysql_protocol.dart' as protocol;
 
-import '../../values.dart';
+import '../values/codec.dart';
+import '../values/decimal.dart';
+import '../values/temporal.dart';
 
 final _mysqlMinInt = BigInt.from(-9223372036854775808);
 final _mysqlMaxInt = BigInt.from(9223372036854775807);

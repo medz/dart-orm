@@ -247,11 +247,9 @@ final class Appointment({
 });
 
 // After generation:
-await db.appointment.create(
-  day: LocalDate(2024, 2, 29),
-  time: Change.set(LocalTime(12, 30)),
-  starts: LocalDateTime.parse('2024-02-29 12:30:00.000001'),
-);
+await db.appointment.create(day: LocalDate(2024, 2, 29),
+  time: LocalTime(12, 30),
+  starts: LocalDateTime.parse('2024-02-29 12:30:00.000001'));
 ```
 
 These values have no timezone or implied UTC instant. `DateTime`, strings and

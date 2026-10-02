@@ -1,6 +1,7 @@
 import 'package:sqlite3/common.dart' as sqlite;
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 import 'functions.dart';
 
 int configureSqlite(

@@ -1,3 +1,8 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -19,13 +24,15 @@ void main() {
         setUp(() async {
           d.reset();
           if (dialect == SqlDialect.sqlite) {
-            db = await sqlite(const SqliteOptions.memory());
+            db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
           } else {
-            db = postgres(
-              PostgresOptions(
-                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-                tls: .disable,
-                schema: 'orm_client_default_tests',
+            db = Database.fromSql(
+              postgres(
+                PostgresOptions(
+                  url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                  tls: .disable,
+                  schema: 'orm_client_default_tests',
+                ),
               ),
             );
             await db.execute(
@@ -80,13 +87,17 @@ void main() {
           'explicit values, null and SQL DEFAULT bypass their client factory',
           () async {
             final instant = DateTime.utc(2026, 9, 15);
-            final row = await db.ticket.create(
-              id: .set(d.TicketId(20)),
-              name: .set('explicit'),
-              label: .set(null),
-              state: .defaultValue(),
-              createdAt: .set(instant),
-            );
+            final row = await db.ticket.plan
+                .insert(
+                  ticketInsert.values(
+                    id: .set(d.TicketId(20)),
+                    name: .set('explicit'),
+                    label: .set(null),
+                    state: .databaseDefault(),
+                    createdAt: .set(instant),
+                  ),
+                )
+                .row();
             expect(row.state, 'server');
             expect(row.label, isNull);
             expect(row.createdAt, instant);
@@ -95,7 +106,9 @@ void main() {
               [0, 0, 0, 0],
             );
             await expectLater(
-              db.ticket.create(name: .defaultValue()),
+              db.ticket.plan
+                  .insert(ticketInsert.values(name: .databaseDefault()))
+                  .row(),
               throwsA(
                 isA<OrmException>().having(
                   (e) => e.code,
@@ -109,7 +122,9 @@ void main() {
         );
 
         test('prepared mutations, repeated compilation and conflicts retain one generated value', () async {
-          final prepared = db.ticket.insert((row) => []);
+          final prepared = db.ticket.database
+              .table(ticketTable)
+              .insert((row) => []);
           expect(
             [d.idCalls, d.nameCalls, d.stateCalls, d.nullCalls],
             [1, 1, 1, 1],
@@ -129,7 +144,7 @@ void main() {
         });
 
         test('batch insert prepares defaults once per omitted row and preserves explicit values', () async {
-          final batch = db.ticket.insertMany(
+          final batch = db.ticket.database.table(ticketTable).insertMany(
             [null, 20, null],
             (row, int? id) => [
               if (id != null) row.id.set(d.TicketId(id)),
@@ -163,13 +178,16 @@ void main() {
           'updates and conflict updates do not reset omitted client values',
           () async {
             final row = await db.ticket.create();
-            await db.ticket.byId(row.id).patch(name: .set('changed'));
+            await db.ticket
+                .byId(row.id)
+                .update(ticketPatch.values(name: .set('changed')));
             expect((await db.ticket.single()).state, 'client-1');
             expect(
               [d.idCalls, d.nameCalls, d.stateCalls, d.nullCalls],
               [1, 1, 1, 1],
             );
-            await db.ticket
+            await db.ticket.database
+                .table(ticketTable)
                 .insert((t) => [t.id.set(row.id), t.name.set('incoming')])
                 .onConflictUpdate(
                   target: (t) => [t.id],
@@ -186,7 +204,10 @@ void main() {
 
         test('factory errors issue no writes, and rollback does not reverse Dart side effects', () async {
           d.failName = true;
-          expect(() => db.ticket.insert((t) => []), throwsStateError);
+          expect(
+            () => db.ticket.database.table(ticketTable).insert((t) => []),
+            throwsStateError,
+          );
           expect(await db.ticket.count(), 0);
           d.failName = false;
           await expectLater(
@@ -236,7 +257,9 @@ void main() {
         test('explicit DEFAULT can choose database identity instead of the client value', () async {
           final client = await db.sequenceRow.create();
           expect(client.id, 1001);
-          final server = await db.sequenceRow.create(id: .defaultValue());
+          final server = await db.sequenceRow.plan
+              .insert(sequenceRowInsert.values(id: .databaseDefault()))
+              .row();
           expect(server.id, dialect == SqlDialect.sqlite ? 1002 : 1);
           expect(d.identityCalls, 1);
         });

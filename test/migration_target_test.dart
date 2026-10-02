@@ -1,3 +1,9 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -136,7 +142,7 @@ void main() {
   test(
     'SQLite virtual indexes and computed mode changes ignore PostgreSQL limits',
     () async {
-      final db = await sqlite(const SqliteOptions.memory());
+      final db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
       try {
         final start = Migration.create('0001_start', [
           scores(indexed: true),
@@ -304,7 +310,7 @@ void main() {
     final history = MigrationHistory([
       (migration, migration.checksum),
     ], dialect: .postgres);
-    final base = await sqlite(const SqliteOptions.memory());
+    final base = Database.fromSql(await sqlite(const SqliteOptions.memory()));
     final statements = <String>[];
     final db = Database(base.driver, onQuery: (e) => statements.add(e.sql));
     try {
@@ -344,7 +350,9 @@ void main() {
           schema: SchemaSnapshot([]),
           connect: ({required readOnly}) async {
             connected = true;
-            final base = await sqlite(const SqliteOptions.memory());
+            final base = Database.fromSql(
+              await sqlite(const SqliteOptions.memory()),
+            );
             return SqlDatabase(
               base.driver,
               onQuery: (e) => statements.add(e.sql),
@@ -361,12 +369,14 @@ void main() {
 
   if (Platform.environment['ORM_TEST_POSTGRES'] case final url?) {
     test('PostgreSQL applies only its own generated conversion and rejects a SQLite history before SQL', () async {
-      final base = postgres(
-        PostgresOptions(
-          url: Uri.parse(url),
-          tls: .disable,
-          schema: 'orm_target_tests',
-          maxConnections: 1,
+      final base = Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(url),
+            tls: .disable,
+            schema: 'orm_target_tests',
+            maxConnections: 1,
+          ),
         ),
       );
       final statements = <String>[];

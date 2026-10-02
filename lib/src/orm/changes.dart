@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:meta/meta.dart' show internal;
 
-import '../../driver.dart';
-import '../../schema_model.dart';
+import '../driver/driver.dart';
+import '../schema/model.dart';
 
 final _hubs = Expando<ChangeHub>();
 

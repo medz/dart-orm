@@ -1,4 +1,4 @@
-import '../../driver.dart';
+import '../driver/driver.dart';
 
 /// A SQLite error preserving both the primary and extended result codes.
 final class SqliteFailure implements SqlFailure {

@@ -1,3 +1,4 @@
+import 'package:orm/values.dart';
 import 'package:orm/schema.dart';
 
 extension type const Email(String value) {}

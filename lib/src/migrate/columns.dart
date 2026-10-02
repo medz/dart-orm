@@ -1,10 +1,9 @@
 // Live column inspection and comparison with declared storage.
 
-import '../../driver.dart' show Backend, SqlCommand, SqlDialect;
-import '../../runtime.dart' show SqlDatabase;
-import '../../values.dart' show OrmException;
-import '../../schema_model.dart'
-    show Column, ComputedColumn, ComputedStorage, TableSchema;
+import '../driver/driver.dart';
+import '../values/codec.dart';
+import '../runtime/database.dart';
+import '../schema/model.dart';
 import 'catalog.dart' show normalizeDefault;
 import 'computed.dart'
     show computedDeclaration, sqliteComputedColumns, verifyComputed;

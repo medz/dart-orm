@@ -16,7 +16,9 @@ void main() {
   tearDown(() => root.delete(recursive: true));
   Future<GeneratedSchema> generate(String source) async {
     final file = File('${root.path}/models.dart');
-    await file.writeAsString("import 'package:orm/schema.dart';\n$source");
+    await file.writeAsString(
+      "import 'package:orm/schema.dart';\nimport 'package:orm/values.dart';\n$source",
+    );
     return generateSchema(file.path);
   }
 

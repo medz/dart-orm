@@ -41,19 +41,6 @@
 /// {@canonicalFor validation.validateMigrations}
 library;
 
-export 'schema_model.dart'
-    show
-        SqlDialect,
-        TableSchema,
-        Column,
-        Codec,
-        Codecs,
-        ComputedColumn,
-        ComputedStorage,
-        CheckSchema,
-        ForeignKey,
-        IndexSchema,
-        OrmException;
 export 'src/migrate/backfill.dart' show BackfillProgress;
 export 'src/migrate/catalog.dart'
     show

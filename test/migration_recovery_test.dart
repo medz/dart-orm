@@ -1,6 +1,11 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -14,7 +19,7 @@ void main() {
   test(
     'SQLite and transaction controls reject recoverable autocommit steps',
     () async {
-      final db = await sqlite(const SqliteOptions.memory());
+      final db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
       try {
         final migration = Migration.steps('0001_invalid', [
           const CheckedSql(
@@ -69,7 +74,9 @@ void runPostgresTests(String url) {
     dialect: SqlDialect.postgres,
   );
   setUpAll(() async {
-    admin = postgres(PostgresOptions(url: Uri.parse(url), tls: .disable));
+    admin = Database.fromSql(
+      postgres(PostgresOptions(url: Uri.parse(url), tls: .disable)),
+    );
     await admin.execute(SqlCommand('CREATE SCHEMA IF NOT EXISTS $schema'));
   });
   tearDownAll(() async {
@@ -77,8 +84,10 @@ void runPostgresTests(String url) {
     await admin.close();
   });
   setUp(() async {
-    db = postgres(
-      PostgresOptions(url: Uri.parse(url), tls: .disable, schema: schema),
+    db = Database.fromSql(
+      postgres(
+        PostgresOptions(url: Uri.parse(url), tls: .disable, schema: schema),
+      ),
     );
     for (final table in [
       'payload',
@@ -298,8 +307,10 @@ void runPostgresTests(String url) {
   test(
     'runner lock timeout leaves history untouched and the connection reusable',
     () async {
-      final blocker = postgres(
-        PostgresOptions(url: Uri.parse(url), tls: .disable, schema: schema),
+      final blocker = Database.fromSql(
+        postgres(
+          PostgresOptions(url: Uri.parse(url), tls: .disable, schema: schema),
+        ),
       );
       try {
         await blocker.session((held) async {

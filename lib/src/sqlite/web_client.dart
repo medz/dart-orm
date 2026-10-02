@@ -3,7 +3,8 @@ import 'dart:js_interop';
 
 import 'package:web/web.dart' as web;
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 import 'failure.dart';
 import 'web_wire.dart';
 

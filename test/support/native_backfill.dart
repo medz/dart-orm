@@ -1,3 +1,6 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+
 import 'dart:io';
 
 import 'package:orm/migrate.dart';
@@ -13,7 +16,8 @@ Future<void> main() async {
     'orm-native-backfill-',
   );
   final options = SqliteOptions.file('${directory.path}/db.sqlite');
-  final db = await sqlite(options), other = await sqlite(options);
+  final db = Database.fromSql(await sqlite(options)),
+      other = Database.fromSql(await sqlite(options));
   try {
     await seed(db, count: 25);
     final migration = historical.migrationHistory.checked.last;

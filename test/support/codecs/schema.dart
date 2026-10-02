@@ -1,3 +1,4 @@
+import 'package:orm/values.dart';
 import 'package:orm/schema.dart';
 
 import 'types.dart' as domain;

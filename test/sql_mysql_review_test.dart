@@ -1,6 +1,11 @@
 @Tags(['core'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+import 'package:orm/mysql.dart';
 import 'package:orm/orm.dart';
 import 'package:test/test.dart';
 
@@ -110,8 +115,8 @@ void main() {
             .table(_table)
             .insert((r) => [r.id.set(3), r.name.setExpression(source.scalar())])
             .compile();
-        expect(command.sql, contains('SELECT `t1`.`name`'));
-        expect(command.sql, contains('`t1`.`id` = `t2`.`id`'));
+        expect(command.sql, contains('SELECT `t0`.`name`'));
+        expect(command.sql, contains('`t0`.`id` = `t1`.`id`'));
         expect(command.parameters, [3, 1]);
       });
 
@@ -363,8 +368,7 @@ void main() {
     final query = SqlBuilder(SqlDialect.mysql)
         .table(_table)
         .select((r) => r.document)
-        .asCte('documents')
-        .query;
+        .asCte('documents');
     final command = query.compile();
     expect(
       'AS CHAR CHARACTER SET utf8mb4'.allMatches(command.sql),
@@ -387,7 +391,7 @@ void main() {
         ),
       ),
     );
-    final command = query.asCte('distinct_documents').query.compile();
+    final command = query.asCte('distinct_documents').compile();
     expect(command.sql, contains('SELECT DISTINCT `t1`.`document`'));
     expect(
       'AS CHAR CHARACTER SET utf8mb4'.allMatches(command.sql),

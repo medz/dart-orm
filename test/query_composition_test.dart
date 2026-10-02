@@ -1,6 +1,8 @@
 @Tags(['sqlite'])
 library;
 
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 import 'package:orm/sqlite.dart';
 import 'package:test/test.dart' hide allOf, anyOf;
 
@@ -11,7 +13,9 @@ void main() {
   final events = <QueryEvent>[];
 
   setUp(() async {
-    db = await sqlite(const SqliteOptions.memory(), onQuery: events.add);
+    db = Database.fromSql(
+      await sqlite(const SqliteOptions.memory(), onQuery: events.add),
+    );
     await createTables(db);
     for (final (index, score) in [0, 0, 1, 2, 2, 2].indexed) {
       await db

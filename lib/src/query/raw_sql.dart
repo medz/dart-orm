@@ -1,7 +1,8 @@
 import 'dart:typed_data';
 
-import '../../driver.dart';
-import '../../schema_model.dart';
+import '../driver/driver.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
 import 'nodes.dart';
 import 'result.dart';
 import 'sql_text.dart';
@@ -110,7 +111,10 @@ sealed class Sql {
       return slots.putIfAbsent(name, () {
         final value = source.parameters[name];
         if (value is SqlValue<Object?>) {
-          SqlNode node = ParameterNode(value._encoded, sqlType: value._storage);
+          SqlNode node = ParameterNode.captured(
+            value._encoded,
+            sqlType: value._storage,
+          );
           if (value._storage == 'decimal') node = DecimalNode(node);
           if ({
             'date',

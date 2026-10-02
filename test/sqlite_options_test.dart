@@ -1,6 +1,10 @@
 @Tags(['sqlite'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -14,8 +18,8 @@ void main() {
       final directory = await Directory.systemTemp.createTemp('orm-options-');
       addTearDown(() => directory.delete(recursive: true));
       final path = '${directory.path}/data.sqlite';
-      final db = await sqlite(
-        SqliteOptions.persistent('app', nativePath: path),
+      final db = Database.fromSql(
+        await sqlite(SqliteOptions.persistent('app', nativePath: path)),
       );
       try {
         await db.execute(
@@ -27,7 +31,7 @@ void main() {
       } finally {
         await db.close();
       }
-      final read = await sqlite(SqliteOptions.readOnly(path));
+      final read = Database.fromSql(await sqlite(SqliteOptions.readOnly(path)));
       try {
         expect((await read.execute(SqlCommand('SELECT id FROM item'))).rows, [
           [7],
@@ -43,11 +47,13 @@ void main() {
     'native persistent storage never guesses a path or falls back to memory',
     () async {
       await expectLater(
-        sqlite(const SqliteOptions.persistent('app')),
+        sqlite(const SqliteOptions.persistent('app'))
+            .then((sql) => Database.fromSql(sql)),
         throwsArgumentError,
       );
       await expectLater(
-        sqlite(const SqliteOptions.persistent('app', nativePath: ':memory:')),
+        sqlite(const SqliteOptions.persistent('app', nativePath: ':memory:'))
+            .then((sql) => Database.fromSql(sql)),
         throwsArgumentError,
       );
     },

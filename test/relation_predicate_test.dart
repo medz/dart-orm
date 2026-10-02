@@ -1,6 +1,9 @@
 @Tags(['database'])
 library;
 
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+
 import 'dart:io';
 
 import 'package:orm/postgres.dart';
@@ -12,19 +15,24 @@ import 'support/relation_predicates.dart';
 void main() {
   relationPredicateTests(
     'sqlite',
-    (observe) => sqlite(const SqliteOptions.memory(), onQuery: observe),
+    (observe) => sqlite(
+      const SqliteOptions.memory(),
+      onQuery: observe,
+    ).then((sql) => Database.fromSql(sql)),
   );
   final address = Platform.environment['ORM_TEST_POSTGRES'];
   relationPredicateTests(
     'postgres',
     (observe) async {
-      final db = postgres(
-        PostgresOptions(
-          url: Uri.parse(address!),
-          tls: .disable,
-          schema: 'orm_relation_predicate_tests',
+      final db = Database.fromSql(
+        postgres(
+          PostgresOptions(
+            url: Uri.parse(address!),
+            tls: .disable,
+            schema: 'orm_relation_predicate_tests',
+          ),
+          onQuery: observe,
         ),
-        onQuery: observe,
       );
       await db.execute(
         SqlCommand(

@@ -1,5 +1,5 @@
-import '../../driver.dart' show SqlDialect;
-import '../../values.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 
 /// Physical column metadata coupled to the Dart/storage [Codec].
 ///

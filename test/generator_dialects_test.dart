@@ -1,10 +1,11 @@
 @Tags(['core'])
 library;
 
+import 'package:orm/driver.dart';
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';
-import 'package:orm/migrate.dart';
 import 'package:test/test.dart';
 
 void main() {

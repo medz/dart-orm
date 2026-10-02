@@ -6,10 +6,11 @@ models, selections, relationships, transactions, migrations and subscriptions us
 one API.
 
 ```dart
+import 'package:orm/orm.dart';
 import 'package:orm/sqlite.dart';
 import 'schema.orm.dart';
 
-final db = await sqlite(const SqliteOptions.persistent('app'));
+final db = Database.fromSql(await sqlite(const SqliteOptions.persistent('app')));
 // Apply the application's reviewed Dart migration history before queries.
 final user = await db.user.create(email: 'seven@example.com');
 await db.close();
@@ -19,10 +20,10 @@ Use `SqliteOptions.memory()` for an isolated in-memory database. For the same
 persistent configuration on native platforms, provide `nativePath`:
 
 ```dart
-final db = await sqlite(SqliteOptions.persistent(
+final db = Database.fromSql(await sqlite(SqliteOptions.persistent(
   'app',
   nativePath: databaseFilePath,
-));
+)));
 ```
 
 The application owns its native directory choice; `nativePath` is unused on Web.
@@ -67,10 +68,10 @@ and WASM with `application/wasm`.
 Advanced deployment can set `SqliteWebOptions` on `memory()` or `persistent()`:
 
 ```dart
-final db = await sqlite(SqliteOptions.persistent(
+final db = Database.fromSql(await sqlite(SqliteOptions.persistent(
   'app',
   web: SqliteWebOptions(assetBase: Uri.parse('static/database/')),
-));
+)));
 ```
 
 `assetBase` is the directory of the versioned files and must end with `/`.

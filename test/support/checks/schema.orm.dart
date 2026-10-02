@@ -1,9 +1,20 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND.
 
 import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/orm.dart' as orm_model show ModelTable, ModelQuery;
+import 'package:orm/values.dart';
 
 import "schema.dart" as models;
 export "schema.dart" show Product, Line;
+
+final class _OrmWriteAbsent {
+  const _OrmWriteAbsent();
+}
+
+const _writeAbsent = _OrmWriteAbsent();
+WriteValue<T, F> _writeLiteral<T, F extends Fields>(Object? value) =>
+    identical(value, _writeAbsent) ? const .keep() : .set(value as T);
 
 final _lineId = Column<int>(
   "id",
@@ -45,22 +56,165 @@ final lineTable = Table<models.Line, LineFields>(
   ).map((v0, v1) => models.Line(id: v0, productId: v1)),
 );
 
-final class LineTableSet extends TableSet<models.Line, LineFields> {
-  LineTableSet(QueryContext db) : super(db, lineTable) {
-    db.registerSchema(appSchema);
-  }
-  Future<models.Line> create({
-    Change<int> id = const Change.keep(),
-    required int productId,
-  }) =>
-      createRow((row) => [...row.id.change(id), row.productId.set(productId)]);
-  Query<models.Line, LineFields> byId(int id) =>
-      where((row) => row.id.eq(.value(id)));
+/// Immutable input data; composition belongs to [linePatch], not field names.
+final class LinePatch {
+  final WriteValue<int, LineFields> productId;
+  LinePatch._({required this.productId});
+
+  List<Assignment> _assignments(LineFields fields) => [
+    ...fields.productId.write(productId, fields),
+  ];
 }
 
-extension LineUpdates on Query<models.Line, LineFields> {
-  Future<int> patch({Change<int> productId = const Change.keep()}) =>
-      update((row) => [...row.productId.change(productId)]).execute();
+/// Literal and intent input construction share the same immutable representation.
+abstract interface class LinePatchFactory {
+  LinePatch call({int productId});
+  LinePatch values({WriteValue<int, LineFields> productId = const .keep()});
+  LinePatch overlay(Iterable<LinePatch> layers);
+  bool isEmpty(LinePatch input);
+}
+
+const LinePatchFactory linePatch = _LinePatchFactory();
+
+final class _LinePatchFactory implements LinePatchFactory {
+  const _LinePatchFactory();
+  @override
+  LinePatch call({Object? productId = _writeAbsent}) =>
+      LinePatch._(productId: _writeLiteral<int, LineFields>(productId));
+  @override
+  LinePatch values({WriteValue<int, LineFields> productId = const .keep()}) =>
+      LinePatch._(productId: productId);
+  @override
+  LinePatch overlay(Iterable<LinePatch> layers) {
+    var earlier = call();
+    for (final later in layers) {
+      earlier = LinePatch._(
+        productId: WriteValue.overlay(earlier.productId, later.productId),
+      );
+    }
+    return earlier;
+  }
+
+  @override
+  bool isEmpty(LinePatch input) => input.productId.isMissing;
+}
+
+/// Immutable input data; composition belongs to [lineInsert], not field names.
+final class LineInsert {
+  final WriteValue<int, LineFields> id;
+  final WriteValue<int, LineFields> productId;
+  LineInsert._({required this.id, required this.productId}) {
+    if (productId.isMissing) {
+      throw ArgumentError.value(productId, 'productId', 'Must be supplied.');
+    }
+  }
+  List<Assignment> _assignments(LineFields fields) => [
+    ...fields.id.write(id, fields),
+    ...fields.productId.write(productId, fields),
+  ];
+}
+
+/// Literal and intent input construction share the same immutable representation.
+abstract interface class LineInsertFactory {
+  LineInsert call({int id, required int productId});
+  LineInsert values({
+    WriteValue<int, LineFields> id = const .keep(),
+    required WriteValue<int, LineFields> productId,
+  });
+  LineInsert overlay(LineInsert earlier, Iterable<LinePatch> layers);
+}
+
+const LineInsertFactory lineInsert = _LineInsertFactory();
+
+final class _LineInsertFactory implements LineInsertFactory {
+  const _LineInsertFactory();
+  @override
+  LineInsert call({Object? id = _writeAbsent, required int productId}) =>
+      LineInsert._(
+        id: _writeLiteral<int, LineFields>(id),
+        productId: .set(productId),
+      );
+  @override
+  LineInsert values({
+    WriteValue<int, LineFields> id = const .keep(),
+    required WriteValue<int, LineFields> productId,
+  }) => LineInsert._(id: id, productId: productId);
+  @override
+  LineInsert overlay(LineInsert earlier, Iterable<LinePatch> layers) {
+    for (final later in layers) {
+      earlier = LineInsert._(
+        id: earlier.id,
+        productId: WriteValue.overlay(earlier.productId, later.productId),
+      );
+    }
+    return earlier;
+  }
+}
+
+/// Creates a complete models.Line from named literal values.
+/// Omission is preserved when this callable is passed as a typed function.
+abstract interface class LineCreator {
+  Future<models.Line> call({int id, required int productId});
+}
+
+final class _LineCreator implements LineCreator {
+  final LineTableSet _table;
+  const _LineCreator(this._table);
+  @override
+  Future<models.Line> call({
+    Object? id = _writeAbsent,
+    required int productId,
+  }) async => _table.plan
+      .insert(
+        LineInsert._(
+          id: _writeLiteral<int, LineFields>(id),
+          productId: .set(productId),
+        ),
+      )
+      .row();
+}
+
+/// Updates named literal fields and returns the affected-row count.
+/// Omitted fields remain unchanged; explicit null clears a nullable field.
+/// For execution options or composed inputs use the query's update method;
+/// for RETURNING use its plan. Empty patches fail without executing SQL.
+abstract interface class LinePatcher {
+  Future<int> call({int productId});
+}
+
+final class _LinePatcher implements LinePatcher {
+  final orm_model.ModelQuery<models.Line, LineFields, LinePatch> _query;
+  const _LinePatcher(this._query);
+  @override
+  Future<int> call({Object? productId = _writeAbsent}) => _query.update(
+    LinePatch._(productId: _writeLiteral<int, LineFields>(productId)),
+  );
+}
+
+/// Named literal updates on a complete models.Line query.
+extension LineWrites
+    on orm_model.ModelQuery<models.Line, LineFields, LinePatch> {
+  /// Executes one update; omitted fields remain unchanged.
+  LinePatcher get patch => _LinePatcher(this);
+}
+
+/// The generated root; all read composition uses the common Query core.
+final class LineTableSet
+    extends
+        orm_model.ModelTable<models.Line, LineFields, LineInsert, LinePatch> {
+  LineTableSet(QueryContext db)
+    : super(
+        db,
+        lineTable,
+        (fields, input) => input._assignments(fields),
+        (fields, input) => input._assignments(fields),
+      ) {
+    db.registerSchema(appSchema);
+  }
+  late final LineCreator create = _LineCreator(this);
+
+  orm_model.ModelQuery<models.Line, LineFields, LinePatch> byId(int id) =>
+      where((row) => row.id.eq(.value(id)));
 }
 
 final _productId = Column<int>(
@@ -191,47 +345,316 @@ final productTable = Table<models.Product, ProductFields>(
       ),
 );
 
-final class ProductTableSet extends TableSet<models.Product, ProductFields> {
-  ProductTableSet(QueryContext db) : super(db, productTable) {
-    db.registerSchema(appSchema);
+/// Immutable input data; composition belongs to [productPatch], not field names.
+final class ProductPatch {
+  final WriteValue<int, ProductFields> stock;
+  final WriteValue<double, ProductFields> price;
+  final WriteValue<double?, ProductFields> discount;
+  final WriteValue<String, ProductFields> state;
+  final WriteValue<String?, ProductFields> label;
+  ProductPatch._({
+    required this.stock,
+    required this.price,
+    required this.discount,
+    required this.state,
+    required this.label,
+  });
+
+  List<Assignment> _assignments(ProductFields fields) => [
+    ...fields.stock.write(stock, fields),
+    ...fields.price.write(price, fields),
+    ...fields.discount.write(discount, fields),
+    ...fields.state.write(state, fields),
+    ...fields.label.write(label, fields),
+  ];
+}
+
+/// Literal and intent input construction share the same immutable representation.
+abstract interface class ProductPatchFactory {
+  ProductPatch call({
+    int stock,
+    double price,
+    double? discount,
+    String state,
+    String? label,
+  });
+  ProductPatch values({
+    WriteValue<int, ProductFields> stock = const .keep(),
+    WriteValue<double, ProductFields> price = const .keep(),
+    WriteValue<double?, ProductFields> discount = const .keep(),
+    WriteValue<String, ProductFields> state = const .keep(),
+    WriteValue<String?, ProductFields> label = const .keep(),
+  });
+  ProductPatch overlay(Iterable<ProductPatch> layers);
+  bool isEmpty(ProductPatch input);
+}
+
+const ProductPatchFactory productPatch = _ProductPatchFactory();
+
+final class _ProductPatchFactory implements ProductPatchFactory {
+  const _ProductPatchFactory();
+  @override
+  ProductPatch call({
+    Object? stock = _writeAbsent,
+    Object? price = _writeAbsent,
+    Object? discount = _writeAbsent,
+    Object? state = _writeAbsent,
+    Object? label = _writeAbsent,
+  }) => ProductPatch._(
+    stock: _writeLiteral<int, ProductFields>(stock),
+    price: _writeLiteral<double, ProductFields>(price),
+    discount: _writeLiteral<double?, ProductFields>(discount),
+    state: _writeLiteral<String, ProductFields>(state),
+    label: _writeLiteral<String?, ProductFields>(label),
+  );
+  @override
+  ProductPatch values({
+    WriteValue<int, ProductFields> stock = const .keep(),
+    WriteValue<double, ProductFields> price = const .keep(),
+    WriteValue<double?, ProductFields> discount = const .keep(),
+    WriteValue<String, ProductFields> state = const .keep(),
+    WriteValue<String?, ProductFields> label = const .keep(),
+  }) => ProductPatch._(
+    stock: stock,
+    price: price,
+    discount: discount,
+    state: state,
+    label: label,
+  );
+  @override
+  ProductPatch overlay(Iterable<ProductPatch> layers) {
+    var earlier = call();
+    for (final later in layers) {
+      earlier = ProductPatch._(
+        stock: WriteValue.overlay(earlier.stock, later.stock),
+        price: WriteValue.overlay(earlier.price, later.price),
+        discount: WriteValue.overlay(earlier.discount, later.discount),
+        state: WriteValue.overlay(earlier.state, later.state),
+        label: WriteValue.overlay(earlier.label, later.label),
+      );
+    }
+    return earlier;
   }
-  Future<models.Product> create({
-    Change<int> id = const Change.keep(),
-    Change<int> stock = const Change.keep(),
+
+  @override
+  bool isEmpty(ProductPatch input) =>
+      input.stock.isMissing &&
+      input.price.isMissing &&
+      input.discount.isMissing &&
+      input.state.isMissing &&
+      input.label.isMissing;
+}
+
+/// Immutable input data; composition belongs to [productInsert], not field names.
+final class ProductInsert {
+  final WriteValue<int, ProductFields> id;
+  final WriteValue<int, ProductFields> stock;
+  final WriteValue<double, ProductFields> price;
+  final WriteValue<double?, ProductFields> discount;
+  final WriteValue<String, ProductFields> state;
+  final WriteValue<String?, ProductFields> label;
+  ProductInsert._({
+    required this.id,
+    required this.stock,
+    required this.price,
+    required this.discount,
+    required this.state,
+    required this.label,
+  }) {
+    if (price.isMissing) {
+      throw ArgumentError.value(price, 'price', 'Must be supplied.');
+    }
+    if (state.isMissing) {
+      throw ArgumentError.value(state, 'state', 'Must be supplied.');
+    }
+  }
+  List<Assignment> _assignments(ProductFields fields) => [
+    ...fields.id.write(id, fields),
+    ...fields.stock.write(stock, fields),
+    ...fields.price.write(price, fields),
+    ...fields.discount.write(discount, fields),
+    ...fields.state.write(state, fields),
+    ...fields.label.write(label, fields),
+  ];
+}
+
+/// Literal and intent input construction share the same immutable representation.
+abstract interface class ProductInsertFactory {
+  ProductInsert call({
+    int id,
+    int stock,
     required double price,
     double? discount,
     required String state,
     String? label,
-  }) => createRow(
-    (row) => [
-      ...row.id.change(id),
-      ...row.stock.change(stock),
-      row.price.set(price),
-      row.discount.set(discount),
-      row.state.set(state),
-      row.label.set(label),
-    ],
-  );
-  Query<models.Product, ProductFields> byId(int id) =>
-      where((row) => row.id.eq(.value(id)));
+  });
+  ProductInsert values({
+    WriteValue<int, ProductFields> id = const .keep(),
+    WriteValue<int, ProductFields> stock = const .keep(),
+    required WriteValue<double, ProductFields> price,
+    WriteValue<double?, ProductFields> discount = const .keep(),
+    required WriteValue<String, ProductFields> state,
+    WriteValue<String?, ProductFields> label = const .keep(),
+  });
+  ProductInsert overlay(ProductInsert earlier, Iterable<ProductPatch> layers);
 }
 
-extension ProductUpdates on Query<models.Product, ProductFields> {
-  Future<int> patch({
-    Change<int> stock = const Change.keep(),
-    Change<double> price = const Change.keep(),
-    Change<double?> discount = const Change.keep(),
-    Change<String> state = const Change.keep(),
-    Change<String?> label = const Change.keep(),
-  }) => update(
-    (row) => [
-      ...row.stock.change(stock),
-      ...row.price.change(price),
-      ...row.discount.change(discount),
-      ...row.state.change(state),
-      ...row.label.change(label),
-    ],
-  ).execute();
+const ProductInsertFactory productInsert = _ProductInsertFactory();
+
+final class _ProductInsertFactory implements ProductInsertFactory {
+  const _ProductInsertFactory();
+  @override
+  ProductInsert call({
+    Object? id = _writeAbsent,
+    Object? stock = _writeAbsent,
+    required double price,
+    Object? discount = _writeAbsent,
+    required String state,
+    Object? label = _writeAbsent,
+  }) => ProductInsert._(
+    id: _writeLiteral<int, ProductFields>(id),
+    stock: _writeLiteral<int, ProductFields>(stock),
+    price: .set(price),
+    discount: _writeLiteral<double?, ProductFields>(discount),
+    state: .set(state),
+    label: _writeLiteral<String?, ProductFields>(label),
+  );
+  @override
+  ProductInsert values({
+    WriteValue<int, ProductFields> id = const .keep(),
+    WriteValue<int, ProductFields> stock = const .keep(),
+    required WriteValue<double, ProductFields> price,
+    WriteValue<double?, ProductFields> discount = const .keep(),
+    required WriteValue<String, ProductFields> state,
+    WriteValue<String?, ProductFields> label = const .keep(),
+  }) => ProductInsert._(
+    id: id,
+    stock: stock,
+    price: price,
+    discount: discount,
+    state: state,
+    label: label,
+  );
+  @override
+  ProductInsert overlay(ProductInsert earlier, Iterable<ProductPatch> layers) {
+    for (final later in layers) {
+      earlier = ProductInsert._(
+        id: earlier.id,
+        stock: WriteValue.overlay(earlier.stock, later.stock),
+        price: WriteValue.overlay(earlier.price, later.price),
+        discount: WriteValue.overlay(earlier.discount, later.discount),
+        state: WriteValue.overlay(earlier.state, later.state),
+        label: WriteValue.overlay(earlier.label, later.label),
+      );
+    }
+    return earlier;
+  }
+}
+
+/// Creates a complete models.Product from named literal values.
+/// Omission is preserved when this callable is passed as a typed function.
+abstract interface class ProductCreator {
+  Future<models.Product> call({
+    int id,
+    int stock,
+    required double price,
+    double? discount,
+    required String state,
+    String? label,
+  });
+}
+
+final class _ProductCreator implements ProductCreator {
+  final ProductTableSet _table;
+  const _ProductCreator(this._table);
+  @override
+  Future<models.Product> call({
+    Object? id = _writeAbsent,
+    Object? stock = _writeAbsent,
+    required double price,
+    Object? discount = _writeAbsent,
+    required String state,
+    Object? label = _writeAbsent,
+  }) async => _table.plan
+      .insert(
+        ProductInsert._(
+          id: _writeLiteral<int, ProductFields>(id),
+          stock: _writeLiteral<int, ProductFields>(stock),
+          price: .set(price),
+          discount: _writeLiteral<double?, ProductFields>(discount),
+          state: .set(state),
+          label: _writeLiteral<String?, ProductFields>(label),
+        ),
+      )
+      .row();
+}
+
+/// Updates named literal fields and returns the affected-row count.
+/// Omitted fields remain unchanged; explicit null clears a nullable field.
+/// For execution options or composed inputs use the query's update method;
+/// for RETURNING use its plan. Empty patches fail without executing SQL.
+abstract interface class ProductPatcher {
+  Future<int> call({
+    int stock,
+    double price,
+    double? discount,
+    String state,
+    String? label,
+  });
+}
+
+final class _ProductPatcher implements ProductPatcher {
+  final orm_model.ModelQuery<models.Product, ProductFields, ProductPatch>
+  _query;
+  const _ProductPatcher(this._query);
+  @override
+  Future<int> call({
+    Object? stock = _writeAbsent,
+    Object? price = _writeAbsent,
+    Object? discount = _writeAbsent,
+    Object? state = _writeAbsent,
+    Object? label = _writeAbsent,
+  }) => _query.update(
+    ProductPatch._(
+      stock: _writeLiteral<int, ProductFields>(stock),
+      price: _writeLiteral<double, ProductFields>(price),
+      discount: _writeLiteral<double?, ProductFields>(discount),
+      state: _writeLiteral<String, ProductFields>(state),
+      label: _writeLiteral<String?, ProductFields>(label),
+    ),
+  );
+}
+
+/// Named literal updates on a complete models.Product query.
+extension ProductWrites
+    on orm_model.ModelQuery<models.Product, ProductFields, ProductPatch> {
+  /// Executes one update; omitted fields remain unchanged.
+  ProductPatcher get patch => _ProductPatcher(this);
+}
+
+/// The generated root; all read composition uses the common Query core.
+final class ProductTableSet
+    extends
+        orm_model.ModelTable<
+          models.Product,
+          ProductFields,
+          ProductInsert,
+          ProductPatch
+        > {
+  ProductTableSet(QueryContext db)
+    : super(
+        db,
+        productTable,
+        (fields, input) => input._assignments(fields),
+        (fields, input) => input._assignments(fields),
+      ) {
+    db.registerSchema(appSchema);
+  }
+  late final ProductCreator create = _ProductCreator(this);
+
+  orm_model.ModelQuery<models.Product, ProductFields, ProductPatch> byId(
+    int id,
+  ) => where((row) => row.id.eq(.value(id)));
 }
 
 final appSchema = List<TableSchema>.unmodifiable([lineSchema, productSchema]);

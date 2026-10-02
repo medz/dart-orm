@@ -1,3 +1,5 @@
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
 
@@ -7,10 +9,12 @@ Future<void> main() async {
   final events = <QueryEvent>[];
   final acquisitions = <AcquisitionEvent>[];
   final decodes = <DecodeEvent>[];
-  final db = await sqlite(
-    const SqliteOptions.memory(),
-    onQuery: events.add,
-    onAcquire: acquisitions.add,
+  final db = Database.fromSql(
+    await sqlite(
+      const SqliteOptions.memory(),
+      onQuery: events.add,
+      onAcquire: acquisitions.add,
+    ),
     onDecode: decodes.add,
   );
   try {
@@ -24,7 +28,7 @@ Future<void> main() async {
       await tx.membership.create(
         teamId: 10,
         userId: 1,
-        role: .set(MembershipRole.owner),
+        role: MembershipRole.owner,
         joinedAt: DateTime.utc(2026, 1, 1),
       );
       await tx.membership.create(

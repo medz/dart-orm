@@ -1,3 +1,9 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/schema_model.dart';
+import 'package:orm/values.dart';
+
 import 'dart:io';
 
 import 'package:orm/generate.dart';
@@ -20,13 +26,15 @@ void main() {
       late Database<Backend> db;
       setUp(() async {
         if (backend == 'sqlite') {
-          db = await sqlite(const SqliteOptions.memory());
+          db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
         } else {
-          db = postgres(
-            PostgresOptions(
-              url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
-              tls: .disable,
-              schema: 'orm_decimal_tests',
+          db = Database.fromSql(
+            postgres(
+              PostgresOptions(
+                url: Uri.parse(Platform.environment['ORM_TEST_POSTGRES']!),
+                tls: .disable,
+                schema: 'orm_decimal_tests',
+              ),
             ),
           );
           await db.execute(
@@ -54,7 +62,9 @@ void main() {
         expect(first.fee, null);
         await db.entry
             .byId(first.id)
-            .patch(fee: Change.set(d('.00000000000000000000000000001')));
+            .update(
+              entryPatch.values(fee: .set(d('.00000000000000000000000000001'))),
+            );
         final row = await db.entry.byId(first.id).single();
         expect(row.fee, d('.00000000000000000000000000001'));
         final result = await db.entry
@@ -73,7 +83,9 @@ void main() {
           d('.3'),
           d('9007199254740993.1234567890123456789012345679'),
         ));
-        await db.entry.byId(first.id).patch(fee: const Change.set(null));
+        await db.entry
+            .byId(first.id)
+            .update(entryPatch.values(fee: .set(null)));
         expect(
           await db.entry.select((e) => e.amount.plusExpression(e.fee)).single(),
           null,
@@ -185,7 +197,7 @@ void main() {
         final source = db.entry.select((e) => e.amount.times(d('2')));
         final cte = source.asCte('doubled');
         expect(
-          await cte.query
+          await cte
               .where(
                 (e) => e.ref((o) => o.amount.times(d('2'))).gt(.value(d('5'))),
               )
@@ -302,10 +314,7 @@ void main() {
         await db.entry.create(amount: huge, bucket: 'a');
         await db.entry.create(amount: -huge, bucket: 'a');
         expect(await db.entry.select((e) => e.amount.sum()).single(), huge);
-        await db.entry
-            .where((e) => e.amount.lt(.value(Decimal.zero)))
-            .delete()
-            .execute();
+        await db.entry.where((e) => e.amount.lt(.value(Decimal.zero))).delete();
         await expectLater(
           db.entry.select((e) => e.amount.sum()).single(),
           throwsA(isA<SqlFailure>()),
@@ -427,10 +436,7 @@ void main() {
             throwsA(isA<SqlFailure>()),
           );
         }
-        await db.entry
-            .where((e) => e.bucket.eq(.value('bad')))
-            .delete()
-            .execute();
+        await db.entry.where((e) => e.bucket.eq(.value('bad'))).delete();
         expect(
           await db.entry.where((e) => e.bucket.eq(.value('bad'))).count(),
           0,
@@ -458,7 +464,7 @@ void main() {
   );
 
   test('SQLite recognizes only column decimal collations, and detects drift', () async {
-    final db = await sqlite(const SqliteOptions.memory());
+    final db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
     try {
       final table = TableSchema(
         'quoted',

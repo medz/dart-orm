@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:meta/meta.dart' show internal;
 
-import '../../driver.dart';
+import '../driver/driver.dart';
+import '../values/codec.dart';
 
 /// The driver may not expose a cancellable queue. Abandon the request, never
 /// enter its SQL callback, and release a late lease normally. The separately

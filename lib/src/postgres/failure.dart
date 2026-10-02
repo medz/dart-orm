@@ -1,6 +1,6 @@
 import 'package:postgres/postgres.dart' as pg;
 
-import '../../driver.dart';
+import '../driver/driver.dart';
 
 /// A server-reported error, preserving SQLSTATE and the original exception.
 final class PostgresFailure implements SqlFailure {

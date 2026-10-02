@@ -1,9 +1,11 @@
 import 'package:meta/meta.dart';
 
-import '../../schema_model.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
 import 'expression.dart';
 import 'joins.dart';
 import 'nodes.dart';
+import 'projection.dart';
 import 'query.dart';
 import 'selection.dart';
 import 'table.dart';
@@ -19,7 +21,7 @@ abstract interface class CteDefinition {
 /// A CTE exports SQL expression identities. Dart mapper properties are not
 /// mistaken for SQL columns. ref() accepts only expressions the source selected.
 ///
-/// Create one with [Query.asCte]. Accessing [query] or [alias] only builds a
+/// Create one with [QueryCtes.asCte]. Accessing [query] or [alias] only builds a
 /// description; database work starts when the resulting query executes.
 final class Cte<R, F extends Fields> implements CteDefinition {
   final Query<R, F> _source;
@@ -67,7 +69,7 @@ final class Cte<R, F extends Fields> implements CteDefinition {
         for (var i = 0; i < planQuery.columns.length; i++)
           Column(
             'c$i',
-            nullable[i]
+            nullable[i] && !planQuery.columns[i].codec.acceptsNull
                 ? planQuery.columns[i].codec.nullable()
                 : planQuery.columns[i].codec,
             nullable: nullable[i],
@@ -91,15 +93,49 @@ final class Cte<R, F extends Fields> implements CteDefinition {
   /// Starts a query over the CTE while retaining the source's decoded row type.
   ///
   /// The result belongs to the same database or transaction view as its source.
-  Query<R, CteFields<F>> get query {
+  DerivedQuery<R, CteFields<F>, Selection<R>> get query {
     final fields = _table.createFields(TableRef(_table.schema));
-    return Query.internal(
-      _source.database,
-      fields,
-      QueryState(fields.table, ctes: [this]),
-      _table.selectRow(fields),
+    final selection = _selectionFor(fields);
+    return DerivedQuery._(
+      Query.internal(
+        _source.database,
+        fields,
+        QueryState(fields.table, ctes: [this]),
+        selection,
+      ),
+      selection,
+      _table,
+      this,
     );
   }
+
+  /// @nodoc
+  @internal
+  DerivedQuery<R, O, Projection<R, O>>
+  queryWithOutput<O extends ProjectionOutput>(Projection<R, O> output) {
+    final table = Table<R, O>(_table.schema, output.bindOutput, _selectionFor);
+    final fields = table.createFields(TableRef(table.schema));
+    return DerivedQuery._(
+      Query.internal(
+        _source.database,
+        fields,
+        QueryState(fields.table, ctes: [this]),
+        _selectionFor(fields),
+      ),
+      output,
+      table,
+      this,
+    );
+  }
+
+  ReboundSelection<R> _selectionFor(Fields fields) =>
+      ReboundSelection(_decode, [
+        for (var i = 0; i < planQuery.columns.length; i++)
+          Expr.internal(
+            ColumnNode(fields.table, 'c$i'),
+            fields.table.schema.columns[i].codec,
+          ),
+      ], source: _source.querySelection);
 
   /// Creates a fresh CTE occurrence for a join or self join.
   TableAlias<R, CteFields<F>> alias() => TableAlias.internal(_table, this);
@@ -155,6 +191,12 @@ final class CteFields<F extends Fields> extends Fields {
         'This CTE column is nullable; reference it with a nullable expression.',
       );
     }
+    if (!table.schema.columns[index].codec.sameStorageAs(original.codec)) {
+      throw const OrmException(
+        'QUERY.CTE_CODEC',
+        'Reference the exported CTE codec.',
+      );
+    }
     return Expr.internal(ColumnNode(table, 'c$index'), original.codec);
   }
 }
@@ -174,4 +216,34 @@ final class ReboundSelection<R>(
     final indices = [for (final column in columns) plan.column(column)];
     return (row) => decode([for (final index in indices) row[index]]);
   }
+}
+
+/// Creates a CTE from selections without declared named output fields.
+///
+/// Selected flat projections expose their named fields through `ProjectedSql`.
+/// Other SQL selections retain their original expression references.
+extension QueryCtes<R, F extends Fields> on Query<R, F> {
+  /// Names this SQL query for reuse. Constructing the CTE performs no I/O.
+  DerivedQuery<R, CteFields<F>, Selection<R>> asCte(String name) =>
+      Cte.internal(this, name).query;
+}
+
+/// A query over an explicitly named common table expression.
+///
+/// Scalar and positional selections expose [CteFields.ref]. Named projections
+/// expose their declared output fields. Both forms are queries immediately and
+/// create independent join occurrences with [alias].
+final class DerivedQuery<R, F extends Fields, S extends Selection<R>>
+    extends SelectedQuery<R, F, S> {
+  final Table<R, F> _definition;
+  final CteDefinition _cte;
+
+  DerivedQuery._(super.source, super.output, this._definition, this._cte)
+    : super.internal();
+
+  /// Creates a fresh occurrence of this CTE for a join or self join.
+  ///
+  /// Apply filters before `asCte` when they must belong to the aliased SQL
+  /// definition. Filtering this derived query describes a separate outer query.
+  TableAlias<R, F> alias() => TableAlias.internal(_definition, _cte);
 }

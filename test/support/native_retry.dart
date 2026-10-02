@@ -1,3 +1,7 @@
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -7,7 +11,7 @@ import 'tables.dart';
 
 /// Real competing workers, compiled without the test runner for native AOT.
 Future<void> main() async {
-  final probe = await sqlite(const SqliteOptions.memory());
+  final probe = Database.fromSql(await sqlite(const SqliteOptions.memory()));
   try {
     if (!probe.capabilities.cancellation) {
       var entered = false;
@@ -35,7 +39,8 @@ Future<void> main() async {
         journal: journal,
         busyTimeout: const Duration(milliseconds: 20),
       );
-      final base = await sqlite(options), other = await sqlite(options);
+      final base = Database.fromSql(await sqlite(options)),
+          other = Database.fromSql(await sqlite(options));
       final entered = Completer<void>(), release = Completer<void>();
       Future<void>? reader;
       var callbacks = 0, busy = 0;

@@ -1,7 +1,6 @@
 import 'package:meta/meta.dart';
 
-import '../../driver.dart';
-import '../../schema_model.dart';
+import '../values/codec.dart';
 import 'cte.dart';
 import 'expression.dart';
 import 'nodes.dart';

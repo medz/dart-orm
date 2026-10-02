@@ -1,10 +1,14 @@
+import 'package:orm/driver.dart';
+import 'package:orm/orm.dart';
+import 'package:orm/sql.dart';
+import 'package:orm/values.dart';
 import 'package:orm/migrate.dart';
 import 'package:orm/sqlite.dart';
 
 import 'schema.orm.dart';
 
 Future<void> main() async {
-  final db = await sqlite(const SqliteOptions.memory());
+  final db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
   try {
     await Migrator(
       db.sql,
@@ -13,7 +17,7 @@ Future<void> main() async {
     final stamp = LocalDateTime.parse('294276-12-31 23:59:59.999999');
     final row = await db.appointment.create(
       day: last,
-      time: Change.set(LocalTime(24)),
+      time: LocalTime(24),
       starts: stamp,
     );
     if (row.day != last || row.time != LocalTime(24) || row.starts != stamp) {

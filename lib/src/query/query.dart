@@ -1,7 +1,8 @@
 import 'package:meta/meta.dart';
 
-import '../../driver.dart';
-import '../../schema_model.dart';
+import '../driver/driver.dart';
+import '../schema/model.dart';
+import '../values/codec.dart';
 import 'batch.dart';
 import 'context.dart';
 import 'cte.dart';
@@ -10,6 +11,8 @@ import 'joins.dart';
 import 'mutation.dart';
 import 'nodes.dart';
 import 'plan.dart';
+import 'preparation.dart';
+import 'projection.dart';
 import 'reads.dart';
 import 'relation.dart';
 import 'selection.dart';
@@ -142,10 +145,6 @@ class Query<R, F extends Fields> {
   /// Removes duplicate SQL projections before any Dart mapping.
   Query<R, F> distinct() => copyQuery(queryState.copy(distinct: true));
 
-  /// Chooses the SQL columns and result type to decode.
-  Query<S, F> select<S>(Selection<S> Function(F) selection) =>
-      Query.internal(database, queryFields, queryState, selection(queryFields));
-
   /// Maps decoded rows in Dart. This does not create SQL columns or change
   /// database DISTINCT/UNION semantics; compose SQL set operations first.
   Query<S, F> map<S>(S Function(R) mapper) => Query.internal(
@@ -212,9 +211,6 @@ class Query<R, F extends Fields> {
   /// Builds a SQL EXISTS expression without executing a read.
   Expr<bool> existsExpression() =>
       Expr.internal(SubqueryNode(this, exists: true), Codecs.boolean);
-
-  /// Names this query as a CTE for further typed composition.
-  Cte<R, F> asCte(String name) => Cte.internal(this, name);
 
   /// @nodoc
   @internal
@@ -490,11 +486,13 @@ class Query<R, F extends Fields> {
   ///
   /// Relation batches reuse the same connection. Use an explicit transaction when
   /// a consistent snapshot across multiple statements is required.
-  Future<List<R>> get({ExecutionOptions options = const ExecutionOptions()}) {
+  Future<List<R>> get({
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
     options.check();
+    final (plan, decode) = planQuery();
+    final command = compileQuery(plan);
     return database.run((connection) async {
-      final (plan, decode) = planQuery();
-      final command = compileQuery(plan);
       final result = await database.executeOn(
         connection,
         command,
@@ -605,25 +603,6 @@ class Query<R, F extends Fields> {
     );
     return Codecs.boolean.decode(result.rows.single.single);
   }
-
-  /// Prepares an update; call the mutation's execute or returning method.
-  Mutation<F> update(List<Assignment> Function(F) assignments) =>
-      Mutation.internal(
-        database,
-        queryFields,
-        queryState,
-        MutationKind.update,
-        assignments(queryFields),
-      );
-
-  /// Prepares a delete; no SQL runs until the mutation is executed.
-  Mutation<F> delete() => Mutation.internal(
-    database,
-    queryFields,
-    queryState,
-    MutationKind.delete,
-    const [],
-  );
 }
 
 // A scalar SQL subquery cannot contain an enclosing query's window function.
@@ -694,8 +673,71 @@ final class _WindowStage(
   }
 }
 
+/// A table-shaped SQL query with assignment-based update and delete.
+/// A selected/mapped result is a Query and cannot be used as a write target.
+class TableQuery<R, F extends Fields> extends Query<R, F> {
+  TableQuery.internal(
+    super.database,
+    super.fields,
+    super.state,
+    super.selection,
+  ) : super.internal();
+  @override
+  TableQuery<R, F> copyQuery(QueryState state) =>
+      TableQuery.internal(database, queryFields, state, querySelection);
+  @override
+  TableQuery<R, F> where(Expr<bool?> Function(F) condition) =>
+      super.where(condition) as TableQuery<R, F>;
+  @override
+  TableQuery<R, F> orderBy(List<OrderTerm> Function(F) order) =>
+      super.orderBy(order) as TableQuery<R, F>;
+  @override
+  TableQuery<R, F> take(int count) => super.take(count) as TableQuery<R, F>;
+  @override
+  TableQuery<R, F> skip(int count) => super.skip(count) as TableQuery<R, F>;
+  @override
+  TableQuery<R, F> join<S, G extends Fields>(
+    TableAlias<S, G> alias, {
+    required Expr<bool?> Function(F, G) on,
+  }) => super.join(alias, on: on) as TableQuery<R, F>;
+  @override
+  TableQuery<R, F> leftJoin<S, G extends Fields>(
+    TableAlias<S, G> alias, {
+    required Expr<bool?> Function(F, G) on,
+  }) => super.leftJoin(alias, on: on) as TableQuery<R, F>;
+  @override
+  TableQuery<R, F> bind(QueryContext context) =>
+      TableQuery.internal(context, queryFields, queryState, querySelection);
+
+  /// Prepares an update; call the mutation's execute or returning method.
+  ///
+  /// Checks the session and known query shape before invoking [assignments].
+  /// Invalid assignment expressions can only be checked after that callback.
+  Mutation<F> update(List<Assignment> Function(F) assignments) {
+    database.checkActive();
+    preflightMutationQuery(queryState);
+    return Mutation.internal(
+      database,
+      queryFields,
+      queryState,
+      MutationKind.update,
+      assignments(queryFields),
+    );
+  }
+
+  /// Prepares a delete; no SQL runs until the mutation is executed.
+  Mutation<F> delete() => Mutation.internal(
+    database,
+    queryFields,
+    queryState,
+    MutationKind.delete,
+    const [],
+  );
+}
+
 /// Typed access to a table, including full-row reads and prepared inserts.
-class TableSet<R, F extends Fields> extends Query<R, F> {
+
+class TableSet<R, F extends Fields> extends TableQuery<R, F> {
   /// The table definition used to create fields and decode full rows.
   final Table<R, F> definition;
 
@@ -718,39 +760,38 @@ class TableSet<R, F extends Fields> extends Query<R, F> {
       );
 
   /// Prepares one insert, evaluating omitted client defaults once now.
-  Mutation<F> insert(List<Assignment> Function(F) assignments) =>
-      Mutation.internal(
-        database,
-        queryFields,
-        queryState,
-        MutationKind.insert,
-        _insertDefaults(assignments(queryFields)),
-        fieldsFactory: definition.createFields,
-      );
+  ///
+  /// Structural, scope and known SQL capability errors are checked first.
+  /// Callback, codec and factory side effects are ordinary Dart effects and
+  /// cannot be rolled back if preparation fails. The callback's literal values
+  /// are encoded by their fields before this validation.
+  Mutation<F> insert(List<Assignment> Function(F) assignments) {
+    database.checkActive();
+    preflightMutationQuery(queryState);
+    return prepareInsert(this, assignments(queryFields), null);
+  }
 
   /// Prepares rows for a parameter-aware batch insert.
   ///
-  /// Client defaults run once per omitted field during preparation. Execution uses
-  /// one transaction across all generated statement chunks.
+  /// All callbacks and structural/scope checks finish before client defaults
+  /// run. Omitted defaults then run once in input-row and schema-column order;
+  /// compiling or executing this description never samples them again.
+  /// Callback, codec and factory side effects cannot be rolled back. Execution
+  /// uses one transaction across all generated statement chunks.
   BatchInsert<F> insertMany<T>(
     Iterable<T> rows,
     List<Assignment> Function(F, T) values,
-  ) => BatchInsert.internal(database, queryFields, queryState, [
-    for (final row in rows)
-      List<Assignment>.unmodifiable(_insertDefaults(values(queryFields, row))),
-  ]);
-
-  List<Assignment> _insertDefaults(List<Assignment> assignments) {
-    final defaults = definition.schema.clientDefaults;
-    if (defaults.isEmpty) return assignments;
-    final assigned = {for (final a in assignments) a.field.definition.name};
-    return [
-      ...assignments,
-      for (final column in defaults)
-        if (!assigned.contains(column.name))
-          queryFields.column(column).set(column.clientDefault!()),
-    ];
-  }
+  ) => BatchInsert.internal(
+    database,
+    queryFields,
+    queryState,
+    prepareInsertRows(
+      database,
+      queryFields,
+      queryState,
+      rows.map((row) => values(queryFields, row)),
+    ),
+  );
 
   /// Inserts and returns a complete row.
   ///
@@ -759,8 +800,29 @@ class TableSet<R, F extends Fields> extends Query<R, F> {
   Future<R> createRow(
     List<Assignment> Function(F) assignments, {
     ExecutionOptions options = const ExecutionOptions(),
-  }) {
-    final mutation = insert(assignments);
+  }) async {
+    database.checkActive();
+    options.check();
+    preflightMutationQuery(queryState);
+    final plan = database.capabilities.returning ? SelectionPlan() : null;
+    if (plan != null) definition.selectRow(queryFields).bindSelection(plan);
+    final mutation = prepareInsert(
+      this,
+      assignments(queryFields),
+      plan,
+      needsRow: true,
+    );
+    return createPreparedRow(mutation, options: options);
+  }
+
+  /// @nodoc
+  @internal
+  Future<R> createPreparedRow(
+    Mutation<F> mutation, {
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
+    database.checkActive();
+    options.check();
     if (database.capabilities.returning) {
       return mutation.returning(definition.selectRow).single(options: options);
     }
@@ -846,5 +908,27 @@ class TableSet<R, F extends Fields> extends Query<R, F> {
     return database.inTransaction
         ? create(database)
         : database.atomic(create, acquire: options.acquisition);
+  }
+}
+
+/// Chooses decoded results while retaining a concrete selection's SQL evidence.
+///
+/// Import `package:orm/sql.dart` where `select` is called. Returning a plain
+/// [Selection] keeps its result type; returning a [Projection] additionally
+/// retains its named SQL output fields for CTE and UNION composition.
+/// Selection callbacks describe a query immediately and do not execute it.
+extension SelectQuery<R, F extends Fields> on Query<R, F> {
+  /// Chooses selected SQL cells and the application result decoded from them.
+  ///
+  /// Filters and ordering still use source [F]. Preserve the concrete
+  /// [Projection] return type in helpers that export named SQL output fields.
+  SelectedQuery<T, F, S> select<S extends Selection<T>, T>(
+    S Function(F) selection,
+  ) {
+    final selected = selection(queryFields);
+    return SelectedQuery<T, F, S>.internal(
+      Query<T, F>.internal(database, queryFields, queryState, selected),
+      selected,
+    );
   }
 }
