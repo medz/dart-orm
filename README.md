@@ -7,17 +7,17 @@ schema and migrations in Dart. SQLite, PostgreSQL, MySQL and MariaDB share a typ
 query API, with explicit database capabilities and transaction boundaries.
 
 [Get started](#get-started) · [Guides](https://github.com/medz/dart-orm/blob/main/doc/README.md) ·
-[Published API reference](https://pub.dev/documentation/orm/6.0.0-beta.6/) ·
-[Examples](https://github.com/medz/dart-orm/tree/main/example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.6)
+[Published API reference](https://pub.dev/documentation/orm/6.0.0-beta.7/) ·
+[Examples](https://github.com/medz/dart-orm/tree/main/example) · [pub.dev](https://pub.dev/packages/orm/versions/6.0.0-beta.7)
 
 > **6.0 beta:** a new implementation requiring Dart 3.13+. This is a breaking
 > replacement for the Prisma-based 5.x client. Read the [release notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md)
 > before upgrading an existing application.
 
-These examples target the current repository API, including unreleased breaking
-changes. Regenerate clients and review the [migration notes](https://github.com/medz/dart-orm/blob/main/CHANGELOG.md#unreleased).
-For the published `6.0.0-beta.6` package, use its
-[tagged guide](https://github.com/medz/dart-orm/blob/orm-v6.0.0-beta.6/README.md).
+These examples target `6.0.0-beta.7`. When upgrading from beta.6, regenerate
+clients and follow the [beta.7 migration guide](https://github.com/medz/dart-orm/blob/main/doc/upgrade-beta7.md).
+The [beta.6 tagged guide](https://github.com/medz/dart-orm/blob/orm-v6.0.0-beta.6/README.md)
+continues to describe that earlier API.
 
 ## Annotated Dart models
 
@@ -43,15 +43,13 @@ PostgreSQL namespaces are independent of source folders. See
 
 ## Get started
 
-Create a Dart application using the current repository API:
+Create a Dart application and install beta.7:
 
 ```sh
 dart create -t console my_app
 cd my_app
-dart pub add "orm@{git: {url: https://github.com/medz/dart-orm.git, ref: main}}"
+dart pub add orm:6.0.0-beta.7
 ```
-
-This dependency tracks `main`; use a commit or release tag to pin its API.
 
 This is an application, so add a top-level entry to its `pubspec.yaml`:
 
@@ -195,6 +193,6 @@ migrations without importing today's application models. See [API boundaries](ht
 - [SQL inspection](https://github.com/medz/dart-orm/blob/main/doc/observability.md) · [Raw SQL](https://github.com/medz/dart-orm/blob/main/doc/raw-sql.md)
 - [Contributing and validation](https://github.com/medz/dart-orm/blob/main/CONTRIBUTING.md)
 
-Starting with the next release after `6.0.0-beta.6`, project-owned code uses the
+Starting with `6.0.0-beta.7`, project-owned code uses the
 [MIT License](https://github.com/medz/dart-orm/blob/main/LICENSE), copyright © 2022–2026 Seven Du. Earlier releases and
 historical tags retain their original licenses.

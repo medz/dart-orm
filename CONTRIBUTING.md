@@ -91,6 +91,57 @@ resources. Regenerate them only when their source fingerprint changes.
 Report the tested revision, platforms and meaningful skips in the pull request.
 Do not use a public guide as a development status log.
 
+### Check a release archive as a consumer
+
+Use the exact Dart SDK pinned by CI, including when rebuilding SQLite Web assets
+after a version or lockfile change. Start from a clean commit. Run ordinary
+`dart pub publish --dry-run` first, then create the actual pub archive in a
+separate invocation:
+
+```sh
+dart pub publish --to-archive=/tmp/orm-release.tar.gz
+```
+
+Use pub's package rules, rather than `git archive`. Preserve the version, commit,
+SDK, archive SHA-256 and per-file manifest with the release evidence. Do not rely
+on `--from-archive` to repeat source validation: the publishing SDK can skip
+those checks on that path. Complete source analysis, tests, Dartdoc, asset checks
+and the ordinary dry-run before freezing an archive.
+
+Unpack into a new directory only after rejecting absolute paths, `..` components,
+duplicate names, symlinks, hard links and special files. For example:
+
+```sh
+python3 - /tmp/orm-release.tar.gz /tmp/orm-release-package <<'PY'
+import pathlib, sys, tarfile
+archive, output = sys.argv[1:]
+root = pathlib.Path(output)
+root.mkdir()  # Refuse an existing destination.
+with tarfile.open(archive, 'r:gz') as package:
+    names = set()
+    for entry in package.getmembers():
+        path = pathlib.PurePosixPath(entry.name)
+        if (path.is_absolute() or '..' in path.parts or
+                path.as_posix() in names or not (entry.isfile() or entry.isdir())):
+            raise ValueError(f'Unsafe archive member: {entry.name}')
+        names.add(path.as_posix())
+    package.extractall(root, filter='data')
+PY
+dart run tool/test_package.dart /tmp/orm-release-package /tmp/orm-consumer.json
+```
+
+The consumer check requires real Chrome and cached development dependencies from
+`dart pub get`; native SQLite's build hook may download its verified library.
+It verifies package resolution, CLI initialization and saved migrations, identical
+first-build CLI/build_runner outputs, ordinary/advanced writes, typed overlays,
+nested named results, CTEs, transaction commit/rollback and unchanged exported Web
+assets in native SQLite and Chrome JS/WASM. Temporary consumers and Chrome profiles
+are removed. Server coverage remains in the real-database CI matrix.
+
+After merging, repeat these checks on the final clean main and keep only its
+archive as the candidate for publication. After publishing, install the official
+hosted version in an independent pub cache and validate it separately.
+
 ## Choose regression suites by behavior
 
 All names below refer to files under `test/` with the `_test.dart` suffix.

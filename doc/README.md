@@ -4,8 +4,9 @@ Define a schema, generate typed models and queries, and evolve your database wit
 reviewed Dart migrations. Start with [schema declarations](https://github.com/medz/dart-orm/blob/main/doc/authoring.md)
 and the [company example](https://github.com/medz/dart-orm/blob/main/example/company/README.md).
 
-> These guides describe the development API. For a published version, use its
-> release tag. Regenerate derived clients after API changes; retain the frozen
+> These guides describe `6.0.0-beta.7`. For another version, use its release tag.
+> Follow the [beta.7 migration guide](https://github.com/medz/dart-orm/blob/main/doc/upgrade-beta7.md)
+> when upgrading from beta.6. Regenerate derived clients; retain the frozen
 > definitions and fingerprints of existing migration history.
 
 ## Define and query
