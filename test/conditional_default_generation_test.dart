@@ -1,6 +1,7 @@
 @Tags(['core'])
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
@@ -482,6 +483,254 @@ import '${indirect ? 'facade.dart' : "fields_native.dart' if (dart.library.js_in
           0,
           reason: '${compile.stdout}\n${compile.stderr}',
         );
+      },
+    );
+  }
+
+  test('conditional factory type arguments retain their own nested public routes', () async {
+    for (final platform in ['native', 'web']) {
+      await write(
+        'helpers_$platform.dart',
+        "class ${platform == 'native' ? 'Native' : 'Web'}Tag {}\ntypedef Token = ${platform == 'native' ? 'Native' : 'Web'}Tag;\nString generic<T>() => T.toString();\n",
+      );
+    }
+    await write(
+      'facade.dart',
+      "export 'helpers_native.dart' if (dart.library.js_interop) 'helpers_web.dart';",
+    );
+    final result = await generate('''
+import 'package:orm/schema.dart';
+import 'facade.dart' as h;
+typedef _One<T> = Map<h.Token, List<T?>>;
+typedef _Two = _One<h.Token>;
+@Model() final class Row({@Id() required final int id, @ClientDefault(h.generic<_Two>) required final String label});
+''');
+    expect(result.dart, contains('show Token;'));
+    expect(result.dart, isNot(contains('import "helpers_native.dart"')));
+    expect(
+      result.dart,
+      contains('Map<factories0.Token, List<factories0.Token?>>'),
+    );
+    await write(
+      'probe.dart',
+      "import 'client.dart';\nvoid main() => print(rowSchema.columns.last.clientDefault!());",
+    );
+    final compile = await Process.run(Platform.resolvedExecutable, [
+      'compile',
+      'js',
+      '${root.path}/probe.dart',
+      '-o',
+      '${root.path}/probe.js',
+    ]);
+    expect(compile.exitCode, 0, reason: '${compile.stdout}\n${compile.stderr}');
+  });
+
+  test(
+    'conditional mixin counterpart annotations match each field independently',
+    () async {
+      await write('native.dart', '''
+import 'package:orm/schema.dart';
+String next() => 'native';
+mixin Fields { @Id() int id = 0; @ClientDefault(next) String first = '', second = ''; }
+''');
+      await write('web.dart', '''
+import 'package:orm/schema.dart';
+String next() => 'web';
+mixin Fields { @Id() int id = 0; @ClientDefault(next) String second = ''; @ClientDefault(next) String first = ''; }
+''');
+      final result = await generate('''
+import 'package:orm/schema.dart';
+import 'native.dart' if (dart.library.js_interop) 'web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String first, required String second}) { this.id = id; this.first = first; this.second = second; }
+}
+''');
+      expect(result.dart, contains('if (dart.library.js_interop) "web.dart"'));
+    },
+  );
+
+  test(
+    'inactive conditional mixin packages resolve through package config',
+    () async {
+      final configFile = File('.dart_tool/package_config.json').absolute;
+      final config =
+          jsonDecode(await configFile.readAsString()) as Map<String, dynamic>;
+      final packages = config['packages'] as List<dynamic>;
+      for (final entry in packages.cast<Map<String, dynamic>>()) {
+        entry['rootUri'] = configFile.uri
+            .resolve(entry['rootUri'] as String)
+            .toString();
+      }
+      for (final platform in ['native', 'web']) {
+        await write('pkg_$platform/lib/fields.dart', '''
+import 'package:orm/schema.dart';
+String next() => '$platform';
+mixin Fields { @Id() int id = 0; @ClientDefault(next) String label = ''; }
+''');
+        packages.add({
+          'name': 'fields_$platform',
+          'rootUri': Directory('${root.path}/pkg_$platform').absolute.uri
+              .toString(),
+          'packageUri': 'lib/',
+          'languageVersion': '3.13',
+        });
+      }
+      await write('.dart_tool/package_config.json', jsonEncode(config));
+      final result = await generate('''
+import 'package:orm/schema.dart';
+import 'package:fields_native/fields.dart' if (dart.library.js_interop) 'package:fields_web/fields.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+''');
+      expect(
+        result.dart,
+        contains(
+          'if (dart.library.js_interop) "package:fields_web/fields.dart"',
+        ),
+      );
+    },
+  );
+
+  test('shared external argument types retain fixed routes across different branch prefixes', () async {
+    await write(
+      'shared.dart',
+      'class Token {}\nString make<T>() => T.toString();',
+    );
+    for (final platform in ['native', 'web']) {
+      final prefix = platform == 'native' ? 'h' : 'longh';
+      await write('fields_$platform.dart', '''
+import 'package:orm/schema.dart';
+import 'shared.dart' as $prefix;
+mixin Fields { @Id() int id = 0; @ClientDefault($prefix.make<$prefix.Token>) String label = ''; }
+''');
+    }
+    await generate('''
+import 'package:orm/schema.dart';
+import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+''');
+  });
+
+  test(
+    'factory and argument can select different explicit conditional prefixes',
+    () async {
+      await write(
+        'native.dart',
+        'class Token {}\nString make<T>() => T.toString();',
+      );
+      await write(
+        'web.dart',
+        'class Token {}\nString make<T>() => T.toString();',
+      );
+      await write(
+        'other_web.dart',
+        'class OtherToken {}\ntypedef Token = OtherToken;',
+      );
+      await write(
+        'factory.dart',
+        "export 'native.dart' if (dart.library.js_interop) 'web.dart';",
+      );
+      await write(
+        'argument.dart',
+        "export 'native.dart' if (dart.library.js_interop) 'other_web.dart';",
+      );
+      final result = await generate('''
+import 'package:orm/schema.dart';
+import 'factory.dart' as f;
+import 'argument.dart' as t;
+@Model() final class Row({@Id() required final int id, @ClientDefault(f.make<t.Token>) required final String label});
+''');
+      expect(
+        result.dart,
+        contains('"argument.dart" as factories0 show Token;'),
+      );
+      expect(result.dart, contains('"factory.dart" as factories1 show make;'));
+      expect(result.dart, contains('factories1.make<factories0.Token>'));
+      expect(result.dart, isNot(contains('import "native.dart"')));
+    },
+  );
+
+  test(
+    'record argument fields retain conditional public type routes',
+    () async {
+      await write(
+        'native.dart',
+        'class Token {}\nString make<T>() => T.toString();',
+      );
+      await write(
+        'web.dart',
+        'class Token {}\nString make<T>() => T.toString();',
+      );
+      final result = await generate('''
+import 'package:orm/schema.dart';
+import 'native.dart' if (dart.library.js_interop) 'web.dart' as h;
+@Model() final class Row({@Id() required final int id, @ClientDefault(h.make<(h.Token, {h.Token? value})>) required final String label});
+''');
+      expect(
+        result.dart,
+        contains('(factories0.Token, {factories0.Token? value})'),
+      );
+      expect(result.dart, isNot(contains('import "native.dart" as types')));
+      await write(
+        'probe.dart',
+        "import 'client.dart';\nvoid main() => print(rowSchema.columns.last.clientDefault!());",
+      );
+      final compile = await Process.run(Platform.resolvedExecutable, [
+        'compile',
+        'js',
+        '${root.path}/probe.dart',
+        '-o',
+        '${root.path}/probe.js',
+      ]);
+      expect(
+        compile.exitCode,
+        0,
+        reason: '${compile.stdout}\n${compile.stderr}',
+      );
+    },
+  );
+
+  for (final conditional in [false, true]) {
+    test(
+      '${conditional ? 'conditional' : 'plain'} inferred private-alias bounds have an explicit route boundary',
+      () async {
+        const types =
+            'class Token {}\nclass Box<T extends Token> {}\nString make<T>() => T.toString();';
+        await write('native.dart', types);
+        await write('web.dart', types);
+        final source =
+            '''
+import 'package:orm/schema.dart';
+import 'native.dart' ${conditional ? "if (dart.library.js_interop) 'web.dart'" : ''} as h;
+typedef _Box = h.Box;
+@Model() final class Row({@Id() required final int id, @ClientDefault(h.make<_Box>) required final String label});
+''';
+        if (conditional) {
+          await expectLater(
+            generate(source),
+            throwsA(
+              isA<GenerationException>()
+                  .having((e) => e.code, 'code', 'SCHEMA.DEFAULT')
+                  .having(
+                    (e) => e.message,
+                    'route',
+                    contains('inferred factory type'),
+                  )
+                  .having((e) => e.line, 'line', greaterThan(0)),
+            ),
+          );
+          await generate(
+            source.replaceFirst(
+              'typedef _Box = h.Box;',
+              'typedef _Box = h.Box<h.Token>;',
+            ),
+          );
+        } else {
+          await generate(source);
+        }
       },
     );
   }

@@ -129,8 +129,9 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
     Expression expression,
     ExecutableElement function,
     FunctionType signature,
-    AstNode context,
-  ) {
+    AstNode context, {
+    String? fieldName,
+  }) {
     expression = unwrapFactory(expression);
     final element = switch (expression) {
       Identifier() => expression.element,
@@ -147,9 +148,9 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
         );
       }
       if (variable case FieldElement(:final enclosingElement)) {
-        return '${_factoryName(enclosingElement, expression, context)}.${variable.name}';
+        return '${_factoryName(enclosingElement, expression, context, fieldName: fieldName)}.${variable.name}';
       }
-      return _factoryName(variable, expression, context);
+      return _factoryName(variable, expression, context, fieldName: fieldName);
     }
     if (function.isPrivate) {
       throw const GenerationException(
@@ -162,18 +163,20 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
         expression,
         context,
         constructor: signature,
+        fieldName: fieldName,
       );
-      if (target.reference == null &&
-          !target.expanded &&
-          target.symbol is! TypeAliasElement) {
-        return '${type(signature.returnType)}.${function.name}';
-      }
       final arguments =
           target.arguments ??
           [
             if (signature.returnType case InterfaceType(:final typeArguments))
               for (final argument in typeArguments)
-                _factoryType(argument, {}, expression),
+                _factoryType(
+                  argument,
+                  {},
+                  expression,
+                  context,
+                  fieldName: fieldName,
+                ),
           ];
       final suffix = arguments.isEmpty ? '' : '<${arguments.join(', ')}>';
       return '${target.reference ?? name(target.symbol)}$suffix.${function.name}';
@@ -187,14 +190,17 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
         'Instantiate generic clientDefault factories explicitly.',
       );
     }
+    final syntax = expression is FunctionReference
+        ? expression.typeArguments?.arguments
+        : null;
     final suffix = arguments == null || arguments.isEmpty
         ? ''
-        : '<${arguments.map((argument) => _factoryType(argument, {}, expression)).join(', ')}>';
+        : '<${[for (var index = 0; index < arguments.length; index++) _factoryType(arguments[index], {}, expression, context, fieldName: fieldName, spelling: syntax?[index])].join(', ')}>';
     if (function is TopLevelFunctionElement) {
-      return '${_factoryName(function, expression, context)}$suffix';
+      return '${_factoryName(function, expression, context, fieldName: fieldName)}$suffix';
     }
     if (function is MethodElement && function.isStatic) {
-      return '${_factoryName(function.enclosingElement!, expression, context)}.${function.name}$suffix';
+      return '${_factoryName(function.enclosingElement!, expression, context, fieldName: fieldName)}.${function.name}$suffix';
     }
     throw const GenerationException(
       'clientDefault requires a public top-level function, static method or constructor.',
@@ -206,16 +212,39 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
     Expression expression,
     AstNode context, {
     FunctionType? constructor,
+    NamedType? typeSpelling,
+    String? fieldName,
+    Map<TypeParameterElement, String> environment = const {},
   }) => factoryImports.resolve(
     symbol,
     expression,
     context,
     constructor: constructor,
-    render: (type, environment) => _factoryType(type, environment, expression),
+    typeSpelling: typeSpelling,
+    environment: environment,
+    fieldName: fieldName,
+    render: (type, environment, spelling) => _factoryType(
+      type,
+      environment,
+      expression,
+      context,
+      fieldName: fieldName,
+      spelling: spelling,
+    ),
   );
 
-  String _factoryName(Element symbol, Expression expression, AstNode context) {
-    final target = _factoryTarget(symbol, expression, context);
+  String _factoryName(
+    Element symbol,
+    Expression expression,
+    AstNode context, {
+    String? fieldName,
+  }) {
+    final target = _factoryTarget(
+      symbol,
+      expression,
+      context,
+      fieldName: fieldName,
+    );
     return target.reference ?? name(target.symbol);
   }
 
@@ -225,10 +254,13 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
     DartType value,
     Map<TypeParameterElement, String> environment,
     Expression expression,
-  ) {
+    AstNode context, {
+    String? fieldName,
+    TypeAnnotation? spelling,
+  }) {
     String arguments(List<DartType> values) => values.isEmpty
         ? ''
-        : '<${values.map((type) => _factoryType(type, environment, expression)).join(', ')}>';
+        : '<${values.map((type) => _factoryType(type, environment, expression, context, fieldName: fieldName)).join(', ')}>';
     String suffix(NullabilitySuffix value) =>
         value == NullabilitySuffix.question ? '?' : '';
     if (value is TypeParameterType) {
@@ -242,6 +274,48 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
       }
       return '$bound${bound.endsWith('?') ? '' : suffix(value.nullabilitySuffix)}';
     }
+    // Resolved DartType identity loses conditional import spelling. Render every
+    // explicit argument from its original AST, including private alias bodies.
+    if (spelling is NamedType &&
+        spelling.element is! TypeParameterElement &&
+        spelling.element != null &&
+        value is! DynamicType) {
+      final target = _factoryTarget(
+        spelling.element!,
+        expression,
+        context,
+        typeSpelling: spelling,
+        fieldName: fieldName,
+        environment: environment,
+      );
+      final rendered = target.arguments ?? const <String>[];
+      return '${target.reference ?? name(target.symbol)}${rendered.isEmpty ? '' : '<${rendered.join(', ')}>'}${suffix(value.nullabilitySuffix)}';
+    }
+    if (spelling is RecordTypeAnnotation) {
+      final positional = [
+        for (final field in spelling.positionalFields)
+          _factoryType(
+            field.type.type!,
+            environment,
+            expression,
+            context,
+            fieldName: fieldName,
+            spelling: field.type,
+          ),
+      ];
+      final named = [
+        for (final field
+            in spelling.namedFields?.fields ??
+                <RecordTypeAnnotationNamedField>[])
+          '${_factoryType(field.type.type!, environment, expression, context, fieldName: fieldName, spelling: field.type)} ${field.name.lexeme}',
+      ];
+      return '(${[...positional, if (named.isNotEmpty) '{${named.join(', ')}}'].join(', ')}${positional.length == 1 && named.isEmpty ? ',' : ''})${suffix(value.nullabilitySuffix)}';
+    }
+    final inferredSymbol =
+        value.alias?.element ?? (value is InterfaceType ? value.element : null);
+    if (inferredSymbol != null) {
+      factoryImports.validateInferredType(inferredSymbol, expression, context);
+    }
     final alias = value.alias;
     if (alias != null && !alias.element.isPrivate) {
       return '${name(alias.element)}${arguments(alias.typeArguments)}${suffix(value.nullabilitySuffix)}';
@@ -250,7 +324,7 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
       InterfaceType() =>
         '${name(value.element)}${arguments(value.typeArguments)}${suffix(value.nullabilitySuffix)}',
       RecordType() =>
-        '(${[for (final field in value.positionalFields) _factoryType(field.type, environment, expression), if (value.namedFields.isNotEmpty) '{${value.namedFields.map((field) => '${_factoryType(field.type, environment, expression)} ${field.name}').join(', ')}}'].join(', ')}${value.positionalFields.length == 1 && value.namedFields.isEmpty ? ',' : ''})${suffix(value.nullabilitySuffix)}',
+        '(${[for (final field in value.positionalFields) _factoryType(field.type, environment, expression, context, fieldName: fieldName), if (value.namedFields.isNotEmpty) '{${value.namedFields.map((field) => '${_factoryType(field.type, environment, expression, context, fieldName: fieldName)} ${field.name}').join(', ')}}'].join(', ')}${value.positionalFields.length == 1 && value.namedFields.isEmpty ? ',' : ''})${suffix(value.nullabilitySuffix)}',
       DynamicType() => 'dynamic',
       _ => failAt(
         expression,

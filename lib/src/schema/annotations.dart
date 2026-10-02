@@ -174,6 +174,9 @@ final class Ignore {
 /// generation host's implementation.
 /// Local typedef qualifiers may expand to a public target. Conditional mixins
 /// must expose that target and keep their alias mapping consistent across branches.
+/// Explicit generic arguments retain their own public routes, including nested
+/// types and local private typedefs. Inferred conditional arguments without a
+/// provable public route require explicit spelling and a located diagnostic.
 final class ClientDefault {
   /// Public top-level function, static method or constructor tear-off.
   final Function factory;

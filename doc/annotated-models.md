@@ -129,6 +129,16 @@ alias inside a conditional mixin needs its first public target exposed through
 that mixin entrypoint and a consistent alias mapping across branches. Missing
 or ambiguous routes and unresolved alias arguments produce a located
 `SCHEMA.DEFAULT` diagnostic instead of fixing the factory to the host branch.
+Explicit generic arguments, including nested named/record types and local
+private typedef chains to named types, retain their own public import/export
+routes as well as the factory route. Different import prefixes and field
+declaration grouping between mixin branches do not change this contract.
+Inactive package branches are resolved through the consumer package config.
+An inferred argument without a provable conditional public route must be
+spelled explicitly; generation reports `SCHEMA.DEFAULT` instead of importing
+the host implementation. Branches must keep the same factory expression and
+private alias mapping after import-prefix normalization; generation does not
+prove arbitrary semantically equivalent rewrites.
 
 `@DatabaseDefault.sql('CURRENT_TIMESTAMP')` uses
 trusted SQL. Scalar database constants are encoded and quoted by generation. For a custom

@@ -824,6 +824,7 @@ final class AnnotationReader(
         function,
         signature,
         node,
+        fieldName: field.name,
       );
     } else if (!generated && defaultSql == null && parameter.hasDefaultValue) {
       final value = parameter.computeConstantValue();
