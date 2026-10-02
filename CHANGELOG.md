@@ -1,3 +1,9 @@
+## Unreleased
+
+- Switch project-owned code to the MIT License, copyright © 2022–2026 Seven Du,
+  starting with the next release after `6.0.0-beta.6`. Earlier releases and
+  historical tags retain their original licenses.
+
 ## 6.0.0-beta.6
 
 - Add optional plain mixins for shared annotated storage fields and business methods. Named constructor parameters must assign same-name, same-type mixin fields directly; original DTO identity, defaults and typed relations are preserved. Ordinary models remain supported without mixins. Reject ambiguous field/accessor conflicts, repeated metadata, transforming constructors and unsupported inheritance.
