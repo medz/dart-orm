@@ -430,12 +430,28 @@ class SqlDatabase<B extends Backend> {
   /// Only a borrowed session or transaction view can be discarded. The view
   /// becomes unusable immediately; this does not prove a submitted write rolled
   /// back and does not close an otherwise usable root driver or pool.
+  /// Expired views and parents with an active child scope cannot discard the
+  /// lease. A current view may still discard after failure or cancellation.
   Future<void> discard() async {
     final connection = _connection;
     if (connection == null) {
       throw const OrmException(
         'SESSION.REQUIRED',
         'Discard requires a leased session.',
+      );
+    }
+    // Cleanup needs lease ownership, not a healthy transaction. checkActive()
+    // would also reject the failures that can make discarding necessary.
+    if (!_active) {
+      throw const OrmException(
+        'SESSION.CLOSED',
+        'SqlDatabase session has ended.',
+      );
+    }
+    if (_childActive) {
+      throw const OrmException(
+        'SESSION.SAVEPOINT',
+        'Use the active nested session.',
       );
     }
     _active = false;

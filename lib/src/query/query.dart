@@ -120,8 +120,12 @@ class Query<R, F extends Fields> {
       copyQuery(queryState.copy(group: List.unmodifiable(group(queryFields))));
 
   /// Adds an aggregate filter with AND to the existing HAVING clause.
-  Query<R, F> having(Expr<bool?> Function(F) condition) =>
-      copyQuery(queryState.copy(having: condition(queryFields)));
+  Query<R, F> having(Expr<bool?> Function(F) condition) {
+    final next = condition(queryFields);
+    return copyQuery(
+      queryState.copy(having: allOf([?queryState.having, next])),
+    );
+  }
 
   /// Replaces the row limit; count must be nonnegative.
   Query<R, F> take(int count) {
