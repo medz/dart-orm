@@ -115,20 +115,28 @@ duplicate names, symlinks, hard links and special files. For example:
 python3 - /tmp/orm-release.tar.gz /tmp/orm-release-package <<'PY'
 import pathlib, sys, tarfile
 archive, output = sys.argv[1:]
-root = pathlib.Path(output)
+root = pathlib.Path(output).resolve()
 root.mkdir()  # Refuse an existing destination.
 with tarfile.open(archive, 'r:gz') as package:
     names = set()
     entries = package.getmembers()
+    targets = []
     for entry in entries:
         path = pathlib.PurePosixPath(entry.name)
-        if (path.is_absolute() or '\\' in entry.name or ':' in entry.name or
-                '..' in path.parts or
-                path.as_posix() in names or not (entry.isfile() or entry.isdir())):
+        name = path.as_posix().casefold()
+        if (not path.parts or path.is_absolute() or '\\' in entry.name or
+                ':' in entry.name or
+                any(part.startswith(' ') or part.endswith((' ', '.')) or
+                    pathlib.PureWindowsPath(part).is_reserved()
+                    for part in path.parts) or
+                name in names or not (entry.isfile() or entry.isdir())):
             raise ValueError(f'Unsafe archive member: {entry.name}')
-        names.add(path.as_posix())
-    for entry in entries:
-        target = root.joinpath(*pathlib.PurePosixPath(entry.name).parts)
+        target = root.joinpath(*path.parts).resolve()
+        if not target.is_relative_to(root):
+            raise ValueError(f'Archive destination outside root: {entry.name}')
+        names.add(name)
+        targets.append((entry, target))
+    for entry, target in targets:
         if entry.isdir():
             target.mkdir(parents=True, exist_ok=True)
         else:
