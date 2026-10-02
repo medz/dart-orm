@@ -110,7 +110,9 @@ final class FactoryImports(final String Function(Uri) importUri) {
           .where((node) => node.declaredFragment!.element == alias)
           .firstOrNull;
       final body = declaration?.type;
-      if (body is! NamedType || body.element == null) {
+      if (body is! NamedType ||
+          body.element == null ||
+          body.element is TypeParameterElement) {
         failAt(
           expression,
           'DEFAULT',
@@ -180,17 +182,34 @@ final class FactoryImports(final String Function(Uri) importUri) {
             ),
       ];
     }
-    // Alias bodies may instantiate a generic type to its bounds without spelling
-    // arguments. Keep that resolved instantiation rather than inferring anew in
-    // the generated callback's context.
+    // Omitted arguments on public types must remain omitted: the target
+    // compiler instantiates bounds through that same public entrypoint. Only a
+    // private alias needs a concrete environment before its body can expand.
+    if (type.element case TypeAliasElement(isPrivate: true)) {
+      // Resolve private bounds below, retaining their original type syntax.
+    } else {
+      return [];
+    }
     final resolved = type.type;
     final inferred =
         resolved?.alias?.typeArguments ??
         (resolved is InterfaceType
             ? resolved.typeArguments
             : const <DartType>[]);
+    final unit = type.root as CompilationUnit;
+    final declaration = unit.declarations
+        .whereType<GenericTypeAlias>()
+        .where((node) => node.declaredFragment!.element == type.element)
+        .firstOrNull;
+    final parameters = declaration?.typeParameters?.typeParameters;
+    TypeAnnotation? inferredSpelling(int index) {
+      final bound = parameters == null ? null : parameters[index].bound;
+      return bound?.type == inferred[index] ? bound : null;
+    }
+
     return [
-      for (final argument in inferred) render(argument, environment, null),
+      for (var index = 0; index < inferred.length; index++)
+        render(inferred[index], environment, inferredSpelling(index)),
     ];
   }
 
@@ -304,7 +323,9 @@ final class FactoryImports(final String Function(Uri) importUri) {
             fieldName: fieldName,
             referencePrefix: prefix,
             aliases: target.aliases,
-            referenceType: target.spelling is NamedType,
+            referenceSpelling: target.spelling is NamedType
+                ? target.spelling as NamedType
+                : null,
           )) {
         failAt(
           expression,
@@ -432,7 +453,7 @@ final class FactoryImports(final String Function(Uri) importUri) {
     List<GenericTypeAlias> aliases = const [],
     String? fieldName,
     String? referencePrefix,
-    bool referenceType = false,
+    NamedType? referenceSpelling,
   }) {
     final symbol = factorySymbol.name!;
     final implicitCore = factorySymbol.library!.uri.toString() == 'dart:core';
@@ -465,7 +486,9 @@ final class FactoryImports(final String Function(Uri) importUri) {
         ),
       },
     );
-    final prefix = referenceType ? referencePrefix : _sourcePrefix(expression);
+    final prefix = referenceSpelling != null
+        ? referencePrefix
+        : _sourcePrefix(expression);
     final expected = <String>{
       for (final directive in owner.directives.whereType<ImportDirective>())
         if (directive.prefix?.name == prefix &&
@@ -486,18 +509,81 @@ final class FactoryImports(final String Function(Uri) importUri) {
           route(directive, owner.declaredFragment!.element.uri),
     };
     String shape(AstNode node, CompilationUnit unit) {
-      var text = node.toSource();
-      final prefixes =
-          unit.directives
-              .whereType<ImportDirective>()
-              .map((directive) => directive.prefix?.name)
-              .whereType<String>()
-              .toList()
-            ..sort((left, right) => right.length.compareTo(left.length));
-      for (final prefix in prefixes) {
-        text = text.replaceAll('$prefix.', '');
+      final prefixes = unit.directives
+          .whereType<ImportDirective>()
+          .map((directive) => directive.prefix?.name)
+          .whereType<String>()
+          .toSet();
+      final pieces = <String>[];
+      var token = node.beginToken;
+      String? previous;
+      while (true) {
+        final next = token.next;
+        if (prefixes.contains(token.lexeme) &&
+            next?.lexeme == '.' &&
+            previous != '.') {
+          if (next == node.endToken) break;
+          previous = next!.lexeme;
+          token = next.next!;
+          continue;
+        }
+        pieces.add(token.lexeme);
+        if (token == node.endToken) break;
+        previous = token.lexeme;
+        token = token.next!;
       }
-      return text;
+      return pieces.join(' ');
+    }
+
+    List<NamedType> typeOccurrences(AstNode node) {
+      final result = <NamedType>[];
+      void collect(TypeAnnotation type) {
+        switch (type) {
+          case NamedType():
+            result.add(type);
+            for (final argument
+                in type.typeArguments?.arguments ?? <TypeAnnotation>[]) {
+              collect(argument);
+            }
+          case GenericFunctionType():
+            break;
+          case RecordTypeAnnotation():
+            for (final field in type.positionalFields) {
+              collect(field.type);
+            }
+            for (final field
+                in type.namedFields?.fields ??
+                    <RecordTypeAnnotationNamedField>[]) {
+              collect(field.type);
+            }
+        }
+      }
+
+      switch (node) {
+        case GenericTypeAlias():
+          collect(node.type);
+          for (final parameter
+              in node.typeParameters?.typeParameters ?? <TypeParameter>[]) {
+            if (parameter.bound case final bound?) {
+              collect(bound);
+            }
+          }
+        case FunctionReference():
+          for (final argument
+              in node.typeArguments?.arguments ?? <TypeAnnotation>[]) {
+            collect(argument);
+          }
+        case TypeLiteral():
+          // Before resolution a generic tear-off parses as a type literal.
+          if (node.type case NamedType(:final typeArguments?)) {
+            for (final argument in typeArguments.arguments) {
+              collect(argument);
+            }
+          }
+        case ConstructorReference():
+          collect(node.constructorName.type);
+      }
+      return result;
     }
 
     final selectedField =
@@ -546,8 +632,12 @@ final class FactoryImports(final String Function(Uri) importUri) {
           if (counterpart == null ||
               shape(counterpart.type, result.unit) !=
                   shape(alias.type, owner) ||
-              counterpart.typeParameters?.toSource() !=
-                  alias.typeParameters?.toSource()) {
+              (counterpart.typeParameters == null
+                      ? null
+                      : shape(counterpart.typeParameters!, result.unit)) !=
+                  (alias.typeParameters == null
+                      ? null
+                      : shape(alias.typeParameters!, owner))) {
             valid = false;
             return;
           }
@@ -584,55 +674,35 @@ final class FactoryImports(final String Function(Uri) importUri) {
           return;
         }
         var routePrefix = branchPrefix;
-        if (referenceType && !publicEntrypoint) {
-          final qualifiers = <String?>{};
-          void collect(AstNode node) {
-            if (node is NamedType && node.name.lexeme == symbol) {
-              qualifiers.add(node.importPrefix?.name.lexeme);
-            }
-            switch (node) {
-              case TypeLiteral():
-                collect(node.type);
-              case FunctionReference():
-                if (node.typeArguments case final arguments?) {
-                  collect(arguments);
-                }
-              case ConstructorReference():
-                collect(node.constructorName.type);
-              case NamedType():
-                if (node.typeArguments case final arguments?) {
-                  collect(arguments);
-                }
-              case TypeArgumentList():
-                for (final argument in node.arguments) {
-                  collect(argument);
-                }
-              case RecordTypeAnnotation():
-                for (final field in node.positionalFields) {
-                  collect(field.type);
-                }
-                for (final field
-                    in node.namedFields?.fields ??
-                        <RecordTypeAnnotationNamedField>[]) {
-                  collect(field.type);
-                }
-            }
-          }
-
-          collect(factory);
-          for (final alias in aliases) {
-            final counterpart = result.unit.declarations
-                .whereType<GenericTypeAlias>()
-                .where((node) => node.name.lexeme == alias.name.lexeme)
-                .firstOrNull;
-            if (counterpart != null) collect(counterpart.type);
-          }
-          if (qualifiers.length != 1) {
+        if (referenceSpelling != null && !publicEntrypoint) {
+          final sourceAlias = referenceSpelling
+              .thisOrAncestorOfType<GenericTypeAlias>();
+          final sourceAnchor = sourceAlias ?? expression;
+          final branchAnchor = sourceAlias == null
+              ? factory
+              : result.unit.declarations
+                    .whereType<GenericTypeAlias>()
+                    .where(
+                      (node) => node.name.lexeme == sourceAlias.name.lexeme,
+                    )
+                    .firstOrNull;
+          final sourceTypes = typeOccurrences(sourceAnchor);
+          final occurrence = sourceTypes.indexWhere(
+            (type) => type.offset == referenceSpelling.offset,
+          );
+          final branchTypes = branchAnchor == null
+              ? <NamedType>[]
+              : typeOccurrences(branchAnchor);
+          if (occurrence < 0 ||
+              occurrence >= branchTypes.length ||
+              branchTypes[occurrence].name.lexeme !=
+                  referenceSpelling.name.lexeme) {
             valid = false;
             return;
           }
-          routePrefix = qualifiers.single;
+          routePrefix = branchTypes[occurrence].importPrefix?.name.lexeme;
         }
+
         if (!publicEntrypoint &&
             !implicitCore &&
             (expected.isEmpty ||

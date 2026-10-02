@@ -283,7 +283,7 @@ typedef _Implicit = h.Value;
         implicitExpression.staticType as FunctionType,
         implicitAnnotation,
       );
-      expect(implicitReference, 'factories1.Value<dynamic>.new');
+      expect(implicitReference, 'factories1.Value.new');
       await write(
         'probe.dart',
         '${names.factoryImports.directives.join('\n')}\nvoid main() { print($reference()); print($implicitReference()); }',
@@ -695,7 +695,7 @@ import 'native.dart' if (dart.library.js_interop) 'web.dart' as h;
 
   for (final conditional in [false, true]) {
     test(
-      '${conditional ? 'conditional' : 'plain'} inferred private-alias bounds have an explicit route boundary',
+      '${conditional ? 'conditional' : 'plain'} omitted bounds stay with their public generic entrypoint',
       () async {
         const types =
             'class Token {}\nclass Box<T extends Token> {}\nString make<T>() => T.toString();';
@@ -708,32 +708,210 @@ import 'native.dart' ${conditional ? "if (dart.library.js_interop) 'web.dart'" :
 typedef _Box = h.Box;
 @Model() final class Row({@Id() required final int id, @ClientDefault(h.make<_Box>) required final String label});
 ''';
+        final result = await generate(source);
+        expect(result.dart, contains('Box>'));
         if (conditional) {
-          await expectLater(
-            generate(source),
-            throwsA(
-              isA<GenerationException>()
-                  .having((e) => e.code, 'code', 'SCHEMA.DEFAULT')
-                  .having(
-                    (e) => e.message,
-                    'route',
-                    contains('inferred factory type'),
-                  )
-                  .having((e) => e.line, 'line', greaterThan(0)),
-            ),
-          );
+          expect(result.dart, isNot(contains('import "native.dart" as types')));
           await generate(
             source.replaceFirst(
               'typedef _Box = h.Box;',
               'typedef _Box = h.Box<h.Token>;',
             ),
           );
-        } else {
-          await generate(source);
         }
       },
     );
   }
+
+  test('a private alias ending at a type parameter has a located public-target diagnostic', () async {
+    await write(
+      'helper.dart',
+      'class Token {}\nString make<T>() => T.toString();',
+    );
+    await expectLater(
+      generate('''
+import 'package:orm/schema.dart';
+import 'helper.dart' as h;
+typedef _Identity<T> = T;
+@Model() final class Row({@Id() required final int id, @ClientDefault(h.make<_Identity<h.Token>>) required final String label});
+'''),
+      throwsA(
+        isA<GenerationException>()
+            .having((e) => e.code, 'code', 'SCHEMA.DEFAULT')
+            .having((e) => e.line, 'line', greaterThan(0)),
+      ),
+    );
+  });
+
+  test(
+    'branch prefix normalization preserves complete type identifier tokens',
+    () async {
+      await write(
+        'shared.dart',
+        "class Path { static String next() => 'shared'; }",
+      );
+      for (final platform in ['native', 'web']) {
+        final prefix = platform == 'native' ? 'h' : 'x';
+        await write('fields_$platform.dart', '''
+import 'package:orm/schema.dart';
+import 'shared.dart' as $prefix;
+export 'shared.dart' show Path;
+mixin Fields { @Id() int id = 0; @ClientDefault($prefix.Path.next) String label = ''; }
+''');
+      }
+      await generate('''
+import 'package:orm/schema.dart';
+import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+''');
+    },
+  );
+
+  test(
+    'same-name type arguments retain their specific source occurrence routes',
+    () async {
+      await write(
+        'first.dart',
+        'class Token {}\nString make<A,B>() => "shared";',
+      );
+      await write('second.dart', 'class Token {}');
+      for (final platform in ['native', 'web']) {
+        await write('fields_$platform.dart', '''
+import 'package:orm/schema.dart';
+import 'first.dart' as a;
+import 'second.dart' as b;
+mixin Fields { @Id() int id = 0; @ClientDefault(a.make<a.Token,b.Token>) String label = ''; }
+''');
+      }
+      final result = await generate('''
+import 'package:orm/schema.dart';
+import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+''');
+      expect(result.dart, contains('"first.dart" as types0;'));
+      expect(result.dart, contains('"second.dart" as types1;'));
+      expect(result.dart, contains('types0.make<types0.Token, types1.Token>'));
+    },
+  );
+
+  test(
+    'shared inferred bounds retain constructor and argument public routes',
+    () async {
+      await write(
+        'shared.dart',
+        'class Token {}\nclass Box<T extends Token> { Box(); }\nString make<T>() => T.toString();',
+      );
+      for (final platform in ['native', 'web']) {
+        await write('fields_$platform.dart', '''
+import 'package:orm/schema.dart';
+import 'shared.dart' as h;
+typedef _Box = h.Box;
+mixin Fields {
+ @Id() int id = 0;
+ @ClientDefault(h.make<_Box>) String label = '';
+}
+''');
+      }
+      final result = await generate('''
+import 'package:orm/schema.dart';
+import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+''');
+      expect(result.dart, contains('Box>'));
+      for (final platform in ['native', 'web']) {
+        final source = await File('${root.path}/fields_$platform.dart')
+            .readAsString();
+        await write(
+          'fields_$platform.dart',
+          source.replaceFirst(
+            'mixin Fields {',
+            'mixin Fields { @ClientDefault(h.Box.new) h.Box object = h.Box();',
+          ),
+        );
+      }
+      final contexts = AnalysisContextCollection(
+        includedPaths: [root.absolute.path],
+      );
+      try {
+        final path = File('${root.path}/models.dart').absolute.path;
+        final session = contexts.contextFor(path).currentSession;
+        final model = await session.getResolvedUnit(path) as ResolvedUnitResult;
+        final fields = await session.getResolvedUnit(
+          File('${root.path}/fields_native.dart').absolute.path,
+        ) as ResolvedUnitResult;
+        final declaration = fields.unit.declarations
+            .whereType<MixinDeclaration>()
+            .single
+            .body
+            .members
+            .whereType<FieldDeclaration>()
+            .first;
+        final annotation = declaration.metadata
+            .where((node) => node.name.toSource() == 'ClientDefault')
+            .single;
+        final expression =
+            annotation.arguments!.arguments.single.argumentExpression
+                as ConstructorReference;
+        final context = model.unit.declarations
+            .whereType<ClassDeclaration>()
+            .single
+            .body
+            .members
+            .whereType<ConstructorDeclaration>()
+            .single
+            .parameters
+            .parameters
+            .last;
+        final names = DartNames(
+          model.libraryElement.uri,
+          (uri) => uri.toString(),
+        );
+        final reference = names.factoryReference(
+          expression,
+          expression.constructorName.element as ExecutableElement,
+          expression.staticType as FunctionType,
+          context,
+          fieldName: 'object',
+        );
+        expect(reference, 'types0.Box.new');
+      } finally {
+        await contexts.dispose();
+      }
+    },
+  );
+
+  test(
+    'omitted private generic alias bounds retain original public type syntax',
+    () async {
+      await write(
+        'shared.dart',
+        'class Token {}\nString make<T>() => T.toString();',
+      );
+      for (final platform in ['native', 'web']) {
+        final prefix = platform == 'native' ? 'n' : 'x';
+        await write('fields_$platform.dart', '''
+import 'package:orm/schema.dart';
+import 'shared.dart' as $prefix;
+typedef _Local<T extends $prefix.Token> = List<T>;
+mixin Fields { @Id() int id = 0; @ClientDefault($prefix.make<_Local>) String label = ''; }
+''');
+      }
+      final result = await generate('''
+import 'package:orm/schema.dart';
+import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+''');
+      expect(result.dart, contains('types0.make<List<types0.Token>>'));
+    },
+  );
 
   test('shared wrapper imports may use different branch prefixes', () async {
     await write('shared.dart', "String next() => 'shared';");

@@ -134,11 +134,15 @@ private typedef chains to named types, retain their own public import/export
 routes as well as the factory route. Different import prefixes and field
 declaration grouping between mixin branches do not change this contract.
 Inactive package branches are resolved through the consumer package config.
-An inferred argument without a provable conditional public route must be
-spelled explicitly; generation reports `SCHEMA.DEFAULT` instead of importing
+Omitted arguments of a public generic type retain their omission, so its target
+entrypoint supplies its bounds. Private alias bounds retain their own syntax when
+expanded. An inferred argument without a provable conditional public route must
+be spelled explicitly; generation reports `SCHEMA.DEFAULT` instead of importing
 the host implementation. Branches must keep the same factory expression and
 private alias mapping after import-prefix normalization; generation does not
-prove arbitrary semantically equivalent rewrites.
+prove arbitrary semantically equivalent rewrites. A private alias ending at a
+function/record body or bare type parameter does not expose a named public
+target; spell that argument directly or use a public named alias.
 
 `@DatabaseDefault.sql('CURRENT_TIMESTAMP')` uses
 trusted SQL. Scalar database constants are encoded and quoted by generation. For a custom
