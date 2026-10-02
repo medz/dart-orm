@@ -122,7 +122,8 @@ with tarfile.open(archive, 'r:gz') as package:
     entries = package.getmembers()
     for entry in entries:
         path = pathlib.PurePosixPath(entry.name)
-        if (path.is_absolute() or '..' in path.parts or
+        if (path.is_absolute() or '\\' in entry.name or ':' in entry.name or
+                '..' in path.parts or
                 path.as_posix() in names or not (entry.isfile() or entry.isdir())):
             raise ValueError(f'Unsafe archive member: {entry.name}')
         names.add(path.as_posix())
