@@ -110,7 +110,23 @@ fallbacks.
 method or constructor tear-off with no required arguments. Generation does not
 execute it. Each generated create call prepares a new insert and obtains its
 own omitted client defaults; re-executing an already prepared low-level mutation
-retains that mutation's values. `@DatabaseDefault.sql('CURRENT_TIMESTAMP')` uses
+retains that mutation's values. Generated factory references preserve the public
+import/export entrypoint used by the annotation, including conditional imports
+and indirect exports. A public factory declared alongside a conditional mixin
+is selected through the model's mixin import; expose the factory through that
+entrypoint when using `show`/`hide`. Each platform must provide the same public
+symbol and a compatible zero-required-argument signature. Target compilation
+checks that signature; generation never substitutes a host implementation to
+bypass a missing or incompatible platform symbol. A fixed-library wrapper whose
+body delegates to conditional code remains a compatible alternative. Local
+private typedef qualifiers are expanded along their alias chain to the first
+public type while retaining its import route and constructor type arguments.
+Public aliases keep their own entrypoint. A private alias inside a conditional
+mixin needs a public alias exposed through that mixin entrypoint; otherwise
+generation reports a located `SCHEMA.DEFAULT` diagnostic instead of fixing
+the factory to the host branch.
+
+`@DatabaseDefault.sql('CURRENT_TIMESTAMP')` uses
 trusted SQL. Scalar database constants are encoded and quoted by generation. For a custom
 codec, use `@DatabaseDefault.sql` with an already encoded database expression;
 generation never executes an application encoder to infer a default.

@@ -8,6 +8,7 @@ import 'package:orm/generate.dart';
 
 import 'build_sqlite_web.dart' as sqlite_web;
 import 'src/browser_profile.dart';
+import 'src/conditional_default_consumer.dart';
 
 const engineVersion = '3.6.0';
 const engineDigest =
@@ -139,5 +140,8 @@ instance.invokeMain();
     if (browser != null) await browser.exitCode;
     await server.close(force: true);
     await deleteBrowserProfile(profile);
+  }
+  if (exitCode == 0) {
+    await verifyConditionalDefaultsChrome(wasm: wasm, chrome: chrome);
   }
 }

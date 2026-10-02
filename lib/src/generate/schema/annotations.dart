@@ -819,7 +819,12 @@ final class AnnotationReader(
           'Use a public synchronous factory returning $type without required arguments.',
         );
       }
-      clientDefault = names.factoryReference(expression, function, signature);
+      clientDefault = names.factoryReference(
+        expression,
+        function,
+        signature,
+        node,
+      );
     } else if (!generated && defaultSql == null && parameter.hasDefaultValue) {
       final value = parameter.computeConstantValue();
       if (value == null) {

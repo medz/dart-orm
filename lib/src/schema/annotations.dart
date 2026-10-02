@@ -167,6 +167,11 @@ final class Ignore {
 ///
 /// The zero-required-argument factory is referenced, never run during generation.
 /// Explicit values, including legal null, bypass it. Patches never apply it.
+/// Generated references retain the annotation's public import/export entrypoint,
+/// including conditional imports. A mixin-local factory must be exposed through
+/// the applied mixin's entrypoint. Platform branches need compatible signatures;
+/// incompatible callbacks fail target compilation instead of selecting the
+/// generation host's implementation.
 final class ClientDefault {
   /// Public top-level function, static method or constructor tear-off.
   final Function factory;

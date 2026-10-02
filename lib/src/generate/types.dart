@@ -4,6 +4,8 @@ import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
 
 import 'exception.dart';
+import 'factory_imports.dart';
+import 'schema/diagnostics.dart';
 
 // Match defining libraries, not consumer import text. Reexports retain identity.
 const codecLibraryUri = 'package:orm/src/values/codec.dart';
@@ -15,6 +17,7 @@ const valueLibraryUris = {
 
 /// Resolve symbols by defining library rather than copying source import text.
 final class DartNames(final Uri source, final String Function(Uri) importUri) {
+  late final factoryImports = FactoryImports(importUri);
   final Map<Uri, String> _prefixes = {};
   final Map<Uri, Set<String>> _exports = {};
   bool usesSource = false;
@@ -126,6 +129,7 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
     Expression expression,
     ExecutableElement function,
     FunctionType signature,
+    AstNode context,
   ) {
     final element = switch (expression) {
       Identifier() => expression.element,
@@ -142,9 +146,9 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
         );
       }
       if (variable case FieldElement(:final enclosingElement)) {
-        return '${name(enclosingElement)}.${variable.name}';
+        return '${_factoryName(enclosingElement, expression, context)}.${variable.name}';
       }
-      return name(variable);
+      return _factoryName(variable, expression, context);
     }
     if (function.isPrivate) {
       throw const GenerationException(
@@ -152,7 +156,26 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
       );
     }
     if (function is ConstructorElement) {
-      return '${type(signature.returnType)}.${function.name}';
+      final target = _factoryTarget(
+        function.enclosingElement,
+        expression,
+        context,
+        constructor: signature,
+      );
+      if (target.reference == null &&
+          !target.expanded &&
+          target.symbol is! TypeAliasElement) {
+        return '${type(signature.returnType)}.${function.name}';
+      }
+      final arguments =
+          target.arguments ??
+          [
+            if (signature.returnType case InterfaceType(:final typeArguments))
+              for (final argument in typeArguments)
+                _factoryType(argument, {}, expression),
+          ];
+      final suffix = arguments.isEmpty ? '' : '<${arguments.join(', ')}>';
+      return '${target.reference ?? name(target.symbol)}$suffix.${function.name}';
     }
     final arguments = expression is FunctionReference
         ? expression.typeArgumentTypes
@@ -165,13 +188,74 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
     }
     final suffix = arguments == null || arguments.isEmpty
         ? ''
-        : '<${arguments.map(type).join(', ')}>';
-    if (function is TopLevelFunctionElement) return '${name(function)}$suffix';
+        : '<${arguments.map((argument) => _factoryType(argument, {}, expression)).join(', ')}>';
+    if (function is TopLevelFunctionElement) {
+      return '${_factoryName(function, expression, context)}$suffix';
+    }
     if (function is MethodElement && function.isStatic) {
-      return '${name(function.enclosingElement!)}.${function.name}$suffix';
+      return '${_factoryName(function.enclosingElement!, expression, context)}.${function.name}$suffix';
     }
     throw const GenerationException(
       'clientDefault requires a public top-level function, static method or constructor.',
     );
+  }
+
+  FactoryTarget _factoryTarget(
+    Element symbol,
+    Expression expression,
+    AstNode context, {
+    FunctionType? constructor,
+  }) => factoryImports.resolve(
+    symbol,
+    expression,
+    context,
+    constructor: constructor,
+    render: (type, environment) => _factoryType(type, environment, expression),
+  );
+
+  String _factoryName(Element symbol, Expression expression, AstNode context) {
+    final target = _factoryTarget(symbol, expression, context);
+    return target.reference ?? name(target.symbol);
+  }
+
+  // Substitute only factory constructor/method arguments. Persistent field type
+  // and codec naming continue to use type() above.
+  String _factoryType(
+    DartType value,
+    Map<TypeParameterElement, String> environment,
+    Expression expression,
+  ) {
+    String arguments(List<DartType> values) => values.isEmpty
+        ? ''
+        : '<${values.map((type) => _factoryType(type, environment, expression)).join(', ')}>';
+    String suffix(NullabilitySuffix value) =>
+        value == NullabilitySuffix.question ? '?' : '';
+    if (value is TypeParameterType) {
+      final bound = environment[value.element];
+      if (bound == null) {
+        failAt(
+          expression,
+          'DEFAULT',
+          'Cannot resolve factory type argument ${value.element.name}. Instantiate the factory explicitly.',
+        );
+      }
+      return '$bound${bound.endsWith('?') ? '' : suffix(value.nullabilitySuffix)}';
+    }
+    final alias = value.alias;
+    if (alias != null && !alias.element.isPrivate) {
+      return '${name(alias.element)}${arguments(alias.typeArguments)}${suffix(value.nullabilitySuffix)}';
+    }
+    return switch (value) {
+      InterfaceType() =>
+        '${name(value.element)}${arguments(value.typeArguments)}${suffix(value.nullabilitySuffix)}',
+      RecordType() =>
+        '(${[for (final field in value.positionalFields) _factoryType(field.type, environment, expression), if (value.namedFields.isNotEmpty) '{${value.namedFields.map((field) => '${_factoryType(field.type, environment, expression)} ${field.name}').join(', ')}}'].join(', ')}${value.positionalFields.length == 1 && value.namedFields.isEmpty ? ',' : ''})${suffix(value.nullabilitySuffix)}',
+      DynamicType() => 'dynamic',
+      _ => failAt(
+        expression,
+        'DEFAULT',
+        'Cannot preserve factory type argument $value.',
+      ),
+    };
   }
 }
