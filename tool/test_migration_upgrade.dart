@@ -179,10 +179,15 @@ dependencies:
     stdout.write(json);
     if (args.length == 3) await File(args[2]).writeAsString(json);
   } finally {
-    if (args.length == 3) {
-      await File('${args[2]}.log').writeAsString(logs.toString());
+    try {
+      if (args.length == 3) {
+        await File('${args[2]}.log').writeAsString(logs.toString());
+      }
+    } on FileSystemException catch (error) {
+      stderr.writeln('Could not save the optional command log: $error');
+    } finally {
+      await directory.delete(recursive: true);
     }
-    await directory.delete(recursive: true);
   }
 }
 
