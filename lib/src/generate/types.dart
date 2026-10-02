@@ -131,6 +131,7 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
     FunctionType signature,
     AstNode context,
   ) {
+    expression = unwrapFactory(expression);
     final element = switch (expression) {
       Identifier() => expression.element,
       PropertyAccess() => expression.propertyName.element,

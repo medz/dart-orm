@@ -69,7 +69,7 @@ const alias = next;
     expect(report['indirectExportDefault'], 'native');
     expect(report['fixedWrapperControl'], 'native');
     expect(await conditionalDefaultHashes(fixture), before);
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
   test(
     'build_runner and CLI preserve identical conditional factory routes',
@@ -383,6 +383,263 @@ import 'native.dart' if (dart.library.js_interop) 'web.dart';
       );
     },
   );
+
+  for (final direct in [false, true]) {
+    test(
+      'duplicate plain ${direct ? 'direct and facade' : 'facade'} imports retain the same factory',
+      () async {
+        await write('native.dart', helpers);
+        await write('first.dart', "export 'native.dart';");
+        await write('second.dart', "export 'native.dart';");
+        await generate(
+          "import '${direct ? 'native' : 'first'}.dart';\nimport 'second.dart';\n${model.replaceAll('h.', '')}",
+        );
+        await write(
+          'probe.dart',
+          "import 'client.dart';\nvoid main() => print(rowSchema.columns.last.clientDefault!());",
+        );
+        final run = await Process.run(Platform.resolvedExecutable, [
+          'run',
+          '${root.path}/probe.dart',
+        ]);
+        expect(run.exitCode, 0, reason: '${run.stdout}\n${run.stderr}');
+        expect('${run.stdout}'.trim(), 'native');
+      },
+    );
+  }
+
+  for (final indirect in [false, true]) {
+    test(
+      'branch-specific ${indirect ? 'indirect' : 'direct'} external factories cannot freeze a conditional mixin',
+      () async {
+        await write('helpers_native.dart', helpers);
+        await write('helpers_web.dart', helpers.replaceAll('native', 'web'));
+        for (final platform in ['native', 'web']) {
+          await write(
+            'facade_$platform.dart',
+            "export 'helpers_$platform.dart';",
+          );
+          await write('fields_$platform.dart', '''
+import 'package:orm/schema.dart';
+import '${indirect ? 'facade' : 'helpers'}_$platform.dart' as h;
+mixin Fields { @Id() int id = 0; @ClientDefault(h.next) String label = ''; }
+''');
+        }
+        await expectLater(
+          generate('''
+import 'package:orm/schema.dart';
+import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+'''),
+          throwsA(
+            isA<GenerationException>().having(
+              (e) => e.code,
+              'code',
+              'SCHEMA.DEFAULT',
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  for (final indirect in [false, true]) {
+    test(
+      'shared core factory through ${indirect ? 'indirect export' : 'conditional import'} remains valid',
+      () async {
+        const fields = '''
+import 'package:orm/schema.dart';
+mixin Fields { @Id() int id = 0; @ClientDefault(DateTime.now) DateTime? createdAt; }
+''';
+        await write('fields_native.dart', fields);
+        await write('fields_web.dart', fields);
+        await write(
+          'facade.dart',
+          "export 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';",
+        );
+        await generate('''
+import 'package:orm/schema.dart';
+import '${indirect ? 'facade.dart' : "fields_native.dart' if (dart.library.js_interop) 'fields_web.dart"}';
+@Model() final class Row with Fields {
+ Row({required int id, required DateTime? createdAt}) { this.id = id; this.createdAt = createdAt; }
+}
+''');
+        await write(
+          'probe.dart',
+          "import 'client.dart';\nvoid main() => print(rowSchema.columns.last.clientDefault!());",
+        );
+        final compile = await Process.run(Platform.resolvedExecutable, [
+          'compile',
+          'js',
+          '${root.path}/probe.dart',
+          '-o',
+          '${root.path}/probe.js',
+        ]);
+        expect(
+          compile.exitCode,
+          0,
+          reason: '${compile.stdout}\n${compile.stderr}',
+        );
+      },
+    );
+  }
+
+  test('shared wrapper imports may use different branch prefixes', () async {
+    await write('shared.dart', "String next() => 'shared';");
+    for (final platform in ['native', 'web']) {
+      await write('fields_$platform.dart', '''
+import 'package:orm/schema.dart';
+import 'shared.dart' as $platform;
+mixin Fields { @Id() int id = 0; @ClientDefault($platform.next) String label = ''; }
+''');
+    }
+    await generate('''
+import 'package:orm/schema.dart';
+import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+''');
+  });
+
+  for (final exposed in [false, true]) {
+    test(
+      'conditional mixin private aliases ${exposed ? 'retain their public target' : 'diagnose an unexposed target'}',
+      () async {
+        for (final platform in ['native', 'web']) {
+          await write(
+            'helpers_$platform.dart',
+            helpers.replaceAll('native', platform),
+          );
+          await write('fields_$platform.dart', '''
+import 'package:orm/schema.dart';
+import 'helpers_$platform.dart' as ${platform == 'native' ? 'n' : 'longn'};
+${exposed ? "export 'helpers_$platform.dart' show Labels;" : ''}
+typedef _First = ${platform == 'native' ? 'n' : 'longn'}.Labels;
+typedef _Second = _First;
+mixin Fields { @Id() int id = 0; @ClientDefault(_Second.next) String label = ''; }
+''');
+        }
+        final future = generate('''
+import 'package:orm/schema.dart';
+import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+''');
+        if (exposed) {
+          final result = await future;
+          expect(result.dart, contains('factories0.Labels.next'));
+          expect(result.dart, isNot(contains('import "helpers_native.dart"')));
+          await write(
+            'probe.dart',
+            "import 'client.dart';\nvoid main() => print(rowSchema.columns.last.clientDefault!());",
+          );
+          final compile = await Process.run(Platform.resolvedExecutable, [
+            'compile',
+            'js',
+            '${root.path}/probe.dart',
+            '-o',
+            '${root.path}/probe.js',
+          ]);
+          expect(
+            compile.exitCode,
+            0,
+            reason: '${compile.stdout}\n${compile.stderr}',
+          );
+        } else {
+          await expectLater(
+            future,
+            throwsA(
+              isA<GenerationException>().having(
+                (e) => e.code,
+                'code',
+                'SCHEMA.DEFAULT',
+              ),
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  test('different conditional private alias targets produce a located diagnostic', () async {
+    for (final platform in ['native', 'web']) {
+      await write(
+        'helpers_$platform.dart',
+        "class Labels { static String next() => '$platform'; } class Other { static String next() => 'other'; }",
+      );
+      await write('fields_$platform.dart', '''
+import 'package:orm/schema.dart';
+import 'helpers_$platform.dart' as h;
+export 'helpers_$platform.dart' show Labels, Other;
+typedef _Local = h.${platform == 'native' ? 'Labels' : 'Other'};
+mixin Fields { @Id() int id = 0; @ClientDefault(_Local.next) String label = ''; }
+''');
+    }
+    await expectLater(
+      generate('''
+import 'package:orm/schema.dart';
+import 'fields_native.dart' if (dart.library.js_interop) 'fields_web.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+'''),
+      throwsA(
+        isA<GenerationException>()
+            .having((e) => e.code, 'code', 'SCHEMA.DEFAULT')
+            .having(
+              (e) => e.message,
+              'alias mapping',
+              contains('alias type arguments'),
+            )
+            .having((e) => e.line, 'line', greaterThan(0)),
+      ),
+    );
+  });
+
+  test(
+    'parenthesized factories preserve the same conditional public entrypoint',
+    () async {
+      await write('native.dart', helpers);
+      await write('web.dart', helpers.replaceAll('native', 'web'));
+      await write(
+        'facade.dart',
+        "export 'native.dart' if (dart.library.js_interop) 'web.dart';",
+      );
+      final wrapped = model.replaceAllMapped(
+        RegExp(r'ClientDefault\(([^)]*)\)'),
+        (match) => 'ClientDefault((${match[1]}))',
+      );
+      final result = await generate("import 'facade.dart' as h;\n$wrapped");
+      expect(result.dart, contains('"facade.dart"'));
+      expect(result.dart, isNot(contains('import "native.dart"')));
+      final analyze = await Process.run(Platform.resolvedExecutable, [
+        'analyze',
+        '${root.path}/client.dart',
+      ]);
+      expect(
+        analyze.exitCode,
+        0,
+        reason: '${analyze.stdout}\n${analyze.stderr}',
+      );
+    },
+  );
+
+  test('factory import paths escape dollar signs', () async {
+    await write(r'dollar$path/native.dart', helpers);
+    await write(r'dollar$path/web.dart', helpers.replaceAll('native', 'web'));
+    await generate(
+      "import 'dollar\\\$path/native.dart' if (dart.library.js_interop) 'dollar\\\$path/web.dart' as h;\n$model",
+    );
+    final result = await Process.run(Platform.resolvedExecutable, [
+      'analyze',
+      '${root.path}/client.dart',
+    ]);
+    expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
+  });
 
   test('hidden conditional mixin factory fails instead of importing its defining library', () async {
     const fields = '''

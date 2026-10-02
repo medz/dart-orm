@@ -172,6 +172,8 @@ final class Ignore {
 /// the applied mixin's entrypoint. Platform branches need compatible signatures;
 /// incompatible callbacks fail target compilation instead of selecting the
 /// generation host's implementation.
+/// Local typedef qualifiers may expand to a public target. Conditional mixins
+/// must expose that target and keep their alias mapping consistent across branches.
 final class ClientDefault {
   /// Public top-level function, static method or constructor tear-off.
   final Function factory;

@@ -121,10 +121,14 @@ bypass a missing or incompatible platform symbol. A fixed-library wrapper whose
 body delegates to conditional code remains a compatible alternative. Local
 private typedef qualifiers are expanded along their alias chain to the first
 public type while retaining its import route and constructor type arguments.
-Public aliases keep their own entrypoint. A private alias inside a conditional
-mixin needs a public alias exposed through that mixin entrypoint; otherwise
-generation reports a located `SCHEMA.DEFAULT` diagnostic instead of fixing
-the factory to the host branch.
+Public aliases keep their own entrypoint. For external factories used by a
+conditional mixin, expose the symbol through the mixin entrypoint or use the
+same factory expression and public import route in every branch. Generation
+checks those routes before retaining a shared fixed-library wrapper. A private
+alias inside a conditional mixin needs its first public target exposed through
+that mixin entrypoint and a consistent alias mapping across branches. Missing
+or ambiguous routes and unresolved alias arguments produce a located
+`SCHEMA.DEFAULT` diagnostic instead of fixing the factory to the host branch.
 
 `@DatabaseDefault.sql('CURRENT_TIMESTAMP')` uses
 trusted SQL. Scalar database constants are encoded and quoted by generation. For a custom
