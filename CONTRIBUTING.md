@@ -115,17 +115,33 @@ duplicate names, symlinks, hard links and special files. For example:
 python3 - /tmp/orm-release.tar.gz /tmp/orm-release-package <<'PY'
 import pathlib, sys, tarfile
 archive, output = sys.argv[1:]
-root = pathlib.Path(output)
+root = pathlib.Path(output).resolve()
 root.mkdir()  # Refuse an existing destination.
 with tarfile.open(archive, 'r:gz') as package:
     names = set()
-    for entry in package.getmembers():
+    entries = package.getmembers()
+    targets = []
+    for entry in entries:
         path = pathlib.PurePosixPath(entry.name)
-        if (path.is_absolute() or '..' in path.parts or
-                path.as_posix() in names or not (entry.isfile() or entry.isdir())):
+        name = path.as_posix().casefold()
+        if (not path.parts or path.is_absolute() or '\\' in entry.name or
+                ':' in entry.name or
+                any(part.startswith(' ') or part.endswith((' ', '.')) or
+                    pathlib.PureWindowsPath(part).is_reserved()
+                    for part in path.parts) or
+                name in names or not (entry.isfile() or entry.isdir())):
             raise ValueError(f'Unsafe archive member: {entry.name}')
-        names.add(path.as_posix())
-    package.extractall(root, filter='data')
+        target = root.joinpath(*path.parts).resolve()
+        if not target.is_relative_to(root):
+            raise ValueError(f'Archive destination outside root: {entry.name}')
+        names.add(name)
+        targets.append((entry, target))
+    for entry, target in targets:
+        if entry.isdir():
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(package.extractfile(entry).read())
 PY
 dart run tool/test_package.dart /tmp/orm-release-package /tmp/orm-consumer.json
 ```
@@ -141,6 +157,20 @@ are removed. Server coverage remains in the real-database CI matrix.
 After merging, repeat these checks on the final clean main and keep only its
 archive as the candidate for publication. After publishing, install the official
 hosted version in an independent pub cache and validate it separately.
+
+For the beta.6 migration upgrade, safely unpack the official beta.6 archive and
+the candidate archive, then run:
+
+```sh
+dart run tool/test_migration_upgrade.dart /tmp/orm-beta6-package /tmp/orm-release-package /tmp/orm-upgrade.json
+```
+
+This independent SQLite consumer generates and applies history with beta.6,
+preserves the database, changes the dependency and application imports/API, proves
+unpatched historical imports fail, and adds only the required imports to the saved
+migration and registry. Beta.7 `check/status/verify/apply` must preserve compiled
+definitions, recorded/calculated checksums, journal timestamps, data, physical
+schema and database bytes; already applied migrations must not run again.
 
 ## Choose regression suites by behavior
 
