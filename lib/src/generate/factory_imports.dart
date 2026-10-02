@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
@@ -648,10 +650,10 @@ final class FactoryImports(final String Function(Uri) importUri) {
     var activeConditions = <String, (String?, Set<String>)>{};
     String conditionKey(Map<String, (String?, Set<String>)> conditions) {
       final keys = conditions.keys.toList()..sort();
-      return [
+      return jsonEncode([
         for (final key in keys)
-          '$key:${conditions[key]!.$1}:${(conditions[key]!.$2.toList()..sort()).join(',')}',
-      ].join('|');
+          [key, conditions[key]!.$1, conditions[key]!.$2.toList()..sort()],
+      ]);
     }
 
     Iterable<(StringLiteral, Map<String, (String?, Set<String>)>)> branches(
@@ -713,10 +715,9 @@ final class FactoryImports(final String Function(Uri) importUri) {
       if (identities.every((branch) => branch.$2 == identities.first.$2)) {
         return identities.first.$2;
       }
-      return [
-        for (final (conditions, identity) in identities)
-          '$conditions:$identity',
-      ].join('|');
+      return jsonEncode([
+        for (final (conditions, identity) in identities) [conditions, identity],
+      ]);
     }
 
     origin = (file, name, visiting) {

@@ -1197,6 +1197,48 @@ import 'fields_native.dart' if (mode == 'a') 'facade_a.dart' if (mode == 'b') 'f
     );
   });
 
+  test('distinct excluded conditional values cannot collide in branch visits', () async {
+    await write('shared.dart', "String next() => 'shared';");
+    await write('other.dart', "String next() => 'other';");
+    await write('nothing.dart', '');
+    await write('fields.dart', '''
+import 'package:orm/schema.dart';
+import 'shared.dart' if (mode == 'a,b') 'other.dart';
+mixin Fields { @Id() int id = 0; @ClientDefault(next) String label = ''; }
+''');
+    await write(
+      'first.dart',
+      "export 'fields.dart' if (mode == 'a,b') 'nothing.dart';",
+    );
+    await write(
+      'second.dart',
+      "export 'fields.dart' if (mode == 'a') 'nothing.dart' if (mode == 'b') 'nothing.dart';",
+    );
+    await write(
+      'facade.dart',
+      "export 'first.dart'; export 'second.dart'; export 'shared.dart';",
+    );
+    // Both exports provide the same Fields on the host. Across all values,
+    // at least one still provides it. Only mode == 'a,b' replaces its callback
+    // with a declaration not exposed by the public facade.
+    await expectLater(
+      generate('''
+import 'package:orm/schema.dart';
+import 'facade.dart';
+@Model() final class Row with Fields {
+ Row({required int id, required String label}) { this.id = id; this.label = label; }
+}
+'''),
+      throwsA(
+        isA<GenerationException>().having(
+          (e) => e.code,
+          'code',
+          'SCHEMA.DEFAULT',
+        ),
+      ),
+    );
+  });
+
   for (final extensionType in [false, true]) {
     test(
       'conditional ${extensionType ? 'extension type' : 'named extension'} static factories retain their public identity',
