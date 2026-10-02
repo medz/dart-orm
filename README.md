@@ -190,4 +190,6 @@ migrations without importing today's application models. See [API boundaries](ht
 - [SQL inspection](https://github.com/medz/dart-orm/blob/main/doc/observability.md) · [Raw SQL](https://github.com/medz/dart-orm/blob/main/doc/raw-sql.md)
 - [Contributing and validation](https://github.com/medz/dart-orm/blob/main/CONTRIBUTING.md)
 
-Licensed under the [BSD 3-Clause License](https://github.com/medz/dart-orm/blob/main/LICENSE).
+Starting with the next release after `6.0.0-beta.6`, project-owned code uses the
+[MIT License](LICENSE), copyright © 2022–2026 Seven Du. Earlier releases and
+historical tags retain their original licenses.
