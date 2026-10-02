@@ -115,10 +115,10 @@ targets:
       );
       assetHashes[name] = expected;
     }
-    await write('lib/checks.dart', _checks);
+    await write('bin/checks.dart', _checks);
     await write('bin/native.dart', '''
 import 'dart:convert';
-import 'package:package_consumer/checks.dart';
+import 'checks.dart';
 Future<void> main() async => print(jsonEncode(await checks()));
 ''');
     await write('web/main.dart', _browser);
@@ -179,9 +179,13 @@ const instance = await app.instantiate({}); instance.invokeMain();
       final target = File(args[1]);
       await target.parent.create(recursive: true);
       await target.writeAsString(json);
-      await File('${args[1]}.log').writeAsString(logs.toString());
     }
   } finally {
+    if (args.length == 2) {
+      final log = File('${args[1]}.log');
+      await log.parent.create(recursive: true);
+      await log.writeAsString(logs.toString());
+    }
     await consumer.delete(recursive: true);
   }
 }
@@ -286,12 +290,11 @@ final class TaskView({
 ''';
 
 const _checks = r'''
-import 'package:orm/driver.dart';
 import 'package:orm/orm.dart';
 import 'package:orm/sql.dart';
 import 'package:orm/sqlite.dart';
 import 'package:orm/migrate.dart';
-import 'models.orm.dart';
+import '../lib/models.orm.dart';
 import '../migrations/migrations.g.dart' as saved;
 Future<Map<String, Object?>> checks() async {
   final passed = <String>[];
@@ -350,7 +353,7 @@ const _browser = r'''
 import 'dart:convert';
 import 'dart:js_interop';
 import 'package:web/web.dart' as web;
-import 'package:package_consumer/checks.dart';
+import '../bin/checks.dart';
 Future<void> main() async {
   Map<String, Object?> result;
   try { result = await checks(); }
