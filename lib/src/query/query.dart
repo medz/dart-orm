@@ -791,6 +791,7 @@ class TableSet<R, F extends Fields> extends TableQuery<R, F> {
       queryState,
       rows.map((row) => values(queryFields, row)),
     ),
+    fieldsFactory: definition.createFields,
   );
 
   /// Inserts and returns a complete row.

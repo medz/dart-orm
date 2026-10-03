@@ -225,6 +225,55 @@ RETURNING. The whole write executes before cardinality checks; an empty update
 is an error. `plan.insertMany(inputs).prepare().returning(selection)` exposes batch
 RETURNING. An owned batch transaction decodes results before committing.
 
+**Unreleased:** prepared batches support SQLite/PostgreSQL conflict updates with
+one explicit update rule shared by every input row:
+
+```dart
+final BatchInsert<EmployeeFields> upsert = tx.employee.plan
+    .insertMany(inputs)
+    .prepare()
+    .onConflictUpdate(
+      target: (e) => [e.email],
+      set: (existing, incoming) => [
+        existing.name.setExpression(incoming.name),
+        existing.departmentId.setExpression(incoming.departmentId),
+      ],
+    );
+final BatchReturning<Employee> returning = upsert.returning(employeeTable.selectRow);
+final List<Employee> employees = await returning.get();
+```
+
+The [directory sync example](https://github.com/medz/dart-orm/blob/main/example/company/sync.dart)
+shows the complete business function. Only listed fields change on conflict;
+generated IDs and other stored fields are retained. Copying an incoming field
+copies its proposed insert value, including an insert default when omitted.
+It does not interpret omission as “keep the existing value.” For per-row patch
+policies, form groups with the same update rule or keep separate writes.
+Nullable incoming fields distinguish explicit NULL from declared database defaults.
+
+Preparation freezes client defaults once per input row. Adding the conflict rule,
+compiling and replaying the prepared batch do not resample them. All chunks are
+compiled and their parameter budgets checked before the first statement runs;
+conflict and RETURNING parameters count toward each chunk's limit. The chunks
+share one transaction; a failed later statement rolls earlier changes back and
+prevents a caught SQL error from committing a partial batch.
+
+Each chunk is a separate native statement. PostgreSQL rejects updating the same
+row twice within one statement; separate chunks can update it again. SQLite can
+process repeated keys within one statement. Changing parameter limits or input
+column shapes can therefore change repeated-key outcomes. There is no cross-chunk
+deduplication or application-side check that reproduces database equality,
+collation or unique-index rules. Supply nonconflicting keys under those rules
+when behavior must be independent of chunking.
+
+RETURNING order is not an input-row mapping. `execute()` sums native affected-row
+counts rather than normalizing them across engines or counting distinct keys.
+MySQL/MariaDB targeted conflicts and drivers without RETURNING reject these
+respective operations before I/O; no fallback is implied. SQLite also rejects an
+upsert row whose insert columns all use database defaults, because its
+`DEFAULT VALUES` form cannot carry ON CONFLICT. An empty valid batch does no I/O,
+but still validates the requested conflict and RETURNING capabilities.
+
 **Unreleased:** SQLite/PostgreSQL insert plans can describe duplicate suppression
 without freezing values first:
 

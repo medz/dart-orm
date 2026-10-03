@@ -31,6 +31,7 @@ final class BatchInsert<F extends Fields> {
   /// @nodoc
   @internal
   final List<List<Assignment>> insertRows;
+  final Mutation<F> _template;
 
   /// @nodoc
   @internal
@@ -38,8 +39,51 @@ final class BatchInsert<F extends Fields> {
     this.database,
     this.queryFields,
     this.queryState,
-    List<List<Assignment>> rows,
-  ) : insertRows = List.unmodifiable(rows);
+    List<List<Assignment>> rows, {
+    F Function(TableRef)? fieldsFactory,
+    Mutation<F>? template,
+  }) : insertRows = List.unmodifiable(rows),
+       _template =
+           template ??
+           Mutation.internal(
+             database,
+             queryFields,
+             queryState,
+             MutationKind.insert,
+             const [],
+             fieldsFactory: fieldsFactory,
+           );
+
+  /// Applies one SQLite/PostgreSQL conflict-update rule to every statement chunk.
+  ///
+  /// [target] must name a declared primary or unique key. [set] receives existing
+  /// and proposed incoming fields and must supply at least one assignment. These
+  /// callbacks run once here; they do not resample the batch's frozen defaults.
+  /// Only explicit assignments update existing rows. Assigning an incoming field
+  /// copies its proposed insert value, including defaults for omitted inputs;
+  /// this method does not infer per-row patch or omission semantics.
+  ///
+  /// Chunks remain separate native statements inside one atomic transaction.
+  /// Repeated keys follow each statement's database rules: PostgreSQL rejects
+  /// updating one row twice in a single statement, but separate chunks may update
+  /// it again. Parameter limits and input shapes can therefore change duplicate
+  /// outcomes. No cross-chunk deduplication or database-equality check is made.
+  /// For chunk-independent results, supply inputs that do not conflict with one
+  /// another under the database's unique-key rules.
+  ///
+  /// MySQL/MariaDB cannot select this conflict target and are rejected before I/O.
+  /// SQLite also rejects an upsert row with no non-default insert columns,
+  /// because its `DEFAULT VALUES` form cannot carry an ON CONFLICT clause.
+  BatchInsert<F> onConflictUpdate({
+    required List<ReadField<Object?>> Function(F) target,
+    required List<Assignment> Function(F existing, F incoming) set,
+  }) => BatchInsert.internal(
+    database,
+    queryFields,
+    queryState,
+    insertRows,
+    template: _template.onConflictUpdate(target: target, set: set),
+  );
 
   /// @nodoc
   @internal
@@ -49,37 +93,27 @@ final class BatchInsert<F extends Fields> {
     var chunk = <List<Assignment>>[];
     List<String>? shape;
     var parameters = 0;
-    final extra = SqlWriter(
-      database.dialect,
-      {queryState.source: 't0'},
-      database: database,
-      exactDecimal: database.capabilities.exactDecimal,
-      temporal: database.capabilities.temporal,
-    );
-    if (selection != null) {
-      for (final column in selection.columns) {
-        column.expressionNode.write(extra);
-      }
-    }
+    // Compile the row-free template to validate the complete clause/selection
+    // and reserve their parameters before any chunk is built or submitted.
+    final extra = _template.compileQuery(selection);
     final limit = database.capabilities.maxParameters - extra.parameters.length;
     void flush() {
       if (chunk.isEmpty) return;
-      commands.add(
-        Mutation.internal(
-          database,
-          queryFields,
-          queryState,
-          MutationKind.insert,
-          chunk.first,
-          insertRows: chunk,
-        ).compileQuery(selection),
-      );
+      commands.add(_template.withInsertRows(chunk).compileQuery(selection));
       chunk = [];
       parameters = 0;
     }
 
     for (final row in insertRows) {
       final actual = row.where((a) => a.assignedValue != null).toList();
+      if (actual.isEmpty &&
+          _template.hasConflict &&
+          database.dialect == SqlDialect.sqlite) {
+        throw const OrmException(
+          'CAPABILITY.CONFLICT_DEFAULT_VALUES',
+          'SQLite DEFAULT VALUES cannot carry ON CONFLICT.',
+        );
+      }
       final columns = [for (final a in actual) a.field.definition.name];
       final writer = SqlWriter(
         database.dialect,
@@ -159,6 +193,8 @@ final class BatchInsert<F extends Fields> {
 
   /// Executes all chunks atomically and returns their total affected-row count.
   ///
+  /// Counts sum the driver's native results, including conflict updates; they
+  /// are not normalized across engines or a count of distinct input keys.
   /// An empty batch returns zero without acquiring a connection.
   Future<int> execute({ExecutionOptions options = const ExecutionOptions()}) =>
       _run(options: options, complete: (_, result) => result.affectedRows);
