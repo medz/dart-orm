@@ -49,6 +49,66 @@ ordered line collection loads in two observable statements regardless of line
 count. Read a receipt in a transaction when a consistent multi-statement snapshot
 is required by the application's concurrent editing policy.
 
+## Customer order history
+
+[history.dart](history.dart) reads a customer's receipts in descending
+`placedAt, id` order. Both values travel in the cursor, so orders with identical
+timestamps still have a deterministic position. The customer filter is applied
+again for every page; a cursor is pagination input, not authorization.
+
+Keep headers and lines in the same snapshot. For the SQLite database in
+[main.dart](main.dart), use a deferred transaction:
+
+```dart
+final first = await db.transaction(
+  (tx) => readOrderHistory(tx, customerId: 'ada', pageSize: 20),
+  options: const SqliteTransaction(),
+);
+if (first.nextCursor case final after?) {
+  final next = await db.transaction(
+    (tx) => readOrderHistory(tx, customerId: 'ada', after: after, pageSize: 20),
+    options: const SqliteTransaction(),
+  );
+  print(next.orders);
+}
+```
+
+For a `Database<Postgres>` configured with its own migration history, import
+`package:orm/postgres.dart` and use REPEATABLE READ for each page:
+
+```dart
+final page = await db.transaction(
+  (tx) => readOrderHistory(tx, customerId: 'ada', pageSize: 20),
+  options: const PostgresTransaction(
+    isolation: .repeatableRead,
+    readOnly: true,
+  ),
+);
+```
+
+`readOrderHistory` requires a transaction, but the caller chooses its isolation.
+A session alone does not provide a snapshot. PostgreSQL's default READ COMMITTED
+also allows another transaction's changes between the header and line SELECTs,
+even inside an explicit transaction. SQLite WAL lets a competing writer commit
+while this read transaction retains its snapshot; rollback-journal mode instead
+can delay that writer's commit. See the engine's
+[SQLite isolation](https://www.sqlite.org/isolation.html) and
+[PostgreSQL isolation](https://www.postgresql.org/docs/current/transaction-iso.html)
+rules.
+
+The root SELECT returns at most `pageSize` headers and an independent `EXISTS`
+checks for more matching orders. One batched SELECT loads only those headers'
+lines. A nonempty page uses two SELECTs, and an empty page uses one, plus transaction
+control. The existence check adds an order-table lookup: fewer returned rows do
+not guarantee less execution time. Inspect plans and indexes for your workload.
+
+The calls above start a new snapshot for each page. Deleting the order that supplied the
+cursor does not invalidate its saved boundary. Changing `placedAt` between
+requests can cause repeats or omissions; this example's checkout keeps ordering
+keys unchanged. Concurrently deleted later orders disappear from subsequent
+pages. A next cursor describes availability in the current page's snapshot, so
+the next request can still return an empty page.
+
 No implicit retry or external service runs here. If the caller opts into bounded
 transaction retry, `placedAt` is sampled again when that attempt executes its
 insert plan. Stock arithmetic uses the database's current value at each executed

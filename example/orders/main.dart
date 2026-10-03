@@ -6,6 +6,7 @@ import 'package:orm/sql.dart';
 import 'package:orm/sqlite.dart';
 
 import 'checkout.dart';
+import 'history.dart';
 import 'migrations/migrations.g.dart';
 import 'models.orm.dart';
 import 'request.dart';
@@ -67,6 +68,16 @@ Future<void> main() async {
       await readReceipt(db, receipt.id);
       print(
         'Replay: order ${replay.id}; saved receipt: ${events.length} statements',
+      );
+      events.clear();
+      final history = await db.transaction(
+        (tx) => readOrderHistory(tx, customerId: 'ada', pageSize: 10),
+        options: const SqliteTransaction(),
+      );
+      print(
+        'History: ${history.orders.length} orders; '
+        'next page: ${history.nextCursor != null}; '
+        '${events.length} statements including BEGIN and COMMIT',
       );
       for (final item
           in await db.inventory.orderBy((i) => [i.sku.asc()]).get()) {
