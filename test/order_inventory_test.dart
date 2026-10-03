@@ -164,6 +164,7 @@ void main() {
         unitPriceCents: 1,
       );
       primary.commands.clear();
+      competing.commands.clear();
       final replay = await checkout(
         other,
         request(
@@ -185,8 +186,11 @@ void main() {
       expect(await db.purchaseOrder.count(), 1);
       expect(await db.orderLine.count(), 2);
       expect(
-        primary.commands.any(
-          (c) => c.sql.startsWith('INSERT') || c.sql.startsWith('UPDATE'),
+        [...primary.commands, ...competing.commands].any(
+          (c) =>
+              c.sql.startsWith('INSERT') ||
+              c.sql.startsWith('UPDATE') ||
+              c.sql.startsWith('DELETE'),
         ),
         false,
       );
