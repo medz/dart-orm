@@ -12,8 +12,8 @@ import '../query/preparation.dart' show prepareInsert;
 
 /// An inert write bound to its original query context.
 /// Each terminal prepares again. [prepare] freezes client defaults and returns
-/// a [Mutation] for SQL inspection and conflict handling. Descriptions borrow
-/// their context; they neither acquire nor own a connection until execution.
+/// a [Mutation] for SQL inspection and additional conflict handling. Descriptions
+/// borrow their context; they neither acquire nor own a connection until execution.
 /// A description captured from a session cannot execute after that session ends.
 ///
 /// Preparation can run expression callbacks, codecs and client factories. Their
@@ -141,6 +141,8 @@ final class WriteRows<R, F extends Fields> {
 final class InsertWrite<R, F extends Fields> extends Write<R, F> {
   final TableSet<R, F> _table;
   final Mutation<F> Function(SelectionPlan?) _buildRow;
+  final Mutation<F> Function(SelectionPlan?, List<ReadField<Object?>>)
+  _buildDoNothing;
   InsertWrite._(
     super.database,
     super.fields,
@@ -149,7 +151,31 @@ final class InsertWrite<R, F extends Fields> extends Write<R, F> {
     super.row,
     this._table,
     this._buildRow,
+    this._buildDoNothing,
   ) : super._();
+
+  /// Describes SQLite/PostgreSQL duplicate-key suppression without preparing.
+  ///
+  /// An explicit [target] must match a declared primary or unique key; omitting
+  /// it suppresses conflicts on any unique key. Each terminal evaluates [target]
+  /// and validates the target and engine before sampling client defaults.
+  /// Defaults are sampled even when SQL subsequently skips a conflicting row.
+  /// [Write.prepare] instead freezes them for replay of that prepared mutation.
+  ///
+  /// Returns an affected-row write with optional native RETURNING. A skipped
+  /// insert affects zero rows and returns no row; it does not read the existing
+  /// record. Use `returning().singleOrNull()` when an optional new row is needed.
+  /// Logical [row] readback is unavailable because no row may have been inserted.
+  Write<R, F> onConflictDoNothing({
+    List<ReadField<Object?>> Function(F)? target,
+  }) => Write._(
+    _database,
+    _fields,
+    _state,
+    (selection) =>
+        _buildDoNothing(selection, target?.call(_fields) ?? const []),
+    _row,
+  );
 
   /// Inserts and returns the complete model, with key readback if necessary.
   ///
@@ -388,6 +414,12 @@ final class ModelTableWritePlan<R, F extends Fields, I, P>
         _model._insert(table.queryFields, input),
         selection,
         needsRow: true,
+      ),
+      (selection, target) => prepareInsert(
+        table,
+        _model._insert(table.queryFields, input),
+        selection,
+        conflictTarget: target,
       ),
     );
   }

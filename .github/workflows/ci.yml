@@ -31,7 +31,7 @@ jobs:
         run: dart format --output=none --set-exit-if-changed bin lib test tool example
       - name: Analyze Dart package and examples
         # The Flutter example is a separate package with its own SDK dependency.
-        run: dart analyze bin lib test tool example/*.dart example/migrations example/teams example/company
+        run: dart analyze bin lib test tool example/*.dart example/migrations example/teams example/company example/orders
       - name: Test shared behavior and build workflows
         run: dart test --preset core
 

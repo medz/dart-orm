@@ -83,6 +83,7 @@ Mutation<F> prepareInsert<R, F extends Fields>(
   List<Assignment> assignments,
   SelectionPlan? selection, {
   bool needsRow = false,
+  List<ReadField<Object?>>? conflictTarget,
 }) {
   final fields = query.queryFields;
   final state = query.queryState;
@@ -90,14 +91,21 @@ Mutation<F> prepareInsert<R, F extends Fields>(
   final input = _InsertInput(fields, state, assignments);
   preflightAssignments(state.source, [input.explicit]);
   final dry = input.dry;
-  Mutation.internal(
-    query.database,
-    fields,
-    state,
-    MutationKind.insert,
-    dry,
-    fieldsFactory: query.definition.createFields,
-  ).compileQuery(selection);
+  Mutation<F> mutation(List<Assignment> values) {
+    final prepared = Mutation.internal(
+      query.database,
+      fields,
+      state,
+      MutationKind.insert,
+      values,
+      fieldsFactory: query.definition.createFields,
+    );
+    return conflictTarget == null
+        ? prepared
+        : prepared.onConflictDoNothing(target: (_) => conflictTarget);
+  }
+
+  mutation(dry).compileQuery(selection);
   if (needsRow && !query.database.capabilities.returning) {
     final keys = state.source.schema.primaryKey;
     var generated = 0;
@@ -125,14 +133,7 @@ Mutation<F> prepareInsert<R, F extends Fields>(
       );
     }
   }
-  return Mutation.internal(
-    query.database,
-    fields,
-    state,
-    MutationKind.insert,
-    input.materialize(),
-    fieldsFactory: query.definition.createFields,
-  );
+  return mutation(input.materialize());
 }
 
 final class _InsertInput {

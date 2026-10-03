@@ -144,4 +144,96 @@ void main() {
     expect(events, isEmpty);
     expect(await db.user.insert(userInsert(email: 'root', name: 'Root')), 1);
   });
+
+  test('conflict plans defer defaults; each terminal resamples and prepare freezes', () async {
+    var targets = 0;
+    final write = db.user.plan
+        .insert(userInsert(id: 42, email: 'idempotent', name: 'Ada'))
+        .onConflictDoNothing(
+          target: (u) {
+            targets++;
+            return [u.id];
+          },
+        );
+    expect((models.samples, targets), (0, 0));
+    expect(events, isEmpty);
+    expect(await write.execute(), 1);
+    expect(await write.execute(), 0);
+    expect((models.samples, targets), (2, 2));
+    final prepared = write.prepare();
+    expect((models.samples, targets), (3, 3));
+    expect(prepared.compile().sql, contains('ON CONFLICT ("id") DO NOTHING'));
+    expect(await prepared.execute(), 0);
+    expect(await prepared.execute(), 0);
+    expect((models.samples, targets), (3, 3));
+    expect((await db.user.byId(42).single()).stamp, 1);
+  });
+
+  test('conflict RETURNING preserves the model and represents a skipped row as null', () async {
+    final write = db.user.plan
+        .insert(userInsert(id: 42, email: 'idempotent', name: 'Ada'))
+        .onConflictDoNothing();
+    final User? inserted = await write.returning().singleOrNull();
+    expect(inserted?.name, 'Ada');
+    expect(await write.returning().singleOrNull(), isNull);
+    expect(await write.returning().select((u) => u.id).get(), isEmpty);
+    expect(models.samples, 3);
+    expect(await db.user.count(), 1);
+  });
+
+  test(
+    'invalid conflict target and relation RETURNING precede defaults and I/O',
+    () async {
+      final insert = db.user.plan.insert(userInsert(email: 'a', name: 'Ada'));
+      await expectLater(
+        insert.onConflictDoNothing(target: (u) => [u.email]).execute(),
+        throwsA(code('MUTATION.CONFLICT')),
+      );
+      final alias = userTable.alias();
+      await expectLater(
+        insert.onConflictDoNothing(target: (_) => [alias.fields.id]).execute(),
+        throwsA(code('QUERY.SCOPE')),
+      );
+      await expectLater(
+        insert
+            .onConflictDoNothing()
+            .returning()
+            .select((u) => u.memberships.many())
+            .get(),
+        throwsA(code('MUTATION.RELATION')),
+      );
+      expect(models.samples, 0);
+      expect(events, isEmpty);
+    },
+  );
+
+  test('cancelled or expired conflict plans reject before callbacks', () async {
+    var targets = 0;
+    late Write<User, UserFields> write;
+    await db.session((session) async {
+      write = session.user.plan
+          .insert(userInsert(email: 'a', name: 'Ada'))
+          .onConflictDoNothing(
+            target: (u) {
+              targets++;
+              return [u.id];
+            },
+          );
+      await expectLater(
+        write.execute(
+          options: ExecutionOptions(
+            cancellation: CancellationToken()..cancel(),
+          ),
+        ),
+        throwsA(code('OPERATION.CANCELLED')),
+      );
+    });
+    await expectLater(write.execute(), throwsA(code('SESSION.CLOSED')));
+    await expectLater(
+      write.returning().singleOrNull(),
+      throwsA(code('SESSION.CLOSED')),
+    );
+    expect((models.samples, targets), (0, 0));
+    expect(events, isEmpty);
+  });
 }

@@ -225,6 +225,25 @@ RETURNING. The whole write executes before cardinality checks; an empty update
 is an error. `plan.insertMany(inputs).prepare().returning(selection)` exposes batch
 RETURNING. An owned batch transaction decodes results before committing.
 
+**Unreleased:** SQLite/PostgreSQL insert plans can describe duplicate suppression
+without freezing values first:
+
+```dart
+final claim = db.purchaseOrder.plan.insert(input)
+    .onConflictDoNothing(target: (o) => [o.customerId, o.requestKey]);
+final claimed = await claim.execute() == 1;
+// Alternatively, execute once and receive the newly inserted model or null:
+// final order = await claim.returning().singleOrNull();
+```
+
+The target must match a declared primary or unique key. Omit it only when any
+unique conflict should skip the insert. Construction runs no callbacks; terminals
+validate the target and engine before client defaults. Defaults still run if the
+database later skips a conflicting row. A skipped insert affects zero rows and
+RETURNING yields no row; neither path loads the existing record. `row()` is not
+available on this optional insert. Use an explicit transaction to combine a claim
+with other writes, as in the [order example](https://github.com/medz/dart-orm/tree/main/example/orders).
+
 `Query` is a read description. Generated complete-model queries retain typed
 `patch(...)`, `update(input)`, `delete()` and their advanced `plan`. Selections,
 mapping, grouping, DISTINCT and compound
