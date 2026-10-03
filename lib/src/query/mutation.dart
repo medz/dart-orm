@@ -112,6 +112,23 @@ final class Mutation<F extends Fields> {
     this.insertRows,
   }) : writeAssignments = List.unmodifiable(assignments);
 
+  /// @nodoc
+  @internal
+  bool get hasConflict => _conflict != null;
+
+  /// @nodoc
+  @internal
+  Mutation<F> withInsertRows(List<List<Assignment>> rows) => Mutation.internal(
+    database,
+    queryFields,
+    queryState,
+    MutationKind.insert,
+    rows.first,
+    fieldsFactory: fieldsFactory,
+    conflict: _conflict,
+    insertRows: rows,
+  );
+
   /// Prepares SQLite/PostgreSQL duplicate-key suppression for this insert.
   ///
   /// An explicit [target] must match a declared primary or unique key. Omitting

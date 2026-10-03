@@ -4,6 +4,12 @@ This example defines departments, employees, projects and project memberships in
 one [annotated Dart model library](schema.dart). Full reads return these original
 DTO classes; generation adds typed queries and an independent migration snapshot.
 
+[Directory synchronization](sync.dart) demonstrates prepared batch upserts on
+SQLite/PostgreSQL. Inside an explicit transaction, it updates directory-owned
+names and department assignments while retaining existing generated IDs and
+locally managed fields. See [batch conflict boundaries](../../doc/api.md) for
+omission, repeated keys, statement chunking and RETURNING semantics.
+
 | Model | Relationships |
 | --- | --- |
 | Department | Has employees |

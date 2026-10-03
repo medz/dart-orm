@@ -8,6 +8,7 @@ final class RecordingDriver<B extends Backend>(
   // Disable a feature to exercise fallback SQL on a real connection. This does
   // not establish support for a separate platform lacking that feature.
   final bool withoutReturning = false,
+  final int? maxParameters,
 }) implements Driver<B> {
   final commands = <SqlCommand>[];
   void Function(SqlCommand)? onCommand;
@@ -16,11 +17,11 @@ final class RecordingDriver<B extends Backend>(
   @override
   Capabilities get capabilities {
     final source = inner.capabilities;
-    if (!withoutReturning) return source;
+    if (!withoutReturning && maxParameters == null) return source;
     return Capabilities(
       dialect: source.dialect,
-      maxParameters: source.maxParameters,
-      returning: false,
+      maxParameters: maxParameters ?? source.maxParameters,
+      returning: !withoutReturning && source.returning,
       windowFunctions: source.windowFunctions,
       streaming: source.streaming,
       cancellation: source.cancellation,
