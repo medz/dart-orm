@@ -17,6 +17,11 @@ import '../example/orders/request.dart';
 import 'support/recording_driver.dart';
 
 void main() {
+  group('native RETURNING', () => _orderTests(false));
+  group('RETURNING disabled', () => _orderTests(true));
+}
+
+void _orderTests(bool withoutReturning) {
   final url = Platform.environment['ORM_TEST_POSTGRES'];
   group(
     'order inventory on PostgreSQL',
@@ -66,8 +71,14 @@ void main() {
           schema: namespace,
           maxConnections: 1,
         );
-        primary = RecordingDriver(postgres(options).driver);
-        competing = RecordingDriver(postgres(options).driver);
+        primary = RecordingDriver(
+          postgres(options).driver,
+          withoutReturning: withoutReturning,
+        );
+        competing = RecordingDriver(
+          postgres(options).driver,
+          withoutReturning: withoutReturning,
+        );
         db = Database(primary, onQuery: events.add);
         other = Database(competing);
         addTearDown(db.close);
@@ -99,6 +110,31 @@ void main() {
         primary.commands.clear();
         competing.commands.clear();
       });
+
+      test(
+        'two-item checkout uses ten statements or eleven without RETURNING',
+        () async {
+          final receipt = await checkout(
+            db,
+            OrderRequest(
+              customerId: 'ada',
+              requestKey: 'count',
+              items: [
+                CartItem(sku: 'book', quantity: 2),
+                CartItem(sku: 'pen', quantity: 3),
+              ],
+            ),
+          );
+          expect(receipt.totalCents, 1875);
+          expect(events, hasLength(withoutReturning ? 11 : 10));
+          final claim = primary.commands.singleWhere(
+            (c) => c.sql.startsWith('INSERT INTO "purchase_orders"'),
+          );
+          expect(claim.sql.contains(' RETURNING '), !withoutReturning);
+          expect((await db.inventory.byId('book').single()).available, 3);
+          expect((await db.inventory.byId('pen').single()).available, 7);
+        },
+      );
 
       test('read committed stock competitors cannot oversell', () async {
         synchronizeClaims();
@@ -185,26 +221,30 @@ void main() {
         },
       );
 
-      test(
-        'conflict plan RETURNING yields the inserted model or no row',
-        () async {
-          final input = purchaseOrderInsert(
-            customerId: 'ada',
-            requestKey: 'claim',
-            requestPayload: '{}',
-            totalCents: 0,
-          );
-          final write = db.purchaseOrder.plan
-              .insert(input)
-              .onConflictDoNothing(target: (o) => [o.customerId, o.requestKey]);
-          final PurchaseOrder? inserted = await write
-              .returning()
-              .singleOrNull();
-          expect(inserted?.customerId, 'ada');
-          expect(await write.returning().singleOrNull(), isNull);
-          expect(await db.purchaseOrder.count(), 1);
-        },
-      );
+      if (!withoutReturning) {
+        test(
+          'conflict plan RETURNING yields the inserted model or no row',
+          () async {
+            final input = purchaseOrderInsert(
+              customerId: 'ada',
+              requestKey: 'claim',
+              requestPayload: '{}',
+              totalCents: 0,
+            );
+            final write = db.purchaseOrder.plan
+                .insert(input)
+                .onConflictDoNothing(
+                  target: (o) => [o.customerId, o.requestKey],
+                );
+            final PurchaseOrder? inserted = await write
+                .returning()
+                .singleOrNull();
+            expect(inserted?.customerId, 'ada');
+            expect(await write.returning().singleOrNull(), isNull);
+            expect(await db.purchaseOrder.count(), 1);
+          },
+        );
+      }
     },
     skip: url == null
         ? 'Set ORM_TEST_POSTGRES for real PostgreSQL order tests.'

@@ -38,9 +38,10 @@ Future<OrderReceipt> placeOrder(
     totalCents: total,
     note: request.note,
   );
-  final claimed = await claimOrder(tx, input);
-  final order = await _requestOrder(tx, request).single();
-  if (!claimed) return _replay(tx, request, order);
+  final order = await claimOrder(tx, request, input);
+  if (order == null) {
+    return _replay(tx, request, await _requestOrder(tx, request).single());
+  }
 
   for (final item in request.items) {
     final reserved = await tx.inventory
@@ -70,15 +71,21 @@ Future<OrderReceipt> placeOrder(
 ///
 /// Conflict handling is the one advanced write needed by this workflow. The
 /// insert plan samples client defaults at execution, once per callback attempt.
-Future<bool> claimOrder(
+/// Returns the newly inserted order, or null if the request key already exists.
+/// Without native RETURNING, reads a successful insert by [request]'s key. The
+/// caller constructs [input] from that same request before crossing this boundary.
+Future<PurchaseOrder?> claimOrder(
   Database<Backend> tx,
+  OrderRequest request,
   PurchaseOrderInsert input,
-) async =>
-    await tx.purchaseOrder.plan
-        .insert(input)
-        .onConflictDoNothing(target: (o) => [o.customerId, o.requestKey])
-        .execute() ==
-    1;
+) async {
+  final write = tx.purchaseOrder.plan
+      .insert(input)
+      .onConflictDoNothing(target: (o) => [o.customerId, o.requestKey]);
+  if (tx.capabilities.returning) return write.returning().singleOrNull();
+  if (await write.execute() == 0) return null;
+  return _requestOrder(tx, request).single();
+}
 
 ModelQuery<PurchaseOrder, PurchaseOrderFields, PurchaseOrderPatch>
 _requestOrder(Database<Backend> tx, OrderRequest request) =>
