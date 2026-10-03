@@ -212,7 +212,7 @@ void main() {
     if (!db.capabilities.cancellation) {
       var entered = false;
       await expectLater(
-        db.transaction((tx) async {
+        () => db.transaction((tx) async {
           entered = true;
         }, retry: const TransactionRetry()),
         throwsA(code('CAPABILITY.CANCEL')),
