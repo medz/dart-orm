@@ -1,3 +1,11 @@
+## Unreleased
+
+- Describe SQLite/PostgreSQL `ON CONFLICT DO NOTHING` directly on model insert
+  plans. Validate conflict targets before client defaults, preserve typed native
+  RETURNING, and sample fresh defaults at each terminal unless explicitly prepared.
+- Add an order/inventory example with saved SQLite migrations, atomic stock
+  reservations, idempotent requests and named nested receipts.
+
 ## 6.0.0-beta.7
 
 Breaking beta API change: regenerate clients and update imports, database setup,
