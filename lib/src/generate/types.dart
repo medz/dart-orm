@@ -31,7 +31,11 @@ final class DartNames(final Uri source, final String Function(Uri) importUri) {
   void reserveDeclarations(Iterable<CompilationUnitMember> declarations) {
     final identifier = RegExp(r'^[a-zA-Z_$][a-zA-Z0-9_$]*$');
     for (final declaration in declarations) {
-      var token = declaration.beginToken;
+      // Dartdoc has a separate token chain that cannot reach the declaration's
+      // end. Keep annotation identifiers, but start on the source token stream.
+      var token =
+          declaration.metadata.beginToken ??
+          declaration.firstTokenAfterCommentAndMetadata;
       while (true) {
         if (identifier.hasMatch(token.lexeme)) _usedNames.add(token.lexeme);
         if (identical(token, declaration.endToken)) break;

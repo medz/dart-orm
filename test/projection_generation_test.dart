@@ -78,11 +78,13 @@ final class Note({
 ''',
   'record': '''
 import 'package:orm/schema.dart';
+/// A named record projection.
 @Projection()
 typedef Card = ({int id, String label});
 ''',
   'factory': '''
 import 'package:orm/schema.dart';
+/** A projection decoded through its public factory. */
 @Projection()
 abstract class Card {
   factory Card({required int id, required String label}) = _Card;

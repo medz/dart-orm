@@ -385,6 +385,7 @@ final class _OnlyRoot(final String root, Map<String, dynamic> options)
 
 const _user = '''
 import 'package:orm/schema.dart';
+/// A documented model must work through the builder and standalone generator.
 @Model()
 class User {
   @Id(generated: true) final int id;
