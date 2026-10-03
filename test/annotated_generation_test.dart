@@ -30,6 +30,50 @@ void main() {
   Future<GeneratedSchema> generate(String name, String contents) async =>
       generateSchema((await source(name, contents)).path);
 
+  for (final (name, annotations) in [
+    ('line', '/// An application model.\n/// With a second line.\n@Model()'),
+    ('block', '/** An application model. */\n@Model()'),
+    ('after_metadata', '@Model()\n/// An application model.'),
+  ]) {
+    test(
+      'documented $name model generates without losing name reservations',
+      () async {
+        final file = await source('documented_$name', '''
+$annotations
+final class Item({
+  @Id(generated: true) required final int id,
+  required final String models,
+});
+''');
+        final generated = await generateSchema(file.path);
+        expect(generated.snapshot.tables.single.columns.map((c) => c.name), [
+          'id',
+          'models',
+        ]);
+        final output = File('${fixtures.path}/documented_$name.orm.dart')
+            .absolute;
+        await output.writeAsString(generated.dart);
+        final contexts = AnalysisContextCollection(
+          includedPaths: [output.path],
+        );
+        try {
+          final result =
+              await contexts
+                      .contextFor(output.path)
+                      .currentSession
+                      .getResolvedUnit(output.path)
+                  as ResolvedUnitResult;
+          final errors = result.diagnostics.where(
+            (e) => e.severity.name.toLowerCase() == 'error',
+          );
+          expect(errors, isEmpty, reason: errors.join('\n'));
+        } finally {
+          await contexts.dispose();
+        }
+      },
+    );
+  }
+
   test(
     'parameter and field annotations preserve constructor key order',
     () async {

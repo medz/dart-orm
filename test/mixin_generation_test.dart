@@ -27,6 +27,7 @@ void main() {
     () async {
       await source('shared', '''
 String nextLabel() => 'client';
+/// Storage inherited by independent models.
 mixin Shared {
   @Id(generated: true) int id = 0;
   @Column(name: 'shared_label') @ClientDefault(nextLabel) String label = '';
