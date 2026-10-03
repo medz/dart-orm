@@ -27,6 +27,13 @@ each stock quantity with `WHERE available >= quantity`, inserts the lines, and
 returns a named [OrderReceipt](receipts.dart). Conflict suppression is the only
 write using `.plan`. All SQL uses the supplied transaction view.
 
+When the driver supports native RETURNING, the claim returns the new order header
+directly; only a skipped claim reads the existing header by its request key.
+Drivers without RETURNING retain insert-then-read behavior. For the two-item
+example, a successful transaction uses 10 statements with RETURNING and 11 without
+it, including BEGIN and COMMIT. Both paths keep the same idempotency and rollback
+boundaries; RETURNING support is checked through the driver's capabilities.
+
 If any reservation fails, let `InsufficientStock` escape the callback: the header,
 earlier deductions and lines roll back together. SQLite callers use
 `SqliteTransaction(mode: .immediate)` so competing writers serialize before

@@ -19,6 +19,11 @@ import '../example/orders/request.dart';
 import 'support/recording_driver.dart';
 
 void main() {
+  group('native RETURNING', () => _orderTests(false));
+  group('RETURNING disabled', () => _orderTests(true));
+}
+
+void _orderTests(bool withoutReturning) {
   late Directory directory;
   late Database<Sqlite> db, other;
   late RecordingDriver<Sqlite> primary, competing;
@@ -48,14 +53,17 @@ void main() {
     directory = await Directory.systemTemp.createTemp('orm-order-test-');
     final options = SqliteOptions.file('${directory.path}/orders.sqlite');
     final first = await sqlite(options);
-    primary = RecordingDriver(first.driver);
+    primary = RecordingDriver(first.driver, withoutReturning: withoutReturning);
     db = Database(primary, onQuery: events.add);
     addTearDown(() async {
       await db.close();
       await directory.delete(recursive: true);
     });
     final second = await sqlite(options);
-    competing = RecordingDriver(second.driver);
+    competing = RecordingDriver(
+      second.driver,
+      withoutReturning: withoutReturning,
+    );
     other = Database(competing);
     addTearDown(other.close);
     await Migrator(db.sql).apply(migrationHistory.checked);
@@ -88,6 +96,11 @@ void main() {
     ]);
     expect(events.first.sql, 'BEGIN IMMEDIATE');
     expect(events.last.sql, 'COMMIT');
+    expect(events, hasLength(withoutReturning ? 11 : 10));
+    final claim = primary.commands.singleWhere(
+      (c) => c.sql.startsWith('INSERT INTO "purchase_orders"'),
+    );
+    expect(claim.sql.contains(' RETURNING '), !withoutReturning);
     expect(await db.purchaseOrder.count(), 1);
     expect(await db.orderLine.count(), 2);
     expect((await db.inventory.byId('book').single()).available, 3);
