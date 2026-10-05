@@ -302,7 +302,7 @@ class Query<R, F extends Fields> {
         'A nested query needs a fresh source occurrence.',
       );
     }
-    w.aliases[queryState.source] = 't${w.aliases.length}';
+    w.aliases[queryState.source] = w.nextAlias;
     final rootAlias = w.aliases[queryState.source]!;
     for (final join in joins) {
       if (w.aliases.containsKey(join.alias.fields.table)) {
@@ -311,7 +311,7 @@ class Query<R, F extends Fields> {
           'Create a fresh occurrence for each join.',
         );
       }
-      w.aliases[join.alias.fields.table] = 't${w.aliases.length}';
+      w.aliases[join.alias.fields.table] = w.nextAlias;
       if (join.left) w.leftJoins.add(join.alias.fields.table);
     }
     final savedAverageInputs = w.averageInputs;

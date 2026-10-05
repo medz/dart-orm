@@ -201,8 +201,10 @@ final class BatchInsert<F extends Fields> {
 
   /// Prepares typed scalar projections from every inserted chunk's RETURNING.
   ///
-  /// The connected engine must support RETURNING. Relationships and aggregate
-  /// or window selections are rejected before executing a chunk.
+  /// The connected engine must support RETURNING. Scalar subqueries and
+  /// relationship `count`/`any` expressions stay within each chunk's statement.
+  /// Related row selections and top-level aggregate or window selections are
+  /// rejected before executing a chunk.
   BatchReturning<R> returning<R>(Selection<R> Function(F) selection) =>
       BatchReturning.internal(this, selection(queryFields));
 }

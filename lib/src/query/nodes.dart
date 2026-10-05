@@ -43,7 +43,7 @@ final class ColumnNode(final TableRef table, final String name)
       );
     }
     if (w.mysql && alias == 'excluded') return 'VALUES(${w.quote(name)})';
-    return w.unqualified || w.unqualifiedTable == table
+    return w.unqualifiedTable == table
         ? w.quote(name)
         : '${w.quote(alias)}.${w.quote(name)}';
   }
@@ -205,7 +205,6 @@ final class SqlWriter {
   final ReadTables? reads;
   final bool exactDecimal;
   final bool temporal;
-  bool unqualified = false;
   TableRef? unqualifiedTable;
   String? Function(SqlNode)? project;
   AverageInputs? averageInputs;
@@ -219,6 +218,17 @@ final class SqlWriter {
   });
   bool get mysql =>
       dialect == SqlDialect.mysql || dialect == SqlDialect.mariadb;
+
+  // RETURNING on SQLite exposes the target by its physical name. Reserve that
+  // name too, including case variants, when introducing nested table aliases.
+  String get nextAlias {
+    var index = aliases.length;
+    while (aliases.values.any((alias) => alias.toLowerCase() == 't$index')) {
+      index++;
+    }
+    return 't$index';
+  }
+
   String quote(String name) {
     checkSqlText(name);
     return mysql
@@ -330,7 +340,7 @@ final class RelationSubqueryNode(
     }
     w.reads?.tables.add(source.schema);
     final previous = w.aliases[source];
-    final alias = 't${w.aliases.length}';
+    final alias = w.nextAlias;
     w.aliases[source] = alias;
     try {
       final predicates = [

@@ -454,7 +454,11 @@ final class Mutation<F extends Fields> {
           'Driver does not support RETURNING.',
         );
       }
-      w.unqualified = database.dialect == SqlDialect.sqlite;
+      if (database.dialect == SqlDialect.sqlite) {
+        // SQLite RETURNING cannot resolve the mutation's AS alias. Qualify only
+        // the target with its physical name; nested occurrences keep aliases.
+        w.aliases[queryState.source] = queryState.source.schema.name;
+      }
       b.write(
         ' RETURNING ${selection.columns.map((e) => e.expressionNode.write(w)).join(', ')}',
       );
@@ -491,8 +495,10 @@ final class Mutation<F extends Fields> {
 
   /// Prepares a typed `RETURNING` result on an engine that supports it.
   ///
-  /// Select scalar SQL expressions or composed projections. Relationships,
-  /// aggregate functions, and window functions are rejected before execution.
+  /// Select scalar SQL expressions or composed projections. Scalar subqueries
+  /// and relationship `count`/`any` expressions execute within this statement.
+  /// Related row selections (`one`/`many`), top-level aggregate functions, and
+  /// window functions are rejected before execution.
   Returning<R> returning<R>(Selection<R> Function(F) selection) =>
       Returning.internal(this, selection(queryFields));
 }
