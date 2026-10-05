@@ -225,6 +225,32 @@ RETURNING. The whole write executes before cardinality checks; an empty update
 is an error. `plan.insertMany(inputs).prepare().returning(selection)` exposes batch
 RETURNING. An owned batch transaction decodes results before committing.
 
+RETURNING can combine scalar subqueries and relationship `count`/`any` expressions
+with the changed row in one statement, preserving the selected Dart result type:
+
+```dart
+final ({int id, String? nickname, int posts, bool published}) changed =
+    await db.user.byId(id).plan
+        .update(userPatch(nickname: 'Reviewed'))
+        .returning()
+        .select((u) => (
+          u.id,
+          u.nickname,
+          u.posts.count(),
+          u.posts.where((p) => p.title.eq(.value('Published'))).any(),
+        ).map((id, nickname, posts, published) => (
+          id: id, nickname: nickname, posts: posts, published: published,
+        )))
+        .single();
+```
+
+This example uses the generated [user/post schema](https://github.com/medz/dart-orm/blob/main/example/schema.dart).
+Related row selections (`one`/`many`) need a subsequent query; top-level aggregate
+and window functions are rejected. Subqueries follow the engine's native
+RETURNING visibility rules. In particular, [SQLite](https://www.sqlite.org/lang_returning.html#self_referential_subqueries_are_indeterminate) does not define results for
+self-referential subqueries that read rows changed by the same statement. Use an
+explicit transaction with a subsequent SELECT when that result must be defined.
+
 **Unreleased:** prepared batches support SQLite/PostgreSQL conflict updates with
 one explicit update rule shared by every input row:
 
