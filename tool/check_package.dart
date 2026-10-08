@@ -211,9 +211,9 @@ Future<void> verify(Driver driver, Migration initial) async {
     check((await runner.apply()).isEmpty, 'History resumes');
     final seeded = await db.transaction((tx) async {
       final user = await tx.users.create(username: 'consumer', age: 28);
-      await tx.posts.create(authorId: user.id, title: 'Packaged ORM');
+      final post = await tx.posts.create(authorId: user.id, title: 'Packaged ORM');
       final product = await tx.products.create(sku: 'book', name: 'Dart book', priceCents: 4900, stock: 10);
-      return (user: user, product: product);
+      return (user: user, post: post, product: product);
     });
     await db.users.update(seeded.user.id, nickname: 'Seven');
     await db.users.update(seeded.user.id, nickname: null);
@@ -236,6 +236,8 @@ Future<void> verify(Driver driver, Migration initial) async {
     check(failed && (await db.orders.all()).length == 1 && (await db.products.get(seeded.product.id))!.stock == 8, 'Failed checkout rolls back');
     final users = await db.transaction((tx) => tx.users.stream(fetchSize: 1).toList(), readOnly: true);
     check(users.single.username == 'consumer', 'Bounded typed stream');
+    check(await db.posts.delete(seeded.post.id) == 1, 'Typed delete count');
+    check(await db.posts.get(seeded.post.id) == null, 'Typed delete persists');
     print('${driver.engine.name}: migration, typed CRUD, relationships, checkout and rollback passed.');
   } finally { await db.close(); }
 }

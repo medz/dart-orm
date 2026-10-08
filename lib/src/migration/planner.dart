@@ -47,15 +47,20 @@ MigrationPlan planSchemaChange(SchemaSnapshot before, SchemaSnapshot after) {
     for (final table in next.tables)
       if (!oldTables.containsKey(table.name)) table.name: table,
   };
-  final available = oldTables.keys.toSet();
+  final available = {
+    for (final name in oldTables.keys) physicalIdentity(next.engine, name),
+  };
   while (pending.isNotEmpty) {
     final ready = pending.values
         .where(
           (table) => table.columns.every(
             (column) =>
                 column.references == null ||
-                column.references!.table == table.name ||
-                available.contains(column.references!.table),
+                physicalIdentity(next.engine, column.references!.table) ==
+                    physicalIdentity(next.engine, table.name) ||
+                available.contains(
+                  physicalIdentity(next.engine, column.references!.table),
+                ),
           ),
         )
         .firstOrNull;
@@ -66,7 +71,7 @@ MigrationPlan planSchemaChange(SchemaSnapshot before, SchemaSnapshot after) {
       'CREATE TABLE ${quoteIdentifier(ready.name)} (${ready.columns.map((c) => columnSql(next.engine, c)).join(', ')})',
     );
     pending.remove(ready.name);
-    available.add(ready.name);
+    available.add(physicalIdentity(next.engine, ready.name));
   }
   for (final table in next.tables) {
     final previous = oldTables[table.name];

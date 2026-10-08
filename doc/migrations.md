@@ -19,7 +19,10 @@ await MigrationRunner(db.database, migrations.history).apply();
 
 The runner checks the connection engine before DDL. It verifies saved versions,
 names and fingerprints, then checks the actual catalog against the last frozen
-schema. Pending DDL, catalog validation and history markers share one transaction.
+schema. The internal `_orm_migrations` table must also have the required column
+types, nullability and primary key; an incompatible preexisting table is rejected
+before application migration SQL runs. Pending DDL, catalog validation and
+history markers share one transaction.
 Failures roll back the invocation. Already applied histories are verified;
 modified or missing historical entries fail. PostgreSQL runners take a
 transaction advisory lock. SQLite runners sharing one owned driver use its FIFO
@@ -111,6 +114,8 @@ removed tables. Other tables in the database are outside that history. Catalog
 verification covers columns, storage types, nullability, single-column primary
 keys, identity, single-column unique constraints and foreign keys, and literal
 defaults. PostgreSQL foreign keys must be enforced and validated; unique indexes
-must be valid and ready. Unfinished constraint/index builds cannot be recorded as
-matching the frozen schema. Composite constraints are unsupported. Arbitrary non-unique indexes,
-triggers and check constraints are not represented in the current snapshot API.
+must be valid, ready and immediate, so typed unique-key claims can use them.
+Deferrable unique constraints and unfinished constraint/index builds cannot be
+recorded as matching the frozen schema. Composite constraints are unsupported.
+Arbitrary non-unique indexes, triggers and check constraints are not represented
+in the current snapshot API.

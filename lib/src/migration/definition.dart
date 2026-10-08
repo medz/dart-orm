@@ -117,7 +117,7 @@ SchemaSnapshot freezeSnapshot(SchemaSnapshot snapshot) {
   final tableNames = <String>{};
   for (final table in snapshot.tables) {
     _validatePhysicalIdentifier(snapshot.engine, table.name);
-    final tableIdentity = _physicalIdentity(snapshot.engine, table.name);
+    final tableIdentity = physicalIdentity(snapshot.engine, table.name);
     if (tableIdentity == '_orm_migrations' ||
         (snapshot.engine == Engine.sqlite &&
             tableIdentity.startsWith('sqlite_')) ||
@@ -133,7 +133,7 @@ SchemaSnapshot freezeSnapshot(SchemaSnapshot snapshot) {
     final columns = <ColumnDefinition>[];
     for (final column in table.columns) {
       _validatePhysicalIdentifier(snapshot.engine, column.name);
-      if (!names.add(_physicalIdentity(snapshot.engine, column.name)) ||
+      if (!names.add(physicalIdentity(snapshot.engine, column.name)) ||
           !fields.add(column.field)) {
         throw ArgumentError('Duplicate column or field in ${table.name}.');
       }
@@ -201,10 +201,18 @@ SchemaSnapshot freezeSnapshot(SchemaSnapshot snapshot) {
       final reference = column.references;
       if (reference == null) continue;
       final target = result.tables
-          .where((t) => t.name == reference.table)
+          .where(
+            (t) =>
+                physicalIdentity(snapshot.engine, t.name) ==
+                physicalIdentity(snapshot.engine, reference.table),
+          )
           .firstOrNull;
       final key = target?.columns
-          .where((c) => c.name == reference.column)
+          .where(
+            (c) =>
+                physicalIdentity(snapshot.engine, c.name) ==
+                physicalIdentity(snapshot.engine, reference.column),
+          )
           .firstOrNull;
       if (key == null ||
           (!key.primaryKey && !key.unique) ||
@@ -220,7 +228,7 @@ SchemaSnapshot freezeSnapshot(SchemaSnapshot snapshot) {
 
 // SQLite identifiers fold ASCII letters even when quoted. Unicode characters
 // remain distinct. PostgreSQL quoted identifiers preserve their original case.
-String _physicalIdentity(Engine engine, String name) => engine == Engine.sqlite
+String physicalIdentity(Engine engine, String name) => engine == Engine.sqlite
     ? String.fromCharCodes(
         name.codeUnits.map(
           (unit) => unit >= 65 && unit <= 90 ? unit + 32 : unit,

@@ -42,7 +42,7 @@ Future<GeneratedSources> generateSchema({
   final input = p.normalize(p.absolute(schemaPath));
   final output = p.normalize(p.absolute(outputPath));
   await _validateOutputPaths(input, output);
-  final model = await readSchema(input);
+  final model = await readSchema(input, engine: engine);
   _validateGeneratedNames(model, databaseName);
   freezeSnapshot(
     SchemaSnapshot(

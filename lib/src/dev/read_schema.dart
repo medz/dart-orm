@@ -8,12 +8,21 @@ import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/type.dart';
+import 'package:orm/database.dart' show Engine;
 import 'package:orm/schema.dart';
 import 'package:path/path.dart' as p;
 
 import 'model.dart';
 
-Future<SchemaModel> readSchema(String file) async {
+String _physicalIdentity(Engine engine, String name) => engine == Engine.sqlite
+    ? String.fromCharCodes(
+        name.codeUnits.map(
+          (unit) => unit >= 65 && unit <= 90 ? unit + 32 : unit,
+        ),
+      )
+    : name;
+
+Future<SchemaModel> readSchema(String file, {required Engine engine}) async {
   final collection = AnalysisContextCollection(
     includedPaths: [file],
     sdkPath: p.dirname(p.dirname(Platform.resolvedExecutable)),
@@ -223,7 +232,9 @@ Future<SchemaModel> readSchema(String file) async {
         final reference = field.column.references;
         if (reference == null) continue;
         final targets = tables.where(
-          (target) => target.name == reference.table,
+          (target) =>
+              _physicalIdentity(engine, target.name) ==
+              _physicalIdentity(engine, reference.table),
         );
         if (targets.length != 1) {
           throw FormatException(
@@ -231,7 +242,9 @@ Future<SchemaModel> readSchema(String file) async {
           );
         }
         final columns = targets.single.fields.where(
-          (target) => target.column.name == reference.column,
+          (target) =>
+              _physicalIdentity(engine, target.column.name) ==
+              _physicalIdentity(engine, reference.column),
         );
         if (columns.length != 1 ||
             !(columns.single.column.primaryKey ||

@@ -4,12 +4,14 @@ import 'dart:typed_data';
 import 'package:orm/database.dart';
 import 'package:orm/migration.dart';
 import 'package:orm/postgres.dart';
+import 'package:orm/query.dart';
 import 'package:orm/schema.dart';
 import 'package:postgres/postgres.dart'
     show ForeignKeyViolationException, UniqueViolationException;
 import 'package:test/test.dart';
 
 import '../example/migrations/postgres/history.dart' as shop;
+import '../example/models.db.dart' show AppDatabase;
 
 const _id = ColumnDefinition(
   name: 'id',
@@ -83,6 +85,7 @@ void main() {
     'real PostgreSQL migration runner',
     () {
       late Database database;
+      late AppDatabase app;
       late String schema;
       setUp(() async {
         final driver = PostgresDriver(
@@ -109,7 +112,8 @@ void main() {
         await driver.withConnection(
           (connection) => connection.run('CREATE SCHEMA "$schema"', []),
         );
-        database = openDatabase(_SchemaDriver(driver, schema));
+        app = AppDatabase(_SchemaDriver(driver, schema));
+        database = app.database;
       });
       tearDown(() async {
         await database.session.run('DROP SCHEMA "$schema" CASCADE');
@@ -536,6 +540,139 @@ void main() {
             ),
             throwsA(isA<UniqueViolationException>()),
           );
+          expect(await runner.apply(), isEmpty);
+        },
+      );
+
+      test(
+        'deferrable unique keys reject before typed conflict creation',
+        () async {
+          final snapshot = SchemaSnapshot(
+            engine: Engine.postgresql,
+            tables: [shop.history.migrations.single.snapshot.tables.first],
+          );
+          final steps = planSchemaChange(
+            const SchemaSnapshot(engine: Engine.postgresql, tables: []),
+            snapshot,
+          ).steps;
+          await expectLater(
+            MigrationRunner(
+              database,
+              _history([
+                _migration(1, snapshot, [
+                  steps.single.replaceFirst(
+                    ' UNIQUE',
+                    ' UNIQUE DEFERRABLE INITIALLY IMMEDIATE',
+                  ),
+                ]),
+              ]),
+            ).apply(),
+            throwsStateError,
+          );
+          expect(
+            (await database.session.run(
+              'SELECT tablename FROM pg_tables WHERE schemaname = \$1',
+              parameters: [schema],
+            )).rows,
+            isEmpty,
+          );
+          final runner = MigrationRunner(
+            database,
+            _history([_migration(1, snapshot, steps)]),
+          );
+          expect(await runner.apply(), [1]);
+          final row = await app.users.createIfAbsent(
+            .username,
+            username: 'claim',
+            age: 28,
+          );
+          expect(row!.username, 'claim');
+          expect(
+            await app.users.createIfAbsent(
+              .username,
+              username: 'claim',
+              age: 99,
+            ),
+            isNull,
+          );
+          expect((await app.users.get(row.id))!.age, 28);
+          expect(await runner.apply(), isEmpty);
+        },
+      );
+
+      test(
+        'deferrable primary keys reject before typed conflict creation',
+        () async {
+          const table = TableDefinition('claims', [
+            ColumnDefinition(
+              name: 'id',
+              field: 'id',
+              type: ScalarType.integer,
+              primaryKey: true,
+            ),
+            ColumnDefinition(
+              name: 'value',
+              field: 'value',
+              type: ScalarType.text,
+            ),
+          ]);
+          const snapshot = SchemaSnapshot(
+            engine: Engine.postgresql,
+            tables: [table],
+          );
+          final steps = planSchemaChange(
+            const SchemaSnapshot(engine: Engine.postgresql, tables: []),
+            snapshot,
+          ).steps;
+          await expectLater(
+            MigrationRunner(
+              database,
+              _history([
+                _migration(1, snapshot, [
+                  steps.single.replaceFirst(
+                    ' PRIMARY KEY',
+                    ' PRIMARY KEY DEFERRABLE INITIALLY DEFERRED',
+                  ),
+                ]),
+              ]),
+            ).apply(),
+            throwsStateError,
+          );
+          expect(
+            (await database.session.run(
+              'SELECT tablename FROM pg_tables WHERE schemaname = \$1',
+              parameters: [schema],
+            )).rows,
+            isEmpty,
+          );
+          final runner = MigrationRunner(
+            database,
+            _history([_migration(1, snapshot, steps)]),
+          );
+          expect(await runner.apply(), [1]);
+          final query = TableQuery(
+            database.session,
+            table,
+            (row) => (
+              id: decodeValue<int>(row[0]),
+              value: decodeValue<String>(row[1]),
+            ),
+          );
+          expect(
+            await query.insertIfAbsent({
+              'id': 1,
+              'value': 'claim',
+            }, conflictField: 'id'),
+            (id: 1, value: 'claim'),
+          );
+          expect(
+            await query.insertIfAbsent({
+              'id': 1,
+              'value': 'ignored',
+            }, conflictField: 'id'),
+            isNull,
+          );
+          expect(await query.get(1), (id: 1, value: 'claim'));
           expect(await runner.apply(), isEmpty);
         },
       );

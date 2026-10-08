@@ -22,11 +22,12 @@ const _upperId = ColumnDefinition(
   type: ScalarType.integer,
 );
 
-Future<void> _applyTables(
+Future<MigrationHistory> _applyTables(
   TestDatabase fixture,
   Engine engine,
-  List<TableDefinition> tables,
-) async {
+  List<TableDefinition> tables, {
+  List<String>? steps,
+}) async {
   final initial = engine == Engine.sqlite ? sqlite.history : postgres.history;
   final before = initial.migrations.last.snapshot;
   final after = SchemaSnapshot(
@@ -34,30 +35,27 @@ Future<void> _applyTables(
     tables: [...before.tables, ...tables],
   );
   final plan = planSchemaChange(before, after);
+  final sql = steps ?? plan.steps;
   final next = Migration(
     version: 2,
     name: 'physical identities',
     engine: engine,
-    steps: plan.steps,
+    steps: sql,
     snapshot: plan.snapshot,
     reviewedFingerprint: migrationFingerprint(
       version: 2,
       name: 'physical identities',
       engine: engine,
-      steps: plan.steps,
+      steps: sql,
       snapshot: plan.snapshot,
     ),
   );
-  expect(
-    await MigrationRunner(
-      fixture.db.database,
-      MigrationHistory(
-        engine: engine,
-        migrations: [...initial.migrations, next],
-      ),
-    ).apply(),
-    [2],
+  final history = MigrationHistory(
+    engine: engine,
+    migrations: [...initial.migrations, next],
   );
+  expect(await MigrationRunner(fixture.db.database, history).apply(), [2]);
+  return history;
 }
 
 void main() {
@@ -127,6 +125,60 @@ void main() {
     },
   );
 
+  test(
+    'SQLite catalog accepts reviewed physical aliases in handwritten DDL',
+    () async {
+      final fixture = await openTestDatabase(Engine.sqlite);
+      addTearDown(fixture.db.close);
+      const parent = TableDefinition('Parents', [
+        ColumnDefinition(
+          name: 'ID',
+          field: 'id',
+          type: ScalarType.integer,
+          primaryKey: true,
+          identity: true,
+        ),
+      ]);
+      const child = TableDefinition('Children', [
+        _id,
+        ColumnDefinition(
+          name: 'parent_id',
+          field: 'parentId',
+          type: ScalarType.integer,
+          references: ForeignKey('parents', 'id'),
+        ),
+      ]);
+      final history = await _applyTables(
+        fixture,
+        Engine.sqlite,
+        [child, parent],
+        steps: [
+          'CREATE TABLE "pARENTS" ("Id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL)',
+          'CREATE TABLE "cHILDREN" ("iD" INTEGER PRIMARY KEY NOT NULL, "PARENT_ID" INTEGER NOT NULL REFERENCES "PARENTS" ("Id") ON DELETE RESTRICT)',
+        ],
+      );
+      final parents = TableQuery(
+        fixture.db.session,
+        parent,
+        (row) => row.single,
+      );
+      final children = TableQuery(
+        fixture.db.session,
+        child,
+        (row) => (row[0], row[1]),
+      );
+      final id = await parents.insert({});
+      expect(id, 1);
+      expect(await children.insert({'id': 2, 'parentId': id}), (2, 1));
+      expect(
+        await MigrationRunner(fixture.db.database, history).apply(),
+        isEmpty,
+      );
+      expect(await parents.get(1), 1);
+      expect(await children.get(2), (2, 1));
+    },
+  );
+
   for (final engine in Engine.values) {
     group(
       'physical identity on ${engine.name}',
@@ -152,6 +204,90 @@ void main() {
           );
           expect(fixture.events, isEmpty);
         });
+
+        test(
+          'foreign keys use the engine table and column identity rules',
+          () async {
+            final fixture = await openTestDatabase(engine);
+            addTearDown(fixture.db.close);
+            const child = TableDefinition('Children', [
+              _id,
+              ColumnDefinition(
+                name: 'parent_id',
+                field: 'parentId',
+                type: ScalarType.integer,
+                references: ForeignKey('parents', 'id'),
+              ),
+            ]);
+            const parent = TableDefinition('Parents', [
+              ColumnDefinition(
+                name: 'ID',
+                field: 'id',
+                type: ScalarType.integer,
+                primaryKey: true,
+              ),
+            ]);
+            const tables = [child, parent];
+            if (engine == Engine.postgresql) {
+              for (final invalid in [
+                tables,
+                const [
+                  TableDefinition('Children', [
+                    _id,
+                    ColumnDefinition(
+                      name: 'parent_id',
+                      field: 'parentId',
+                      type: ScalarType.integer,
+                      references: ForeignKey('Parents', 'id'),
+                    ),
+                  ]),
+                  parent,
+                ],
+              ]) {
+                expect(
+                  () => planSchemaChange(
+                    const SchemaSnapshot(engine: Engine.postgresql, tables: []),
+                    SchemaSnapshot(engine: Engine.postgresql, tables: invalid),
+                  ),
+                  throwsArgumentError,
+                );
+              }
+              expect(fixture.events, isEmpty);
+              return;
+            }
+            final plan = planSchemaChange(
+              const SchemaSnapshot(engine: Engine.sqlite, tables: []),
+              const SchemaSnapshot(engine: Engine.sqlite, tables: tables),
+            );
+            expect(
+              plan.steps.first.startsWith('CREATE TABLE "Parents"'),
+              isTrue,
+            );
+            expect(plan.steps.last, contains('REFERENCES "parents" ("id")'));
+            final history = await _applyTables(fixture, engine, tables);
+            final parents = TableQuery(
+              fixture.db.session,
+              parent,
+              (row) => row.single,
+            );
+            final children = TableQuery(
+              fixture.db.session,
+              child,
+              (row) => (row[0], row[1]),
+            );
+            expect(await parents.insert({'id': 1}), 1);
+            expect(await children.insert({'id': 2, 'parentId': 1}), (2, 1));
+            await expectLater(
+              children.insert({'id': 3, 'parentId': 999}),
+              throwsException,
+            );
+            expect(
+              await MigrationRunner(fixture.db.database, history).apply(),
+              isEmpty,
+            );
+            expect(await children.get(2), (2, 1));
+          },
+        );
 
         test(
           '63-byte table, column and reference identities stay exact',

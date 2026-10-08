@@ -376,6 +376,64 @@ final class const User({
     },
   );
 
+  test('SQLite reference aliases generate, draft and apply without changing reviewed names', () async {
+    const model = '''
+@Table('Children')
+final class const Child({
+  @PrimaryKey() required final int id,
+  @References('parents', column: 'id') required final int parentId,
+});
+@Table('Parents')
+final class const Parent({
+  @PrimaryKey() @Column(name: 'ID') required final int id,
+});
+''';
+    for (final invalid in [
+      model,
+      model.replaceFirst("@References('parents'", "@References('Parents'"),
+    ]) {
+      await expectLater(
+        generate(invalid, engine: Engine.postgresql),
+        throwsFormatException,
+      );
+    }
+    expect(await File('${directory.path}/models.db.dart').exists(), isFalse);
+    final sources = await generate(model);
+    expect(sources.snapshot, contains('ForeignKey("parents", "id"'));
+    await analyze(sources);
+    final draft = '${directory.path}/v001_initial.dart';
+    await draftMigration(
+      after: await readSnapshot('${directory.path}/models.snapshot.dart'),
+      version: 1,
+      name: 'case_alias',
+      outputPath: draft,
+    );
+    final run = File('${directory.path}/run.dart');
+    await run.writeAsString('''
+import 'models.db.dart';
+import 'v001_initial.dart' as v001;
+import 'package:orm/database.dart';
+import 'package:orm/migration.dart';
+import 'package:orm/sqlite.dart';
+Future<void> main() async {
+  final db = AppDatabase(SqliteDriver.memory());
+  try {
+    final history = MigrationHistory(engine: Engine.sqlite, migrations: [v001.migration]);
+    final runner = MigrationRunner(db.database, history);
+    await runner.apply();
+    final parent = await db.Parents.create(id: 1);
+    final child = await db.Children.create(id: 2, parentId: parent.id);
+    if (child.parentId != 1 || (await db.Children.get(2))?.parentId != 1 || (await runner.apply()).isNotEmpty) { throw StateError('Wrong case-aliased foreign key'); }
+  } finally { await db.close(); }
+}
+''');
+    final result = await Process.run(Platform.resolvedExecutable, [
+      'run',
+      run.path,
+    ]);
+    expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
+  });
+
   test(
     'reserved SQLite and overlong PostgreSQL names fail without output',
     () async {

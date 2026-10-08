@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:orm/database.dart';
 import 'package:orm/schema.dart';
 
+import 'definition.dart';
 import 'planner.dart';
 
 Future<void> verifyCatalog(
@@ -20,7 +21,7 @@ Future<void> verifyCatalog(
   for (final table in removedTables) {
     final result = session.engine == Engine.sqlite
         ? await session.run(
-            "SELECT name FROM sqlite_schema WHERE type = 'table' AND name = ?",
+            "SELECT name FROM sqlite_schema WHERE type = 'table' AND name = ? COLLATE NOCASE",
             parameters: [table],
           )
         : await session.run(
@@ -40,7 +41,7 @@ Future<void> _verifySqlite(Session session, TableDefinition table) async {
     _mismatch(table.name, 'column count or missing table');
   }
   final source = await session.run(
-    "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?",
+    "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ? COLLATE NOCASE",
     parameters: [table.name],
   );
   final createSql = source.rows.firstOrNull?.first as String? ?? '';
@@ -59,7 +60,9 @@ Future<void> _verifySqlite(Session session, TableDefinition table) async {
         indexed.single['name'] is! String) {
       _mismatch(table.name, 'unique index is absent from the frozen schema');
     }
-    unique.add(indexed.single['name'] as String);
+    unique.add(
+      physicalIdentity(Engine.sqlite, indexed.single['name'] as String),
+    );
   }
   final foreignKeys = _records(
     await session.run(
@@ -67,7 +70,9 @@ Future<void> _verifySqlite(Session session, TableDefinition table) async {
     ),
   );
   for (final column in table.columns) {
-    final actual = columns.where((c) => c['name'] == column.name).firstOrNull;
+    final actual = columns
+        .where((c) => _sameSqliteName(c['name'], column.name))
+        .firstOrNull;
     if (actual == null) _mismatch(table.name, 'missing column ${column.name}');
     final pk = actual['pk'] != 0;
     if ((actual['type'] as String).toUpperCase() !=
@@ -76,7 +81,8 @@ Future<void> _verifySqlite(Session session, TableDefinition table) async {
             !column.nullable ||
         pk != column.primaryKey ||
         actual['hidden'] != 0 ||
-        (unique.contains(column.name) && !pk) !=
+        (unique.contains(physicalIdentity(Engine.sqlite, column.name)) &&
+                !pk) !=
             (column.unique && !column.primaryKey) ||
         !_defaultMatches(
           Engine.sqlite,
@@ -90,7 +96,7 @@ Future<void> _verifySqlite(Session session, TableDefinition table) async {
       _mismatch(table.name, 'identity of ${column.name}');
     }
     final actualReferences = foreignKeys
-        .where((key) => key['from'] == column.name)
+        .where((key) => _sameSqliteName(key['from'], column.name))
         .toList();
     final reference = column.references;
     if (reference == null) {
@@ -98,8 +104,8 @@ Future<void> _verifySqlite(Session session, TableDefinition table) async {
         _mismatch(table.name, 'unexpected foreign key ${column.name}');
       }
     } else if (actualReferences.length != 1 ||
-        actualReferences.single['table'] != reference.table ||
-        actualReferences.single['to'] != reference.column ||
+        !_sameSqliteName(actualReferences.single['table'], reference.table) ||
+        !_sameSqliteName(actualReferences.single['to'], reference.column) ||
         (actualReferences.single['on_delete'] as String).toLowerCase() !=
             reference.onDelete.toLowerCase() ||
         foreignKeys
@@ -110,6 +116,11 @@ Future<void> _verifySqlite(Session session, TableDefinition table) async {
     }
   }
 }
+
+bool _sameSqliteName(Object? actual, String expected) =>
+    actual is String &&
+    physicalIdentity(Engine.sqlite, actual) ==
+        physicalIdentity(Engine.sqlite, expected);
 
 // Keywords inside defaults, quoted identifiers or comments cannot define the
 // table's identity behavior. SQLite has no PRAGMA exposing AUTOINCREMENT.
@@ -170,7 +181,7 @@ WHERE n.nspname = current_schema() AND c.relname = \$1 AND k.contype IN ('p', 'u
       '''
 SELECT a.attname AS name, i.indnkeyatts AS key_count,
        i.indpred IS NOT NULL AS partial, i.indexprs IS NOT NULL AS expression,
-       i.indisvalid AS valid, i.indisready AS ready
+       i.indisvalid AS valid, i.indisready AS ready, i.indimmediate AS immediate
 FROM pg_catalog.pg_index i
 JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -181,9 +192,12 @@ WHERE n.nspname = current_schema() AND c.relname = \$1 AND i.indisunique
     ),
   );
   if (uniques.any(
-    (index) => index['valid'] != true || index['ready'] != true,
+    (index) =>
+        index['valid'] != true ||
+        index['ready'] != true ||
+        index['immediate'] != true,
   )) {
-    _mismatch(table.name, 'unique index is not valid and ready');
+    _mismatch(table.name, 'unique index is not valid, ready and immediate');
   }
   if (uniques.any(
     (index) =>

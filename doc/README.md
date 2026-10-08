@@ -222,6 +222,8 @@ not inferred from arbitrary Dart objects, enums or custom serializers.
 Native SQLite and PostgreSQL are verified on macOS and Linux. SQLite RETURNING
 needs SQLite 3.35 or newer and is capability-checked. Windows, Web and Flutter
 packaging remain unverified. MySQL and MariaDB are outside this rewrite.
+PostgreSQL verification uses PostgreSQL 18; older server versions remain
+unverified.
 Composite keys, typed joins, cross-field OR, relation DSLs, schema namespaces,
 client defaults, conflict updates and watchers are
 not currently implemented. Raw SQL and ordinary Dart composition cover the

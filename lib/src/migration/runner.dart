@@ -10,6 +10,8 @@ import 'definition.dart';
 /// Pending SQL, catalog verification and history markers commit together. A
 /// failure rolls back the whole invocation, including newly created tables.
 /// Already-applied history is verified against both source and the live catalog.
+/// An existing internal history table must have the exact required structure;
+/// incompatible tables are rejected before application migration SQL runs.
 /// PostgreSQL callers on the same database/schema serialize through an advisory
 /// transaction lock at read-committed isolation, including first-time creation.
 /// SQLite uses the driver's queue and an immediate serializable transaction.
@@ -33,8 +35,16 @@ final class MigrationRunner {
             "SELECT pg_advisory_xact_lock(hashtextextended(current_database() || ':' || current_schema() || ':orm_migrations', 0))",
           );
         }
+        final versionType = session.engine == Engine.sqlite
+            ? 'INTEGER'
+            : 'BIGINT';
         await session.run(
-          'CREATE TABLE IF NOT EXISTS "_orm_migrations" ("version" BIGINT PRIMARY KEY NOT NULL, "name" TEXT NOT NULL, "engine" TEXT NOT NULL, "fingerprint" TEXT NOT NULL)',
+          'CREATE TABLE IF NOT EXISTS "_orm_migrations" ("version" $versionType PRIMARY KEY NOT NULL, "name" TEXT NOT NULL, "engine" TEXT NOT NULL, "fingerprint" TEXT NOT NULL)',
+        );
+        await verifyCatalog(
+          session,
+          SchemaSnapshot(engine: session.engine, tables: _historyTables),
+          const {},
         );
         final saved = await session.run(
           'SELECT "version", "name", "engine", "fingerprint" FROM "_orm_migrations" ORDER BY "version"',
@@ -103,3 +113,21 @@ final class MigrationRunner {
     );
   }
 }
+
+const _historyTables = [
+  TableDefinition('_orm_migrations', [
+    ColumnDefinition(
+      name: 'version',
+      field: 'version',
+      type: ScalarType.integer,
+      primaryKey: true,
+    ),
+    ColumnDefinition(name: 'name', field: 'name', type: ScalarType.text),
+    ColumnDefinition(name: 'engine', field: 'engine', type: ScalarType.text),
+    ColumnDefinition(
+      name: 'fingerprint',
+      field: 'fingerprint',
+      type: ScalarType.text,
+    ),
+  ]),
+];
