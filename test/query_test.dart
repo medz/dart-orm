@@ -325,6 +325,47 @@ void main() {
           );
         });
 
+        test('largest native integer delta preserves exact bounds', () async {
+          const maxInteger = 9223372036854775807;
+          const minInteger = -9223372036854775808;
+          final user = await fixture.db.users.create(username: 'delta', age: 0);
+          expect(
+            (await fixture.db.users.increment(user.id, age: maxInteger))!.age,
+            maxInteger,
+          );
+          expect(
+            await fixture.db.users.increment(user.id, age: maxInteger),
+            isNull,
+          );
+          expect(
+            (await fixture.db.users.decrement(user.id, age: maxInteger))!.age,
+            0,
+          );
+          expect(
+            (await fixture.db.users.decrement(user.id, age: maxInteger))!.age,
+            -maxInteger,
+          );
+          expect(
+            await fixture.db.users.decrement(user.id, age: maxInteger),
+            isNull,
+          );
+          expect((await fixture.db.users.get(user.id))!.age, -maxInteger);
+          await fixture.db.users.update(user.id, age: minInteger);
+          expect(
+            (await fixture.db.users.increment(user.id, age: maxInteger))!.age,
+            -1,
+          );
+          fixture.events.clear();
+          // Native int overflow produces a negative delta, which must fail
+          // validation before any assignment or guard is sent to the engine.
+          final wrapped = int.parse(maxInteger.toString()) + 1;
+          await expectLater(
+            fixture.db.users.increment(user.id, age: wrapped),
+            throwsArgumentError,
+          );
+          expect(fixture.statements, isEmpty);
+        });
+
         test(
           'streaming reads bounded batches within an expiring transaction',
           () async {

@@ -460,6 +460,8 @@ final class TableQuery<R> {
       if (c.type == ScalarType.integer) {
         // SQLite would silently promote an overflowing integer to REAL.
         // Bound the operand instead, preserving exact signed 64-bit storage.
+        // Native Dart int already fits that range; a positive delta keeps
+        // both guard expressions within it.
         const maxInteger = 9223372036854775807;
         const minInteger = -9223372036854775808;
         final amount = e.value as int;

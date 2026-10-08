@@ -21,7 +21,7 @@ Future<void> verifyCatalog(
   for (final table in removedTables) {
     final result = session.engine == Engine.sqlite
         ? await session.run(
-            "SELECT name FROM sqlite_schema WHERE type = 'table' AND name = ? COLLATE NOCASE",
+            "SELECT name FROM main.sqlite_schema WHERE type = 'table' AND name = ? COLLATE NOCASE",
             parameters: [table],
           )
         : await session.run(
@@ -33,26 +33,36 @@ Future<void> verifyCatalog(
 }
 
 Future<void> _verifySqlite(Session session, TableDefinition table) async {
+  final source = await session.run(
+    '''
+SELECT m.sql FROM main.sqlite_schema m
+WHERE m.type = 'table' AND m.name = ? COLLATE NOCASE
+  AND NOT EXISTS (
+    SELECT 1 FROM temp.sqlite_schema t
+    WHERE t.type IN ('table', 'view') AND t.name = m.name COLLATE NOCASE
+  )
+''',
+    parameters: [table.name],
+  );
+  if (source.rows.length != 1 || source.rows.single.single is! String) {
+    _mismatch(table.name, 'missing main table or temporary table/view shadow');
+  }
+  final createSql = source.rows.single.single as String;
   final result = await session.run(
-    'PRAGMA table_xinfo(${quoteIdentifier(table.name)})',
+    'PRAGMA main.table_xinfo(${quoteIdentifier(table.name)})',
   );
   final columns = _records(result);
   if (columns.length != table.columns.length) {
     _mismatch(table.name, 'column count or missing table');
   }
-  final source = await session.run(
-    "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ? COLLATE NOCASE",
-    parameters: [table.name],
-  );
-  final createSql = source.rows.firstOrNull?.first as String? ?? '';
   final unique = <String>{};
   for (final index in _records(
-    await session.run('PRAGMA index_list(${quoteIdentifier(table.name)})'),
+    await session.run('PRAGMA main.index_list(${quoteIdentifier(table.name)})'),
   )) {
     if (index['unique'] != 1) continue;
     final indexed = _records(
       await session.run(
-        'PRAGMA index_info(${quoteIdentifier(index['name'] as String)})',
+        'PRAGMA main.index_info(${quoteIdentifier(index['name'] as String)})',
       ),
     );
     if (index['partial'] != 0 ||
@@ -66,7 +76,7 @@ Future<void> _verifySqlite(Session session, TableDefinition table) async {
   }
   final foreignKeys = _records(
     await session.run(
-      'PRAGMA foreign_key_list(${quoteIdentifier(table.name)})',
+      'PRAGMA main.foreign_key_list(${quoteIdentifier(table.name)})',
     ),
   );
   for (final column in table.columns) {
@@ -114,6 +124,12 @@ Future<void> _verifySqlite(Session session, TableDefinition table) async {
             1) {
       _mismatch(table.name, 'foreign key ${column.name}');
     }
+  }
+  if (foreignKeys.isNotEmpty &&
+      (await session.run(
+        'PRAGMA main.foreign_key_check(${quoteIdentifier(table.name)})',
+      )).rows.isNotEmpty) {
+    _mismatch(table.name, 'existing foreign key violations');
   }
 }
 

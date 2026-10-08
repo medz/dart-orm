@@ -71,20 +71,30 @@ final class MigrationRunner {
         SchemaSnapshot? previous;
         for (var i = 0; i < saved.rows.length; i++) {
           previous = history.migrations[i].snapshot;
-          knownTables.addAll(previous.tables.map((t) => t.name));
+          knownTables.addAll(
+            previous.tables.map(
+              (t) => physicalIdentity(session.engine, t.name),
+            ),
+          );
         }
         if (previous != null) {
           await verifyCatalog(
             session,
             previous,
-            knownTables.difference(previous.tables.map((t) => t.name).toSet()),
+            knownTables.difference(
+              previous.tables
+                  .map((t) => physicalIdentity(session.engine, t.name))
+                  .toSet(),
+            ),
           );
         }
         for (final migration in history.migrations.skip(saved.rows.length)) {
           for (final step in migration.steps) {
             await session.run(step);
           }
-          final names = migration.snapshot.tables.map((t) => t.name).toSet();
+          final names = migration.snapshot.tables
+              .map((t) => physicalIdentity(session.engine, t.name))
+              .toSet();
           await verifyCatalog(
             session,
             migration.snapshot,

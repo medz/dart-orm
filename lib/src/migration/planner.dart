@@ -33,8 +33,14 @@ MigrationPlan planSchemaChange(SchemaSnapshot before, SchemaSnapshot after) {
   final old = freezeSnapshot(before);
   final next = freezeSnapshot(after);
   if (old.engine != next.engine) throw ArgumentError('Schema engines differ.');
-  final oldTables = {for (final table in old.tables) table.name: table};
-  final nextTables = {for (final table in next.tables) table.name: table};
+  final oldTables = {
+    for (final table in old.tables)
+      physicalIdentity(next.engine, table.name): table,
+  };
+  final nextTables = {
+    for (final table in next.tables)
+      physicalIdentity(next.engine, table.name): table,
+  };
   for (final name in oldTables.keys) {
     if (!nextTables.containsKey(name)) {
       throw StateError(
@@ -45,11 +51,10 @@ MigrationPlan planSchemaChange(SchemaSnapshot before, SchemaSnapshot after) {
   final steps = <String>[];
   final pending = {
     for (final table in next.tables)
-      if (!oldTables.containsKey(table.name)) table.name: table,
+      if (!oldTables.containsKey(physicalIdentity(next.engine, table.name)))
+        physicalIdentity(next.engine, table.name): table,
   };
-  final available = {
-    for (final name in oldTables.keys) physicalIdentity(next.engine, name),
-  };
+  final available = oldTables.keys.toSet();
   while (pending.isNotEmpty) {
     final ready = pending.values
         .where(
@@ -70,17 +75,19 @@ MigrationPlan planSchemaChange(SchemaSnapshot before, SchemaSnapshot after) {
     steps.add(
       'CREATE TABLE ${quoteIdentifier(ready.name)} (${ready.columns.map((c) => columnSql(next.engine, c)).join(', ')})',
     );
-    pending.remove(ready.name);
+    pending.remove(physicalIdentity(next.engine, ready.name));
     available.add(physicalIdentity(next.engine, ready.name));
   }
   for (final table in next.tables) {
-    final previous = oldTables[table.name];
+    final previous = oldTables[physicalIdentity(next.engine, table.name)];
     if (previous == null) continue;
     final previousColumns = {
-      for (final column in previous.columns) column.name: column,
+      for (final column in previous.columns)
+        physicalIdentity(next.engine, column.name): column,
     };
     final nextColumns = {
-      for (final column in table.columns) column.name: column,
+      for (final column in table.columns)
+        physicalIdentity(next.engine, column.name): column,
     };
     for (final name in previousColumns.keys) {
       if (!nextColumns.containsKey(name)) {
@@ -90,9 +97,10 @@ MigrationPlan planSchemaChange(SchemaSnapshot before, SchemaSnapshot after) {
       }
     }
     for (final column in table.columns) {
-      final previousColumn = previousColumns[column.name];
+      final previousColumn =
+          previousColumns[physicalIdentity(next.engine, column.name)];
       if (previousColumn != null) {
-        if (!_sameStorage(previousColumn, column)) {
+        if (!_sameStorage(next.engine, previousColumn, column)) {
           throw StateError(
             'Changing ${table.name}.${column.name} requires explicit SQL.',
           );
@@ -116,10 +124,26 @@ MigrationPlan planSchemaChange(SchemaSnapshot before, SchemaSnapshot after) {
   return MigrationPlan(engine: next.engine, steps: steps, snapshot: next);
 }
 
-bool _sameStorage(ColumnDefinition a, ColumnDefinition b) {
-  final left = (columnValue(a) as List).toList()..[1] = '';
-  final right = (columnValue(b) as List).toList()..[1] = '';
-  return jsonEncode(left) == jsonEncode(right);
+bool _sameStorage(Engine engine, ColumnDefinition a, ColumnDefinition b) {
+  final left = a.references;
+  final right = b.references;
+  final sameReference = left == null
+      ? right == null
+      : right != null &&
+            physicalIdentity(engine, left.table) ==
+                physicalIdentity(engine, right.table) &&
+            physicalIdentity(engine, left.column) ==
+                physicalIdentity(engine, right.column) &&
+            left.onDelete.toLowerCase() == right.onDelete.toLowerCase();
+  return physicalIdentity(engine, a.name) == physicalIdentity(engine, b.name) &&
+      a.type == b.type &&
+      a.nullable == b.nullable &&
+      a.primaryKey == b.primaryKey &&
+      a.identity == b.identity &&
+      a.unique == b.unique &&
+      jsonEncode(defaultValue(a.defaultValue)) ==
+          jsonEncode(defaultValue(b.defaultValue)) &&
+      sameReference;
 }
 
 String quoteIdentifier(String value) {

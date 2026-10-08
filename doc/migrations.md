@@ -115,6 +115,9 @@ verification covers columns, storage types, nullability, single-column primary
 keys, identity, single-column unique constraints and foreign keys, and literal
 defaults. PostgreSQL foreign keys must be enforced and validated; unique indexes
 must be valid, ready and immediate, so typed unique-key claims can use them.
+SQLite requires persistent tables without temporary shadows and checks existing
+foreign-key rows in managed tables, including when resuming a history. Those
+checks inspect data as well as catalog metadata.
 Deferrable unique constraints and unfinished constraint/index builds cannot be
 recorded as matching the frozen schema. Composite constraints are unsupported.
 Arbitrary non-unique indexes, triggers and check constraints are not represented
