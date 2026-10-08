@@ -1,5 +1,7 @@
-## Unreleased
+## 6.0.0-beta.8 (2026-10-09)
 
+- Validate complete generated models against the runtime engine before taking driver ownership; verify pending migration markers and the final catalog after marker triggers before committing DDL.
+- Fixed driver schemas keep typed SQL on persistent managed tables across PostgreSQL pooled temporary objects and changed search_path without adding query roundtrips. Reject NUL string defaults before SQL or output replacement.
 - Reimplement the ORM with independent schema, query, database, driver,
   migration and development modules. Cross-module imports use public entrypoints.
 - Generate typed tables with direct named-record selections, nullable partial
@@ -8,13 +10,24 @@
   migration histories and catalog verification.
 - Add a complete shop example covering relationship batching, integer-cent
   totals, atomic stock updates, idempotent requests and rollback.
-- This is an unreleased breaking rewrite; previous generated clients and
+- This is a breaking rewrite; previous generated clients and
   migration definitions have no compatibility layer.
 - Use Dart 3.13 primary constructors for concise model declarations and typed
   unique-key claims for idempotent business writes without handwritten SQL.
 - Reject transforming row constructors and unsafe generated-file aliases.
   Preserve microsecond date ordering using integer timestamps in SQLite.
 - Draft standalone reviewed Dart migrations without copying schema by hand.
+- Reject engine identifier collisions and PostgreSQL truncation before SQL.
+  Require PostgreSQL foreign keys to be enforced and validated, and unique
+  indexes to be valid, ready and immediate. Reject incompatible internal
+  migration tables before application migration SQL runs.
+- Verify migrations against persistent tables and reject temporary shadows.
+  PostgreSQL requires permanent logged managed tables.
+- Verify SQLite primary-key nullability using actual rowid semantics.
+- Check existing foreign-key data in managed SQLite tables when applying or
+  resuming migrations.
+- Resolve SQLite table, column and foreign-key names consistently in migration
+  histories using ASCII case-insensitive identifier matching.
 
 ## 6.0.0-beta.7
 
