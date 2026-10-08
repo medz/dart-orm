@@ -27,6 +27,17 @@ String emitDatabase(
   final sessionName =
       '${databaseName.endsWith('Database') ? databaseName.substring(0, databaseName.length - 8) : databaseName}Session';
   final importedTypes = {...model.tables.map((table) => table.dartName)};
+  final scopedNames = {
+    for (final table in model.tables) ...[
+      table.getterName,
+      for (final field in table.fields) field.name,
+      for (final parameter in table.parameters) parameter.name,
+    ],
+  };
+  var modelPrefix = 'models';
+  for (var suffix = 2; scopedNames.contains(modelPrefix); suffix++) {
+    modelPrefix = 'models$suffix';
+  }
   final shapes = <String>{};
   for (final selection in model.selections) {
     if (shapes.add('${selection.table.name}:${selection.shape}')) {
@@ -40,9 +51,11 @@ ${model.tables.any((table) => table.fields.any((field) => field.column.type == S
 import 'package:orm/database.dart';
 import 'package:orm/query.dart';
 import 'package:orm/schema.dart';
-import ${_literal(modelImport)} as models show ${importedTypes.join(', ')};
+import ${_literal(modelImport)} as $modelPrefix show ${importedTypes.join(', ')};
 
-const _absent = Object();
+${model.tables.any((table) => table.insertableFields.isNotEmpty) ? '''const _absent = Object();
+bool _provided(Object? value) => !identical(value, _absent);''' : ''}
+${model.tables.any((table) => table.numericFields.isNotEmpty) ? 'num _number(Object? value) => value as num;' : ''}
 
 /// Owns the supplied driver. Close it after completing all database work.
 final class $databaseName {
@@ -72,7 +85,7 @@ final class $databaseName {
 final class $sessionName implements Session {
   $sessionName._(this._session);
   final Session _session;
-  ${model.tables.map((table) => '/// Typed access to ${_comment(table.name)} in this scope.\nlate final ${table.dartName}Table ${table.getterName} = ${table.dartName}Table._(TableQuery<models.${table.dartName}>(_session, ${table.definitionName}, _decode${table.dartName}));').join('\n')}
+  ${model.tables.map((table) => '/// Typed access to ${_comment(table.name)} in this scope.\nlate final ${table.dartName}Table ${table.getterName} = ${table.dartName}Table._(TableQuery<$modelPrefix.${table.dartName}>(_session, ${table.definitionName}, _decode${table.dartName}));').join('\n')}
   @override
   Engine get engine => _session.engine;
   @override
@@ -88,7 +101,7 @@ final class $sessionName implements Session {
       'const ${table.definitionName} = ${_tableDefinition(table)};',
     );
     buffer.writeln(
-      'models.${table.dartName} _decode${table.dartName}(List<Object?> row) => models.${table.dartName}(${table.parameters.map((parameter) {
+      '$modelPrefix.${table.dartName} _decode${table.dartName}(List<Object?> row) => $modelPrefix.${table.dartName}(${table.parameters.map((parameter) {
         final index = table.fields.indexWhere((field) => field.name == parameter.name);
         return '${parameter.named ? '${parameter.name}: ' : ''}${_decode(table.fields[index], 'row[$index]')}';
       }).join(',')});',
@@ -97,6 +110,7 @@ final class $sessionName implements Session {
       buffer,
       table,
       model.selections.where((selection) => selection.table == table).toList(),
+      modelPrefix: modelPrefix,
     );
   }
   return buffer.toString();
@@ -105,9 +119,10 @@ final class $sessionName implements Session {
 void _emitTable(
   StringBuffer buffer,
   TableModel table,
-  List<SelectionModel> selections,
-) {
-  final row = 'models.${table.dartName}';
+  List<SelectionModel> selections, {
+  required String modelPrefix,
+}) {
+  final row = '$modelPrefix.${table.dartName}';
   final name = table.dartName;
   final fields = table.fields;
   final mutable = table.mutableFields;
@@ -157,8 +172,8 @@ final class ${name}Table {
   for (final selection in selections) {
     if (!emittedShapes.add(selection.shape)) continue;
     buffer.writeln('''
-    if (T == models.${selection.name}) {
-      return _query.selectRows<models.${selection.name}>([${selection.fields.map((field) => _literal(field.name)).join(',')}], (row) => (${selection.fields.indexed.map((entry) => '${entry.$2.name}: ${_decode(entry.$2, 'row[${entry.$1}]')}').join(',')},)).then((rows) => rows.cast<T>());
+    if (T == $modelPrefix.${selection.name}) {
+      return _query.selectRows<$modelPrefix.${selection.name}>([${selection.fields.map((field) => _literal(field.name)).join(',')}], (row) => (${selection.fields.indexed.map((entry) => '${entry.$2.name}: ${_decode(entry.$2, 'row[${entry.$1}]')}').join(',')},)).then((rows) => rows.cast<T>());
     }
 ''');
   }
@@ -183,10 +198,18 @@ final class ${name}Table {
     '${name}Create',
     table.insertableFields,
     create: true,
+    modelPrefix: modelPrefix,
   );
-  _emitCallable(buffer, table, '${name}Update', mutable, create: false);
+  _emitCallable(
+    buffer,
+    table,
+    '${name}Update',
+    mutable,
+    create: false,
+    modelPrefix: modelPrefix,
+  );
   if (table.uniqueFields.isNotEmpty) {
-    _emitCreateIfAbsent(buffer, table);
+    _emitCreateIfAbsent(buffer, table, modelPrefix: modelPrefix);
   }
   if (numeric.isNotEmpty) {
     for (final operation in ['increment', 'decrement']) {
@@ -204,7 +227,7 @@ final class _$operationName implements $operationName {
   _$operationName(this._query);
   final TableQuery<$row> _query;
   @override
-  Future<$row?> call(${table.primaryKey.type} $keyName, {${numeric.map((field) => 'Object? ${field.name} = _absent').join(',')}}) => _query.${operation}ById($keyName, {${numeric.map((field) => "if (!identical(${field.name}, _absent)) ${_literal(field.name)}: ${field.name} as num").join(',')}});
+  Future<$row?> call(${table.primaryKey.type} $keyName, {${numeric.map((field) => 'Object? ${field.name} = _absent').join(',')}}) => _query.${operation}ById($keyName, {${numeric.map((field) => "if (_provided(${field.name})) ${_literal(field.name)}: _number(${field.name})").join(',')}});
 }
 ''');
     }
@@ -217,6 +240,7 @@ void _emitCallable(
   String name,
   List<FieldModel> fields, {
   required bool create,
+  required String modelPrefix,
 }) {
   final key = _keyParameter(fields);
   final id = create ? '' : '${table.primaryKey.type} $key';
@@ -227,7 +251,7 @@ void _emitCallable(
     if (id.isNotEmpty) id,
     if (named.isNotEmpty) named,
   ].join(',');
-  final result = 'models.${table.dartName}${create ? '' : '?'}';
+  final result = '$modelPrefix.${table.dartName}${create ? '' : '?'}';
   final implementationNamed = fields.isEmpty
       ? ''
       : '{${fields.map((field) => 'Object? ${field.name} = _absent').join(',')}}';
@@ -239,14 +263,18 @@ abstract interface class $name {
 }
 final class _$name implements $name {
   _$name(this._query);
-  final TableQuery<models.${table.dartName}> _query;
+  final TableQuery<$modelPrefix.${table.dartName}> _query;
   @override
-  Future<$result> call(${[if (id.isNotEmpty) id, if (implementationNamed.isNotEmpty) implementationNamed].join(',')}) => _query.${create ? 'insert(' : 'updateById($key, '}{${fields.map((field) => "if (!identical(${field.name}, _absent)) ${_literal(field.name)}: ${field.name}").join(',')}});
+  Future<$result> call(${[if (id.isNotEmpty) id, if (implementationNamed.isNotEmpty) implementationNamed].join(',')}) => _query.${create ? 'insert(' : 'updateById($key, '}{${fields.map((field) => "if (_provided(${field.name})) ${_literal(field.name)}: ${field.name}").join(',')}});
 }
 ''');
 }
 
-void _emitCreateIfAbsent(StringBuffer buffer, TableModel table) {
+void _emitCreateIfAbsent(
+  StringBuffer buffer,
+  TableModel table, {
+  required String modelPrefix,
+}) {
   final fields = table.insertableFields;
   final name = table.dartName;
   final target = _parameterName(fields, 'target');
@@ -259,7 +287,7 @@ void _emitCreateIfAbsent(StringBuffer buffer, TableModel table) {
   final values = fields
       .map(
         (field) =>
-            'if (!identical(${field.name}, _absent)) ${_literal(field.name)}: ${field.name}',
+            'if (_provided(${field.name})) ${_literal(field.name)}: ${field.name}',
       )
       .join(',');
   final usedNames = {'hashCode', 'runtimeType', 'toString', 'noSuchMethod'};
@@ -287,13 +315,13 @@ final class ${name}Unique {
 abstract interface class ${name}CreateIfAbsent {
   /// Returns the inserted row, or null for a conflict with the selected target.
   /// The target value must be supplied and non-null; other SQL failures propagate.
-  Future<models.$name?> call(${name}Unique $target, {$named});
+  Future<$modelPrefix.$name?> call(${name}Unique $target, {$named});
 }
 final class _${name}CreateIfAbsent implements ${name}CreateIfAbsent {
   _${name}CreateIfAbsent(this._query);
-  final TableQuery<models.$name> _query;
+  final TableQuery<$modelPrefix.$name> _query;
   @override
-  Future<models.$name?> call(${name}Unique $target, {${fields.map((field) => 'Object? ${field.name} = _absent').join(',')}}) =>
+  Future<$modelPrefix.$name?> call(${name}Unique $target, {${fields.map((field) => 'Object? ${field.name} = _absent').join(',')}}) =>
     _query.insertIfAbsent({$values}, conflictField: $target._field);
 }
 ''');

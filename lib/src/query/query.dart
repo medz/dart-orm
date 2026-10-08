@@ -48,6 +48,8 @@ T decodeValue<T>(Object? value) {
 /// Immutable query scope used by statically generated field-specific facades.
 /// SQL field names resolve only within this physical table. Mutation return
 /// shapes are decoded from RETURNING; no preparatory SELECT is performed.
+/// SQLite column identities fold ASCII case; PostgreSQL quoted names retain it.
+/// The migration history table is reserved and cannot be a table query.
 final class TableQuery<R> {
   TableQuery(this.session, TableDefinition definition, this.decode)
     : definition = TableDefinition(
@@ -80,6 +82,9 @@ final class TableQuery<R> {
 
   void _validateDefinition() {
     quoteIdentifier(definition.name);
+    if (_physicalIdentity(definition.name) == '_orm_migrations') {
+      throw ArgumentError('Migration history is a reserved table');
+    }
     if (definition.columns.isEmpty) {
       throw ArgumentError('A table requires columns');
     }
@@ -88,7 +93,9 @@ final class TableQuery<R> {
     var primaryKeys = 0;
     for (final c in definition.columns) {
       quoteIdentifier(c.name);
-      if (c.field.isEmpty || !fields.add(c.field) || !names.add(c.name)) {
+      if (c.field.isEmpty ||
+          !fields.add(c.field) ||
+          !names.add(_physicalIdentity(c.name))) {
         throw ArgumentError('Duplicate column identity');
       }
       if (c.primaryKey) {
@@ -110,6 +117,16 @@ final class TableQuery<R> {
       throw ArgumentError('Composite primary keys are unsupported');
     }
   }
+
+  // Quoting does not make SQLite identifiers case-sensitive. Fold ASCII only;
+  // Unicode identifiers and PostgreSQL quoted identifiers keep their identity.
+  String _physicalIdentity(String name) => session.engine == Engine.sqlite
+      ? String.fromCharCodes(
+          name.codeUnits.map(
+            (unit) => unit >= 65 && unit <= 90 ? unit + 32 : unit,
+          ),
+        )
+      : name;
 
   TableQuery<R> _copy({
     List<Map<String, Filter<Object?>>>? filters,

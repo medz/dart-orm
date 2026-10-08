@@ -18,6 +18,7 @@ void main() {
   Future<GeneratedSources> generate(
     String model, {
     String name = 'AppDatabase',
+    Engine engine = Engine.sqlite,
   }) async {
     await File('${directory.path}/models.dart')
         .writeAsString("import 'package:orm/schema.dart';\n$model");
@@ -25,7 +26,7 @@ void main() {
       schemaPath: '${directory.path}/models.dart',
       outputPath: '${directory.path}/models.db.dart',
       databaseName: name,
-      engine: Engine.sqlite,
+      engine: engine,
     );
   }
 
@@ -272,6 +273,134 @@ Future<void> main() async {
     ]);
     expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
   });
+
+  test('legal field and table names cannot shadow generated helpers or model imports', () async {
+    final sources = await generate('''
+@Table('models')
+final class const Thing({
+  @PrimaryKey(autoIncrement: true) required final int id,
+  @Unique() required final String identical,
+  required final int num,
+  required final String models,
+  required final String models2,
+  @Column(defaultValue: 'models.users') required final String models3,
+  final String? models4,
+});
+@Table('models2')
+final class const OtherThing({@PrimaryKey() required final int id});
+@SelectFrom(Thing) typedef Card = ({int num, String identical, String models3});
+''');
+    expect(sources.database, contains('as models5'));
+    expect(sources.database, contains('defaultValue: "models.users"'));
+    await analyze(sources);
+    final run = File('${directory.path}/run.dart');
+    await run.writeAsString('''
+import 'models.db.dart';
+import 'models.dart';
+import 'package:orm/sqlite.dart';
+Future<void> main() async {
+  final db = AppDatabase(SqliteDriver.memory());
+  try {
+    await db.session.run("CREATE TABLE models(id INTEGER PRIMARY KEY AUTOINCREMENT, identical TEXT NOT NULL UNIQUE, num INTEGER NOT NULL, models TEXT NOT NULL, models2 TEXT NOT NULL, models3 TEXT NOT NULL DEFAULT 'models.users', models4 TEXT)");
+    final row = await db.models.create(identical: 'one', num: 1, models: 'first', models2: 'second');
+    await db.models.update(row.id, identical: 'updated', models4: 'fourth');
+    final changed = await db.models.increment(row.id, num: 2);
+    final duplicate = await db.models.createIfAbsent(.identical, identical: 'updated', num: 8, models: 'other', models2: 'other');
+    final card = (await db.models.select<Card>()).single;
+    if (changed?.num != 3 || changed?.models4 != 'fourth' || duplicate != null || card.num != 3 || card.identical != 'updated' || card.models3 != 'models.users') { throw StateError('Shadowed generated value'); }
+  } finally { await db.close(); }
+}
+''');
+    final result = await Process.run(Platform.resolvedExecutable, [
+      'run',
+      run.path,
+    ]);
+    expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
+  });
+
+  test(
+    'identity-only clients omit unused sentinel and numeric helpers',
+    () async {
+      final sources = await generate('''
+@Table('tokens') final class const Token({@PrimaryKey(autoIncrement: true) required final int id});
+''');
+      expect(sources.database, isNot(contains('_absent')));
+      expect(sources.database, isNot(contains('_provided')));
+      expect(sources.database, isNot(contains('_number')));
+      final path = p.absolute('${directory.path}/models.db.dart');
+      await writeGeneratedSources(sources: sources, outputPath: path);
+      final result = await Process.run(Platform.resolvedExecutable, [
+        'analyze',
+        path,
+      ]);
+      expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
+    },
+  );
+
+  test(
+    'generation validates engine-specific physical identifier identity',
+    () async {
+      const models = [
+        '''
+@Table('_ORM_MIGRATIONS')
+final class const Metadata({@PrimaryKey() required final int id});
+''',
+        '''
+@Table('users')
+final class const User({@PrimaryKey() required final int id});
+@Table('Users')
+final class const OtherUser({@PrimaryKey() required final int id});
+''',
+        '''
+@Table('users')
+final class const User({
+  @PrimaryKey() required final int id,
+  @Column(name: 'ID') required final int uppercaseId,
+});
+''',
+      ];
+      for (final source in models) {
+        await expectLater(generate(source), throwsArgumentError);
+        expect(
+          await File('${directory.path}/models.db.dart').exists(),
+          isFalse,
+        );
+        expect(
+          await File('${directory.path}/models.snapshot.dart').exists(),
+          isFalse,
+        );
+      }
+      for (final source in models) {
+        await analyze(await generate(source, engine: Engine.postgresql));
+      }
+    },
+  );
+
+  test(
+    'filesystem model names become URI paths before Dart import emission',
+    () async {
+      final output = '${directory.path}/models.db.dart';
+      for (final name in [
+        'models#draft.dart',
+        'models%20draft.dart',
+        'models?draft.dart',
+        'models draft.dart',
+        '模型.dart',
+      ]) {
+        final input = File('${directory.path}/$name');
+        await input.writeAsString("import 'package:orm/schema.dart';\n$row");
+        final sources = await generateSchema(
+          schemaPath: input.path,
+          outputPath: output,
+          engine: Engine.sqlite,
+        );
+        await analyze(sources);
+      }
+    },
+    skip: Platform.isWindows
+        ? 'Unix filenames containing question marks'
+        : false,
+  );
 
   test('generation and writing reject source/output symlink aliases', () async {
     final sources = await generate(row);

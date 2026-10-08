@@ -108,12 +108,16 @@ String migrationFingerprint({
     .toString();
 
 /// Copies and validates a snapshot without retaining mutable application data.
+///
+/// SQLite physical identifiers use ASCII case folding; PostgreSQL quoted names
+/// preserve case. The migration history table is reserved on either engine.
 SchemaSnapshot freezeSnapshot(SchemaSnapshot snapshot) {
   final tables = <TableDefinition>[];
   final tableNames = <String>{};
   for (final table in snapshot.tables) {
     validIdentifier(table.name);
-    if (table.name == '_orm_migrations' || !tableNames.add(table.name)) {
+    final tableIdentity = _physicalIdentity(snapshot.engine, table.name);
+    if (tableIdentity == '_orm_migrations' || !tableNames.add(tableIdentity)) {
       throw ArgumentError('Duplicate or reserved table ${table.name}.');
     }
     if (table.columns.isEmpty) {
@@ -125,7 +129,8 @@ SchemaSnapshot freezeSnapshot(SchemaSnapshot snapshot) {
     final columns = <ColumnDefinition>[];
     for (final column in table.columns) {
       validIdentifier(column.name);
-      if (!names.add(column.name) || !fields.add(column.field)) {
+      if (!names.add(_physicalIdentity(snapshot.engine, column.name)) ||
+          !fields.add(column.field)) {
         throw ArgumentError('Duplicate column or field in ${table.name}.');
       }
       if (column.field.isEmpty) {
@@ -208,6 +213,16 @@ SchemaSnapshot freezeSnapshot(SchemaSnapshot snapshot) {
   }
   return result;
 }
+
+// SQLite identifiers fold ASCII letters even when quoted. Unicode characters
+// remain distinct. PostgreSQL quoted identifiers preserve their original case.
+String _physicalIdentity(Engine engine, String name) => engine == Engine.sqlite
+    ? String.fromCharCodes(
+        name.codeUnits.map(
+          (unit) => unit >= 65 && unit <= 90 ? unit + 32 : unit,
+        ),
+      )
+    : name;
 
 void validIdentifier(String value) {
   if (value.isEmpty || value.contains('\u0000')) {

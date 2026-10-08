@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:dart_style/dart_style.dart';
 import 'package:orm/database.dart' show Engine;
+import 'package:orm/migration.dart' show freezeSnapshot;
+import 'package:orm/schema.dart' show SchemaSnapshot, TableDefinition;
 import 'package:path/path.dart' as p;
 
 import 'emit.dart';
@@ -42,13 +44,23 @@ Future<GeneratedSources> generateSchema({
   await _validateOutputPaths(input, output);
   final model = await readSchema(input);
   _validateGeneratedNames(model, databaseName);
+  freezeSnapshot(
+    SchemaSnapshot(
+      engine: engine,
+      tables: [
+        for (final table in model.tables)
+          TableDefinition(table.name, [
+            for (final field in table.fields) field.column,
+          ]),
+      ],
+    ),
+  );
   final formatter = DartFormatter(
     languageVersion: DartFormatter.latestLanguageVersion,
   );
-  final import = p
-      .relative(input, from: p.dirname(output))
-      .split(p.separator)
-      .join('/');
+  final import = Uri(
+    pathSegments: p.split(p.relative(input, from: p.dirname(output))),
+  ).toString();
   return GeneratedSources._(
     database: formatter.format(
       emitDatabase(model, modelImport: import, databaseName: databaseName),
@@ -73,7 +85,6 @@ void _validateGeneratedNames(SchemaModel model, String databaseName) {
     'DateTime',
     'Stream',
     'ArgumentError',
-    'models',
     'identical',
     'openDatabase',
     'decodeValue',
@@ -94,6 +105,8 @@ void _validateGeneratedNames(SchemaModel model, String databaseName) {
     'ForeignKey',
     'Uint8List',
     '_absent',
+    '_provided',
+    '_number',
   };
   final sessionName =
       '${databaseName.endsWith('Database') ? databaseName.substring(0, databaseName.length - 8) : databaseName}Session';

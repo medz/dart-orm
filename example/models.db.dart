@@ -20,6 +20,8 @@ import "models.dart"
         ProductCard;
 
 const _absent = Object();
+bool _provided(Object? value) => !identical(value, _absent);
+num _number(Object? value) => value as num;
 
 /// Owns the supplied driver. Close it after completing all database work.
 final class AppDatabase {
@@ -358,13 +360,13 @@ final class _UserCreate implements UserCreate {
     Object? joinedAt = _absent,
     Object? avatar = _absent,
   }) => _query.insert({
-    if (!identical(username, _absent)) "username": username,
-    if (!identical(age, _absent)) "age": age,
-    if (!identical(nickname, _absent)) "nickname": nickname,
-    if (!identical(active, _absent)) "active": active,
-    if (!identical(score, _absent)) "score": score,
-    if (!identical(joinedAt, _absent)) "joinedAt": joinedAt,
-    if (!identical(avatar, _absent)) "avatar": avatar,
+    if (_provided(username)) "username": username,
+    if (_provided(age)) "age": age,
+    if (_provided(nickname)) "nickname": nickname,
+    if (_provided(active)) "active": active,
+    if (_provided(score)) "score": score,
+    if (_provided(joinedAt)) "joinedAt": joinedAt,
+    if (_provided(avatar)) "avatar": avatar,
   });
 }
 
@@ -397,13 +399,13 @@ final class _UserUpdate implements UserUpdate {
     Object? joinedAt = _absent,
     Object? avatar = _absent,
   }) => _query.updateById(key, {
-    if (!identical(username, _absent)) "username": username,
-    if (!identical(age, _absent)) "age": age,
-    if (!identical(nickname, _absent)) "nickname": nickname,
-    if (!identical(active, _absent)) "active": active,
-    if (!identical(score, _absent)) "score": score,
-    if (!identical(joinedAt, _absent)) "joinedAt": joinedAt,
-    if (!identical(avatar, _absent)) "avatar": avatar,
+    if (_provided(username)) "username": username,
+    if (_provided(age)) "age": age,
+    if (_provided(nickname)) "nickname": nickname,
+    if (_provided(active)) "active": active,
+    if (_provided(score)) "score": score,
+    if (_provided(joinedAt)) "joinedAt": joinedAt,
+    if (_provided(avatar)) "avatar": avatar,
   });
 }
 
@@ -446,13 +448,13 @@ final class _UserCreateIfAbsent implements UserCreateIfAbsent {
     Object? joinedAt = _absent,
     Object? avatar = _absent,
   }) => _query.insertIfAbsent({
-    if (!identical(username, _absent)) "username": username,
-    if (!identical(age, _absent)) "age": age,
-    if (!identical(nickname, _absent)) "nickname": nickname,
-    if (!identical(active, _absent)) "active": active,
-    if (!identical(score, _absent)) "score": score,
-    if (!identical(joinedAt, _absent)) "joinedAt": joinedAt,
-    if (!identical(avatar, _absent)) "avatar": avatar,
+    if (_provided(username)) "username": username,
+    if (_provided(age)) "age": age,
+    if (_provided(nickname)) "nickname": nickname,
+    if (_provided(active)) "active": active,
+    if (_provided(score)) "score": score,
+    if (_provided(joinedAt)) "joinedAt": joinedAt,
+    if (_provided(avatar)) "avatar": avatar,
   }, conflictField: target._field);
 }
 
@@ -473,8 +475,8 @@ final class _UserIncrement implements UserIncrement {
     Object? age = _absent,
     Object? score = _absent,
   }) => _query.incrementById(key, {
-    if (!identical(age, _absent)) "age": age as num,
-    if (!identical(score, _absent)) "score": score as num,
+    if (_provided(age)) "age": _number(age),
+    if (_provided(score)) "score": _number(score),
   });
 }
 
@@ -495,8 +497,8 @@ final class _UserDecrement implements UserDecrement {
     Object? age = _absent,
     Object? score = _absent,
   }) => _query.decrementById(key, {
-    if (!identical(age, _absent)) "age": age as num,
-    if (!identical(score, _absent)) "score": score as num,
+    if (_provided(age)) "age": _number(age),
+    if (_provided(score)) "score": _number(score),
   });
 }
 
@@ -657,9 +659,9 @@ final class _PostCreate implements PostCreate {
     Object? title = _absent,
     Object? body = _absent,
   }) => _query.insert({
-    if (!identical(authorId, _absent)) "authorId": authorId,
-    if (!identical(title, _absent)) "title": title,
-    if (!identical(body, _absent)) "body": body,
+    if (_provided(authorId)) "authorId": authorId,
+    if (_provided(title)) "title": title,
+    if (_provided(body)) "body": body,
   });
 }
 
@@ -684,9 +686,9 @@ final class _PostUpdate implements PostUpdate {
     Object? title = _absent,
     Object? body = _absent,
   }) => _query.updateById(key, {
-    if (!identical(authorId, _absent)) "authorId": authorId,
-    if (!identical(title, _absent)) "title": title,
-    if (!identical(body, _absent)) "body": body,
+    if (_provided(authorId)) "authorId": authorId,
+    if (_provided(title)) "title": title,
+    if (_provided(body)) "body": body,
   });
 }
 
@@ -875,10 +877,10 @@ final class _ProductCreate implements ProductCreate {
     Object? priceCents = _absent,
     Object? stock = _absent,
   }) => _query.insert({
-    if (!identical(sku, _absent)) "sku": sku,
-    if (!identical(name, _absent)) "name": name,
-    if (!identical(priceCents, _absent)) "priceCents": priceCents,
-    if (!identical(stock, _absent)) "stock": stock,
+    if (_provided(sku)) "sku": sku,
+    if (_provided(name)) "name": name,
+    if (_provided(priceCents)) "priceCents": priceCents,
+    if (_provided(stock)) "stock": stock,
   });
 }
 
@@ -905,10 +907,10 @@ final class _ProductUpdate implements ProductUpdate {
     Object? priceCents = _absent,
     Object? stock = _absent,
   }) => _query.updateById(key, {
-    if (!identical(sku, _absent)) "sku": sku,
-    if (!identical(name, _absent)) "name": name,
-    if (!identical(priceCents, _absent)) "priceCents": priceCents,
-    if (!identical(stock, _absent)) "stock": stock,
+    if (_provided(sku)) "sku": sku,
+    if (_provided(name)) "name": name,
+    if (_provided(priceCents)) "priceCents": priceCents,
+    if (_provided(stock)) "stock": stock,
   });
 }
 
@@ -945,10 +947,10 @@ final class _ProductCreateIfAbsent implements ProductCreateIfAbsent {
     Object? priceCents = _absent,
     Object? stock = _absent,
   }) => _query.insertIfAbsent({
-    if (!identical(sku, _absent)) "sku": sku,
-    if (!identical(name, _absent)) "name": name,
-    if (!identical(priceCents, _absent)) "priceCents": priceCents,
-    if (!identical(stock, _absent)) "stock": stock,
+    if (_provided(sku)) "sku": sku,
+    if (_provided(name)) "name": name,
+    if (_provided(priceCents)) "priceCents": priceCents,
+    if (_provided(stock)) "stock": stock,
   }, conflictField: target._field);
 }
 
@@ -969,8 +971,8 @@ final class _ProductIncrement implements ProductIncrement {
     Object? priceCents = _absent,
     Object? stock = _absent,
   }) => _query.incrementById(key, {
-    if (!identical(priceCents, _absent)) "priceCents": priceCents as num,
-    if (!identical(stock, _absent)) "stock": stock as num,
+    if (_provided(priceCents)) "priceCents": _number(priceCents),
+    if (_provided(stock)) "stock": _number(stock),
   });
 }
 
@@ -991,8 +993,8 @@ final class _ProductDecrement implements ProductDecrement {
     Object? priceCents = _absent,
     Object? stock = _absent,
   }) => _query.decrementById(key, {
-    if (!identical(priceCents, _absent)) "priceCents": priceCents as num,
-    if (!identical(stock, _absent)) "stock": stock as num,
+    if (_provided(priceCents)) "priceCents": _number(priceCents),
+    if (_provided(stock)) "stock": _number(stock),
   });
 }
 
@@ -1202,13 +1204,12 @@ final class _OrderCreate implements OrderCreate {
     Object? status = _absent,
     Object? createdAt = _absent,
   }) => _query.insert({
-    if (!identical(userId, _absent)) "userId": userId,
-    if (!identical(requestKey, _absent)) "requestKey": requestKey,
-    if (!identical(requestSignature, _absent))
-      "requestSignature": requestSignature,
-    if (!identical(totalCents, _absent)) "totalCents": totalCents,
-    if (!identical(status, _absent)) "status": status,
-    if (!identical(createdAt, _absent)) "createdAt": createdAt,
+    if (_provided(userId)) "userId": userId,
+    if (_provided(requestKey)) "requestKey": requestKey,
+    if (_provided(requestSignature)) "requestSignature": requestSignature,
+    if (_provided(totalCents)) "totalCents": totalCents,
+    if (_provided(status)) "status": status,
+    if (_provided(createdAt)) "createdAt": createdAt,
   });
 }
 
@@ -1239,13 +1240,12 @@ final class _OrderUpdate implements OrderUpdate {
     Object? status = _absent,
     Object? createdAt = _absent,
   }) => _query.updateById(key, {
-    if (!identical(userId, _absent)) "userId": userId,
-    if (!identical(requestKey, _absent)) "requestKey": requestKey,
-    if (!identical(requestSignature, _absent))
-      "requestSignature": requestSignature,
-    if (!identical(totalCents, _absent)) "totalCents": totalCents,
-    if (!identical(status, _absent)) "status": status,
-    if (!identical(createdAt, _absent)) "createdAt": createdAt,
+    if (_provided(userId)) "userId": userId,
+    if (_provided(requestKey)) "requestKey": requestKey,
+    if (_provided(requestSignature)) "requestSignature": requestSignature,
+    if (_provided(totalCents)) "totalCents": totalCents,
+    if (_provided(status)) "status": status,
+    if (_provided(createdAt)) "createdAt": createdAt,
   });
 }
 
@@ -1286,13 +1286,12 @@ final class _OrderCreateIfAbsent implements OrderCreateIfAbsent {
     Object? status = _absent,
     Object? createdAt = _absent,
   }) => _query.insertIfAbsent({
-    if (!identical(userId, _absent)) "userId": userId,
-    if (!identical(requestKey, _absent)) "requestKey": requestKey,
-    if (!identical(requestSignature, _absent))
-      "requestSignature": requestSignature,
-    if (!identical(totalCents, _absent)) "totalCents": totalCents,
-    if (!identical(status, _absent)) "status": status,
-    if (!identical(createdAt, _absent)) "createdAt": createdAt,
+    if (_provided(userId)) "userId": userId,
+    if (_provided(requestKey)) "requestKey": requestKey,
+    if (_provided(requestSignature)) "requestSignature": requestSignature,
+    if (_provided(totalCents)) "totalCents": totalCents,
+    if (_provided(status)) "status": status,
+    if (_provided(createdAt)) "createdAt": createdAt,
   }, conflictField: target._field);
 }
 
@@ -1310,7 +1309,7 @@ final class _OrderIncrement implements OrderIncrement {
   @override
   Future<models.Order?> call(int key, {Object? totalCents = _absent}) =>
       _query.incrementById(key, {
-        if (!identical(totalCents, _absent)) "totalCents": totalCents as num,
+        if (_provided(totalCents)) "totalCents": _number(totalCents),
       });
 }
 
@@ -1328,7 +1327,7 @@ final class _OrderDecrement implements OrderDecrement {
   @override
   Future<models.Order?> call(int key, {Object? totalCents = _absent}) =>
       _query.decrementById(key, {
-        if (!identical(totalCents, _absent)) "totalCents": totalCents as num,
+        if (_provided(totalCents)) "totalCents": _number(totalCents),
       });
 }
 
@@ -1499,10 +1498,10 @@ final class _OrderLineCreate implements OrderLineCreate {
     Object? quantity = _absent,
     Object? unitPriceCents = _absent,
   }) => _query.insert({
-    if (!identical(orderId, _absent)) "orderId": orderId,
-    if (!identical(productId, _absent)) "productId": productId,
-    if (!identical(quantity, _absent)) "quantity": quantity,
-    if (!identical(unitPriceCents, _absent)) "unitPriceCents": unitPriceCents,
+    if (_provided(orderId)) "orderId": orderId,
+    if (_provided(productId)) "productId": productId,
+    if (_provided(quantity)) "quantity": quantity,
+    if (_provided(unitPriceCents)) "unitPriceCents": unitPriceCents,
   });
 }
 
@@ -1529,10 +1528,10 @@ final class _OrderLineUpdate implements OrderLineUpdate {
     Object? quantity = _absent,
     Object? unitPriceCents = _absent,
   }) => _query.updateById(key, {
-    if (!identical(orderId, _absent)) "orderId": orderId,
-    if (!identical(productId, _absent)) "productId": productId,
-    if (!identical(quantity, _absent)) "quantity": quantity,
-    if (!identical(unitPriceCents, _absent)) "unitPriceCents": unitPriceCents,
+    if (_provided(orderId)) "orderId": orderId,
+    if (_provided(productId)) "productId": productId,
+    if (_provided(quantity)) "quantity": quantity,
+    if (_provided(unitPriceCents)) "unitPriceCents": unitPriceCents,
   });
 }
 
@@ -1553,9 +1552,8 @@ final class _OrderLineIncrement implements OrderLineIncrement {
     Object? quantity = _absent,
     Object? unitPriceCents = _absent,
   }) => _query.incrementById(key, {
-    if (!identical(quantity, _absent)) "quantity": quantity as num,
-    if (!identical(unitPriceCents, _absent))
-      "unitPriceCents": unitPriceCents as num,
+    if (_provided(quantity)) "quantity": _number(quantity),
+    if (_provided(unitPriceCents)) "unitPriceCents": _number(unitPriceCents),
   });
 }
 
@@ -1576,8 +1574,7 @@ final class _OrderLineDecrement implements OrderLineDecrement {
     Object? quantity = _absent,
     Object? unitPriceCents = _absent,
   }) => _query.decrementById(key, {
-    if (!identical(quantity, _absent)) "quantity": quantity as num,
-    if (!identical(unitPriceCents, _absent))
-      "unitPriceCents": unitPriceCents as num,
+    if (_provided(quantity)) "quantity": _number(quantity),
+    if (_provided(unitPriceCents)) "unitPriceCents": _number(unitPriceCents),
   });
 }

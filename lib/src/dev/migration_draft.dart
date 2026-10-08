@@ -140,7 +140,7 @@ Future<SchemaSnapshot> readSnapshot(String sourcePath) async {
       );
     }
     final schema = SchemaSnapshot(
-      engine: Engine.values.byName(_field(snapshot, 'engine').variable!.name!),
+      engine: Engine.values[_enumIndex(_field(snapshot, 'engine'))],
       tables: [
         for (final table in _field(snapshot, 'tables').toListValue()!)
           TableDefinition(_field(table, 'name').toStringValue()!, [
@@ -148,9 +148,7 @@ Future<SchemaSnapshot> readSnapshot(String sourcePath) async {
               ColumnDefinition(
                 name: _field(column, 'name').toStringValue()!,
                 field: _field(column, 'field').toStringValue()!,
-                type: ScalarType.values.byName(
-                  _field(column, 'type').variable!.name!,
-                ),
+                type: ScalarType.values[_enumIndex(_field(column, 'type'))],
                 nullable: _field(column, 'nullable').toBoolValue()!,
                 primaryKey: _field(column, 'primaryKey').toBoolValue()!,
                 identity: _field(column, 'identity').toBoolValue()!,
@@ -176,6 +174,9 @@ bool _isSchemaType(DartObject value, String name) =>
     value.type?.element?.name == name &&
     value.type?.element?.library?.uri.toString() ==
         'package:orm/src/schema/definition.dart';
+
+// Constant aliases change variable names, while retaining the actual enum value.
+int _enumIndex(DartObject value) => _field(value, 'index').toIntValue()!;
 
 DartObject _field(DartObject value, String name) {
   final field = value.getField(name);

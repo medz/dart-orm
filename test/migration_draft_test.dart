@@ -232,4 +232,42 @@ Future<void> main() async {
       expect((await readSnapshot(output)).tables, isNotEmpty);
     },
   );
+
+  test('CLI reads enum values through reusable constant aliases', () async {
+    final snapshot = File('${directory.path}/aliases.dart');
+    await snapshot.writeAsString('''
+import 'package:orm/database.dart';
+import 'package:orm/schema.dart';
+const engine = Engine.postgresql;
+const scalar = ScalarType.text;
+const keyType = ScalarType.integer;
+const frozenSchema = SchemaSnapshot(engine: engine, tables: [
+  TableDefinition('items', [
+    ColumnDefinition(name: 'id', field: 'id', type: keyType, primaryKey: true),
+    ColumnDefinition(name: 'name', field: 'name', type: scalar),
+  ]),
+]);
+void main() => throw StateError('must not execute');
+''');
+    final output = '${directory.path}/aliased_initial.dart';
+    final result = await Process.run(Platform.resolvedExecutable, [
+      'run',
+      'bin/orm.dart',
+      'migration',
+      'draft',
+      '--to',
+      snapshot.path,
+      '--out',
+      output,
+      '--version',
+      '1',
+      '--name',
+      'initial',
+    ]);
+    expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
+    final restored = await readSnapshot(output);
+    expect(restored.engine, Engine.postgresql);
+    expect(restored.tables.single.columns[0].type, ScalarType.integer);
+    expect(restored.tables.single.columns[1].type, ScalarType.text);
+  });
 }
