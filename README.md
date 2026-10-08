@@ -2,9 +2,15 @@
 
 Plain Dart models, generated typed tables and explicit database sessions.
 
-This checkout contains the **unreleased rewrite**. It requires Dart 3.13 and
-supports native SQLite and PostgreSQL. The published beta.7 package uses the
-previous API; run the examples from this checkout until the next release.
+**6.0.0-beta.8** is a breaking rewrite requiring Dart 3.13. Native SQLite and
+PostgreSQL 18 are verified on macOS and Linux. When upgrading from earlier betas,
+migrate model declarations and application APIs, then regenerate clients. Earlier
+clients and migration definitions have no compatibility layer; existing databases
+require a separately reviewed baseline.
+
+```sh
+dart pub add orm:6.0.0-beta.8
+```
 
 ```dart
 import 'package:orm/query.dart';
@@ -39,8 +45,9 @@ when the key and filters do not match. Omitted fields remain unchanged; explicit
 null clears nullable fields. Selections are registered named records with direct
 field access. Values are bound and identifiers are quoted.
 
-Run the complete example, including schema installation, typed reads,
-relationship loading and an idempotent order transaction:
+From a repository checkout, run the complete example, including schema
+installation, typed reads, relationship loading and an idempotent order
+transaction:
 
 ```sh
 dart pub get

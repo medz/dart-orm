@@ -180,6 +180,7 @@ Future<void> main() async {
   await verify(SqliteDriver.memory(), sqlite.migration);
   final environment = Platform.environment;
   final socket = environment['ORM_TEST_POSTGRES_SOCKET'];
+  final schema = 'orm_package_${pid}_${DateTime.now().microsecondsSinceEpoch}_"Case';
   final driver = PostgresDriver(
     Endpoint(
       host: socket ?? environment['ORM_TEST_POSTGRES_HOST']!,
@@ -189,10 +190,11 @@ Future<void> main() async {
       password: environment['ORM_TEST_POSTGRES_PASSWORD'],
       isUnixSocket: socket != null,
     ),
+    schema: schema,
     settings: const PoolSettings(sslMode: SslMode.disable, maxConnectionCount: 2),
   );
-  final schema = 'orm_package_${pid}_${DateTime.now().microsecondsSinceEpoch}';
   try {
+    check(driver.schema == schema, 'Configured PostgreSQL schema');
     await driver.withConnection((connection) => connection.run('CREATE SCHEMA ${quoteIdentifier(schema)}', []));
   } catch (_) {
     await driver.close();
@@ -205,6 +207,7 @@ Future<void> verify(Driver driver, Migration initial) async {
   final events = <DatabaseEvent>[];
   final db = AppDatabase(driver, onEvent: events.add);
   try {
+    check(db.database.session.schema == driver.schema, 'Fixed session schema');
     final history = MigrationHistory(engine: driver.engine, migrations: [initial]);
     final runner = MigrationRunner(db.database, history);
     check((await runner.apply()).single == 1, 'Initial migration');
@@ -215,7 +218,9 @@ Future<void> verify(Driver driver, Migration initial) async {
       final product = await tx.products.create(sku: 'book', name: 'Dart book', priceCents: 4900, stock: 10);
       return (user: user, post: post, product: product);
     });
+    events.clear();
     await db.users.update(seeded.user.id, nickname: 'Seven');
+    check(events.length == 1 && events.single.kind == 'statement' && events.single.sql.contains('${quoteIdentifier(driver.schema)}."users"'), 'One typed statement in the fixed schema');
     await db.users.update(seeded.user.id, nickname: null);
     check((await db.users.get(seeded.user.id))!.nickname == null, 'Nullable patch');
     final List<UserCard> cards = await searchUsers(db, 'con');
@@ -253,10 +258,7 @@ final class SchemaDriver implements Driver {
   final String schema;
   @override Engine get engine => driver.engine;
   @override Capabilities get capabilities => driver.capabilities;
-  @override Future<T> withConnection<T>(Future<T> Function(Connection) action) => driver.withConnection((connection) async {
-    await connection.run('SET search_path TO ${quoteIdentifier(schema)}', []);
-    return action(connection);
-  });
+  @override Future<T> withConnection<T>(Future<T> Function(Connection) action) => driver.withConnection(action);
   @override Future<void> close() async {
     try {
       await driver.withConnection((connection) => connection.run('DROP SCHEMA ${quoteIdentifier(schema)} CASCADE', []));
