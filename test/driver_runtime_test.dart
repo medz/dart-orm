@@ -4,6 +4,35 @@ import 'package:orm/database.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('schema validation rejects custom drivers before acquisition', () {
+    for (final schema in ['', 'bad\u0000name', 'pg_temp', '界' * 22]) {
+      final driver = _Driver(schema: schema);
+      expect(() => openDatabase(driver), throwsArgumentError);
+      expect(driver.acquisitions, 0);
+    }
+    final sqlite = _Driver(engine: Engine.sqlite, schema: 'temp');
+    expect(() => openDatabase(sqlite), throwsArgumentError);
+    expect(sqlite.acquisitions, 0);
+  });
+
+  test(
+    'database captures schema before custom driver settings change',
+    () async {
+      final driver = _Driver(schema: 'owned');
+      final database = openDatabase(driver);
+      addTearDown(database.close);
+      driver.schema = 'redirected';
+      expect(database.session.schema, 'owned');
+      await database.transaction((session) async {
+        expect(session.schema, 'owned');
+      });
+      expect(driver.statements, [
+        'BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE',
+        'COMMIT',
+      ]);
+    },
+  );
+
   test(
     'transaction drains issued work before commit and expires immediately',
     () async {
@@ -92,6 +121,7 @@ void main() {
 }
 
 final class _Driver implements Driver, Connection {
+  _Driver({this.schema = 'public', this.engine = Engine.postgresql});
   final statements = <String>[];
   final failure = StateError('commit failure');
   final statementEntered = Completer<void>();
@@ -99,7 +129,9 @@ final class _Driver implements Driver, Connection {
   bool failCommit = false;
   int acquisitions = 0;
   @override
-  Engine get engine => Engine.postgresql;
+  final Engine engine;
+  @override
+  String schema;
   @override
   Capabilities get capabilities =>
       const Capabilities(returning: true, maxParameters: 10);

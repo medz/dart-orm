@@ -212,6 +212,7 @@ Future<SchemaModel> readSchema(String file, {required Engine engine}) async {
       'database',
       'session',
       'engine',
+      'schema',
       'capabilities',
       'inTransaction',
       'run',

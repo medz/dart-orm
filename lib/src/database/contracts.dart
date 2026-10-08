@@ -31,6 +31,11 @@ abstract interface class Connection {
 /// Engines own connection acquisition and release; runtime owns transactions.
 abstract interface class Driver {
   Engine get engine;
+
+  /// Fixed schema for managed tables: `main` on SQLite, an application schema
+  /// on PostgreSQL. Typed queries qualify names instead of using search_path.
+  String get schema;
+
   Capabilities get capabilities;
   Future<T> withConnection<T>(Future<T> Function(Connection connection) action);
   Future<void> close();
@@ -57,6 +62,10 @@ typedef DatabaseObserver = void Function(DatabaseEvent event);
 /// An explicit execution scope. Transaction scopes expire after their callback.
 abstract interface class Session {
   Engine get engine;
+
+  /// The fixed schema captured when the database took ownership of its driver.
+  String get schema;
+
   Capabilities get capabilities;
   bool get inTransaction;
 

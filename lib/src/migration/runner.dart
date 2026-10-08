@@ -3,6 +3,7 @@ import 'package:orm/schema.dart';
 
 import 'catalog.dart';
 import 'definition.dart';
+import 'planner.dart' show quoteIdentifier;
 
 /// Applies a static migration history through the database's owned transaction.
 ///
@@ -14,6 +15,7 @@ import 'definition.dart';
 /// incompatible tables are rejected before application migration SQL runs.
 /// PostgreSQL callers on the same database/schema serialize through an advisory
 /// transaction lock at read-committed isolation, including first-time creation.
+/// Saved PostgreSQL SQL runs with the configured schema first in search_path.
 /// SQLite uses the driver's queue and an immediate serializable transaction.
 final class MigrationRunner {
   const MigrationRunner(this.database, this.history);
@@ -32,14 +34,21 @@ final class MigrationRunner {
           // Serialize the first CREATE as well as later history reads. A table
           // lock alone cannot protect two callers before that table exists.
           await session.run(
-            "SELECT pg_advisory_xact_lock(hashtextextended(current_database() || ':' || current_schema() || ':orm_migrations', 0))",
+            "SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(pg_catalog.current_database() || ':' || \$1 || ':orm_migrations', 0))",
+            parameters: [session.schema],
+          );
+          // Explicit pg_temp last prevents its implicit precedence for names.
+          await session.run(
+            'SET LOCAL search_path TO ${quoteIdentifier(session.schema)}, pg_temp',
           );
         }
+        final historyTable =
+            '${quoteIdentifier(session.schema)}.${quoteIdentifier('_orm_migrations')}';
         final versionType = session.engine == Engine.sqlite
             ? 'INTEGER'
             : 'BIGINT';
         await session.run(
-          'CREATE TABLE IF NOT EXISTS "_orm_migrations" ("version" $versionType PRIMARY KEY NOT NULL, "name" TEXT NOT NULL, "engine" TEXT NOT NULL, "fingerprint" TEXT NOT NULL)',
+          'CREATE TABLE IF NOT EXISTS $historyTable ("version" $versionType PRIMARY KEY NOT NULL, "name" TEXT NOT NULL, "engine" TEXT NOT NULL, "fingerprint" TEXT NOT NULL)',
         );
         await verifyCatalog(
           session,
@@ -47,7 +56,7 @@ final class MigrationRunner {
           const {},
         );
         final saved = await session.run(
-          'SELECT "version", "name", "engine", "fingerprint" FROM "_orm_migrations" ORDER BY "version"',
+          'SELECT "version", "name", "engine", "fingerprint" FROM $historyTable ORDER BY "version"',
         );
         if (saved.rows.length > history.migrations.length) {
           throw StateError(
@@ -104,7 +113,7 @@ final class MigrationRunner {
               ? '?, ?, ?, ?'
               : '\$1, \$2, \$3, \$4';
           await session.run(
-            'INSERT INTO "_orm_migrations" ("version", "name", "engine", "fingerprint") VALUES ($placeholders)',
+            'INSERT INTO $historyTable ("version", "name", "engine", "fingerprint") VALUES ($placeholders)',
             parameters: [
               migration.version,
               migration.name,

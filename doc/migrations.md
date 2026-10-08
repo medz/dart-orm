@@ -29,6 +29,12 @@ transaction advisory lock. SQLite runners sharing one owned driver use its FIFO
 queue; separate native handles can fail with SQLITE_BUSY and need an application
 retry policy.
 
+The driver's fixed schema identifies both managed tables and the history table:
+SQLite uses `main`; PostgreSQL uses its configured schema, which must already
+exist. PostgreSQL migration transactions set that schema first and `pg_temp`
+last in a local `search_path`; connection settings are restored at transaction
+completion. Typed queries qualify the schema directly on every pooled connection.
+
 ## Preparing a new migration
 
 Draft the initial migration from a generated snapshot:
@@ -54,6 +60,8 @@ Draft input needs `const frozenSchema`, or one unambiguous top-level constant
 `SchemaSnapshot` in the file. Literal string, number and boolean defaults are
 supported. An unchanged schema has nothing to draft. Unsupported transitions
 still require an explicitly authored migration.
+String defaults containing NUL are rejected before generating SQL or replacing
+output files, since neither engine accepts NUL in a SQL statement.
 
 To author a migration directly:
 

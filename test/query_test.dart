@@ -56,8 +56,44 @@ void main() {
               ),
               isTrue,
             );
+            final table = '${quoteIdentifier(db.session.schema)}."users"';
+            expect(
+              fixture.statements.every((event) => event.sql.contains(table)),
+              isTrue,
+            );
           },
         );
+
+        if (engine == Engine.sqlite) {
+          test('bound strings retain embedded NUL', () async {
+            final db = fixture.db;
+            const value = 'before\u0000after';
+            final row = await db.users.create(
+              username: value,
+              age: 28,
+              nickname: value,
+            );
+            expect(row.username, value);
+            expect((await db.users.get(row.id))?.nickname, value);
+            expect(
+              (await db.users.where(username: eq(value)).all()).single.id,
+              row.id,
+            );
+            expect(
+              (await db.users.update(
+                row.id,
+                nickname: 'next\u0000value',
+              ))?.nickname,
+              'next\u0000value',
+            );
+            expect(
+              fixture.statements.every(
+                (event) => !event.sql.contains('\u0000'),
+              ),
+              isTrue,
+            );
+          });
+        }
 
         test(
           'typed projections, immutable scopes, literal LIKE and nullable IN',
@@ -489,6 +525,8 @@ final class _LimitedSession implements Session {
   final Session delegate;
   @override
   Engine get engine => delegate.engine;
+  @override
+  String get schema => delegate.schema;
   @override
   bool get inTransaction => delegate.inTransaction;
   @override

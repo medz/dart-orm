@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:orm/database.dart';
@@ -20,8 +21,19 @@ export 'package:postgres/postgres.dart' show Endpoint, PoolSettings, SslMode;
 /// `SET LOCAL` inside [Database.transaction] for scoped configuration.
 final class PostgresDriver implements Driver {
   /// Creates an owned pool for [endpoint]; opening happens on first use.
-  PostgresDriver(pg.Endpoint endpoint, {pg.PoolSettings? settings})
-    : _pool = pg.Pool<void>.withEndpoints([endpoint], settings: settings);
+  PostgresDriver(
+    pg.Endpoint endpoint, {
+    String schema = 'public',
+    pg.PoolSettings? settings,
+  }) : schema = _validatedSchema(schema),
+       _pool = pg.Pool<void>.withEndpoints([endpoint], settings: settings);
+
+  /// Fixed application schema used by typed queries and migration histories.
+  ///
+  /// The schema must already exist. Raw SQL retains PostgreSQL's native
+  /// search_path behavior; changing it does not redirect typed table queries.
+  @override
+  final String schema;
 
   final pg.Pool<void> _pool;
   final Object _callbackZone = Object();
@@ -101,6 +113,16 @@ final class PostgresDriver implements Driver {
     }
     await _pool.close();
   }
+}
+
+String _validatedSchema(String schema) {
+  if (schema.isEmpty ||
+      schema.contains('\u0000') ||
+      schema.startsWith('pg_') ||
+      utf8.encode(schema).length > 63) {
+    throw ArgumentError.value(schema, 'schema', 'Invalid managed schema.');
+  }
+  return schema;
 }
 
 final class _PostgresConnection implements Connection {

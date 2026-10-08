@@ -112,6 +112,7 @@ String migrationFingerprint({
 /// SQLite physical identifiers use ASCII case folding; PostgreSQL quoted names
 /// preserve case and must fit within 63 UTF-8 bytes. SQLite's `sqlite_` table
 /// prefix and the migration history table are reserved.
+/// String defaults must not contain NUL.
 SchemaSnapshot freezeSnapshot(SchemaSnapshot snapshot) {
   final tables = <TableDefinition>[];
   final tableNames = <String>{};
@@ -254,6 +255,11 @@ void validIdentifier(String value) {
 void validateDefault(ColumnDefinition column) {
   final value = column.defaultValue;
   if (value == null) return;
+  if (value is String && value.contains('\u0000')) {
+    throw ArgumentError(
+      'String default for ${column.name} must not contain NUL.',
+    );
+  }
   final valid = switch (column.type) {
     ScalarType.integer => value is int,
     ScalarType.text => value is String,

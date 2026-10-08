@@ -249,6 +249,7 @@ void check(bool condition, String message) {
 final class SchemaDriver implements Driver {
   SchemaDriver(this.driver, this.schema);
   final Driver driver;
+  @override
   final String schema;
   @override Engine get engine => driver.engine;
   @override Capabilities get capabilities => driver.capabilities;

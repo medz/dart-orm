@@ -240,7 +240,8 @@ final class TableQuery<R> {
     return sql;
   }
 
-  String get _table => quoteIdentifier(definition.name);
+  String get _table =>
+      '${quoteIdentifier(session.schema)}.${quoteIdentifier(definition.name)}';
   String get _columns =>
       definition.columns.map((c) => quoteIdentifier(c.name)).join(', ');
 

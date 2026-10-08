@@ -4,6 +4,8 @@ import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:orm/database.dart';
 import 'package:orm/dev.dart';
+import 'package:orm/migration.dart';
+import 'package:orm/schema.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -60,6 +62,62 @@ final class const Thing({
   final String? label,
 });
 ''';
+
+  test(
+    'NUL defaults fail freeze, draft and generation without changing outputs',
+    () async {
+      const invalidTable = TableDefinition('things', [
+        ColumnDefinition(
+          name: 'id',
+          field: 'id',
+          type: ScalarType.integer,
+          primaryKey: true,
+        ),
+        ColumnDefinition(
+          name: 'name',
+          field: 'name',
+          type: ScalarType.text,
+          defaultValue: 'before\u0000after',
+        ),
+      ]);
+      for (final engine in Engine.values) {
+        final snapshot = SchemaSnapshot(
+          engine: engine,
+          tables: const [invalidTable],
+        );
+        expect(() => freezeSnapshot(snapshot), throwsArgumentError);
+        final draft = '${directory.path}/nul_${engine.name}.dart';
+        await expectLater(
+          draftMigration(
+            after: snapshot,
+            version: 1,
+            name: 'nul_default',
+            outputPath: draft,
+          ),
+          throwsArgumentError,
+        );
+        expect(await File(draft).exists(), isFalse);
+        final original = await generate(row, engine: engine);
+        final output = '${directory.path}/models.db.dart';
+        await writeGeneratedSources(sources: original, outputPath: output);
+        await expectLater(
+          generate(
+            row.replaceFirst(
+              '@Unique()',
+              r"@Column(defaultValue: '\u0000') @Unique()",
+            ),
+            engine: engine,
+          ),
+          throwsArgumentError,
+        );
+        expect(await File(output).readAsString(), original.database);
+        expect(
+          await File(snapshotPath(output)).readAsString(),
+          original.snapshot,
+        );
+      }
+    },
+  );
 
   test(
     'stable primary constructors preserve field annotations and exact schema',
@@ -147,6 +205,10 @@ final class const Thing({@PrimaryKey() required final int id, required final Str
   test(
     'core names and every actual generated symbol are checked before output',
     () async {
+      await expectLater(
+        generate(row.replaceFirst("@Table('things')", "@Table('schema')")),
+        throwsFormatException,
+      );
       for (final name in [
         'Future',
         'List',

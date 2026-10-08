@@ -106,6 +106,8 @@ final class AppSession implements Session {
   @override
   Engine get engine => _session.engine;
   @override
+  String get schema => _session.schema;
+  @override
   Capabilities get capabilities => _session.capabilities;
   @override
   bool get inTransaction => _session.inTransaction;

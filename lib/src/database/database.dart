@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'contracts.dart';
 
@@ -10,6 +11,10 @@ import 'contracts.dart';
 /// rejected. SQLite supports only serializable transactions, including read-only
 /// transactions enforced by a scoped `query_only` setting.
 /// PostgreSQL supports every [Isolation] and read-only transactions.
+/// The driver's schema is captured once; typed queries use that fixed schema
+/// regardless of temporary objects or later PostgreSQL search_path changes.
+/// Invalid driver schemas throw before acquisition; the caller retains ownership
+/// of a driver when opening fails.
 ///
 /// Every completed SQL operation emits a `statement`, `begin`, `commit` or
 /// `rollback` event. Failed operations append `Error` to that kind. Observer
@@ -19,12 +24,20 @@ Database openDatabase(Driver driver, {DatabaseObserver? observer}) =>
     _Database(driver, observer);
 
 final class _Database implements Database {
-  _Database(this.driver, this.observer) {
+  _Database(this.driver, this.observer) : schema = driver.schema {
+    if (schema.isEmpty ||
+        schema.contains('\u0000') ||
+        (driver.engine == Engine.sqlite && schema != 'main') ||
+        (driver.engine == Engine.postgresql &&
+            (utf8.encode(schema).length > 63 || schema.startsWith('pg_')))) {
+      throw ArgumentError.value(schema, 'schema', 'Invalid managed schema.');
+    }
     session = _RootSession(this);
   }
 
   final Driver driver;
   final DatabaseObserver? observer;
+  final String schema;
   final Object _transactionZone = Object();
   @override
   late final Session session;
@@ -196,6 +209,8 @@ final class _RootSession implements Session {
   @override
   Engine get engine => database.driver.engine;
   @override
+  String get schema => database.schema;
+  @override
   Capabilities get capabilities => database.driver.capabilities;
   @override
   bool get inTransaction => false;
@@ -229,6 +244,8 @@ final class _TransactionSession implements Session {
   (Object, StackTrace)? _failure;
   @override
   Engine get engine => database.driver.engine;
+  @override
+  String get schema => database.schema;
   @override
   Capabilities get capabilities => database.driver.capabilities;
   @override

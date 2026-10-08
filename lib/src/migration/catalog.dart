@@ -25,8 +25,8 @@ Future<void> verifyCatalog(
             parameters: [table],
           )
         : await session.run(
-            'SELECT c.relname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = current_schema() AND c.relname = \$1 AND c.relkind IN (\'r\', \'p\')',
-            parameters: [table],
+            'SELECT c.relname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = \$1 AND c.relname = \$2 AND c.relkind IN (\'r\', \'p\')',
+            parameters: [session.schema, table],
           );
     if (result.rows.isNotEmpty) _mismatch(table, 'removed table still exists');
   }
@@ -161,7 +161,7 @@ FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-WHERE n.nspname = current_schema() AND c.relname = \$1
+WHERE n.nspname = \$1 AND c.relname = \$2
   AND c.relkind IN ('r', 'p') AND c.relpersistence = 'p'
   AND a.attnum > 0 AND NOT a.attisdropped
   AND NOT EXISTS (
@@ -171,7 +171,7 @@ WHERE n.nspname = current_schema() AND c.relname = \$1
   )
 ORDER BY a.attnum
 ''',
-      parameters: [table.name],
+      parameters: [session.schema, table.name],
     ),
   );
   if (columns.length != table.columns.length) {
@@ -181,11 +181,11 @@ ORDER BY a.attnum
   final constraints = _records(
     await session.run(
       '''
-SELECT k.contype::text AS kind, a.attname AS name, cardinality(k.conkey) AS key_count,
+SELECT k.contype::text AS kind, a.attname AS name, pg_catalog.cardinality(k.conkey) AS key_count,
        target.relname AS target_table, referenced.attname AS target_column,
        target_namespace.nspname AS target_schema, k.confdeltype::text AS on_delete,
        k.convalidated AS validated,
-       COALESCE((to_jsonb(k)->>'conenforced')::boolean, true) AS enforced
+       COALESCE((pg_catalog.to_jsonb(k)->>'conenforced')::boolean, true) AS enforced
 FROM pg_catalog.pg_constraint k
 JOIN pg_catalog.pg_class c ON c.oid = k.conrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -193,9 +193,9 @@ JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.conkey[1]
 LEFT JOIN pg_catalog.pg_class target ON target.oid = k.confrelid
 LEFT JOIN pg_catalog.pg_namespace target_namespace ON target_namespace.oid = target.relnamespace
 LEFT JOIN pg_catalog.pg_attribute referenced ON referenced.attrelid = target.oid AND referenced.attnum = k.confkey[1]
-WHERE n.nspname = current_schema() AND c.relname = \$1 AND k.contype IN ('p', 'u', 'f')
+WHERE n.nspname = \$1 AND c.relname = \$2 AND k.contype IN ('p', 'u', 'f')
 ''',
-      parameters: [table.name],
+      parameters: [session.schema, table.name],
     ),
   );
   if (constraints.any((constraint) => constraint['key_count'] != 1)) {
@@ -214,9 +214,9 @@ FROM pg_catalog.pg_index i
 JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum = i.indkey[0]
-WHERE n.nspname = current_schema() AND c.relname = \$1 AND i.indisunique
+WHERE n.nspname = \$1 AND c.relname = \$2 AND i.indisunique
 ''',
-      parameters: [table.name],
+      parameters: [session.schema, table.name],
     ),
   );
   if (uniques.any(
@@ -235,10 +235,6 @@ WHERE n.nspname = current_schema() AND c.relname = \$1 AND i.indisunique
   )) {
     _mismatch(table.name, 'unique index is absent from the frozen schema');
   }
-  final currentSchema = (await session.run('SELECT current_schema()'))
-      .rows
-      .single
-      .single;
   for (final column in table.columns) {
     final actual = columns.where((c) => c['name'] == column.name).firstOrNull;
     if (actual == null) _mismatch(table.name, 'missing column ${column.name}');
@@ -276,7 +272,7 @@ WHERE n.nspname = current_schema() AND c.relname = \$1 AND i.indisunique
         actualReferences.single['enforced'] != true ||
         actualReferences.single['target_table'] != reference.table ||
         actualReferences.single['target_column'] != reference.column ||
-        actualReferences.single['target_schema'] != currentSchema ||
+        actualReferences.single['target_schema'] != session.schema ||
         actualReferences.single['on_delete'] !=
             {
               'restrict': 'r',

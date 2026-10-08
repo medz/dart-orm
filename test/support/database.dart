@@ -70,6 +70,7 @@ Future<TestDatabase> openTestDatabase(Engine engine) async {
 final class _SchemaDriver implements Driver {
   _SchemaDriver(this.driver, this.schema);
   final Driver driver;
+  @override
   final String schema;
   @override
   Engine get engine => driver.engine;

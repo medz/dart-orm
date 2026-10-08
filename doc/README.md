@@ -62,6 +62,7 @@ final db = AppDatabase(SqliteDriver.open('app.sqlite'));
 import 'package:orm/postgres.dart';
 final db = AppDatabase(PostgresDriver(
   Endpoint(host: 'localhost', database: 'app', username: 'app', password: secret),
+  schema: 'public', // Must already exist.
   settings: PoolSettings(maxConnectionCount: 4, sslMode: SslMode.verifyFull),
 ));
 ```
@@ -73,6 +74,9 @@ for `MigrationRunner`; do not wrap the driver again or close it separately.
 
 SQLite uses one native connection with FIFO acquisition. PostgreSQL uses its
 native connection pool; configure pool limits, TLS and timeouts explicitly.
+Typed queries always qualify tables with the driver's fixed schema: `main` on
+SQLite, or the configured PostgreSQL schema (`public` by default). Temporary
+tables and raw SQL changes to `search_path` do not redirect typed queries.
 SQLite runs synchronously on its isolate, so move heavy workloads to a worker
 isolate when a UI needs a responsive event loop.
 
@@ -224,7 +228,7 @@ needs SQLite 3.35 or newer and is capability-checked. Windows, Web and Flutter
 packaging remain unverified. MySQL and MariaDB are outside this rewrite.
 PostgreSQL verification uses PostgreSQL 18; older server versions remain
 unverified.
-Composite keys, typed joins, cross-field OR, relation DSLs, schema namespaces,
+Composite keys, typed joins, cross-field OR, relation DSLs, multiple schemas per client,
 client defaults, conflict updates and watchers are
 not currently implemented. Raw SQL and ordinary Dart composition cover the
 complete demonstrated business workflow without adding alternate query APIs.

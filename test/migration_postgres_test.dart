@@ -59,7 +59,7 @@ Migration _migration(
 MigrationHistory _history(List<Migration> migrations) =>
     MigrationHistory(engine: Engine.postgresql, migrations: migrations);
 
-PostgresDriver _driver({int maxConnections = 2}) {
+PostgresDriver _driver({int maxConnections = 2, String schema = 'public'}) {
   final environment = Platform.environment;
   final socket = environment['ORM_TEST_POSTGRES_SOCKET'];
   return PostgresDriver(
@@ -71,6 +71,7 @@ PostgresDriver _driver({int maxConnections = 2}) {
       password: environment['ORM_TEST_POSTGRES_PASSWORD'],
       isUnixSocket: socket != null,
     ),
+    schema: schema,
     settings: PoolSettings(
       sslMode: SslMode.disable,
       maxConnectionCount: maxConnections,
@@ -89,6 +90,7 @@ List<String> _temporaryUsers(String schema, String kind) => [
 final class _SchemaDriver implements Driver {
   _SchemaDriver(this.driver, this.schema);
   final Driver driver;
+  @override
   final String schema;
   @override
   Engine get engine => driver.engine;
@@ -113,14 +115,12 @@ void main() {
       late Database database;
       late AppDatabase app;
       late String schema;
-      Future<void> useSingleConnection({bool temporarySchema = false}) async {
+      Future<void> useSingleConnection({bool resetSearchPath = true}) async {
         // Keep the owned persistent schema, but fix temp state to one backend.
         await database.close();
+        final driver = _driver(maxConnections: 1, schema: schema);
         app = AppDatabase(
-          _SchemaDriver(
-            _driver(maxConnections: 1),
-            temporarySchema ? 'pg_temp' : schema,
-          ),
+          resetSearchPath ? _SchemaDriver(driver, schema) : driver,
         );
         database = app.database;
       }
@@ -211,8 +211,19 @@ void main() {
             for (final sql in _temporaryUsers(schema, kind)) {
               await database.session.run(sql);
             }
-            expect((await app.users.get(persistent.id))!.username, 'temporary');
-            expect((await app.users.update(persistent.id, age: 100))!.age, 100);
+            expect(
+              (await database.session.run(
+                'SELECT username FROM users WHERE id = \$1',
+                parameters: [persistent.id],
+              )).rows,
+              [
+                ['temporary'],
+              ],
+            );
+            await database.session.run(
+              'UPDATE users SET age = 100 WHERE id = \$1',
+              parameters: [persistent.id],
+            );
             await expectLater(runner.apply(), throwsStateError);
             expect(
               (await database.session.run(
@@ -252,13 +263,20 @@ void main() {
       }
 
       test(
-        'temporary-only search path rejects internal migration history',
+        'temporary-only search path cannot relocate migration history',
         () async {
-          await useSingleConnection(temporarySchema: true);
+          await useSingleConnection(resetSearchPath: false);
           await database.session.run('CREATE TEMP TABLE anchor (id BIGINT)');
-          await expectLater(
-            MigrationRunner(database, shop.history).apply(),
-            throwsStateError,
+          await database.session.run('SET search_path TO pg_temp');
+          final runner = MigrationRunner(database, shop.history);
+          expect(await runner.apply(), [1]);
+          expect(
+            (await database.session.run(
+              'SELECT version FROM "$schema"."_orm_migrations"',
+            )).rows,
+            [
+              [1],
+            ],
           );
           expect(
             (await database.session.run(
@@ -266,16 +284,6 @@ void main() {
             )).rows,
             isEmpty,
           );
-          expect(
-            (await database.session.run(
-              'SELECT tablename FROM pg_tables WHERE schemaname = \$1',
-              parameters: [schema],
-            )).rows,
-            isEmpty,
-          );
-          await useSingleConnection();
-          final runner = MigrationRunner(database, shop.history);
-          expect(await runner.apply(), [1]);
           expect(await runner.apply(), isEmpty);
         },
       );

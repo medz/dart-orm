@@ -63,6 +63,10 @@ final class SqliteDriver implements Driver {
 
   @override
   Engine get engine => Engine.sqlite;
+
+  /// Managed tables always belong to the persistent main database.
+  @override
+  String get schema => 'main';
   @override
   late final Capabilities capabilities;
 
