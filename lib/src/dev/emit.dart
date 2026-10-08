@@ -49,6 +49,7 @@ String emitDatabase(
 // Regenerate with dart run bin/orm.dart generate.
 ${model.tables.any((table) => table.fields.any((field) => field.column.type == ScalarType.bytes)) ? "import 'dart:typed_data';" : ''}
 import 'package:orm/database.dart';
+import 'package:orm/migration.dart' show freezeSnapshot;
 import 'package:orm/query.dart';
 import 'package:orm/schema.dart';
 import ${_literal(modelImport)} as $modelPrefix show ${importedTypes.join(', ')};
@@ -57,10 +58,21 @@ ${model.tables.any((table) => table.insertableFields.isNotEmpty) ? '''const _abs
 bool _provided(Object? value) => !identical(value, _absent);''' : ''}
 ${model.tables.any((table) => table.numericFields.isNotEmpty) ? 'num _number(Object? value) => value as num;' : ''}
 
+Database _openDatabase(Driver driver, {DatabaseObserver? onEvent}) {
+  freezeSnapshot(SchemaSnapshot(
+    engine: driver.engine,
+    tables: const [${model.tables.map((table) => table.definitionName).join(',')}],
+  ));
+  return openDatabase(driver, observer: onEvent);
+}
+
 /// Owns the supplied driver. Close it after completing all database work.
+///
+/// Validates every model against the driver's engine before taking ownership.
+/// If construction fails, the caller retains the driver; no SQL is executed.
 final class $databaseName {
   $databaseName(Driver driver, {DatabaseObserver? onEvent})
-      : _database = openDatabase(driver, observer: onEvent);
+      : _database = _openDatabase(driver, onEvent: onEvent);
   final Database _database;
   /// The owned runtime for migrations and raw database operations.
   ///

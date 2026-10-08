@@ -71,6 +71,10 @@ The generated database owns its driver. Close it in `finally`; closing drains
 admitted work and rejects new work. `db.database` exposes that same owned runtime
 for `MigrationRunner`; do not wrap the driver again or close it separately.
 `db.session` provides raw execution and typed tables in the root scope.
+Before taking ownership, the client validates the complete model against the
+driver's actual engine. Compatible models work on both engines; names that
+collide or exceed engine limits fail before acquisition, leaving the driver
+owned by the caller.
 
 SQLite uses one native connection with FIFO acquisition. PostgreSQL uses its
 native connection pool; configure pool limits, TLS and timeouts explicitly.

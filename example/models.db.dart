@@ -3,6 +3,7 @@
 import 'dart:typed_data';
 
 import 'package:orm/database.dart';
+import 'package:orm/migration.dart' show freezeSnapshot;
 import 'package:orm/query.dart';
 import 'package:orm/schema.dart';
 
@@ -23,10 +24,29 @@ const _absent = Object();
 bool _provided(Object? value) => !identical(value, _absent);
 num _number(Object? value) => value as num;
 
+Database _openDatabase(Driver driver, {DatabaseObserver? onEvent}) {
+  freezeSnapshot(
+    SchemaSnapshot(
+      engine: driver.engine,
+      tables: const [
+        _usersDefinition,
+        _postsDefinition,
+        _productsDefinition,
+        _ordersDefinition,
+        _orderLinesDefinition,
+      ],
+    ),
+  );
+  return openDatabase(driver, observer: onEvent);
+}
+
 /// Owns the supplied driver. Close it after completing all database work.
+///
+/// Validates every model against the driver's engine before taking ownership.
+/// If construction fails, the caller retains the driver; no SQL is executed.
 final class AppDatabase {
   AppDatabase(Driver driver, {DatabaseObserver? onEvent})
-    : _database = openDatabase(driver, observer: onEvent);
+    : _database = _openDatabase(driver, onEvent: onEvent);
   final Database _database;
 
   /// The owned runtime for migrations and raw database operations.

@@ -87,6 +87,7 @@ void _validateGeneratedNames(SchemaModel model, String databaseName) {
     'ArgumentError',
     'identical',
     'openDatabase',
+    'freezeSnapshot',
     'decodeValue',
     'Database',
     'Session',
@@ -100,6 +101,7 @@ void _validateGeneratedNames(SchemaModel model, String databaseName) {
     'Filter',
     'Direction',
     'ScalarType',
+    'SchemaSnapshot',
     'TableDefinition',
     'ColumnDefinition',
     'ForeignKey',
@@ -107,6 +109,7 @@ void _validateGeneratedNames(SchemaModel model, String databaseName) {
     '_absent',
     '_provided',
     '_number',
+    '_openDatabase',
   };
   final sessionName =
       '${databaseName.endsWith('Database') ? databaseName.substring(0, databaseName.length - 8) : databaseName}Session';

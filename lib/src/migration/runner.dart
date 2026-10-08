@@ -55,26 +55,10 @@ final class MigrationRunner {
           SchemaSnapshot(engine: session.engine, tables: _historyTables),
           const {},
         );
-        final saved = await session.run(
-          'SELECT "version", "name", "engine", "fingerprint" FROM $historyTable ORDER BY "version"',
-        );
-        if (saved.rows.length > history.migrations.length) {
-          throw StateError(
-            'Database contains migrations absent from the registered history.',
-          );
-        }
-        for (var i = 0; i < saved.rows.length; i++) {
-          final row = saved.rows[i];
-          final expected = history.migrations[i];
-          if (row[0] != expected.version ||
-              row[1] != expected.name ||
-              row[2] != history.engine.name ||
-              row[3] != expected.fingerprint) {
-            throw StateError(
-              'Applied migration history differs from the reviewed Dart definitions.',
-            );
-          }
-        }
+        final readHistory =
+            'SELECT "version", "name", "engine", "fingerprint" FROM $historyTable ORDER BY "version"';
+        final saved = await session.run(readHistory);
+        _verifySaved(saved);
         final versions = <int>[];
         final knownTables = <String>{};
         SchemaSnapshot? previous;
@@ -112,7 +96,7 @@ final class MigrationRunner {
           final placeholders = session.engine == Engine.sqlite
               ? '?, ?, ?, ?'
               : '\$1, \$2, \$3, \$4';
-          await session.run(
+          final inserted = await session.run(
             'INSERT INTO $historyTable ("version", "name", "engine", "fingerprint") VALUES ($placeholders)',
             parameters: [
               migration.version,
@@ -121,8 +105,18 @@ final class MigrationRunner {
               migration.fingerprint,
             ],
           );
+          if (inserted.affectedRows != 1) {
+            throw StateError('Migration history marker was not inserted.');
+          }
           versions.add(migration.version);
           knownTables.addAll(names);
+        }
+        if (versions.isNotEmpty) {
+          if (session.engine == Engine.postgresql) {
+            // Deferred constraint triggers must run before marker verification.
+            await session.run('SET CONSTRAINTS ALL IMMEDIATE');
+          }
+          _verifySaved(await session.run(readHistory), complete: true);
         }
         return List<int>.unmodifiable(versions);
       },
@@ -130,6 +124,30 @@ final class MigrationRunner {
           ? Isolation.readCommitted
           : Isolation.serializable,
     );
+  }
+
+  void _verifySaved(QueryResult saved, {bool complete = false}) {
+    if (saved.rows.length > history.migrations.length) {
+      throw StateError(
+        'Database contains migrations absent from the registered history.',
+      );
+    }
+    if (complete && saved.rows.length != history.migrations.length) {
+      throw StateError('Migration history markers were not persisted.');
+    }
+    for (var i = 0; i < saved.rows.length; i++) {
+      final row = saved.rows[i];
+      final expected = history.migrations[i];
+      if (row.length != 4 ||
+          row[0] != expected.version ||
+          row[1] != expected.name ||
+          row[2] != history.engine.name ||
+          row[3] != expected.fingerprint) {
+        throw StateError(
+          'Applied migration history differs from the reviewed Dart definitions.',
+        );
+      }
+    }
   }
 }
 

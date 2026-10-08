@@ -9,6 +9,48 @@ import 'package:orm/schema.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+bool get _hasPostgres =>
+    Platform.environment.containsKey('ORM_TEST_POSTGRES_SOCKET') ||
+    Platform.environment.containsKey('ORM_TEST_POSTGRES_HOST');
+
+const _runtimeDrivers = r'''
+bool get hasPostgres => Platform.environment.containsKey('ORM_TEST_POSTGRES_SOCKET') || Platform.environment.containsKey('ORM_TEST_POSTGRES_HOST');
+
+Driver nativeDriver(Engine engine) {
+  if (engine == Engine.sqlite) { return SqliteDriver.memory(); }
+  final env = Platform.environment;
+  final socket = env['ORM_TEST_POSTGRES_SOCKET'];
+  return PostgresDriver(Endpoint(
+    host: socket ?? env['ORM_TEST_POSTGRES_HOST']!,
+    port: int.parse(env['ORM_TEST_POSTGRES_PORT'] ?? '5432'),
+    database: env['ORM_TEST_POSTGRES_DATABASE'] ?? 'postgres',
+    username: env['ORM_TEST_POSTGRES_USER'] ?? 'orm_test',
+    password: env['ORM_TEST_POSTGRES_PASSWORD'],
+    isUnixSocket: socket != null,
+  ), settings: const PoolSettings(sslMode: SslMode.disable));
+}
+
+final class TrackedDriver implements Driver {
+  TrackedDriver(this.delegate, {String? schema}) : schema = schema ?? delegate.schema;
+  final Driver delegate;
+  int acquisitions = 0;
+  int closes = 0;
+  @override
+  final String schema;
+  @override
+  Engine get engine => delegate.engine;
+  @override
+  Capabilities get capabilities => delegate.capabilities;
+  @override
+  Future<T> withConnection<T>(Future<T> Function(Connection) action) {
+    acquisitions++;
+    return delegate.withConnection(action);
+  }
+  @override
+  Future<void> close() { closes++; return delegate.close(); }
+}
+''';
+
 void main() {
   late Directory directory;
   setUp(
@@ -52,6 +94,28 @@ void main() {
     } finally {
       await collection.dispose();
     }
+  }
+
+  Future<void> runClient(String body) async {
+    final run = File('${directory.path}/run.dart');
+    await run.writeAsString('''
+import 'dart:io';
+import 'models.db.dart';
+import 'models.snapshot.dart';
+import 'package:orm/database.dart';
+import 'package:orm/migration.dart';
+import 'package:orm/postgres.dart';
+import 'package:orm/query.dart';
+import 'package:orm/schema.dart';
+import 'package:orm/sqlite.dart';
+$_runtimeDrivers
+$body
+''');
+    final result = await Process.run(Platform.resolvedExecutable, [
+      'run',
+      run.path,
+    ]);
+    expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
   }
 
   const row = '''
@@ -218,6 +282,7 @@ final class const Thing({@PrimaryKey() required final int id, required final Str
         'DateTime',
         'Stream',
         'ArgumentError',
+        'SchemaSnapshot',
         'ThingUnique',
         'ThingCreateIfAbsent',
       ]) {
@@ -437,6 +502,134 @@ final class const User({
       }
     },
   );
+
+  test(
+    'one generated client validates and runs portable models on both engines',
+    () async {
+      await analyze(await generate(row));
+      await runClient(r'''
+Future<void> main() async {
+  final engines = [Engine.sqlite, if (hasPostgres) Engine.postgresql];
+  for (final engine in engines) {
+    final native = nativeDriver(engine);
+    final schema = engine == Engine.sqlite ? 'main' : 'orm_generated_${pid}_${DateTime.now().microsecondsSinceEpoch}';
+    if (engine == Engine.postgresql) {
+      await native.withConnection((connection) => connection.run('CREATE SCHEMA ${quoteIdentifier(schema)}', []));
+    }
+    final driver = TrackedDriver(native, schema: schema);
+    final events = <DatabaseEvent>[];
+    final db = AppDatabase(driver, onEvent: events.add);
+    if (driver.acquisitions != 0 || driver.closes != 0 || events.isNotEmpty) {
+      throw StateError('Model validation must not acquire a connection');
+    }
+    try {
+      final target = SchemaSnapshot(engine: engine, tables: frozenSchema.tables);
+      final plan = planSchemaChange(SchemaSnapshot(engine: engine, tables: const []), target);
+      await db.database.transaction((tx) async {
+        if (engine == Engine.postgresql) {
+          await tx.run('SET LOCAL search_path TO ${quoteIdentifier(schema)}, pg_temp');
+        }
+        for (final sql in plan.steps) { await tx.run(sql); }
+      });
+      events.clear();
+      final created = await db.things.create(name: 'portable');
+      final duplicate = await db.things.createIfAbsent(.name, name: 'portable');
+      final updated = await db.things.update(created.id, label: 'updated');
+      final fetched = await db.things.get(created.id);
+      final rows = await db.things.all();
+      if (created.name != 'portable' || duplicate != null || updated?.label != 'updated' || fetched?.label != 'updated' || rows.length != 1) {
+        throw StateError('Portable typed CRUD failed on $engine');
+      }
+      if (events.length != 5 || events.any((event) => event.kind != 'statement')) {
+        throw StateError('Runtime model validation added SQL');
+      }
+    } finally {
+      try {
+        if (engine == Engine.postgresql) { await db.session.run('DROP SCHEMA ${quoteIdentifier(schema)} CASCADE'); }
+      } finally { await db.close(); }
+    }
+    if (driver.closes != 1) { throw StateError('Generated client must own the valid driver'); }
+  }
+}
+''');
+    },
+  );
+
+  for (final (name, source, generatedEngine, runtimeEngine, diagnostic) in [
+    (
+      'SQLite table identity collision',
+      '''
+@Table('users') final class const User({@PrimaryKey() required final int id});
+@Table('Users') final class const OtherUser({@PrimaryKey() required final int id});
+''',
+      Engine.postgresql,
+      Engine.sqlite,
+      'Duplicate or reserved table Users',
+    ),
+    (
+      'SQLite column identity collision',
+      '''
+@Table('users') final class const User({
+  @PrimaryKey() required final int id,
+  @Column(name: 'ID') required final int uppercaseId,
+});
+''',
+      Engine.postgresql,
+      Engine.sqlite,
+      'Duplicate column or field',
+    ),
+    (
+      'PostgreSQL overlong table name',
+      '''
+@Table('${List.filled(64, 't').join()}') final class const Thing({@PrimaryKey() required final int id});
+''',
+      Engine.sqlite,
+      Engine.postgresql,
+      '63 UTF-8 bytes',
+    ),
+    (
+      'PostgreSQL overlong column name',
+      '''
+@Table('things') final class const Thing({
+  @PrimaryKey() required final int id,
+  @Column(name: '${List.filled(61, 'c').join()}éx') required final String name,
+});
+''',
+      Engine.sqlite,
+      Engine.postgresql,
+      '63 UTF-8 bytes',
+    ),
+  ]) {
+    test(
+      'runtime schema rejects $name before taking driver ownership',
+      () async {
+        await analyze(await generate(source, engine: generatedEngine));
+        await runClient('''
+Future<void> main() async {
+  final driver = TrackedDriver(nativeDriver(Engine.${runtimeEngine.name}));
+  final events = <DatabaseEvent>[];
+  try {
+    try {
+      AppDatabase(driver, onEvent: events.add);
+      throw StateError('Invalid model accepted');
+    } on ArgumentError catch (error) {
+      if (!error.toString().contains('$diagnostic')) { rethrow; }
+    }
+    if (driver.acquisitions != 0 || driver.closes != 0 || events.isNotEmpty) {
+      throw StateError('Failed construction acquired or closed the caller driver');
+    }
+    final result = await driver.withConnection((connection) => connection.run('SELECT 1', []));
+    if (result.rows.single.single != 1) { throw StateError('Caller driver is unusable'); }
+  } finally { await driver.close(); }
+  if (driver.closes != 1) { throw StateError('Caller must close the rejected driver'); }
+}
+''');
+      },
+      skip: runtimeEngine == Engine.postgresql && !_hasPostgres
+          ? 'Set ORM_TEST_POSTGRES_SOCKET or ORM_TEST_POSTGRES_HOST for PostgreSQL'
+          : false,
+    );
+  }
 
   test('SQLite reference aliases generate, draft and apply without changing reviewed names', () async {
     const model = '''
