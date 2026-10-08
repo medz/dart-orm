@@ -1,39 +1,56 @@
-import 'package:orm/orm.dart';
-import 'package:orm/sql.dart';
-import 'package:orm/migrate.dart';
+import 'package:orm/migration.dart';
+import 'package:orm/query.dart';
 import 'package:orm/sqlite.dart';
 
-import 'schema.orm.dart';
+import 'migrations/sqlite/history.dart' as migrations;
+import 'models.db.dart';
+import 'shop.dart';
 
 Future<void> main() async {
-  final db = Database.fromSql(await sqlite(const SqliteOptions.memory()));
+  final db = AppDatabase(SqliteDriver.memory());
   try {
-    await Migrator(
-      db.sql,
-    ).apply([Migration.create('0001_initial', appSchema, dialect: db.dialect)]);
-    final User user = await db.transaction((tx) async {
-      final User user = await tx.user.create(email: 'seven@example.com');
-      await tx.post.create(
-        authorId: user.id,
-        title: 'Hello Dart',
-        createdAt: DateTime.now(),
+    await MigrationRunner(db.database, migrations.history).apply();
+    final seeded = await db.transaction((tx) async {
+      final user = await tx.users.create(username: 'seven', age: 28);
+      await tx.posts.create(authorId: user.id, title: 'Hello Dart ORM');
+      final product = await tx.products.create(
+        sku: 'dart-book',
+        name: 'Dart book',
+        priceCents: 4900,
+        stock: 10,
       );
-      return user;
+      return (user: user, product: product);
     });
-    await db.user.byId(user.id).patch(nickname: 'Seven');
-    final cards = await db.user
-        .select(
-          (u) => (
-            u.email,
-            u.posts
-                .orderBy((p) => [p.createdAt.desc(), p.id.desc()])
-                .take(3)
-                .select((p) => p.title)
-                .many(),
-          ).map((email, titles) => (email: email, titles: titles)),
-        )
-        .get();
-    print(cards);
+
+    await db.users.update(seeded.user.id, nickname: 'Seven');
+    await db.users.update(seeded.user.id, nickname: null);
+    final cards = await searchUsers(db, 'sev');
+    print(cards.first.username);
+    final related = await usersWithPosts(db);
+    print('${related.first.user.username}: ${related.first.posts.first.title}');
+
+    final items = [(productId: seeded.product.id, quantity: 2)];
+    final receipt = await checkout(
+      db,
+      userId: seeded.user.id,
+      requestKey: 'first-order',
+      items: items,
+    );
+    final replay = await checkout(
+      db,
+      userId: seeded.user.id,
+      requestKey: 'first-order',
+      items: items,
+    );
+    print('Order ${receipt.order.id}: ${receipt.order.totalCents} cents');
+    print('Replay: ${replay.replayed}');
+
+    await db.transaction((tx) async {
+      await for (final row
+          in tx.users.where(active: eq(true)).stream(fetchSize: 100)) {
+        print(row.username);
+      }
+    }, readOnly: true);
   } finally {
     await db.close();
   }

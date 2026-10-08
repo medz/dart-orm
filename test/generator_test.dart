@@ -1,179 +1,327 @@
-@Tags(['core'])
-library;
-
-import 'package:orm/values.dart';
-
 import 'dart:io';
 
-import 'package:orm/generate.dart';
+import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
+import 'package:analyzer/dart/analysis/results.dart';
+import 'package:orm/database.dart';
+import 'package:orm/dev.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
-  late Directory fixtures;
-  setUpAll(() async {
-    fixtures = await Directory('.dart_tool').createTemp('schema-generation-');
+  late Directory directory;
+  setUp(() async {
+    directory = await Directory('test').createTemp('.generator-');
   });
-  tearDownAll(() => fixtures.delete(recursive: true));
+  tearDown(() async {
+    await directory.delete(recursive: true);
+  });
 
-  Future<GeneratedSchema> generate(String name, String source) async {
-    final file = File('${fixtures.path}/$name.dart');
-    await file.writeAsString("import 'package:orm/schema.dart';\n$source");
-    return generateSchema(file.path);
+  Future<GeneratedSources> generate(
+    String source, {
+    Engine engine = Engine.sqlite,
+  }) async {
+    final input = File('${directory.path}/models.dart');
+    await input.writeAsString("import 'package:orm/schema.dart';\n$source");
+    return generateSchema(
+      schemaPath: input.path,
+      outputPath: '${directory.path}/models.db.dart',
+      engine: engine,
+    );
   }
 
+  const row = '''
+@Table('things')
+final class Thing {
+  const Thing({required this.id, required this.name, this.label});
+  @PrimaryKey(autoIncrement: true)
+  final int id;
+  @Column(name: 'physical_name')
+  final String name;
+  @Column(defaultValue: 'fallback')
+  final String? label;
+}
+''';
+
   test(
-    'target capabilities are checked when choosing a migration engine',
+    'actually resolves models, emits typed client and independent frozen Dart',
     () async {
-      final sqlite = await generate('sqlite_virtual_index', '''
-@Model(table: 'items')
-@Check('id > 0', name: 'positive', postgres: '')
-final class Item({required final int id,
-  @Unique() @Computed('id + 1', storage: .virtual, postgres: '') required final int value});
+      final result = await generate('''$row
+@SelectFrom(Thing)
+typedef Card = ({int id, String name});
 ''');
-      expect(sqlite.snapshot.forDialect(.sqlite).tables, hasLength(1));
-      expect(
-        () => sqlite.snapshot.forDialect(.postgres),
-        throwsA(isA<OrmException>()),
-      );
-      final postgres = await generate('postgres_computed_pk', '''
-@Model(table: 'items')
-@Check('source > 0', name: 'valid') @Check('source < 10', name: 'VALID')
-final class Item({required final int source,
-  @Id() @Computed('source + 1') required final int id});
-''');
-      expect(postgres.snapshot.forDialect(.postgres).tables, hasLength(1));
-      expect(
-        () => postgres.snapshot.forDialect(.sqlite),
-        throwsA(isA<OrmException>()),
-      );
+      expect(result.database, contains('final class AppDatabase'));
+      expect(result.database, contains('Database get database => _database'));
+      expect(result.database, contains('ThingCreate get create'));
+      expect(result.database, contains('required String name'));
+      expect(result.database, contains('Object? label = _absent'));
+      expect(result.database, contains('T == models.Card'));
+      expect(result.database, contains('"name"'));
+      expect(result.database, isNot(contains('part ')));
+      expect(result.snapshot, contains('const frozenSchema = SchemaSnapshot'));
+      expect(result.snapshot, contains('Engine.sqlite'));
+      expect(result.snapshot, contains('physical_name'));
+      expect(result.snapshot, isNot(contains('models.dart')));
+      expect(result.snapshot, isNot(contains('Thing(')));
     },
   );
 
-  test('client and snapshot paths cannot overwrite the declaration', () async {
-    const declaration =
-        "import 'package:orm/schema.dart';\n@Model(table: 'rows') final class Row({required final int id});\n";
-    for (final (name, outputName) in [
-      ('same.dart', 'same.dart'),
-      ('overlap.snapshot.dart', 'overlap.dart'),
+  test(
+    'check detects missing and drifted outputs without modifying them',
+    () async {
+      final sources = await generate(row);
+      final output = '${directory.path}/models.db.dart';
+      expect(
+        await writeGeneratedSources(
+          sources: sources,
+          outputPath: output,
+          check: true,
+        ),
+        isFalse,
+      );
+      expect(await File(output).exists(), isFalse);
+      expect(
+        await writeGeneratedSources(sources: sources, outputPath: output),
+        isTrue,
+      );
+      expect(
+        await writeGeneratedSources(
+          sources: sources,
+          outputPath: output,
+          check: true,
+        ),
+        isTrue,
+      );
+      final snapshot = File(snapshotPath(output));
+      await snapshot.writeAsString('// changed\n');
+      expect(
+        await writeGeneratedSources(
+          sources: sources,
+          outputPath: output,
+          check: true,
+        ),
+        isFalse,
+      );
+      expect(await snapshot.readAsString(), '// changed\n');
+    },
+  );
+
+  test('each snapshot fixes one requested engine', () async {
+    final result = await generate(row, engine: Engine.postgresql);
+    expect(result.snapshot, contains('Engine.postgresql'));
+    expect(result.snapshot, isNot(contains('Engine.sqlite')));
+  });
+
+  test('selection field names and exact nullability are validated', () async {
+    for (final selection in [
+      '({int id, String missing})',
+      '({int id, int name})',
+      '({int id, String label})',
+      '(int, String)',
     ]) {
-      final source = File('${fixtures.path}/$name');
-      final output = File('${fixtures.path}/$outputName');
-      await source.writeAsString(declaration);
       await expectLater(
-        writeGeneratedSchema(source.path, output: output.path),
-        throwsA(isA<GenerationException>()),
+        generate('$row\n@SelectFrom(Thing)\ntypedef Broken = $selection;'),
+        throwsFormatException,
       );
-      expect(await source.readAsString(), declaration);
-      if (name != outputName) expect(await output.exists(), false);
-    }
-  });
-
-  test('output is deterministic for all executable schemas', () async {
-    final sources = [
-      'example/schema.dart',
-      'example/teams/schema.dart',
-      'example/company/schema.dart',
-      for (final directory in Directory(
-        'test/support',
-      ).listSync().whereType<Directory>())
-        if (File('${directory.path}/schema.dart').existsSync())
-          '${directory.path}/schema.dart',
-    ];
-    for (final source in sources) {
-      final result = await generateSchema(source);
-      expect(
-        result.dart,
-        await File(source.replaceAll('.dart', '.orm.dart')).readAsString(),
-        reason: source,
-      );
-      expect(
-        result.snapshotDart,
-        await File(source.replaceAll('.dart', '.snapshot.dart')).readAsString(),
-        reason: source,
-      );
-      expect(result.dart, isNot(contains('final class User(')));
     }
   });
 
   test(
-    'custom types resolve their defining libraries when output moves',
+    'structurally equal records keep independent physical table identity',
     () async {
-      final output = '${fixtures.path}/moved.dart';
-      await writeGeneratedSchema(
-        'test/support/codecs/schema.dart',
-        output: output,
-      );
-      final analyzed = await Process.run(Platform.resolvedExecutable, [
-        'analyze',
-        output,
-      ]);
-      expect(
-        analyzed.exitCode,
-        0,
-        reason: '${analyzed.stdout}\n${analyzed.stderr}',
-      );
-    },
-  );
-
-  test(
-    'SQL and nullable client defaults preserve independent insert ownership',
-    () async {
-      final generated = await generate('defaults', '''
-String? defaultLabel() => null;
-String defaultState() => 'client';
-@Model(table: 'items')
-final class Item({
-  @Id(generated: true) required final int id,
-  @ClientDefault(defaultLabel) required final String? label,
-  @ClientDefault(defaultState) @DatabaseDefault.sql("'server'") required final String state,
-});
+      final result = await generate('''$row
+@Table('others')
+final class Other {
+  const Other({required this.id, required this.name});
+  @PrimaryKey() final int id;
+  @Column(name: 'different_name') final String name;
+}
+@SelectFrom(Thing) typedef ThingCard = ({int id, String name});
+@SelectFrom(Other) typedef OtherCard = ({int id, String name});
 ''');
-      expect(generated.dart, contains('clientDefault: models.defaultLabel'));
-      expect(generated.dart, contains('clientDefault: models.defaultState'));
-      expect(
-        generated.snapshot.tables.single.columns.last.defaultSql,
-        "'server'",
-      );
-      expect(generated.snapshotDart, isNot(contains('clientDefault')));
+      expect(result.database, contains('T == models.ThingCard'));
+      expect(result.database, contains('T == models.OtherCard'));
+      expect(result.snapshot, contains('different_name'));
     },
   );
 
-  final invalid = <String, String>{
-    for (final name in [
-      'Raw',
-      'Query',
-      'StreamSql',
-      'WatchSql',
-      'Close',
-      'Switch',
-    ])
-      'reserved_$name': "@Model() final class $name({required final int id});",
-    'private': '@Model() final class _Item({required final int id});',
-    'symbol': '@Model() final class App({required final int id});',
-    'duplicate_column': '@Model() final class Item({required final int iD, required final int i_d});',
-    'computed_identity': "@Model() final class Item({@Id(generated:true) @Computed('1') required final int id});",
-    'computed_sql_default': "@Model() final class Item({@DatabaseDefault(1) @Computed('1') required final int id});",
-    'computed_client_default': "int value()=>1; @Model() final class Item({@ClientDefault(value) @Computed('1') required final int id});",
-    'computed_empty':
-        "@Model() final class Item({@Computed('') required final int id});",
-    'wrong_factory': "String value()=>'one'; @Model() final class Item({@ClientDefault(value) required final int id});",
-    'async_factory': "Future<int> value() async=>1; @Model() final class Item({@ClientDefault(value) required final int id});",
-    'private_factory': "int _value()=>1; @Model() final class Item({@ClientDefault(_value) required final int id});",
-    'required_factory': "int value(int a)=>a; @Model() final class Item({@ClientDefault(value) required final int id});",
-    'factory_closure': '@Model() final class Item({@ClientDefault(() => 1) required final int id});',
-    'duplicate_factory': 'int value()=>1; @Model() final class Item({@ClientDefault(value) @ClientDefault(value) required final int id});',
-    'dynamic_check': "String sql()=>'id>0'; @Model() @Check(sql()) final class Item({required final int id});",
-    'empty_check':
-        "@Model() @Check('') final class Item({required final int id});",
-    'duplicate_check': "@Model() @Check('id>0', name:'valid') @Check('id<10', name:'valid') final class Item({required final int id});",
-    'wrong_default': "@Model() final class Item({@DatabaseDefault('one') required final int id});",
-  };
-  for (final entry in invalid.entries) {
-    test('rejects ${entry.key}', () async {
-      await expectLater(
-        generate(entry.key, entry.value),
-        throwsA(isA<GenerationException>()),
+  test(
+    'duplicate aliases for one structural selection share one decoder',
+    () async {
+      final result = await generate('''$row
+@SelectFrom(Thing) typedef Card = ({int id, String name});
+@SelectFrom(Thing) typedef Duplicate = ({String name, int id});
+''');
+      expect(
+        RegExp(r'T == models\.(Card|Duplicate)').allMatches(result.database),
+        hasLength(1),
       );
-    });
-  }
+    },
+  );
+
+  test(
+    'mutable fields, unsupported scalars and inconsistent constructors fail',
+    () async {
+      for (final source in [
+        row
+            .replaceFirst('final String name;', 'String name;')
+            .replaceFirst('const Thing', 'Thing'),
+        row.replaceFirst('final String name;', 'final Object name;'),
+        row.replaceFirst('required this.name, ', ''),
+        row
+            .replaceFirst(
+              '@PrimaryKey(autoIncrement: true)',
+              '@PrimaryKey(autoIncrement: false)',
+            )
+            .replaceFirst('final int id;', 'final int? id;'),
+        row.replaceFirst(
+          "@Column(name: 'physical_name')",
+          "@Column(name: 'id')",
+        ),
+        row.replaceFirst(
+          "@Column(name: 'physical_name')",
+          '@Column(defaultValue: 42)',
+        ),
+      ]) {
+        await expectLater(generate(source), throwsFormatException);
+      }
+    },
+  );
+
+  test(
+    'foreign keys require matching unique physical target columns',
+    () async {
+      await expectLater(
+        generate(
+          row.replaceFirst(
+            "@Column(name: 'physical_name')",
+            "@References('missing')",
+          ),
+        ),
+        throwsFormatException,
+      );
+      await expectLater(
+        generate(
+          row.replaceFirst(
+            "@Column(name: 'physical_name')",
+            "@References('things')",
+          ),
+        ),
+        throwsFormatException,
+      );
+      final result = await generate('''$row
+@Table('links')
+final class Link {
+  const Link({required this.id, required this.thingId});
+  @PrimaryKey() final int id;
+  @Column(name: 'thing_id') @References('things') final int thingId;
+}
+''');
+      expect(result.snapshot, contains('ForeignKey'));
+      expect(result.snapshot, contains('thing_id'));
+    },
+  );
+
+  test('SQL defaults preserve escaped Dart strings', () async {
+    final result = await generate(
+      row.replaceFirst("'fallback'", r"'price \$5 and \\path'"),
+    );
+    expect(result.snapshot, contains(r'\$5'));
+    expect(result.snapshot, contains(r'\\path'));
+  });
+
+  test(
+    'selection targets use class identity across imported libraries',
+    () async {
+      await File('${directory.path}/external.dart')
+          .writeAsString('class Thing {}');
+      await expectLater(
+        generate('''
+import 'external.dart' as external;
+$row
+@SelectFrom(external.Thing)
+typedef Card = ({int id, String name});
+'''),
+        throwsFormatException,
+      );
+    },
+  );
+
+  test('reserved getters and identity defaults fail before output', () async {
+    for (final source in [
+      row.replaceFirst("'things'", "'class'"),
+      row.replaceFirst("'things'", "'database'"),
+      row.replaceFirst("'things'", "'hash_code'"),
+      row.replaceFirst(
+        '@PrimaryKey(autoIncrement: true)',
+        '@PrimaryKey(autoIncrement: true) @Column(defaultValue: 1)',
+      ),
+    ]) {
+      await expectLater(generate(source), throwsFormatException);
+    }
+  });
+
+  test(
+    'non-id primary keys do not collide with mutable field arguments',
+    () async {
+      final result = await generate('''
+@Table('entries')
+final class Entry {
+  const Entry({required this.pk, required this.id, required this.key});
+  @PrimaryKey(autoIncrement: true) final int pk;
+  final int id;
+  final int key;
+}
+''');
+      final output = '${directory.path}/models.db.dart';
+      await writeGeneratedSources(sources: result, outputPath: output);
+      final collection = AnalysisContextCollection(
+        includedPaths: [p.absolute(output)],
+        sdkPath: p.dirname(p.dirname(Platform.resolvedExecutable)),
+      );
+      try {
+        final resolved =
+            await collection
+                    .contextFor(p.absolute(output))
+                    .currentSession
+                    .getResolvedUnit(p.absolute(output))
+                as ResolvedUnitResult;
+        expect(resolved.diagnostics, isEmpty);
+      } finally {
+        await collection.dispose();
+      }
+    },
+  );
+
+  test('database name and output ownership are validated', () async {
+    final input = File('${directory.path}/models.dart');
+    await input.writeAsString("import 'package:orm/schema.dart';\n$row");
+    await expectLater(
+      generateSchema(
+        schemaPath: input.path,
+        outputPath: input.path,
+        engine: Engine.sqlite,
+      ),
+      throwsFormatException,
+    );
+    await expectLater(
+      generateSchema(
+        schemaPath: input.path,
+        outputPath: '${directory.path}/out.dart',
+        databaseName: 'bad name',
+        engine: Engine.sqlite,
+      ),
+      throwsFormatException,
+    );
+    for (final name in ['Database', 'ThingTable', 'TableQuery']) {
+      await expectLater(
+        generateSchema(
+          schemaPath: input.path,
+          outputPath: '${directory.path}/out.dart',
+          databaseName: name,
+          engine: Engine.sqlite,
+        ),
+        throwsFormatException,
+      );
+    }
+  });
 }

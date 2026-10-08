@@ -1,388 +1,88 @@
-# Migrations
+# Reviewed migrations in Dart
 
-Schema snapshots, saved migrations and their registry are Dart libraries. Start
-with one typed project configuration and one fixed database engine:
+A migration history fixes one database engine. Each saved migration contains
+that engine's SQL, the complete frozen physical schema after it, and a literal
+reviewed fingerprint. Historical files import only public ORM metadata; they
+remain independent of current model classes and generated snapshots.
 
-```sh
-dart run orm init --database sqlite
-dart run orm migrate create 0001_initial
-# Review migrations/m0001_initial.dart.
-dart run orm migrate check
-dart run orm migrate apply
-dart run orm migrate plan
-dart run orm migrate status
-dart run orm migrate verify
-dart run orm migrate inspect tasks
-```
+The complete examples have separate histories:
 
-`init` also accepts `postgres`, `mysql` and `mariadb`. It generates an annotated DTO,
-client, physical snapshot, empty static registry and `orm.config.dart`. Existing
-files are never replaced, and initialization does not connect or execute DDL.
-See the [project CLI](https://github.com/medz/dart-orm/blob/main/doc/cli.md) for the generated typed configuration and all options.
-
-The config calls `defineConfig` from a parameterless `void main()` and imports
-neither the generated client/snapshot nor the registry. It declares the engine,
-model source, migration directory and optional connection factory. The CLI first
-registers those paths, then compiles a static registry import when history exists.
-Keep registration free of side effects; it may run twice. Connections belong in
-`connect` and use the independent `SqlDatabase` runtime with the selected driver.
-Server factories read environment variables only when connecting.
-
-Configuration model/output/migration paths are relative to the config file.
-`--config` itself and explicit command-line path overrides are relative to the
-working directory. `migrate create` regenerates current DTOs before diffing.
-`migrate verify` analyzes those DTOs into an in-memory snapshot without writing
-outputs. Other migration commands only use frozen history, so missing or invalid
-current models do not block applying or checking reviewed migrations.
-
-A missing registry is an empty history only when no migration Dart files exist.
-Existing files without a registry, a stale registry file list or a mismatched
-engine are rejected before a connection is opened. Rebuild imports explicitly
-with `dart run orm migration registry migrations --dialect sqlite`; this leaves
-recorded fingerprints unchanged. First generation needs no registry:
-`dart run orm generate lib/models.dart --database sqlite`.
-
-Projects can also call the lower-level `runMigrationCli` in their own executable:
+- [SQLite](../example/migrations/sqlite/history.dart)
+- [PostgreSQL](../example/migrations/postgres/history.dart)
 
 ```dart
-import 'package:orm/migrate_cli.dart';
-import 'package:orm/sql.dart';
-import 'package:orm/sqlite.dart';
-import '../lib/models.snapshot.dart';
-import '../migrations/migrations.g.dart';
+import 'package:orm/migration.dart';
+import 'migrations/sqlite/history.dart' as migrations;
 
-Future<void> main(List<String> args) => runMigrationCli(
-  args,
-  directory: 'migrations',
-  history: migrationHistory,
-  schema: schema,
-  connect: ({required readOnly}) async => SqlDatabase(
-    await SqliteDriver.open(readOnly
-        ? const SqliteOptions.readOnly('app.sqlite')
-        : const SqliteOptions.file('app.sqlite')),
-  ),
+await MigrationRunner(db.database, migrations.history).apply();
+```
+
+The runner checks the connection engine before DDL. It verifies saved versions,
+names and fingerprints, then checks the actual catalog against the last frozen
+schema. Pending DDL, catalog validation and history markers share one transaction.
+Failures roll back the invocation. Already applied histories are verified;
+modified or missing historical entries fail. PostgreSQL runners take a
+transaction advisory lock. SQLite runners sharing one owned driver use its FIFO
+queue; separate native handles can fail with SQLITE_BUSY and need an application
+retry policy.
+
+## Preparing a new migration
+
+1. Generate the current engine's `models.snapshot.dart`.
+2. Compare the last historical snapshot with the new snapshot using
+   `planSchemaChange(before, after)`.
+3. Save a new Dart file containing the returned steps and a **copied** frozen
+   snapshot. Review every SQL statement and its effects on existing data.
+4. Calculate `migrationFingerprint` over that definition and save the hash as a
+   literal `reviewedFingerprint`. Register it with a static import in history.
+
+`planSchemaChange` is a pure API. It creates new tables and adds nullable columns
+or columns with a supported literal default. It rejects drops, renames, type,
+identity and constraint changes. Author such SQL explicitly after reviewing the
+engine behavior; a new snapshot still describes its final managed schema.
+Destructive renames are never inferred.
+
+```dart
+final plan = planSchemaChange(previousSnapshot, newSnapshot);
+for (final sql in plan.steps) {
+  print(sql); // Review before saving.
+}
+final fingerprint = migrationFingerprint(
+  version: 2,
+  name: 'add_nickname',
+  engine: newSnapshot.engine,
+  steps: plan.steps,
+  snapshot: newSnapshot,
+);
+print(fingerprint); // Paste the reviewed literal into the new historical file.
+```
+
+A saved definition looks like
+[the SQLite initial migration](../example/migrations/sqlite/v001_initial.dart).
+Keep a static registry:
+
+```dart
+import 'package:orm/database.dart';
+import 'package:orm/migration.dart';
+import 'v001_initial.dart' as v001;
+import 'v002_add_nickname.dart' as v002;
+
+final history = MigrationHistory(
+  engine: Engine.sqlite,
+  migrations: [v001.migration, v002.migration],
 );
 ```
 
-Offline commands never call the connection factory. SQLite inspection requires
-an existing read-only file; `apply` can create one. Database migration/verification
-operations enforce their own transaction and locking boundaries.
+Versions are positive and strictly increasing; gaps are allowed. Do not sort or
+edit old entries to reconcile drift. Fix a deployed schema with a new reviewed
+migration. A fingerprint detects source changes; it does not replace SQL review
+or backups. There is no automatic migration file writer or rename inference.
+Never compute an old migration's reviewed hash dynamically at startup, or import
+the current application's snapshot into a historical definition.
 
-Each new migration is an `m<id>.dart` file with fixed operations, an independent
-historical schema and a recorded `migrationChecksum`. The adjacent
-`migrations.g.dart` statically imports these definitions. Check both into Git.
-The current `.snapshot.dart` contains only physical database metadata and imports
-no application models, codec callbacks or Flutter libraries.
-
-`create` compares the current physical schema with the last historical snapshot
-and freezes the resulting SQL/steps in a new Dart file. It does not execute DDL.
-No-change generation writes no migration. Repeated IDs, overwritten files, stale
-registries and broken history chains are rejected when saving a new migration.
-`check` validates the compiled history, fixed fingerprints and its declared engine
-without connecting. The registry records one `migrationDialect`, including before
-the first migration. Every migration has the same explicit `dialect` and one flat
-step list. Rebuilding with `dart run orm migration registry migrations` preserves
-that target and never refreshes fingerprints. Attempting to regenerate with a
-different target fails without writing files.
-
-A connection for another engine is rejected before migration SQL, including CLI
-`status`, `verify`, `inspect` and an empty history. The connection factory itself
-runs first and may open/create a SQLite file; it must honor `readOnly`. Environment
-variables configure locations and credentials for the chosen engine, not select
-a different engine for the same history.
-
-Saved snapshots and operation tables freeze SQL for the selected engine. Later
-edits to application models cannot change an existing migration's plan or
-checksum. Engine-specific capability checks still apply. Physical-schema APIs
-such as `ComputedColumn(sql)` and `CheckSchema(name, sql)` remain available for
-explicitly authored migration metadata and steps.
-
-Multi-database applications own separate directories, registries and connections.
-Use the application's database engine when checking migrations. Switching to
-SQLite is a separate schema/data transfer and baseline operation; it does not
-translate, replay or rewrite the PostgreSQL history. Changing servers or credentials
-within the same engine preserves the history; the destination's applied hashes and
-catalog still need checking.
-
-The migration executor supports PostgreSQL 18+ and SQLite 3.35+. PostgreSQL apply,
-baseline and standalone planning read the actual server version before migration
-locks or journal writes; the SQLite driver checks its library version when opening.
-Older PostgreSQL migrations are deliberately rejected instead of attempting DDL
-whose catalog/generated-column behavior has not been verified. This does not claim
-that every older server feature is unsupported by the query driver. See the native
-[PostgreSQL ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html) and
-[SQLite ALTER TABLE](https://www.sqlite.org/lang_altertable.html) boundaries.
-
-Edit the latest **unpublished** migration when a generated change needs a reviewed
-backfill or manual SQL, then run `dart run orm migrate record 0002_name`.
-This explicit command updates its fingerprint while preserving the surrounding
-source. It cannot know whether a migration was deployed. Never edit or re-record
-an applied migration: database history also records checksums and rejects the
-change. Add a new migration instead. Earlier historical files remain fixed even
-when the current application model changes.
-
-Declare physical renames in the entrypoint's `renames` argument:
-
-```dart
-renames: const SchemaRenames(
-  tables: {'users': 'members'},
-  columns: {'members': {'nickname': 'display_name'}},
-),
-```
-
-Declare conversions in its `using` argument, keyed by table and column for the chosen database:
-
-```dart
-using: {
-  'members': {'score': 'CAST(score AS TEXT)'},
-},
-```
-
-The configuration library exports `SchemaRenames`; migration-only tools can import it from `package:orm/migrate.dart`. Renames and conversions are
-inputs to the next `create`; remove them after generating that change. Pass
-`create <id> --allow-destructive` to generate reviewed drop steps or replace
-ordinary SQLite column values with a computed expression. Computed-to-ordinary
-SQLite changes materialize the existing result instead. Neither offline
-checking nor generation applies them.
-
-Start with [catalog import](https://github.com/medz/dart-orm/blob/main/doc/importing.md) for an existing database, then run
-`baseline` to verify and register its final historical schema without replaying
-creation SQL. Add `--json` for machine reports (not migration artifacts). The lower-level `runMigrationCli` defaults to JSON reports. Exit code 2
-indicates catalog drift, 64 invalid CLI arguments, and 1 an execution failure.
-Dart's launcher may print build-hook progress on stderr.
-
-Application startup uses the same static history without the CLI/tooling imports:
-Here and below, `db` is a `SqlDatabase`; use `ormDatabase.sql` when starting from
-the typed ORM `Database`.
-
-```dart
-import 'migrations/migrations.g.dart';
-
-final migrations = migrationHistory.checked;
-final pending = await Migrator(db).plan(migrations);
-final appliedIds = await Migrator(db).apply(migrations);
-```
-
-For programmatic generation, `writeMigration(migration, directory: 'migrations',
-history: migrationHistory)` saves fixed Dart operations and the registry.
-`migrationSource`, `schemaSource` and `migrationHistorySource` also return Dart
-source without writing files. A saved migration contains frozen SQL and typed
-steps; it must not call `Migration.diff` against current models when it runs.
-Fingerprints cover the engine, SQL, operation data, historical schema and predecessor, while
-formatting and comments do not affect them.
-
-SQLite and PostgreSQL `apply` run a pending batch without `CheckedSql` or `Backfill` in one transaction. A failed copy, required
-column, unique constraint, or foreign key rolls back earlier steps and history
-records from that invocation. PostgreSQL uses a dedicated connection and a session advisory lock scoped to the
-current database/schema; SQLite obtains an immediate write transaction. PostgreSQL
-lock acquisition uses short `pg_try_advisory_lock` queries outside a transaction,
-with `Migrator(db, lockTimeout: ...)` defaulting to 30 seconds. Waiting does not
-hold an old SQL snapshot that could deadlock concurrent index creation.
-MySQL/MariaDB DDL commits independently and uses exact catalog preconditions,
-postconditions and durable checkpoints; see [MySQL/MariaDB migrations](https://github.com/medz/dart-orm/blob/main/doc/mysql-migrations.md).
-
-Migration planning checks applied history and checksums. Catalog verification is
-an explicit separate operation; SQL history alone does not prove schema equality.
-
-## Deployment bundle
-
-For deployment, save the `runMigrationCli` example above as `bin/migrate.dart`.
-It imports the reviewed registry and desired physical snapshot directly. Build
-that dedicated executable with the SDK's native-asset-aware CLI build:
-
-```sh
-dart build cli --target bin/migrate.dart --output build/migration
-./build/migration/bundle/bin/migrate check
-./build/migration/bundle/bin/migrate apply
-```
-
-`orm.config.dart` is the source-authoring configuration, not the deployment
-executable. `runMigrationCli` intentionally accepts an explicit frozen history;
-it does not load source models or invoke the project configuration.
-
-Deploy the complete `bundle` directory, including its native libraries. Migration
-history and snapshots are compiled into the executable; runtime `check`, `plan`,
-`apply`, `status` and `verify` do not read Dart source or migration assets. Supply
-the same environment configuration used by your connection factory. Build for the
-actual deployment OS/architecture.
-
-Use source execution during authoring. A compiled executable contains the history
-from its build and cannot discover a newly generated migration. Rebuild after
-reviewing and committing new history. The application imports `migrate.dart` and
-its registry; it does not need the generator or CLI entrypoint.
-
-## Application startup compatibility
-
-```dart
-// Default: the database must have completed the latest bundled migration.
-final version = await Migrator(db).requireVersion(migrations);
-
-// This release can run on either side of a compatible expand migration.
-await Migrator(db).requireVersion(
-  migrations,
-  minimum: '0001_initial',
-  maximum: '0002_expand',
-);
-```
-
-The range is inclusive and uses the ordered bundled history. Without bounds, the
-requirement is exactly its latest migration. With only `minimum`, the upper bound
-is the latest bundled migration; with only `maximum`, that version is required
-exactly. Bounds must name an ordered, nonempty range in the supplied history.
-The list is copied before asynchronous work begins.
-
-The check validates every applied ID/checksum in the history prefix, not just its
-last ID. An unversioned database, an older required version, a database outside the
-range, or a database newer than the bundled history reports `MIGRATION.VERSION`.
-Changed checksums or missing history entries report `MIGRATION.CHECKSUM`; corrupt
-checkpoint sequences report `MIGRATION.HISTORY`. Any recovery checkpoint for a
-migration not yet recorded as applied reports `MIGRATION.INCOMPLETE`, including
-checkpoints unknown to an older application. Complete or recover that migration
-before accepting application traffic.
-
-Call this on a root database or a leased session, outside an existing transaction.
-The check opens a short read transaction: PostgreSQL uses REPEATABLE READ READ ONLY,
-and SQLite uses a deferred read snapshot, including on an explicitly read-only
-file. It reads catalog/history/checkpoints without creating metadata or applying
-migrations. The returned `MigrationStatus` records the accepted ID and checksum.
-An existing caller transaction is rejected with `MIGRATION.SESSION` so the method
-can establish its own consistent snapshot.
-
-This is a point-in-time startup check. It does not prevent a later deployment
-from changing the database, check the actual catalog for drift, or prove that old
-application processes have stopped. Use `verifySchema` for catalog checks and
-coordinate incompatible contract migrations with application deployment. A
-rejected downgrade does not delete or rebuild tables.
-
-## Schema evolution
-
-`diff` generates operations for the history's selected engine only:
-
-- New nullable/defaulted columns use `ALTER TABLE` when SQLite permits the default.
-- SQLite changes to existing columns or keys use an explicit `RebuildTable` step.
-- Renames must be declared. Drops require `allowDestructive: true` when generating
-  the file; the resulting file makes each removal visible to review.
-- A new required column without a default needs a separate add/backfill/constrain
-  sequence. Identity changes require a manual migration.
-- Type changes require SQL conversion expressions for the selected dialect. Expressions
-  are trusted migration code and use column names after declared renames.
-
-[Computed target columns](https://github.com/medz/dart-orm/blob/main/doc/computed.md) use their own expressions to populate old
-rows and derive values on type changes. They are excluded from rebuild copy maps;
-their addition does not require a default or application backfill. Mode conversions
-and native expression dependencies have separate documented migration limits.
-
-For long data transformations, use a reviewed [resumable backfill](https://github.com/medz/dart-orm/blob/main/doc/backfills.md).
-It carries a historical table definition, commits bounded batches with their
-primary-key cursors, supports bounded runs, and verifies completion. Both SQLite
-and PostgreSQL support it; general `CheckedSql` autocommit operations still require
-PostgreSQL.
-
-```dart
-final change = Migration.diff(
-  '0003_score_text',
-  dialect: previousMigration.dialect,
-  from: previousSnapshot,
-  to: nextSnapshot,
-  previous: previousMigration.checksum,
-  using: {
-    'members': {'score': 'CAST(score AS TEXT)'},
-  },
-);
-```
-
-SQLite rebuilds borrow one connection, disable foreign keys before `BEGIN`, copy
-explicit columns into a new table, replace the old table, and recreate indexes
-and triggers. They check foreign keys before commit and restore the connection's
-original foreign-key setting even on failure. Restore failure discards the
-connection. Incoming cascade relations therefore do not delete child rows during
-replacement. Existing views are retained and checked after replacement.
-
-The runner preserves unmanaged indexes and triggers whose SQL can be restored.
-Unmodeled table constraints/options (undeclared `CHECK`, collations, generated expressions,
-`STRICT`, `WITHOUT ROWID`, and similar features) require a manual migration;
-they are never silently discarded. Removing columns from a table with triggers
-also requires explicit manual handling. A new managed index cannot silently
-replace an unmanaged index of the same name.
-
-[Declared CHECK constraints](https://github.com/medz/dart-orm/blob/main/doc/checks.md) participate in schema diffs, inspection
-and import. SQLite adds/changes/removes them through a rebuild; PostgreSQL uses
-constraint DDL. Checked renames explicitly remove and re-add the declared SQL,
-which can require two SQLite copies. Existing rows are validated before commit.
-
-Manual migrations use `Migration(id, ['SQL', ...], dialect: .sqlite)`, or
-`Migration.steps` with `ExecuteSql`, `DropTable`, and `RebuildTable` operations.
-For a custom SQLite copy-and-replace migration, an explicit `DropTable` enables
-outer foreign-key handling; preserve dependent SQL objects in the reviewed steps.
-Transaction control is owned by the runner. Use `CheckedSql` for PostgreSQL
-commands that must run outside a transaction; ordinary `ExecuteSql` rejects them.
-
-# Recoverable PostgreSQL operations
-
-```dart
-final migration = Migration.steps(
-  '0004_email_index',
-  [
-    CheckedSql.createIndex(
-      'members',
-      const IndexSchema('members_email_lookup', ['email']),
-    ),
-  ],
-  dialect: .postgres,
-  previous: previousMigration.checksum,
-  snapshot: nextSnapshot,
-);
-```
-
-`CheckedSql.createIndex` builds a concurrent B-tree index using default column
-collations and operator classes. Its completion check compares the table, ordered
-columns, uniqueness, predicate/expression absence, index options and validity.
-A same-name object or an INVALID index is not proof of completion. PostgreSQL's
-[concurrent index documentation](https://www.postgresql.org/docs/current/sql-createindex.html#SQL-CREATEINDEX-CONCURRENTLY)
-explains its nontransactional execution and possible INVALID leftovers.
-
-Other operations use `CheckedSql(sql, readyWhen: 'SELECT ...', doneWhen: 'SELECT ...')`.
-Each condition must return exactly one boolean and accurately describe durable
-state. SQL and probes are reviewed migration code. The runner first checks
-`doneWhen`; if false, it requires `readyWhen`, executes SQL in autocommit mode,
-and checks `doneWhen` again. If neither state matches, it stops for explicit
-inspection/repair. It does not guess that an existing object should be dropped.
-Retry the unchanged migration after repairing the actual database.
-
-A migration containing `CheckedSql` uses durable checkpoints for every step.
-Ordinary SQL within that migration commits its effect and completion checkpoint
-in the same transaction. Checked SQL records its phase before execution and checks
-actual state on restart. An interrupted success therefore need not execute twice.
-Attempted migration checksums are frozen even before the whole migration completes.
-
-This mode is not one atomic transaction: earlier successful steps remain committed
-when a later step fails. Contiguous ordinary migrations outside a mixed migration
-still form an atomic batch. The runner lock covers all these phases on the same
-connection; baseline and ordinary migration runners use the same lock protocol.
-Session lock behavior is documented by
-[PostgreSQL](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS).
-
-Use `Migrator(db).progress()` or `dart run orm migrate status` to inspect step states, failed
-phases and failure codes. `dart run orm migrate plan` reports `atomic: false` for pending
-nontransactional work and includes progress. A `MIGRATION.STEP` exception retains
-the underlying error as `cause`. A failed lock release discards its connection.
-SQLite rejects `CheckedSql`; its schema rebuild path remains transactional.
-
-
-## Existing databases
-
-```dart
-final result = await Migrator(db).baseline(
-  migrations,
-  expected: migrations.last.snapshot!,
-);
-```
-
-Baseline verifies declared columns, storage types, nullability, defaults, primary
-and unique keys, foreign keys, and simple indexes before recording history. It
-never replays creation SQL and refuses existing nonempty migration history.
-`verifySchema(...).matches` covers these supported facts; inspect `unmanaged`
-separately for triggers, policies, expression/partial indexes and unmodeled
-constraints/options. This catalog currently inspects the declared tables, not all
-objects in a database. PostgreSQL constraint removal resolves actual names by
-signature, including names chosen before an ORM baseline.
+The runner manages the tables listed in its snapshots and checks historical
+removed tables. Other tables in the database are outside that history. Catalog
+verification covers columns, storage types, nullability, single-column primary
+keys, identity, single-column unique constraints and foreign keys, and literal
+defaults. Composite constraints are unsupported. Arbitrary non-unique indexes,
+triggers and check constraints are not represented in the current snapshot API.

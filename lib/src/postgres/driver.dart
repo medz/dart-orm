@@ -1,190 +1,223 @@
 import 'dart:async';
+import 'dart:typed_data';
 
+import 'package:orm/database.dart';
 import 'package:postgres/postgres.dart' as pg;
 
-import '../driver/driver.dart';
-import '../values/codec.dart';
-import 'connection.dart';
-import 'options.dart';
-import 'temporal.dart';
+export 'package:postgres/postgres.dart' show Endpoint, PoolSettings, SslMode;
 
-/// Owns or borrows a PostgreSQL pool and leases one connection per callback.
+/// Owns a native postgres pool; each callback pins one physical connection.
 ///
-/// Owned pools configure exact temporal codecs and cancellation connections.
-/// A borrowed pool enables these capabilities only when explicitly configured.
-final class PostgresDriver implements Driver<Postgres> {
+/// The connection opens lazily on acquisition. Configuration is independent of
+/// SQLite. Use [pg.PoolSettings] for limits, TLS, timeouts and application name.
+/// Every isolation level and read-only transaction mode is supported.
+///
+/// SQL uses PostgreSQL's native `$1`, `$2`, ... placeholders without rewriting.
+/// Parameters support int, String, bool, double, DateTime, Uint8List and null.
+/// Dates are bound as UTC timestamptz; byte arrays use bytea. Unsupported values
+/// fail before SQL execution. Native PostgreSQL result types are preserved.
+/// Application SQL follows PostgreSQL session-setting persistence rules. Use
+/// `SET LOCAL` inside [Database.transaction] for scoped configuration.
+final class PostgresDriver implements Driver {
+  /// Creates an owned pool for [endpoint]; opening happens on first use.
+  PostgresDriver(pg.Endpoint endpoint, {pg.PoolSettings? settings})
+    : _pool = pg.Pool<void>.withEndpoints([endpoint], settings: settings);
+
   final pg.Pool<void> _pool;
-  final bool _ownsPool;
-  final bool _temporal;
-  final Future<pg.Connection> Function()? _cancelConnection;
-  final Expando<int> _backendIds = Expando();
-  final Duration? _queryTimeout;
-  final Duration? _connectTimeout;
-  bool _closed = false;
+  final Object _callbackZone = Object();
+  bool _closing = false;
+  int _active = 0;
+  Completer<void>? _idle;
+  Future<void>? _closeFuture;
 
-  /// Creates an owned pool; physical connections open as leases are acquired.
-  PostgresDriver(PostgresOptions options)
-    : _pool = _createPool(options),
-      _ownsPool = true,
-      _temporal = true,
-      _queryTimeout = options.queryTimeout,
-      _connectTimeout = options.connectTimeout,
-      _cancelConnection = (() => _openControl(options));
+  @override
+  Engine get engine => Engine.postgresql;
+  @override
+  Capabilities get capabilities =>
+      const Capabilities(returning: true, maxParameters: 65535);
 
-  /// Uses a caller-owned pool, which remains open when this driver closes.
+  /// Pins a pooled connection until [action] and its issued statements finish.
   ///
-  /// Supply [cancellationConnection] to support statement cancellation. Enable
-  /// `temporal` only if the pool was created with [postgresTypeRegistry].
-  PostgresDriver.borrow(
-    pg.Pool<void> pool, {
-    Future<pg.Connection> Function()? cancellationConnection,
-    this._queryTimeout,
-    // Enable only when the pool uses postgresTypeRegistry().
-    this._temporal = false,
-  }) : _pool = pool,
-       _ownsPool = false,
-       _connectTimeout = null,
-       _cancelConnection = cancellationConnection;
-
-  static Future<pg.Connection> _openControl(PostgresOptions options) {
-    final url = options.url, colon = options.url.userInfo.indexOf(':');
-    return pg.Connection.open(
-      pg.Endpoint(
-        host: url.host,
-        port: url.hasPort ? url.port : 5432,
-        database: url.pathSegments.single,
-        username: url.userInfo.isEmpty
-            ? null
-            : Uri.decodeComponent(
-                colon < 0 ? url.userInfo : url.userInfo.substring(0, colon),
-              ),
-        password: colon < 0
-            ? null
-            : Uri.decodeComponent(url.userInfo.substring(colon + 1)),
-      ),
-      settings: pg.ConnectionSettings(
-        connectTimeout: options.connectTimeout,
-        queryTimeout: const Duration(seconds: 5),
-        sslMode: switch (options.tls) {
-          PostgresTls.verifyFull => pg.SslMode.verifyFull,
-          PostgresTls.require => pg.SslMode.require,
-          PostgresTls.disable => pg.SslMode.disable,
-        },
-        applicationName: '${options.applicationName}/cancel',
-      ),
-    );
-  }
-
-  static pg.Pool<void> _createPool(PostgresOptions options) {
-    final url = options.url;
-    if (!{'postgres', 'postgresql'}.contains(url.scheme) ||
-        url.host.isEmpty ||
-        url.pathSegments.length != 1 ||
-        options.maxConnections < 1) {
-      throw ArgumentError('Provide a PostgreSQL URL and a positive pool size.');
-    }
-    if (options.queryTimeout <= Duration.zero ||
-        options.poolTimeout <= Duration.zero ||
-        options.connectTimeout <= Duration.zero) {
-      throw ArgumentError('PostgreSQL timeouts must be positive.');
-    }
-    if (url.hasQuery || url.hasFragment) {
-      throw ArgumentError(
-        'Use typed PostgresOptions instead of URL query options.',
-      );
-    }
-    final colon = url.userInfo.indexOf(':');
-    final user = colon < 0 ? url.userInfo : url.userInfo.substring(0, colon);
-    final password = colon < 0
-        ? null
-        : Uri.decodeComponent(url.userInfo.substring(colon + 1));
-    return pg.Pool<void>.withEndpoints(
-      [
-        pg.Endpoint(
-          host: url.host,
-          port: url.hasPort ? url.port : 5432,
-          database: url.pathSegments.single,
-          username: user.isEmpty ? null : Uri.decodeComponent(user),
-          password: password,
-        ),
-      ],
-      settings: pg.PoolSettings(
-        maxConnectionCount: options.maxConnections,
-        connectTimeout: options.poolTimeout,
-        queryTimeout: null,
-        applicationName: options.applicationName,
-        timeZone: 'UTC',
-        typeRegistry: postgresTypeRegistry(),
-        onOpen: options.schema == null
-            ? null
-            : (connection) async {
-                final schema = '"${options.schema!.replaceAll('"', '""')}"';
-                await connection.execute(
-                  pg.Sql(
-                    r"SELECT pg_catalog.set_config('search_path', $1, false)",
-                    types: [pg.Type.text],
-                  ),
-                  parameters: [schema],
-                );
-              },
-        sslMode: switch (options.tls) {
-          PostgresTls.verifyFull => pg.SslMode.verifyFull,
-          PostgresTls.require => pg.SslMode.require,
-          PostgresTls.disable => pg.SslMode.disable,
-        },
-      ),
-    );
-  }
-
+  /// The callback connection expires immediately when [action] settles.
+  /// Failed callbacks cause the native pool to discard that connection.
+  /// Unfinished direct BEGIN/START transactions roll back before reuse. Nested
+  /// acquisition is rejected so a callback cannot wait on its own pool slot.
   @override
-  Capabilities get capabilities => Capabilities(
-    dialect: SqlDialect.postgres,
-    maxParameters: 65535,
-    streaming: true,
-    cancellation: _cancelConnection != null,
-    exactDecimal: true,
-    temporal: _temporal,
-  );
-
-  /// Leases a pooled connection for the lifetime of the callback future.
-  @override
-  Future<R> run<R>(Future<R> Function(SqlConnection) action) async {
-    if (_closed) {
-      throw const OrmException('DRIVER.CLOSED', 'PostgreSQL driver is closed.');
+  Future<T> withConnection<T>(
+    Future<T> Function(Connection connection) action,
+  ) async {
+    if (_closing) {
+      throw StateError('The PostgreSQL driver is closing or closed.');
     }
-    var acquired = false;
+    if (Zone.current[_callbackZone] != null) {
+      throw StateError('Nested PostgreSQL acquisition is not supported.');
+    }
+    _active++;
     try {
-      return await _pool.withConnection(
-        (connection) {
-          acquired = true;
-          return action(
-            PostgresConnection(
-              connection,
-              _cancelConnection,
-              _backendIds,
-              _queryTimeout,
-            ),
+      return await _pool.withConnection((native) async {
+        final connection = _PostgresConnection(native);
+        try {
+          final value = await runZoned(
+            () => action(connection),
+            zoneValues: {_callbackZone: true},
           );
-        },
-        settings: _connectTimeout == null
-            ? null
-            : pg.ConnectionSettings(connectTimeout: _connectTimeout),
-      );
-    } on TimeoutException catch (error) {
-      if (acquired) rethrow;
-      throw OrmException(
-        'CONNECTION.TIMEOUT',
-        'PostgreSQL connection acquisition timed out.',
-        cause: error,
-      );
+          await connection._finish();
+          return value;
+        } catch (error, stack) {
+          try {
+            await connection._finish(ignoreFailure: true);
+          } catch (_) {
+            // The pool discards this connection; keep the callback/SQL cause.
+          }
+          Error.throwWithStackTrace(error, stack);
+        }
+      });
+    } finally {
+      _active--;
+      if (_active == 0) {
+        _idle?.complete();
+        _idle = null;
+      }
     }
   }
 
-  /// Rejects new leases and closes the pool only when this driver owns it.
+  /// Drains admitted callbacks and then releases every pooled connection.
   @override
-  Future<void> close() async {
-    if (_closed) return;
-    _closed = true;
-    if (_ownsPool) await _pool.close();
+  Future<void> close() {
+    if (Zone.current[_callbackZone] != null) {
+      return Future.error(
+        StateError('Cannot close the driver in its callback.'),
+      );
+    }
+    if (_closeFuture case final future?) return future;
+    _closing = true;
+    return _closeFuture = _close();
+  }
+
+  Future<void> _close() async {
+    if (_active != 0) {
+      _idle = Completer<void>();
+      await _idle!.future;
+    }
+    await _pool.close();
   }
 }
+
+final class _PostgresConnection implements Connection {
+  _PostgresConnection(this.connection);
+  final pg.Connection connection;
+  bool _active = true;
+  bool _transactionOpen = false;
+  Future<void> _tail = Future.value();
+  (Object, StackTrace)? _failure;
+
+  @override
+  Future<QueryResult> run(String sql, List<Object?> parameters) {
+    if (!_active) {
+      return Future.error(StateError('The connection callback has expired.'));
+    }
+    if (parameters.length > 65535) {
+      return Future.error(
+        ArgumentError('The statement exceeds PostgreSQL limits.'),
+      );
+    }
+    final List<pg.TypedValue<Object>> values;
+    try {
+      values = parameters.map(_parameter).toList(growable: false);
+    } catch (error, stack) {
+      return Future.error(error, stack);
+    }
+    final result = _tail.then((_) async {
+      final result = await connection.execute(pg.Sql(sql), parameters: values);
+      final words = _transactionWords(sql);
+      switch (words.firstOrNull) {
+        case 'BEGIN' || 'START':
+          _transactionOpen = true;
+        case 'COMMIT' || 'END' || 'ABORT':
+          _transactionOpen = words.contains('CHAIN') && !words.contains('NO');
+        case 'ROLLBACK':
+          if (!words.skip(1).contains('TO')) {
+            _transactionOpen = words.contains('CHAIN') && !words.contains('NO');
+          }
+      }
+      return QueryResult(
+        columns: List.unmodifiable(
+          result.schema.columns.indexed.map(
+            (column) => column.$2.columnName ?? '[${column.$1}]',
+          ),
+        ),
+        rows: List.unmodifiable(result.map(List<Object?>.unmodifiable)),
+        affectedRows: result.affectedRows,
+      );
+    });
+    _tail = result.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stack) {
+        _failure ??= (error, stack);
+      },
+    );
+    return result;
+  }
+
+  Future<void> _finish({bool ignoreFailure = false}) async {
+    _active = false;
+    await _tail;
+    if (_transactionOpen) {
+      await connection.execute('ROLLBACK');
+      _transactionOpen = false;
+    }
+    if (!ignoreFailure) {
+      if (_failure case final failure?) {
+        Error.throwWithStackTrace(failure.$1, failure.$2);
+      }
+    }
+  }
+}
+
+List<String> _transactionWords(String sql) {
+  final words = <String>[];
+  var offset = 0;
+  while (offset < sql.length && words.length < 5) {
+    if (RegExp(r'\s').hasMatch(sql[offset])) {
+      offset++;
+    } else if (sql.startsWith('--', offset)) {
+      final end = sql.indexOf('\n', offset + 2);
+      offset = end < 0 ? sql.length : end + 1;
+    } else if (sql.startsWith('/*', offset)) {
+      var depth = 1;
+      offset += 2;
+      while (offset < sql.length && depth != 0) {
+        if (sql.startsWith('/*', offset)) {
+          depth++;
+          offset += 2;
+        } else if (sql.startsWith('*/', offset)) {
+          depth--;
+          offset += 2;
+        } else {
+          offset++;
+        }
+      }
+    } else {
+      final match = RegExp(r'[A-Za-z]+').matchAsPrefix(sql, offset);
+      if (match == null) break;
+      words.add(match.group(0)!.toUpperCase());
+      offset = match.end;
+    }
+  }
+  return words;
+}
+
+pg.TypedValue<Object> _parameter(Object? value) => switch (value) {
+  null => pg.TypedValue(pg.Type.unspecified, null),
+  int() => pg.TypedValue(pg.Type.bigInteger, value),
+  String() => pg.TypedValue(pg.Type.text, value),
+  bool() => pg.TypedValue(pg.Type.boolean, value),
+  double() => pg.TypedValue(pg.Type.double, value),
+  DateTime() => pg.TypedValue(pg.Type.timestampTz, value.toUtc()),
+  Uint8List() => pg.TypedValue(pg.Type.byteArray, value),
+  _ => throw ArgumentError.value(
+    value,
+    'parameter',
+    'Unsupported PostgreSQL value.',
+  ),
+};

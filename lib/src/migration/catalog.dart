@@ -1,0 +1,287 @@
+import 'dart:typed_data';
+
+import 'package:orm/database.dart';
+import 'package:orm/schema.dart';
+
+import 'planner.dart';
+
+Future<void> verifyCatalog(
+  Session session,
+  SchemaSnapshot snapshot,
+  Set<String> removedTables,
+) async {
+  for (final table in snapshot.tables) {
+    if (session.engine == Engine.sqlite) {
+      await _verifySqlite(session, table);
+    } else {
+      await _verifyPostgresql(session, table);
+    }
+  }
+  for (final table in removedTables) {
+    final result = session.engine == Engine.sqlite
+        ? await session.run(
+            "SELECT name FROM sqlite_schema WHERE type = 'table' AND name = ?",
+            parameters: [table],
+          )
+        : await session.run(
+            'SELECT c.relname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = current_schema() AND c.relname = \$1 AND c.relkind IN (\'r\', \'p\')',
+            parameters: [table],
+          );
+    if (result.rows.isNotEmpty) _mismatch(table, 'removed table still exists');
+  }
+}
+
+Future<void> _verifySqlite(Session session, TableDefinition table) async {
+  final result = await session.run(
+    'PRAGMA table_xinfo(${quoteIdentifier(table.name)})',
+  );
+  final columns = _records(result);
+  if (columns.length != table.columns.length) {
+    _mismatch(table.name, 'column count or missing table');
+  }
+  final source = await session.run(
+    "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?",
+    parameters: [table.name],
+  );
+  final createSql = source.rows.firstOrNull?.first as String? ?? '';
+  final unique = <String>{};
+  for (final index in _records(
+    await session.run('PRAGMA index_list(${quoteIdentifier(table.name)})'),
+  )) {
+    if (index['unique'] != 1) continue;
+    final indexed = _records(
+      await session.run(
+        'PRAGMA index_info(${quoteIdentifier(index['name'] as String)})',
+      ),
+    );
+    if (index['partial'] != 0 ||
+        indexed.length != 1 ||
+        indexed.single['name'] is! String) {
+      _mismatch(table.name, 'unique index is absent from the frozen schema');
+    }
+    unique.add(indexed.single['name'] as String);
+  }
+  final foreignKeys = _records(
+    await session.run(
+      'PRAGMA foreign_key_list(${quoteIdentifier(table.name)})',
+    ),
+  );
+  for (final column in table.columns) {
+    final actual = columns.where((c) => c['name'] == column.name).firstOrNull;
+    if (actual == null) _mismatch(table.name, 'missing column ${column.name}');
+    final pk = actual['pk'] != 0;
+    if ((actual['type'] as String).toUpperCase() !=
+            storageType(Engine.sqlite, column.type) ||
+        (actual['notnull'] != 0 || (pk && column.type == ScalarType.integer)) !=
+            !column.nullable ||
+        pk != column.primaryKey ||
+        actual['hidden'] != 0 ||
+        (unique.contains(column.name) && !pk) !=
+            (column.unique && !column.primaryKey) ||
+        !_defaultMatches(
+          Engine.sqlite,
+          column,
+          actual['dflt_value'] as String?,
+        )) {
+      _mismatch(table.name, 'definition of ${column.name}');
+    }
+    if (column.primaryKey &&
+        _hasSqlKeyword(createSql, 'AUTOINCREMENT') != column.identity) {
+      _mismatch(table.name, 'identity of ${column.name}');
+    }
+    final actualReferences = foreignKeys
+        .where((key) => key['from'] == column.name)
+        .toList();
+    final reference = column.references;
+    if (reference == null) {
+      if (actualReferences.isNotEmpty) {
+        _mismatch(table.name, 'unexpected foreign key ${column.name}');
+      }
+    } else if (actualReferences.length != 1 ||
+        actualReferences.single['table'] != reference.table ||
+        actualReferences.single['to'] != reference.column ||
+        (actualReferences.single['on_delete'] as String).toLowerCase() !=
+            reference.onDelete.toLowerCase() ||
+        foreignKeys
+                .where((key) => key['id'] == actualReferences.single['id'])
+                .length !=
+            1) {
+      _mismatch(table.name, 'foreign key ${column.name}');
+    }
+  }
+}
+
+// Keywords inside defaults, quoted identifiers or comments cannot define the
+// table's identity behavior. SQLite has no PRAGMA exposing AUTOINCREMENT.
+bool _hasSqlKeyword(String sql, String keyword) => RegExp(
+  r"""--[^\n]*(?:\n|$)|/\*[\s\S]*?\*/|'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|\[[^\]]*\]|[A-Za-z_][A-Za-z_0-9]*""",
+).allMatches(sql).any((token) => token.group(0)!.toUpperCase() == keyword);
+
+Future<void> _verifyPostgresql(Session session, TableDefinition table) async {
+  final columns = _records(
+    await session.run(
+      '''
+SELECT a.attname AS name, pg_catalog.format_type(a.atttypid, a.atttypmod) AS type,
+       a.attnotnull AS required, a.attidentity::text AS identity,
+       pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS default_value
+FROM pg_catalog.pg_attribute a
+JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+WHERE n.nspname = current_schema() AND c.relname = \$1
+  AND c.relkind IN ('r', 'p') AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum
+''',
+      parameters: [table.name],
+    ),
+  );
+  if (columns.length != table.columns.length) {
+    _mismatch(table.name, 'column count or missing table');
+  }
+  final constraints = _records(
+    await session.run(
+      '''
+SELECT k.contype::text AS kind, a.attname AS name, cardinality(k.conkey) AS key_count,
+       target.relname AS target_table, referenced.attname AS target_column,
+       target_namespace.nspname AS target_schema, k.confdeltype::text AS on_delete
+FROM pg_catalog.pg_constraint k
+JOIN pg_catalog.pg_class c ON c.oid = k.conrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.conkey[1]
+LEFT JOIN pg_catalog.pg_class target ON target.oid = k.confrelid
+LEFT JOIN pg_catalog.pg_namespace target_namespace ON target_namespace.oid = target.relnamespace
+LEFT JOIN pg_catalog.pg_attribute referenced ON referenced.attrelid = target.oid AND referenced.attnum = k.confkey[1]
+WHERE n.nspname = current_schema() AND c.relname = \$1 AND k.contype IN ('p', 'u', 'f')
+''',
+      parameters: [table.name],
+    ),
+  );
+  if (constraints.any((constraint) => constraint['key_count'] != 1)) {
+    _mismatch(
+      table.name,
+      'composite constraints are absent from the frozen schema',
+    );
+  }
+  final uniques = _records(
+    await session.run(
+      '''
+SELECT a.attname AS name, i.indnkeyatts AS key_count,
+       i.indpred IS NOT NULL AS partial, i.indexprs IS NOT NULL AS expression
+FROM pg_catalog.pg_index i
+JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum = i.indkey[0]
+WHERE n.nspname = current_schema() AND c.relname = \$1 AND i.indisunique
+''',
+      parameters: [table.name],
+    ),
+  );
+  if (uniques.any(
+    (index) =>
+        index['key_count'] != 1 ||
+        index['partial'] != false ||
+        index['expression'] != false,
+  )) {
+    _mismatch(table.name, 'unique index is absent from the frozen schema');
+  }
+  final currentSchema = (await session.run('SELECT current_schema()'))
+      .rows
+      .single
+      .single;
+  for (final column in table.columns) {
+    final actual = columns.where((c) => c['name'] == column.name).firstOrNull;
+    if (actual == null) _mismatch(table.name, 'missing column ${column.name}');
+    final primaryKeys = constraints
+        .where((c) => c['kind'] == 'p' && c['name'] == column.name)
+        .toList();
+    final pk = primaryKeys.length == 1 && primaryKeys.single['key_count'] == 1;
+    final expectedType = column.type == ScalarType.dateTime
+        ? 'TIMESTAMP WITH TIME ZONE'
+        : storageType(Engine.postgresql, column.type);
+    if ((actual['type'] as String).toUpperCase() != expectedType ||
+        actual['required'] != !column.nullable ||
+        pk != column.primaryKey ||
+        actual['identity'] != (column.identity ? 'a' : '') ||
+        (uniques.any((c) => c['name'] == column.name) && !pk) !=
+            (column.unique && !column.primaryKey) ||
+        !_defaultMatches(
+          Engine.postgresql,
+          column,
+          actual['default_value'] as String?,
+        )) {
+      _mismatch(table.name, 'definition of ${column.name}');
+    }
+    final actualReferences = constraints
+        .where((c) => c['kind'] == 'f' && c['name'] == column.name)
+        .toList();
+    final reference = column.references;
+    if (reference == null) {
+      if (actualReferences.isNotEmpty) {
+        _mismatch(table.name, 'unexpected foreign key ${column.name}');
+      }
+    } else if (actualReferences.length != 1 ||
+        actualReferences.single['key_count'] != 1 ||
+        actualReferences.single['target_table'] != reference.table ||
+        actualReferences.single['target_column'] != reference.column ||
+        actualReferences.single['target_schema'] != currentSchema ||
+        actualReferences.single['on_delete'] !=
+            {
+              'restrict': 'r',
+              'cascade': 'c',
+              'set null': 'n',
+              'no action': 'a',
+            }[reference.onDelete.toLowerCase()]) {
+      _mismatch(table.name, 'foreign key ${column.name}');
+    }
+  }
+}
+
+List<Map<String, Object?>> _records(QueryResult result) => [
+  for (final row in result.rows)
+    {for (var i = 0; i < result.columns.length; i++) result.columns[i]: row[i]},
+];
+
+Never _mismatch(String table, String detail) => throw StateError(
+  'Migration snapshot differs from database catalog: $table ($detail).',
+);
+
+bool _defaultMatches(Engine engine, ColumnDefinition column, String? actual) {
+  final expected = column.defaultValue;
+  if (actual == null || expected == null) {
+    return actual == null && expected == null;
+  }
+  var expression = actual.trim();
+  while (expression.startsWith('(') && expression.endsWith(')')) {
+    expression = expression.substring(1, expression.length - 1).trim();
+  }
+  if (engine == Engine.sqlite) {
+    return expression == literalSql(engine, expected);
+  }
+  expression = expression
+      .replaceFirst(
+        RegExp(
+          r'::(?:text|bigint|integer|numeric|double precision|boolean|timestamp with time zone|bytea)$',
+        ),
+        '',
+      )
+      .trim();
+  return switch (expected) {
+    int value => int.tryParse(_quotedString(expression) ?? expression) == value,
+    double value =>
+      double.tryParse(_quotedString(expression) ?? expression) == value,
+    bool value => expression.toLowerCase() == value.toString(),
+    String value => _quotedString(expression) == value,
+    DateTime value =>
+      DateTime.tryParse(_quotedString(expression) ?? '')?.toUtc() ==
+          value.toUtc(),
+    Uint8List value =>
+      expression.replaceAll('::text', '').replaceAll(' ', '').toLowerCase() ==
+          literalSql(engine, value).replaceAll(' ', '').toLowerCase(),
+    _ => false,
+  };
+}
+
+String? _quotedString(String expression) {
+  if (!expression.startsWith("'") || !expression.endsWith("'")) return null;
+  return expression.substring(1, expression.length - 1).replaceAll("''", "'");
+}

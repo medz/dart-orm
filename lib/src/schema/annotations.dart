@@ -1,289 +1,42 @@
-import '../values/codec.dart' show Codec;
-
-import 'model.dart' show ComputedStorage;
-
-/// Database behavior when a referenced row is deleted.
-enum ReferentialAction {
-  /// Rejects deletion while referencing rows exist.
-  restrict,
-
-  /// Deletes rows that reference the deleted row.
-  cascade,
-
-  /// Sets referencing columns to SQL NULL; those columns must be nullable.
-  setNull,
-
-  /// Assigns the referencing columns' database defaults when supported.
-  setDefault,
-
-  /// Uses the database's NO ACTION constraint semantics.
-  noAction,
+/// Declares a database table independently from its Dart row type.
+final class Table {
+  const Table(this.name);
+  final String name;
 }
 
-/// Maps an ordinary Dart class to a physical table.
-///
-/// [table] defaults to the class name without case conversion or pluralization.
-/// [namespace] overrides the PostgreSQL configuration default; it never changes
-/// the Dart class identity, query member name, or connection search path.
-///
-/// Optional plain, nongeneric mixins can share field annotations and business
-/// methods. Persistent mixin storage must be mutable and non-late, with constant
-/// initializers or implicit null. Map each field through a same-name, same-type
-/// named constructor parameter and a direct `this.field = field` assignment.
-/// Initializers are placeholders, not insert defaults. Generation rejects
-/// conflicting fields/accessors, repeated metadata, superclass storage and
-/// executable constructor logic beyond these assignments.
-final class Model {
-  /// Explicit physical table name.
-  final String? table;
-
-  /// Explicit PostgreSQL namespace, independent of source paths.
-  final String? namespace;
-
-  /// Marks a class for static generation.
-  const Model({this.table, this.namespace});
-}
-
-/// Declares a named flat SQL projection without a physical table.
-///
-/// Put this on a public nongeneric class with an unnamed constructor using named
-/// parameters, or on a typedef for a named record. Generation emits a typed
-/// expression-binding function and derived query fields. Every constructor
-/// parameter or record field is an explicitly required expression at binding.
-/// The expression supplies its codec; no column or storage annotation is needed.
-/// An abstract class must expose a factory returning a concrete implementation;
-/// an abstract generative constructor cannot materialize a result.
-///
-/// Class projections construct the original DTO after decoding, retaining its
-/// methods. Constructor validation or transformation runs only when results are
-/// materialized. Derived SQL fields always refer to the bound SQL slots, before
-/// such Dart constructor logic. Projections never enter schema snapshots or
-/// migration history, and generation never executes the DTO constructor.
-final class Projection {
-  /// Marks a class or named-record typedef for projection generation.
-  const Projection();
-}
-
-/// Includes a field in the primary key, in constructor declaration order.
-final class Id {
-  /// Whether the database generates this single integer-storage key.
-  ///
-  /// Generated keys reject [DatabaseDefault] and may use [ClientDefault].
-  final bool generated;
-
-  /// Marks a primary-key field. Generated keys may be omitted on creation.
-  const Id({this.generated = false});
-}
-
-/// Overrides inferred scalar storage metadata without changing the DTO type.
+/// Overrides a field's SQL name and optional literal database default.
 final class Column {
-  /// Physical column name; otherwise the field name is converted to snake_case.
+  const Column({this.name, this.defaultValue});
   final String? name;
-
-  /// Public constant codec for a domain value. Its type must match the field.
-  final Codec<Object?>? codec;
-
-  /// Complete, distinct storage labels for an enum field.
-  final Map<Enum, String>? labels;
-
-  /// Integer width, when integer storage is selected.
-  final int? bits;
-
-  /// Decimal or temporal precision, according to the storage type.
-  final int? precision;
-
-  /// Decimal scale, requiring an explicit precision.
-  final int? scale;
-
-  /// Configures physical scalar storage.
-  const Column({
-    this.name,
-    this.codec,
-    this.labels,
-    this.bits,
-    this.precision,
-    this.scale,
-  });
+  final Object? defaultValue;
 }
 
-/// Declares a unique field, or a class-level ordered composite unique key.
+/// Declares a primary key. Identity keys must be non-nullable integers.
+final class PrimaryKey {
+  const PrimaryKey({this.autoIncrement = false});
+  final bool autoIncrement;
+}
+
+/// Declares a unique column constraint.
 final class Unique {
-  /// Dart field names for class-level usage; empty on a scalar field.
-  final List<String> fields;
-
-  /// Declares uniqueness. Strings are checked during generation.
-  const Unique([this.fields = const []]);
+  const Unique();
 }
 
-/// Declares a named index using Dart field names, checked during generation.
-final class Index {
-  /// Ordered fields in the index.
-  final List<String> fields;
-
-  /// Physical index name.
-  final String name;
-
-  /// Whether the index also enforces uniqueness.
-  final bool unique;
-
-  /// Declares a class-level index.
-  const Index(this.fields, {required this.name, this.unique = false});
-}
-
-/// Declares explicit navigation and optionally a physical foreign key.
-///
-/// On a scalar field, use [key] for the target field. On a class, use ordered
-/// [fields] and [keys]; each pair is validated for type, storage and codec.
-/// The target must be reachable through a model source, export or relation.
-/// Relations never become DTO fields or automatically loaded placeholders.
-final class Relation {
-  /// Original annotated target class.
-  final Type target;
-
-  /// Generated navigation member on this model's query fields.
-  final String name;
-
-  /// Target field for a single-field relation; defaults to its primary key.
-  final String? key;
-
-  /// Local fields for class-level composite relations.
-  final List<String> fields;
-
-  /// Ordered target fields; defaults to the target primary key.
-  final List<String> keys;
-
-  /// Optional reverse navigation; it does not create a second foreign key.
-  final String? inverse;
-
-  /// Physical deletion action when [constraint] is true.
-  final ReferentialAction onDelete;
-
-  /// Whether to create a database foreign key, rather than read-only navigation.
-  final bool constraint;
-
-  /// Declares a checked relation whose loading remains explicit.
-  const Relation({
-    required this.target,
-    required this.name,
-    this.key,
-    this.fields = const [],
-    this.keys = const [],
-    this.inverse,
-    this.onDelete = ReferentialAction.restrict,
-    this.constraint = true,
+/// Declares a foreign key by physical table/column identity.
+final class References {
+  const References(
+    this.table, {
+    this.column = 'id',
+    this.onDelete = 'restrict',
   });
+  final String table;
+  final String column;
+  final String onDelete;
 }
 
-/// Excludes an instance field from persistent scalar mapping.
-///
-/// An ignored constructor parameter must be optional so complete database rows
-/// can still instantiate the DTO without inventing a value for it.
-final class Ignore {
-  /// Marks a nonpersistent field or constructor parameter.
-  const Ignore();
-}
-
-/// Supplies an omitted insert value using a public synchronous factory.
-///
-/// The zero-required-argument factory is referenced, never run during generation.
-/// Explicit values, including legal null, bypass it. Patches never apply it.
-/// Generated references retain the annotation's public import/export entrypoint,
-/// including conditional imports. A mixin-local factory must be exposed through
-/// the applied mixin's entrypoint. Platform branches need compatible signatures;
-/// incompatible callbacks fail target compilation instead of selecting the
-/// generation host's implementation.
-/// Local typedef qualifiers may expand to a public target. Conditional mixins
-/// must expose that target and keep their alias mapping consistent across branches.
-/// Explicit generic arguments retain their own public routes, including nested
-/// types and local private typedefs. Inferred conditional arguments without a
-/// provable public route require explicit spelling and a located diagnostic.
-final class ClientDefault {
-  /// Public top-level function, static method or constructor tear-off.
-  final Function factory;
-
-  /// Declares a client-side default factory.
-  const ClientDefault(this.factory);
-}
-
-/// Explicitly declares a database insert default.
-///
-/// Constructor constants are client-side fallbacks only; they do not imply this
-/// annotation or a SQL DEFAULT. An explicit client factory takes precedence over
-/// this default. Actual database values always populate complete DTO reads.
-/// A generated [Id] already owns its database default and rejects this annotation.
-final class DatabaseDefault {
-  /// Scalar constant to encode as a SQL default, or null for [DatabaseDefault.sql].
-  final Object? value;
-
-  /// Trusted SQL expression, without automatic quoting.
-  final String? expression;
-
-  /// Uses a scalar constant as a database default, including a legal null.
-  const DatabaseDefault(this.value) : expression = null;
-
-  /// Uses a trusted SQL expression as a database default.
-  const DatabaseDefault.sql(String sql) : value = null, expression = sql;
-}
-
-/// Marks a scalar field as database-computed and excludes it from writes.
-/// Expressions are trusted SQL using physical column names.
-final class Computed {
-  /// SQL used where no dialect override is provided.
-  final String expression;
-
-  /// SQLite expression override; empty explicitly marks it unsupported.
-  final String? sqlite;
-
-  /// PostgreSQL expression override.
-  final String? postgres;
-
-  /// MySQL expression override.
-  final String? mysql;
-
-  /// MariaDB expression override.
-  final String? mariadb;
-
-  /// Whether computation is stored or virtual, subject to engine capabilities.
-  final ComputedStorage storage;
-
-  /// Declares a computed database field.
-  const Computed(
-    this.expression, {
-    this.sqlite,
-    this.postgres,
-    this.mysql,
-    this.mariadb,
-    this.storage = ComputedStorage.stored,
-  });
-}
-
-/// Declares a class-level database check using trusted SQL.
-final class Check {
-  /// SQL used where no dialect override is provided.
-  final String expression;
-
-  /// Optional physical constraint name.
-  final String? name;
-
-  /// SQLite expression override; empty explicitly marks it unsupported.
-  final String? sqlite;
-
-  /// PostgreSQL expression override.
-  final String? postgres;
-
-  /// MySQL expression override.
-  final String? mysql;
-
-  /// MariaDB expression override.
-  final String? mariadb;
-
-  /// Declares a database check; generation does not execute the expression.
-  const Check(
-    this.expression, {
-    this.name,
-    this.sqlite,
-    this.postgres,
-    this.mysql,
-    this.mariadb,
-  });
+/// Registers a named-record selection against a declared row type.
+/// Generated code rejects unknown selections before SQL execution.
+final class SelectFrom {
+  const SelectFrom(this.rowType);
+  final Type rowType;
 }

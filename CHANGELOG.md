@@ -1,17 +1,22 @@
 ## Unreleased
 
-- Describe SQLite/PostgreSQL `ON CONFLICT DO NOTHING` directly on model insert
-  plans. Validate conflict targets before client defaults, preserve typed native
-  RETURNING, and sample fresh defaults at each terminal unless explicitly prepared.
-- Add an order/inventory example with saved SQLite migrations, atomic stock
-  reservations, idempotent requests and named nested receipts.
+- Reimplement the ORM with independent schema, query, database, driver,
+  migration and development modules. Cross-module imports use public entrypoints.
+- Generate typed tables with direct named-record selections, nullable partial
+  updates, guarded arithmetic and explicit transaction sessions.
+- Support native SQLite and PostgreSQL, with engine-specific frozen Dart
+  migration histories and catalog verification.
+- Add a complete shop example covering relationship batching, integer-cent
+  totals, atomic stock updates, idempotent requests and rollback.
+- This is an unreleased breaking rewrite; previous generated clients and
+  migration definitions have no compatibility layer.
 
 ## 6.0.0-beta.7
 
 Breaking beta API change: regenerate clients and update imports, database setup,
 selections and writes. Keep reviewed migration definitions and fingerprints.
-See the [beta.7 migration guide](doc/upgrade-beta7.md) and
-[API guide](doc/api.md) for the updated workflow.
+See the [tagged beta.7 migration guide](https://github.com/medz/dart-orm/blob/orm-v6.0.0-beta.7/doc/upgrade-beta7.md) and
+[tagged API guide](https://github.com/medz/dart-orm/blob/orm-v6.0.0-beta.7/doc/api.md) for that release's workflow.
 
 - Separate engine-created `SqlDatabase` from the ORM view created with
   `Database.fromSql`. Public entrypoints have explicit ownership; remove the
