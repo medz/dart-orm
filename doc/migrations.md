@@ -110,5 +110,7 @@ The runner manages the tables listed in its snapshots and checks historical
 removed tables. Other tables in the database are outside that history. Catalog
 verification covers columns, storage types, nullability, single-column primary
 keys, identity, single-column unique constraints and foreign keys, and literal
-defaults. Composite constraints are unsupported. Arbitrary non-unique indexes,
+defaults. PostgreSQL foreign keys must be enforced and validated; unique indexes
+must be valid and ready. Unfinished constraint/index builds cannot be recorded as
+matching the frozen schema. Composite constraints are unsupported. Arbitrary non-unique indexes,
 triggers and check constraints are not represented in the current snapshot API.

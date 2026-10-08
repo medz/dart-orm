@@ -110,14 +110,18 @@ String migrationFingerprint({
 /// Copies and validates a snapshot without retaining mutable application data.
 ///
 /// SQLite physical identifiers use ASCII case folding; PostgreSQL quoted names
-/// preserve case. The migration history table is reserved on either engine.
+/// preserve case and must fit within 63 UTF-8 bytes. SQLite's `sqlite_` table
+/// prefix and the migration history table are reserved.
 SchemaSnapshot freezeSnapshot(SchemaSnapshot snapshot) {
   final tables = <TableDefinition>[];
   final tableNames = <String>{};
   for (final table in snapshot.tables) {
-    validIdentifier(table.name);
+    _validatePhysicalIdentifier(snapshot.engine, table.name);
     final tableIdentity = _physicalIdentity(snapshot.engine, table.name);
-    if (tableIdentity == '_orm_migrations' || !tableNames.add(tableIdentity)) {
+    if (tableIdentity == '_orm_migrations' ||
+        (snapshot.engine == Engine.sqlite &&
+            tableIdentity.startsWith('sqlite_')) ||
+        !tableNames.add(tableIdentity)) {
       throw ArgumentError('Duplicate or reserved table ${table.name}.');
     }
     if (table.columns.isEmpty) {
@@ -128,7 +132,7 @@ SchemaSnapshot freezeSnapshot(SchemaSnapshot snapshot) {
     var primaryKeys = 0;
     final columns = <ColumnDefinition>[];
     for (final column in table.columns) {
-      validIdentifier(column.name);
+      _validatePhysicalIdentifier(snapshot.engine, column.name);
       if (!names.add(_physicalIdentity(snapshot.engine, column.name)) ||
           !fields.add(column.field)) {
         throw ArgumentError('Duplicate column or field in ${table.name}.');
@@ -150,8 +154,8 @@ SchemaSnapshot freezeSnapshot(SchemaSnapshot snapshot) {
       }
       final reference = column.references;
       if (reference != null) {
-        validIdentifier(reference.table);
-        validIdentifier(reference.column);
+        _validatePhysicalIdentifier(snapshot.engine, reference.table);
+        _validatePhysicalIdentifier(snapshot.engine, reference.column);
         if (!const {
           'restrict',
           'cascade',
@@ -223,6 +227,15 @@ String _physicalIdentity(Engine engine, String name) => engine == Engine.sqlite
         ),
       )
     : name;
+
+void _validatePhysicalIdentifier(Engine engine, String name) {
+  validIdentifier(name);
+  if (engine == Engine.postgresql && utf8.encode(name).length > 63) {
+    throw ArgumentError(
+      'PostgreSQL identifiers must fit within 63 UTF-8 bytes.',
+    );
+  }
+}
 
 void validIdentifier(String value) {
   if (value.isEmpty || value.contains('\u0000')) {

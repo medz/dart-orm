@@ -138,12 +138,15 @@ ORDER BY a.attnum
   if (columns.length != table.columns.length) {
     _mismatch(table.name, 'column count or missing table');
   }
+  // PostgreSQL 18 added conenforced; JSON lookup keeps older catalogs readable.
   final constraints = _records(
     await session.run(
       '''
 SELECT k.contype::text AS kind, a.attname AS name, cardinality(k.conkey) AS key_count,
        target.relname AS target_table, referenced.attname AS target_column,
-       target_namespace.nspname AS target_schema, k.confdeltype::text AS on_delete
+       target_namespace.nspname AS target_schema, k.confdeltype::text AS on_delete,
+       k.convalidated AS validated,
+       COALESCE((to_jsonb(k)->>'conenforced')::boolean, true) AS enforced
 FROM pg_catalog.pg_constraint k
 JOIN pg_catalog.pg_class c ON c.oid = k.conrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -166,7 +169,8 @@ WHERE n.nspname = current_schema() AND c.relname = \$1 AND k.contype IN ('p', 'u
     await session.run(
       '''
 SELECT a.attname AS name, i.indnkeyatts AS key_count,
-       i.indpred IS NOT NULL AS partial, i.indexprs IS NOT NULL AS expression
+       i.indpred IS NOT NULL AS partial, i.indexprs IS NOT NULL AS expression,
+       i.indisvalid AS valid, i.indisready AS ready
 FROM pg_catalog.pg_index i
 JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -176,6 +180,11 @@ WHERE n.nspname = current_schema() AND c.relname = \$1 AND i.indisunique
       parameters: [table.name],
     ),
   );
+  if (uniques.any(
+    (index) => index['valid'] != true || index['ready'] != true,
+  )) {
+    _mismatch(table.name, 'unique index is not valid and ready');
+  }
   if (uniques.any(
     (index) =>
         index['key_count'] != 1 ||
@@ -221,6 +230,8 @@ WHERE n.nspname = current_schema() AND c.relname = \$1 AND i.indisunique
       }
     } else if (actualReferences.length != 1 ||
         actualReferences.single['key_count'] != 1 ||
+        actualReferences.single['validated'] != true ||
+        actualReferences.single['enforced'] != true ||
         actualReferences.single['target_table'] != reference.table ||
         actualReferences.single['target_column'] != reference.column ||
         actualReferences.single['target_schema'] != currentSchema ||

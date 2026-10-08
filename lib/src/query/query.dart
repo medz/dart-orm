@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:orm/database.dart';
@@ -49,7 +50,8 @@ T decodeValue<T>(Object? value) {
 /// SQL field names resolve only within this physical table. Mutation return
 /// shapes are decoded from RETURNING; no preparatory SELECT is performed.
 /// SQLite column identities fold ASCII case; PostgreSQL quoted names retain it.
-/// The migration history table is reserved and cannot be a table query.
+/// PostgreSQL identifiers must fit within 63 UTF-8 bytes. SQLite's `sqlite_`
+/// table prefix and the migration history table are reserved.
 final class TableQuery<R> {
   TableQuery(this.session, TableDefinition definition, this.decode)
     : definition = TableDefinition(
@@ -81,9 +83,12 @@ final class TableQuery<R> {
   final int? _offset;
 
   void _validateDefinition() {
-    quoteIdentifier(definition.name);
-    if (_physicalIdentity(definition.name) == '_orm_migrations') {
-      throw ArgumentError('Migration history is a reserved table');
+    _validatePhysicalIdentifier(definition.name);
+    final tableIdentity = _physicalIdentity(definition.name);
+    if (tableIdentity == '_orm_migrations' ||
+        (session.engine == Engine.sqlite &&
+            tableIdentity.startsWith('sqlite_'))) {
+      throw ArgumentError('Reserved table ${definition.name}');
     }
     if (definition.columns.isEmpty) {
       throw ArgumentError('A table requires columns');
@@ -92,7 +97,7 @@ final class TableQuery<R> {
     final names = <String>{};
     var primaryKeys = 0;
     for (final c in definition.columns) {
-      quoteIdentifier(c.name);
+      _validatePhysicalIdentifier(c.name);
       if (c.field.isEmpty ||
           !fields.add(c.field) ||
           !names.add(_physicalIdentity(c.name))) {
@@ -112,9 +117,23 @@ final class TableQuery<R> {
           'Identity requires an integer primary key without a default',
         );
       }
+      final reference = c.references;
+      if (reference != null) {
+        _validatePhysicalIdentifier(reference.table);
+        _validatePhysicalIdentifier(reference.column);
+      }
     }
     if (primaryKeys > 1) {
       throw ArgumentError('Composite primary keys are unsupported');
+    }
+  }
+
+  void _validatePhysicalIdentifier(String name) {
+    quoteIdentifier(name);
+    if (session.engine == Engine.postgresql && utf8.encode(name).length > 63) {
+      throw ArgumentError(
+        'PostgreSQL identifiers must fit within 63 UTF-8 bytes.',
+      );
     }
   }
 

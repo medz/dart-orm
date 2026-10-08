@@ -6,6 +6,11 @@ Declare immutable classes with final scalar fields. Dart 3.13 primary
 constructors keep the declaration small. Table and column names are
 physical identities, independent of Dart class or record names.
 
+PostgreSQL identifiers are limited to 63 UTF-8 bytes. SQLite identifiers compare
+ASCII letters without case sensitivity, and table names beginning with `sqlite_`
+are reserved. `_orm_migrations` belongs to the migration runner. Generation and
+typed queries reject invalid physical identities before writing files or SQL.
+
 ```dart
 import 'package:orm/schema.dart';
 

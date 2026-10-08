@@ -377,6 +377,32 @@ final class const User({
   );
 
   test(
+    'reserved SQLite and overlong PostgreSQL names fail without output',
+    () async {
+      for (final (engine, table) in [
+        (Engine.sqlite, 'SQLite_widgets'),
+        (Engine.postgresql, '${List.filled(63, 't').join()}x'),
+      ]) {
+        await expectLater(
+          generate('''
+@Table('$table')
+final class const Thing({@PrimaryKey() required final int id});
+''', engine: engine),
+          throwsArgumentError,
+        );
+        expect(
+          await File('${directory.path}/models.db.dart').exists(),
+          isFalse,
+        );
+        expect(
+          await File('${directory.path}/models.snapshot.dart').exists(),
+          isFalse,
+        );
+      }
+    },
+  );
+
+  test(
     'filesystem model names become URI paths before Dart import emission',
     () async {
       final output = '${directory.path}/models.db.dart';

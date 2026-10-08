@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:orm/database.dart';
 import 'package:orm/migration.dart';
 import 'package:orm/query.dart';
@@ -67,6 +69,7 @@ void main() {
       for (final sql in [
         'CREATE TABLE "Users" (id INTEGER)',
         'CREATE TABLE "_ORM_MIGRATIONS" (id INTEGER)',
+        'CREATE TABLE "SQLite_widgets" (id INTEGER)',
         'CREATE TABLE duplicate_columns ("id" INTEGER, "ID" INTEGER)',
       ]) {
         await expectLater(fixture.db.session.run(sql), throwsException);
@@ -87,6 +90,12 @@ void main() {
           TableDefinition('_Orm_Migrations', [_id]),
         ],
         [
+          TableDefinition('sqlite_widgets', [_id]),
+        ],
+        [
+          TableDefinition('SQLite_schema', [_id]),
+        ],
+        [
           TableDefinition('users', [_id]),
           TableDefinition('Users', [_id]),
         ],
@@ -105,6 +114,8 @@ void main() {
       }
       for (final table in [
         const TableDefinition('_ORM_MIGRATIONS', [_id]),
+        const TableDefinition('sqlite_widgets', [_id]),
+        const TableDefinition('SQLite_schema', [_id]),
         const TableDefinition('mixed_columns', [_id, _upperId]),
       ]) {
         expect(
@@ -141,6 +152,71 @@ void main() {
           );
           expect(fixture.events, isEmpty);
         });
+
+        test(
+          '63-byte table, column and reference identities stay exact',
+          () async {
+            final fixture = await openTestDatabase(engine);
+            addTearDown(fixture.db.close);
+            final tableName = List.filled(63, 't').join();
+            final columnName = '${List.filled(61, 'c').join()}é';
+            expect(utf8.encode(tableName), hasLength(63));
+            expect(utf8.encode(columnName), hasLength(63));
+            final parent = TableDefinition(tableName, [
+              ColumnDefinition(
+                name: columnName,
+                field: 'id',
+                type: ScalarType.integer,
+                primaryKey: true,
+              ),
+              const ColumnDefinition(
+                name: 'value',
+                field: 'value',
+                type: ScalarType.text,
+              ),
+            ]);
+            final child = TableDefinition('boundary_reference', [
+              _id,
+              ColumnDefinition(
+                name: 'parent_id',
+                field: 'parentId',
+                type: ScalarType.integer,
+                references: ForeignKey(tableName, columnName),
+              ),
+            ]);
+            await _applyTables(fixture, engine, [parent, child]);
+            final parentQuery = TableQuery(
+              fixture.db.session,
+              parent,
+              (row) => (
+                id: decodeValue<int>(row[0]),
+                value: decodeValue<String>(row[1]),
+              ),
+            );
+            final childQuery = TableQuery(
+              fixture.db.session,
+              child,
+              (row) => (
+                id: decodeValue<int>(row[0]),
+                parentId: decodeValue<int>(row[1]),
+              ),
+            );
+            expect(await parentQuery.insert({'id': 1, 'value': 'exact'}), (
+              id: 1,
+              value: 'exact',
+            ));
+            expect(await childQuery.insert({'id': 2, 'parentId': 1}), (
+              id: 2,
+              parentId: 1,
+            ));
+            expect(await parentQuery.updateById(1, {'value': 'updated'}), (
+              id: 1,
+              value: 'updated',
+            ));
+            expect(await parentQuery.get(1), (id: 1, value: 'updated'));
+            expect(await childQuery.get(2), (id: 2, parentId: 1));
+          },
+        );
 
         test(
           'non-ASCII case variants stay distinct in tables and columns',
@@ -199,6 +275,103 @@ void main() {
       },
     );
   }
+
+  test(
+    'PostgreSQL rejects overlong physical identities without touching short names',
+    skip: !hasPostgres
+        ? 'Set ORM_TEST_POSTGRES_HOST or ORM_TEST_POSTGRES_SOCKET for a real database'
+        : false,
+    () async {
+      final fixture = await openTestDatabase(Engine.postgresql);
+      addTearDown(fixture.db.close);
+      final shortTable = List.filled(63, 't').join();
+      final shortColumn = '${List.filled(61, 'c').join()}é';
+      final longTable = '${shortTable}x';
+      final longColumn = '${shortColumn}x';
+      expect(utf8.encode(longColumn), hasLength(64));
+      expect(longColumn, hasLength(63));
+      final table = TableDefinition(shortTable, const [
+        _id,
+        ColumnDefinition(name: 'value', field: 'value', type: ScalarType.text),
+      ]);
+      final columns = TableDefinition('column_boundary', [
+        _id,
+        ColumnDefinition(
+          name: shortColumn,
+          field: 'value',
+          type: ScalarType.text,
+        ),
+      ]);
+      await _applyTables(fixture, Engine.postgresql, [table, columns]);
+      final tableQuery = TableQuery(fixture.db.session, table, (row) => row[1]);
+      final columnQuery = TableQuery(
+        fixture.db.session,
+        columns,
+        (row) => row[1],
+      );
+      await tableQuery.insert({'id': 1, 'value': 'short-table-original'});
+      await columnQuery.insert({'id': 1, 'value': 'short-column-original'});
+      fixture.events.clear();
+      final invalid = [
+        TableDefinition(longTable, table.columns),
+        TableDefinition(longColumn, table.columns),
+        TableDefinition(columns.name, [
+          _id,
+          ColumnDefinition(
+            name: longColumn,
+            field: 'value',
+            type: ScalarType.text,
+          ),
+        ]),
+        TableDefinition('reference_boundary', [
+          _id,
+          ColumnDefinition(
+            name: 'parent_id',
+            field: 'value',
+            type: ScalarType.integer,
+            references: ForeignKey(longTable, 'id'),
+          ),
+        ]),
+        TableDefinition('reference_boundary', [
+          _id,
+          ColumnDefinition(
+            name: 'parent_value',
+            field: 'value',
+            type: ScalarType.text,
+            references: ForeignKey(columns.name, longColumn),
+          ),
+        ]),
+      ];
+      final rejected = throwsA(
+        isA<ArgumentError>().having(
+          (error) => error.message,
+          'message',
+          contains('63 UTF-8 bytes'),
+        ),
+      );
+      for (final definition in invalid) {
+        expect(
+          () => freezeSnapshot(
+            SchemaSnapshot(engine: Engine.postgresql, tables: [definition]),
+          ),
+          rejected,
+        );
+        await expectLater(
+          Future.sync(
+            () => TableQuery(
+              fixture.db.session,
+              definition,
+              (row) => row,
+            ).updateById(1, {'value': 'must-not-write'}),
+          ),
+          rejected,
+        );
+      }
+      expect(fixture.events, isEmpty);
+      expect(await tableQuery.get(1), 'short-table-original');
+      expect(await columnQuery.get(1), 'short-column-original');
+    },
+  );
 
   test(
     'PostgreSQL quoted ASCII variants are separate physical identities',

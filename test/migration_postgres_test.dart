@@ -5,6 +5,8 @@ import 'package:orm/database.dart';
 import 'package:orm/migration.dart';
 import 'package:orm/postgres.dart';
 import 'package:orm/schema.dart';
+import 'package:postgres/postgres.dart'
+    show ForeignKeyViolationException, UniqueViolationException;
 import 'package:test/test.dart';
 
 import '../example/migrations/postgres/history.dart' as shop;
@@ -15,6 +17,22 @@ const _id = ColumnDefinition(
   type: ScalarType.integer,
   primaryKey: true,
   identity: true,
+);
+
+const _relationships = SchemaSnapshot(
+  engine: Engine.postgresql,
+  tables: [
+    TableDefinition('parents', [_id]),
+    TableDefinition('children', [
+      _id,
+      ColumnDefinition(
+        name: 'parent_id',
+        field: 'parentId',
+        type: ScalarType.integer,
+        references: ForeignKey('parents', 'id'),
+      ),
+    ]),
+  ],
 );
 
 Migration _migration(
@@ -355,6 +373,170 @@ void main() {
             )).rows,
             isEmpty,
           );
+        },
+      );
+
+      test(
+        'unenforced foreign keys roll back DDL and migration markers',
+        () async {
+          final version =
+              (await database.session.run(
+                    "SELECT current_setting('server_version_num')::integer",
+                  )).rows.single.single
+                  as int;
+          if (version < 180000) {
+            markTestSkipped('NOT ENFORCED foreign keys require PostgreSQL 18.');
+            return;
+          }
+          final steps = planSchemaChange(
+            const SchemaSnapshot(engine: Engine.postgresql, tables: []),
+            _relationships,
+          ).steps;
+          await expectLater(
+            MigrationRunner(
+              database,
+              _history([
+                _migration(1, _relationships, [
+                  for (final sql in steps)
+                    sql.replaceFirst(
+                      'ON DELETE RESTRICT',
+                      'ON DELETE RESTRICT NOT ENFORCED',
+                    ),
+                ]),
+              ]),
+            ).apply(),
+            throwsStateError,
+          );
+          expect(
+            (await database.session.run(
+              'SELECT tablename FROM pg_tables WHERE schemaname = \$1',
+              parameters: [schema],
+            )).rows,
+            isEmpty,
+          );
+          final runner = MigrationRunner(
+            database,
+            _history([_migration(1, _relationships, steps)]),
+          );
+          expect(await runner.apply(), [1]);
+          await expectLater(
+            database.session.run(
+              'INSERT INTO children (parent_id) VALUES (999)',
+            ),
+            throwsA(isA<ForeignKeyViolationException>()),
+          );
+          expect(await runner.apply(), isEmpty);
+        },
+      );
+
+      test(
+        'unvalidated foreign keys with orphan rows reject migration markers',
+        () async {
+          const steps = [
+            'CREATE TABLE parents (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY NOT NULL)',
+            'CREATE TABLE children (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY NOT NULL, parent_id BIGINT NOT NULL)',
+            'INSERT INTO children (parent_id) VALUES (999)',
+            'ALTER TABLE children ADD CONSTRAINT parent_fk FOREIGN KEY (parent_id) REFERENCES parents(id) ON DELETE RESTRICT NOT VALID',
+          ];
+          await expectLater(
+            MigrationRunner(
+              database,
+              _history([_migration(1, _relationships, steps)]),
+            ).apply(),
+            throwsStateError,
+          );
+          expect(
+            (await database.session.run(
+              'SELECT tablename FROM pg_tables WHERE schemaname = \$1',
+              parameters: [schema],
+            )).rows,
+            isEmpty,
+          );
+          final runner = MigrationRunner(
+            database,
+            _history([
+              _migration(1, _relationships, [
+                ...steps.take(2),
+                steps.last,
+                'ALTER TABLE children VALIDATE CONSTRAINT parent_fk',
+              ]),
+            ]),
+          );
+          expect(await runner.apply(), [1]);
+          expect(await runner.apply(), isEmpty);
+        },
+      );
+
+      test(
+        'failed concurrent unique indexes reject migration markers',
+        () async {
+          const snapshot = SchemaSnapshot(
+            engine: Engine.postgresql,
+            tables: [
+              TableDefinition('users', [
+                _id,
+                ColumnDefinition(
+                  name: 'name',
+                  field: 'name',
+                  type: ScalarType.text,
+                  unique: true,
+                ),
+              ]),
+            ],
+          );
+          await database.session.run(
+            'CREATE TABLE users (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY NOT NULL, name TEXT NOT NULL)',
+          );
+          await database.session.run(
+            "INSERT INTO users (name) VALUES ('duplicate'), ('duplicate')",
+          );
+          await expectLater(
+            database.session.run(
+              'CREATE UNIQUE INDEX CONCURRENTLY names ON users (name)',
+            ),
+            throwsA(isA<UniqueViolationException>()),
+          );
+          expect(
+            (await database.session.run(
+              "SELECT indisvalid, indisready FROM pg_index WHERE indexrelid = 'names'::regclass",
+            )).rows,
+            [
+              [false, false],
+            ],
+          );
+          final runner = MigrationRunner(
+            database,
+            _history([_migration(1, snapshot, [])]),
+          );
+          await expectLater(runner.apply(), throwsStateError);
+          expect(
+            (await database.session.run(
+              "SELECT to_regclass('_orm_migrations')",
+            )).rows,
+            [
+              [null],
+            ],
+          );
+          expect(
+            (await database.session.run('SELECT count(*) FROM users'))
+                .rows
+                .single
+                .single,
+            2,
+          );
+          await database.session.run('DROP INDEX names');
+          await database.session.run('DELETE FROM users WHERE id = 2');
+          await database.session.run(
+            'CREATE UNIQUE INDEX CONCURRENTLY names ON users (name)',
+          );
+          expect(await runner.apply(), [1]);
+          await expectLater(
+            database.session.run(
+              "INSERT INTO users (name) VALUES ('duplicate')",
+            ),
+            throwsA(isA<UniqueViolationException>()),
+          );
+          expect(await runner.apply(), isEmpty);
         },
       );
 
