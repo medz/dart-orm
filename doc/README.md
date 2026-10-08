@@ -2,25 +2,22 @@
 
 ## Models and generation
 
-Declare immutable classes with final scalar fields and a public unnamed
-constructor that assigns matching named parameters. Table and column names are
+Declare immutable classes with final scalar fields. Dart 3.13 primary
+constructors keep the declaration small. Table and column names are
 physical identities, independent of Dart class or record names.
 
 ```dart
 import 'package:orm/schema.dart';
 
 @Table('users')
-final class User {
-  const User({required this.id, required this.username, required this.age,
-    this.nickname});
-
+final class const User({
   @PrimaryKey(autoIncrement: true)
-  final int id;
+  required final int id,
   @Unique()
-  final String username;
-  final int age;
-  final String? nickname;
-}
+  required final String username,
+  required final int age,
+  final String? nickname,
+});
 
 @SelectFrom(User)
 typedef UserCard = ({int id, String username});
@@ -32,7 +29,10 @@ Use `@Column(name: 'joined_at')` to map a field name and
 physical primary-key column `id`. Targets must exist in the same declared schema
 and have compatible types. Every table needs exactly one non-null primary key.
 An identity key is an integer primary key and is omitted from generated creation
-arguments. Constructor defaults do not become database defaults.
+arguments. Ordinary constructors are supported when every parameter directly
+assigns its matching field. Transforming initializers, assertions, bodies and
+uninitialized late fields are rejected: decoding must faithfully return the row
+the database stored. Constructor defaults do not become database defaults.
 
 ```sh
 dart run orm generate --schema lib/models.dart --out lib/models.db.dart --name AppDatabase --engine sqlite
@@ -116,6 +116,22 @@ Registered selections must have exactly matching field names, types and
 nullability. Unknown selection types fail before SQL. `.all()` returns full
 models; `.select<T>()` fetches only the columns registered for T.
 
+To claim a unique key without changing an existing row:
+
+```dart
+final user = await db.users.createIfAbsent(
+  .username,
+  username: 'seven',
+  age: 28,
+);
+// user is null if that username already exists.
+```
+
+The generated target type contains the table's insertable single-column unique
+keys. Supply a non-null target value. Other constraint failures propagate.
+`createIfAbsent` executes one INSERT ON CONFLICT DO NOTHING RETURNING; replay
+handling remains explicit in application code.
+
 Filters are preserved on `get`, `update`, `delete`, `increment` and `decrement`.
 Paging and sorting on those operations are rejected. `create` requires an
 unfiltered table. Numeric changes accept positive amounts on non-null numeric
@@ -188,19 +204,21 @@ emits PRAGMA statements; account for these when measuring total work.
 | String | TEXT | TEXT |
 | bool | INTEGER, 0/1 | BOOLEAN |
 | double | REAL | DOUBLE PRECISION |
-| DateTime | UTC ISO 8601 TEXT | TIMESTAMPTZ |
+| DateTime | INTEGER, Unix epoch microseconds | TIMESTAMPTZ |
 | Uint8List | BLOB | BYTEA |
 
-Nullable declarations allow SQL NULL. Dates return UTC instants; they do not
-preserve the original timezone. Floating-point values are unsuitable for exact
-money; use integer minor units as the shop example does. Column definitions are
+Nullable declarations allow SQL NULL. Dates return UTC instants with microsecond
+precision; they do not preserve the original timezone. SQLite integer storage
+preserves ordering before and after the Unix epoch, including expanded years.
+PostgreSQL applies its native timestamp range. Floating-point values are unsuitable
+for exact money; use integer minor units as the shop example does. Column definitions are
 not inferred from arbitrary Dart objects, enums or custom serializers.
 
 Native SQLite and PostgreSQL are verified platforms. SQLite RETURNING needs
 SQLite 3.35 or newer and is capability-checked. Web, Flutter packaging and other
 operating systems remain unverified. MySQL and MariaDB are outside this rewrite.
 Composite keys, typed joins, cross-field OR, relation DSLs, schema namespaces,
-client defaults, upsert, watchers and automatic migration file generation are
+client defaults, conflict updates and watchers are
 not currently implemented. Raw SQL and ordinary Dart composition cover the
 complete demonstrated business workflow without adding alternate query APIs.
 

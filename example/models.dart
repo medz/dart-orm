@@ -4,31 +4,16 @@ import 'package:orm/schema.dart';
 
 /// One immutable application row; its table identity is explicitly declared.
 @Table('users')
-final class User {
-  const User({
-    required this.id,
-    required this.username,
-    required this.age,
-    this.nickname,
-    required this.active,
-    required this.score,
-    this.joinedAt,
-    this.avatar,
-  });
-  @PrimaryKey(autoIncrement: true)
-  final int id;
-  @Unique()
-  final String username;
-  final int age;
-  final String? nickname;
-  @Column(defaultValue: true)
-  final bool active;
-  @Column(defaultValue: 0.0)
-  final double score;
-  @Column(name: 'joined_at')
-  final DateTime? joinedAt;
-  final Uint8List? avatar;
-}
+final class const User({
+  @PrimaryKey(autoIncrement: true) required final int id,
+  @Unique() required final String username,
+  required final int age,
+  final String? nickname,
+  @Column(defaultValue: true) required final bool active,
+  @Column(defaultValue: 0.0) required final double score,
+  @Column(name: 'joined_at') final DateTime? joinedAt,
+  final Uint8List? avatar,
+});
 
 /// SQL projection registered before runtime.
 @SelectFrom(User)
@@ -39,95 +24,50 @@ typedef UserCard = ({int id, String username});
 typedef UserProfile = ({int id, String? nickname, bool active});
 
 @Table('posts')
-final class Post {
-  const Post({
-    required this.id,
-    required this.authorId,
-    required this.title,
-    this.body,
-  });
-  @PrimaryKey(autoIncrement: true)
-  final int id;
+final class const Post({
+  @PrimaryKey(autoIncrement: true) required final int id,
   @Column(name: 'author_id')
   @References('users', onDelete: 'cascade')
-  final int authorId;
-  final String title;
-  final String? body;
-}
+  required final int authorId,
+  required final String title,
+  final String? body,
+});
 
 @SelectFrom(Post)
 typedef PostCard = ({int id, int authorId, String title});
 
 @Table('products')
-final class Product {
-  const Product({
-    required this.id,
-    required this.sku,
-    required this.name,
-    required this.priceCents,
-    required this.stock,
-  });
-  @PrimaryKey(autoIncrement: true)
-  final int id;
-  @Unique()
-  final String sku;
-  final String name;
-  @Column(name: 'price_cents')
-  final int priceCents;
-  @Column(defaultValue: 0)
-  final int stock;
-}
+final class const Product({
+  @PrimaryKey(autoIncrement: true) required final int id,
+  @Unique() required final String sku,
+  required final String name,
+  @Column(name: 'price_cents') required final int priceCents,
+  @Column(defaultValue: 0) required final int stock,
+});
 
 @SelectFrom(Product)
 typedef ProductCard = ({int id, String name, int priceCents});
 
 @Table('orders')
-final class Order {
-  const Order({
-    required this.id,
-    required this.userId,
-    required this.requestKey,
-    required this.requestSignature,
-    required this.totalCents,
-    required this.status,
-    required this.createdAt,
-  });
-  @PrimaryKey(autoIncrement: true)
-  final int id;
-  @Column(name: 'user_id')
-  @References('users')
-  final int userId;
-  @Unique()
-  @Column(name: 'request_key')
-  final String requestKey;
-  @Column(name: 'request_signature')
-  final String requestSignature;
-  @Column(name: 'total_cents', defaultValue: 0)
-  final int totalCents;
-  @Column(defaultValue: 'building')
-  final String status;
-  @Column(name: 'created_at')
-  final DateTime createdAt;
-}
+final class const Order({
+  @PrimaryKey(autoIncrement: true) required final int id,
+  @Column(name: 'user_id') @References('users') required final int userId,
+  @Unique() @Column(name: 'request_key') required final String requestKey,
+  @Column(name: 'request_signature') required final String requestSignature,
+  @Column(name: 'total_cents', defaultValue: 0) required final int totalCents,
+  @Column(defaultValue: 'building') required final String status,
+  @Column(name: 'created_at') required final DateTime createdAt,
+});
 
 @Table('order_lines')
-final class OrderLine {
-  const OrderLine({
-    required this.id,
-    required this.orderId,
-    required this.productId,
-    required this.quantity,
-    required this.unitPriceCents,
-  });
-  @PrimaryKey(autoIncrement: true)
-  final int id;
+final class const OrderLine({
+  @PrimaryKey(autoIncrement: true) required final int id,
   @Column(name: 'order_id')
   @References('orders', onDelete: 'cascade')
-  final int orderId;
+  required final int orderId,
   @Column(name: 'product_id')
   @References('products')
-  final int productId;
-  final int quantity;
-  @Column(name: 'unit_price_cents')
-  final int unitPriceCents;
-}
+  required final int productId,
+  required final int quantity,
+  @Column(name: 'unit_price_cents') required final int unitPriceCents,
+});

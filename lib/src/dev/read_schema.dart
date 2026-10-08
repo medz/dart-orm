@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/token.dart';
 import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
@@ -175,6 +176,10 @@ Future<SchemaModel> readSchema(String file) async {
           '$name: constructor parameters must match every row field by name and exact type.',
         );
       }
+      final declaration = result.units.single.unit.declarations
+          .whereType<ClassDeclaration>()
+          .singleWhere((node) => node.declaredFragment?.element == element);
+      _validateConstructor(name, declaration, constructor);
       final table = TableModel(name, element.name!, fields, [
         for (final parameter in parameters)
           ConstructorParameter(parameter.name!, named: parameter.isNamed),
@@ -283,6 +288,75 @@ Future<SchemaModel> readSchema(String file) async {
     return SchemaModel(tables, selections);
   } finally {
     await collection.dispose();
+  }
+}
+
+void _validateConstructor(
+  String table,
+  ClassDeclaration declaration,
+  ConstructorElement constructor,
+) {
+  FunctionBody? body;
+  Iterable<ConstructorInitializer> initializers;
+  if (constructor.isPrimary) {
+    final node = declaration.namePart as PrimaryConstructorDeclaration;
+    body = node.body?.body;
+    initializers = node.body?.initializers ?? const [];
+  } else {
+    final node = declaration.body.members
+        .whereType<ConstructorDeclaration>()
+        .singleWhere((node) => node.declaredFragment?.element == constructor);
+    if (node.externalKeyword != null) {
+      throw FormatException(
+        '$table: external row constructors are unsupported.',
+      );
+    }
+    body = node.body;
+    initializers = node.initializers;
+  }
+  if (body != null &&
+      body is! EmptyFunctionBody &&
+      !(body is BlockFunctionBody && body.block.statements.isEmpty)) {
+    throw FormatException(
+      '$table: row constructors must assign fields directly without executing a body.',
+    );
+  }
+  final assigned = <String>{};
+  for (final parameter in constructor.formalParameters) {
+    if (parameter is FieldFormalParameterElement) {
+      if (parameter.field?.name != parameter.name) {
+        throw FormatException(
+          '$table: constructor parameter must initialize its own field.',
+        );
+      }
+      assigned.add(parameter.name!);
+    }
+  }
+  for (final initializer in initializers) {
+    if (initializer is! ConstructorFieldInitializer) {
+      throw FormatException(
+        '$table: row constructors cannot contain assertions or other initializers.',
+      );
+    }
+    Expression expression = initializer.expression;
+    while (expression is ParenthesizedExpression) {
+      expression = expression.expression;
+    }
+    final field = initializer.fieldName.name;
+    if (expression is! SimpleIdentifier ||
+        expression.element is! FormalParameterElement ||
+        expression.element?.enclosingElement != constructor ||
+        expression.element?.name != field ||
+        !assigned.add(field)) {
+      throw FormatException(
+        '$table: each initializer must assign a field from its matching constructor parameter.',
+      );
+    }
+  }
+  if (assigned.length != constructor.formalParameters.length) {
+    throw FormatException(
+      '$table: constructor must directly initialize every row field.',
+    );
   }
 }
 

@@ -16,7 +16,7 @@ void main() {
     () async {
       await database.session.run(
         'CREATE TABLE entries (id INTEGER PRIMARY KEY, label TEXT, enabled INTEGER, '
-        'score REAL, recorded TEXT, payload BLOB, missing TEXT)',
+        'score REAL, recorded INTEGER, payload BLOB, missing TEXT)',
       );
       final recorded = DateTime.parse('2026-10-09T04:05:06.123456+08:00');
       final inserted = await database.session.run(
@@ -42,7 +42,7 @@ void main() {
         "O'Reilly",
         1,
         1.25,
-        recorded.toUtc().toIso8601String(),
+        recorded.microsecondsSinceEpoch,
         Uint8List.fromList([0, 255]),
         null,
       ]);

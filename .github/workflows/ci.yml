@@ -48,7 +48,7 @@ jobs:
       - name: Install dependencies
         run: dart pub get --enforce-lockfile
       - name: Check formatting
-        run: dart format --output=none --set-exit-if-changed bin lib test example
+        run: dart format --output=none --set-exit-if-changed bin lib test tool example
       - name: Analyze
         run: dart analyze
       - name: Check generated sources
@@ -57,3 +57,8 @@ jobs:
         run: dart test --concurrency=1
       - name: Run complete business example
         run: dart run example/main.dart
+      - name: Validate public API documentation
+        run: dart doc --validate-links
+      - name: Validate release package
+        if: startsWith(github.head_ref, 'release/')
+        run: dart pub publish --dry-run

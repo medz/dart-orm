@@ -295,13 +295,13 @@ final migration = Migration(
   name: 'initial shop',
   engine: Engine.sqlite,
   steps: [
-    "CREATE TABLE \"users\" (\"id\" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, \"username\" TEXT NOT NULL UNIQUE, \"age\" INTEGER NOT NULL, \"nickname\" TEXT, \"active\" INTEGER NOT NULL DEFAULT 1, \"score\" REAL NOT NULL DEFAULT 0.0, \"joined_at\" TEXT, \"avatar\" BLOB)",
+    "CREATE TABLE \"users\" (\"id\" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, \"username\" TEXT NOT NULL UNIQUE, \"age\" INTEGER NOT NULL, \"nickname\" TEXT, \"active\" INTEGER NOT NULL DEFAULT 1, \"score\" REAL NOT NULL DEFAULT 0.0, \"joined_at\" INTEGER, \"avatar\" BLOB)",
     "CREATE TABLE \"posts\" (\"id\" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, \"author_id\" INTEGER NOT NULL REFERENCES \"users\" (\"id\") ON DELETE CASCADE, \"title\" TEXT NOT NULL, \"body\" TEXT)",
     "CREATE TABLE \"products\" (\"id\" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, \"sku\" TEXT NOT NULL UNIQUE, \"name\" TEXT NOT NULL, \"price_cents\" INTEGER NOT NULL, \"stock\" INTEGER NOT NULL DEFAULT 0)",
-    "CREATE TABLE \"orders\" (\"id\" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, \"user_id\" INTEGER NOT NULL REFERENCES \"users\" (\"id\") ON DELETE RESTRICT, \"request_key\" TEXT NOT NULL UNIQUE, \"request_signature\" TEXT NOT NULL, \"total_cents\" INTEGER NOT NULL DEFAULT 0, \"status\" TEXT NOT NULL DEFAULT 'building', \"created_at\" TEXT NOT NULL)",
+    "CREATE TABLE \"orders\" (\"id\" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, \"user_id\" INTEGER NOT NULL REFERENCES \"users\" (\"id\") ON DELETE RESTRICT, \"request_key\" TEXT NOT NULL UNIQUE, \"request_signature\" TEXT NOT NULL, \"total_cents\" INTEGER NOT NULL DEFAULT 0, \"status\" TEXT NOT NULL DEFAULT 'building', \"created_at\" INTEGER NOT NULL)",
     "CREATE TABLE \"order_lines\" (\"id\" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, \"order_id\" INTEGER NOT NULL REFERENCES \"orders\" (\"id\") ON DELETE CASCADE, \"product_id\" INTEGER NOT NULL REFERENCES \"products\" (\"id\") ON DELETE RESTRICT, \"quantity\" INTEGER NOT NULL, \"unit_price_cents\" INTEGER NOT NULL)",
   ],
   snapshot: frozenSchema,
   reviewedFingerprint:
-      'ad68668feca06b1e7d626dcc9e542783e39dd0c298599ef59a6bca9b284220b5',
+      'b27b9034cff5fc89b7afa7232834ed787e7a90734a8d21d315ee924b6c749360',
 );

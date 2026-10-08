@@ -75,29 +75,29 @@ final class AppSession implements Session {
 
   /// Typed access to users in this scope.
   late final UserTable users = UserTable._(
-    TableQuery<models.User>(_session, _userDefinition, _decodeUser),
+    TableQuery<models.User>(_session, _usersDefinition, _decodeUser),
   );
 
   /// Typed access to posts in this scope.
   late final PostTable posts = PostTable._(
-    TableQuery<models.Post>(_session, _postDefinition, _decodePost),
+    TableQuery<models.Post>(_session, _postsDefinition, _decodePost),
   );
 
   /// Typed access to products in this scope.
   late final ProductTable products = ProductTable._(
-    TableQuery<models.Product>(_session, _productDefinition, _decodeProduct),
+    TableQuery<models.Product>(_session, _productsDefinition, _decodeProduct),
   );
 
   /// Typed access to orders in this scope.
   late final OrderTable orders = OrderTable._(
-    TableQuery<models.Order>(_session, _orderDefinition, _decodeOrder),
+    TableQuery<models.Order>(_session, _ordersDefinition, _decodeOrder),
   );
 
   /// Typed access to order_lines in this scope.
   late final OrderLineTable orderLines = OrderLineTable._(
     TableQuery<models.OrderLine>(
       _session,
-      _orderLineDefinition,
+      _orderLinesDefinition,
       _decodeOrderLine,
     ),
   );
@@ -112,7 +112,7 @@ final class AppSession implements Session {
       _session.run(sql, parameters: parameters);
 }
 
-const _userDefinition = TableDefinition("users", [
+const _usersDefinition = TableDefinition("users", [
   ColumnDefinition(
     name: "id",
     field: "id",
@@ -209,6 +209,12 @@ final class UserTable {
   /// Requires an unfiltered, unordered query without pagination. SQL errors
   /// propagate and roll back an enclosing explicit transaction.
   UserCreate get create => _UserCreate(_query);
+
+  /// Creates one row, or returns null on a conflict with the selected unique field.
+  ///
+  /// The conflict value must be supplied and non-null. Other constraint errors
+  /// propagate. Query filters, ordering and pagination are rejected.
+  UserCreateIfAbsent get createIfAbsent => _UserCreateIfAbsent(_query);
 
   /// Updates supplied fields by primary key and the current where scope.
   ///
@@ -312,7 +318,10 @@ final class UserTable {
           .then((rows) => rows.cast<T>());
     }
 
-    throw ArgumentError('Unregistered selection type $T for users.');
+    throw ArgumentError(
+      'Unregistered selection type $T for '
+      "users.",
+    );
   }
 
   /// Atomically increment supplied fields by key, retaining the where scope.
@@ -398,6 +407,55 @@ final class _UserUpdate implements UserUpdate {
   });
 }
 
+/// Single-column unique constraints that can prevent creation of users.
+final class UserUnique {
+  const UserUnique._(this._field);
+  final String _field;
+
+  /// Conflict target: username.
+  static const username = UserUnique._("username");
+}
+
+/// Typed creation arguments with an explicit unique conflict target.
+abstract interface class UserCreateIfAbsent {
+  /// Returns the inserted row, or null for a conflict with the selected target.
+  /// The target value must be supplied and non-null; other SQL failures propagate.
+  Future<models.User?> call(
+    UserUnique target, {
+    required String username,
+    required int age,
+    String? nickname,
+    bool active,
+    double score,
+    DateTime? joinedAt,
+    Uint8List? avatar,
+  });
+}
+
+final class _UserCreateIfAbsent implements UserCreateIfAbsent {
+  _UserCreateIfAbsent(this._query);
+  final TableQuery<models.User> _query;
+  @override
+  Future<models.User?> call(
+    UserUnique target, {
+    Object? username = _absent,
+    Object? age = _absent,
+    Object? nickname = _absent,
+    Object? active = _absent,
+    Object? score = _absent,
+    Object? joinedAt = _absent,
+    Object? avatar = _absent,
+  }) => _query.insertIfAbsent({
+    if (!identical(username, _absent)) "username": username,
+    if (!identical(age, _absent)) "age": age,
+    if (!identical(nickname, _absent)) "nickname": nickname,
+    if (!identical(active, _absent)) "active": active,
+    if (!identical(score, _absent)) "score": score,
+    if (!identical(joinedAt, _absent)) "joinedAt": joinedAt,
+    if (!identical(avatar, _absent)) "avatar": avatar,
+  }, conflictField: target._field);
+}
+
 /// Typed atomic arithmetic arguments for users.
 abstract interface class UserIncrement {
   /// Returns the changed row, or null when the key, filters or integer bounds
@@ -442,7 +500,7 @@ final class _UserDecrement implements UserDecrement {
   });
 }
 
-const _postDefinition = TableDefinition("posts", [
+const _postsDefinition = TableDefinition("posts", [
   ColumnDefinition(
     name: "id",
     field: "id",
@@ -573,7 +631,10 @@ final class PostTable {
           .then((rows) => rows.cast<T>());
     }
 
-    throw ArgumentError('Unregistered selection type $T for posts.');
+    throw ArgumentError(
+      'Unregistered selection type $T for '
+      "posts.",
+    );
   }
 }
 
@@ -629,7 +690,7 @@ final class _PostUpdate implements PostUpdate {
   });
 }
 
-const _productDefinition = TableDefinition("products", [
+const _productsDefinition = TableDefinition("products", [
   ColumnDefinition(
     name: "id",
     field: "id",
@@ -695,6 +756,12 @@ final class ProductTable {
   /// Requires an unfiltered, unordered query without pagination. SQL errors
   /// propagate and roll back an enclosing explicit transaction.
   ProductCreate get create => _ProductCreate(_query);
+
+  /// Creates one row, or returns null on a conflict with the selected unique field.
+  ///
+  /// The conflict value must be supplied and non-null. Other constraint errors
+  /// propagate. Query filters, ordering and pagination are rejected.
+  ProductCreateIfAbsent get createIfAbsent => _ProductCreateIfAbsent(_query);
 
   /// Updates supplied fields by primary key and the current where scope.
   ///
@@ -774,7 +841,10 @@ final class ProductTable {
           .then((rows) => rows.cast<T>());
     }
 
-    throw ArgumentError('Unregistered selection type $T for products.');
+    throw ArgumentError(
+      'Unregistered selection type $T for '
+      "products.",
+    );
   }
 
   /// Atomically increment supplied fields by key, retaining the where scope.
@@ -842,6 +912,46 @@ final class _ProductUpdate implements ProductUpdate {
   });
 }
 
+/// Single-column unique constraints that can prevent creation of products.
+final class ProductUnique {
+  const ProductUnique._(this._field);
+  final String _field;
+
+  /// Conflict target: sku.
+  static const sku = ProductUnique._("sku");
+}
+
+/// Typed creation arguments with an explicit unique conflict target.
+abstract interface class ProductCreateIfAbsent {
+  /// Returns the inserted row, or null for a conflict with the selected target.
+  /// The target value must be supplied and non-null; other SQL failures propagate.
+  Future<models.Product?> call(
+    ProductUnique target, {
+    required String sku,
+    required String name,
+    required int priceCents,
+    int stock,
+  });
+}
+
+final class _ProductCreateIfAbsent implements ProductCreateIfAbsent {
+  _ProductCreateIfAbsent(this._query);
+  final TableQuery<models.Product> _query;
+  @override
+  Future<models.Product?> call(
+    ProductUnique target, {
+    Object? sku = _absent,
+    Object? name = _absent,
+    Object? priceCents = _absent,
+    Object? stock = _absent,
+  }) => _query.insertIfAbsent({
+    if (!identical(sku, _absent)) "sku": sku,
+    if (!identical(name, _absent)) "name": name,
+    if (!identical(priceCents, _absent)) "priceCents": priceCents,
+    if (!identical(stock, _absent)) "stock": stock,
+  }, conflictField: target._field);
+}
+
 /// Typed atomic arithmetic arguments for products.
 abstract interface class ProductIncrement {
   /// Returns the changed row, or null when the key, filters or integer bounds
@@ -886,7 +996,7 @@ final class _ProductDecrement implements ProductDecrement {
   });
 }
 
-const _orderDefinition = TableDefinition("orders", [
+const _ordersDefinition = TableDefinition("orders", [
   ColumnDefinition(
     name: "id",
     field: "id",
@@ -975,6 +1085,12 @@ final class OrderTable {
   /// propagate and roll back an enclosing explicit transaction.
   OrderCreate get create => _OrderCreate(_query);
 
+  /// Creates one row, or returns null on a conflict with the selected unique field.
+  ///
+  /// The conflict value must be supplied and non-null. Other constraint errors
+  /// propagate. Query filters, ordering and pagination are rejected.
+  OrderCreateIfAbsent get createIfAbsent => _OrderCreateIfAbsent(_query);
+
   /// Updates supplied fields by primary key and the current where scope.
   ///
   /// Omitted fields are unchanged. Returns null when the key and where scope do
@@ -1048,7 +1164,10 @@ final class OrderTable {
       return _query.all().then((rows) => rows.cast<T>());
     }
 
-    throw ArgumentError('Unregistered selection type $T for orders.');
+    throw ArgumentError(
+      'Unregistered selection type $T for '
+      "orders.",
+    );
   }
 
   /// Atomically increment supplied fields by key, retaining the where scope.
@@ -1130,6 +1249,53 @@ final class _OrderUpdate implements OrderUpdate {
   });
 }
 
+/// Single-column unique constraints that can prevent creation of orders.
+final class OrderUnique {
+  const OrderUnique._(this._field);
+  final String _field;
+
+  /// Conflict target: requestKey.
+  static const requestKey = OrderUnique._("requestKey");
+}
+
+/// Typed creation arguments with an explicit unique conflict target.
+abstract interface class OrderCreateIfAbsent {
+  /// Returns the inserted row, or null for a conflict with the selected target.
+  /// The target value must be supplied and non-null; other SQL failures propagate.
+  Future<models.Order?> call(
+    OrderUnique target, {
+    required int userId,
+    required String requestKey,
+    required String requestSignature,
+    int totalCents,
+    String status,
+    required DateTime createdAt,
+  });
+}
+
+final class _OrderCreateIfAbsent implements OrderCreateIfAbsent {
+  _OrderCreateIfAbsent(this._query);
+  final TableQuery<models.Order> _query;
+  @override
+  Future<models.Order?> call(
+    OrderUnique target, {
+    Object? userId = _absent,
+    Object? requestKey = _absent,
+    Object? requestSignature = _absent,
+    Object? totalCents = _absent,
+    Object? status = _absent,
+    Object? createdAt = _absent,
+  }) => _query.insertIfAbsent({
+    if (!identical(userId, _absent)) "userId": userId,
+    if (!identical(requestKey, _absent)) "requestKey": requestKey,
+    if (!identical(requestSignature, _absent))
+      "requestSignature": requestSignature,
+    if (!identical(totalCents, _absent)) "totalCents": totalCents,
+    if (!identical(status, _absent)) "status": status,
+    if (!identical(createdAt, _absent)) "createdAt": createdAt,
+  }, conflictField: target._field);
+}
+
 /// Typed atomic arithmetic arguments for orders.
 abstract interface class OrderIncrement {
   /// Returns the changed row, or null when the key, filters or integer bounds
@@ -1166,7 +1332,7 @@ final class _OrderDecrement implements OrderDecrement {
       });
 }
 
-const _orderLineDefinition = TableDefinition("order_lines", [
+const _orderLinesDefinition = TableDefinition("order_lines", [
   ColumnDefinition(
     name: "id",
     field: "id",
@@ -1299,7 +1465,10 @@ final class OrderLineTable {
       return _query.all().then((rows) => rows.cast<T>());
     }
 
-    throw ArgumentError('Unregistered selection type $T for order_lines.');
+    throw ArgumentError(
+      'Unregistered selection type $T for '
+      "order_lines.",
+    );
   }
 
   /// Atomically increment supplied fields by key, retaining the where scope.

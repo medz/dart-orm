@@ -56,7 +56,7 @@ final class $databaseName {
   Database get database => _database;
   /// Raw execution and generated tables in the database's root scope.
   late final $sessionName session = $sessionName._(_database.session);
-  ${model.tables.map((table) => '/// Typed access to ${table.name}.\n${table.dartName}Table get ${table.getterName} => session.${table.getterName};').join('\n')}
+  ${model.tables.map((table) => '/// Typed access to ${_comment(table.name)}.\n${table.dartName}Table get ${table.getterName} => session.${table.getterName};').join('\n')}
   /// Commits successful work and rolls back callback or SQL failures.
   ///
   /// A caught SQL failure still rolls back. The callback scope expires on return.
@@ -72,7 +72,7 @@ final class $databaseName {
 final class $sessionName implements Session {
   $sessionName._(this._session);
   final Session _session;
-  ${model.tables.map((table) => '/// Typed access to ${table.name} in this scope.\nlate final ${table.dartName}Table ${table.getterName} = ${table.dartName}Table._(TableQuery<models.${table.dartName}>(_session, _${table.dartName[0].toLowerCase()}${table.dartName.substring(1)}Definition, _decode${table.dartName}));').join('\n')}
+  ${model.tables.map((table) => '/// Typed access to ${_comment(table.name)} in this scope.\nlate final ${table.dartName}Table ${table.getterName} = ${table.dartName}Table._(TableQuery<models.${table.dartName}>(_session, ${table.definitionName}, _decode${table.dartName}));').join('\n')}
   @override
   Engine get engine => _session.engine;
   @override
@@ -85,7 +85,7 @@ final class $sessionName implements Session {
 ''');
   for (final table in model.tables) {
     buffer.writeln(
-      'const _${table.dartName[0].toLowerCase()}${table.dartName.substring(1)}Definition = ${_tableDefinition(table)};',
+      'const ${table.definitionName} = ${_tableDefinition(table)};',
     );
     buffer.writeln(
       'models.${table.dartName} _decode${table.dartName}(List<Object?> row) => models.${table.dartName}(${table.parameters.map((parameter) {
@@ -110,19 +110,11 @@ void _emitTable(
   final row = 'models.${table.dartName}';
   final name = table.dartName;
   final fields = table.fields;
-  final mutable = fields.where((field) => !field.column.primaryKey).toList();
-  final numeric = mutable
-      .where(
-        (field) =>
-            !field.column.nullable &&
-            field.column.references == null &&
-            (field.column.type == ScalarType.integer ||
-                field.column.type == ScalarType.real),
-      )
-      .toList();
+  final mutable = table.mutableFields;
+  final numeric = table.numericFields;
   final keyName = _keyParameter(numeric);
   buffer.writeln('''
-/// An immutable query over the ${table.name} table.
+/// An immutable query over the ${_comment(table.name)} table.
 final class ${name}Table {
   ${name}Table._(this._query);
   final TableQuery<$row> _query;
@@ -131,6 +123,11 @@ final class ${name}Table {
   /// Requires an unfiltered, unordered query without pagination. SQL errors
   /// propagate and roll back an enclosing explicit transaction.
   ${name}Create get create => _${name}Create(_query);
+  ${table.uniqueFields.isEmpty ? '' : '''/// Creates one row, or returns null on a conflict with the selected unique field.
+  ///
+  /// The conflict value must be supplied and non-null. Other constraint errors
+  /// propagate. Query filters, ordering and pagination are rejected.
+  ${name}CreateIfAbsent get createIfAbsent => _${name}CreateIfAbsent(_query);'''}
   /// Updates supplied fields by primary key and the current where scope.
   ///
   /// Omitted fields are unchanged. Returns null when the key and where scope do
@@ -166,7 +163,7 @@ final class ${name}Table {
 ''');
   }
   buffer.writeln('''
-    throw ArgumentError('Unregistered selection type \$T for ${table.name}.');
+    throw ArgumentError('Unregistered selection type \$T for ' ${_literal('${table.name}.')});
   }
 ''');
   if (numeric.isNotEmpty) {
@@ -184,16 +181,19 @@ final class ${name}Table {
     buffer,
     table,
     '${name}Create',
-    fields.where((field) => !field.column.identity).toList(),
+    table.insertableFields,
     create: true,
   );
   _emitCallable(buffer, table, '${name}Update', mutable, create: false);
+  if (table.uniqueFields.isNotEmpty) {
+    _emitCreateIfAbsent(buffer, table);
+  }
   if (numeric.isNotEmpty) {
     for (final operation in ['increment', 'decrement']) {
       final operationName =
           '$name${operation[0].toUpperCase()}${operation.substring(1)}';
       buffer.writeln('''
-/// Typed atomic arithmetic arguments for ${table.name}.
+/// Typed atomic arithmetic arguments for ${_comment(table.name)}.
 abstract interface class $operationName {
   /// Returns the changed row, or null when the key, filters or integer bounds
   /// do not match. Integer arithmetic stays within signed 64-bit bounds.
@@ -232,7 +232,7 @@ void _emitCallable(
       ? ''
       : '{${fields.map((field) => 'Object? ${field.name} = _absent').join(',')}}';
   buffer.writeln('''
-/// Typed ${create ? 'creation' : 'partial update'} arguments for ${table.name}.
+/// Typed ${create ? 'creation' : 'partial update'} arguments for ${_comment(table.name)}.
 abstract interface class $name {
   /// ${create ? 'Returns the single inserted row; SQL failures propagate.' : 'Returns the updated row, or null when key and where scope do not match.'}
   Future<$result> call($arguments);
@@ -246,25 +246,93 @@ final class _$name implements $name {
 ''');
 }
 
+void _emitCreateIfAbsent(StringBuffer buffer, TableModel table) {
+  final fields = table.insertableFields;
+  final name = table.dartName;
+  final target = _parameterName(fields, 'target');
+  final named = fields
+      .map(
+        (field) =>
+            '${!field.column.nullable && field.column.defaultValue == null ? 'required ' : ''}${field.type} ${field.name}',
+      )
+      .join(',');
+  final values = fields
+      .map(
+        (field) =>
+            'if (!identical(${field.name}, _absent)) ${_literal(field.name)}: ${field.name}',
+      )
+      .join(',');
+  final usedNames = {'hashCode', 'runtimeType', 'toString', 'noSuchMethod'};
+  final uniqueFields = <String>[];
+  for (final field in table.uniqueFields) {
+    var valueName = field.name;
+    if (usedNames.contains(valueName)) valueName = '${valueName}Column';
+    while (!usedNames.add(valueName)) {
+      valueName = '${valueName}Column';
+    }
+    uniqueFields.add(
+      '/// Conflict target: ${_comment(field.name)}.\n'
+      'static const $valueName = ${name}Unique._(${_literal(field.name)});',
+    );
+  }
+  buffer.writeln('''
+/// Single-column unique constraints that can prevent creation of ${_comment(table.name)}.
+final class ${name}Unique {
+  const ${name}Unique._(this._field);
+  final String _field;
+  ${uniqueFields.join('\n')}
+}
+
+/// Typed creation arguments with an explicit unique conflict target.
+abstract interface class ${name}CreateIfAbsent {
+  /// Returns the inserted row, or null for a conflict with the selected target.
+  /// The target value must be supplied and non-null; other SQL failures propagate.
+  Future<models.$name?> call(${name}Unique $target, {$named});
+}
+final class _${name}CreateIfAbsent implements ${name}CreateIfAbsent {
+  _${name}CreateIfAbsent(this._query);
+  final TableQuery<models.$name> _query;
+  @override
+  Future<models.$name?> call(${name}Unique $target, {${fields.map((field) => 'Object? ${field.name} = _absent').join(',')}}) =>
+    _query.insertIfAbsent({$values}, conflictField: $target._field);
+}
+''');
+}
+
 String _decode(FieldModel field, String expression) => field.column.nullable
     ? '$expression == null ? null : decodeValue<${field.baseType}>($expression)'
     : 'decodeValue<${field.type}>($expression)';
 
-String _keyParameter(List<FieldModel> fields) {
-  var name = 'key';
+String _keyParameter(List<FieldModel> fields) => _parameterName(fields, 'key');
+
+String _parameterName(List<FieldModel> fields, String preferred) {
+  var name = preferred;
   while (fields.any((field) => field.name == name)) {
     name = '${name}Value';
   }
   return name;
 }
 
-String _tableDefinition(TableModel table) =>
-    'TableDefinition(${_literal(table.name)}, [${table.fields.map((field) {
-      final column = field.column;
-      return 'ColumnDefinition(name: ${_literal(column.name)}, field: ${_literal(column.field)}, type: ScalarType.${column.type.name}, nullable: ${column.nullable}, primaryKey: ${column.primaryKey}, identity: ${column.identity}, unique: ${column.unique}${column.defaultValue == null ? '' : ', defaultValue: ${_literal(column.defaultValue)}'}${column.references == null ? '' : ', references: ForeignKey(${_literal(column.references!.table)}, ${_literal(column.references!.column)}, onDelete: ${_literal(column.references!.onDelete)})'})';
+String _tableDefinition(TableModel table) => emitTableDefinition(
+  TableDefinition(
+    table.name,
+    table.fields.map((field) => field.column).toList(),
+  ),
+);
+
+/// Serializes a physical table without importing application row classes.
+String emitTableDefinition(TableDefinition table) =>
+    'TableDefinition(${dartLiteral(table.name)}, [${table.columns.map((column) {
+      return 'ColumnDefinition(name: ${dartLiteral(column.name)}, field: ${dartLiteral(column.field)}, type: ScalarType.${column.type.name}, nullable: ${column.nullable}, primaryKey: ${column.primaryKey}, identity: ${column.identity}, unique: ${column.unique}${column.defaultValue == null ? '' : ', defaultValue: ${dartLiteral(column.defaultValue)}'}${column.references == null ? '' : ', references: ForeignKey(${dartLiteral(column.references!.table)}, ${dartLiteral(column.references!.column)}, onDelete: ${dartLiteral(column.references!.onDelete)})'})';
     }).join(',')}])';
 
-String _literal(Object? value) {
+String _literal(Object? value) => dartLiteral(value);
+
+/// Emits literal values with Dart interpolation escaped.
+String dartLiteral(Object? value) {
   if (value is String) return jsonEncode(value).replaceAll(r'$', r'\$');
   return value.toString();
 }
+
+String _comment(String value) =>
+    value.replaceAll(RegExp(r'[\r\n\u2028\u2029]'), ' ');

@@ -30,7 +30,9 @@ T decodeValue<T>(Object? value) {
   if (value == null) throw FormatException('Unexpected SQL NULL for $T');
   if (T == DateTime) {
     if (value is DateTime) return value.toUtc() as T;
-    if (value is String) return DateTime.parse(value).toUtc() as T;
+    if (value is int) {
+      return DateTime.fromMicrosecondsSinceEpoch(value, isUtc: true) as T;
+    }
   }
   if (value is T) return value as T;
   if (T == bool && value is int && (value == 0 || value == 1)) {
@@ -83,11 +85,29 @@ final class TableQuery<R> {
     }
     final fields = <String>{};
     final names = <String>{};
+    var primaryKeys = 0;
     for (final c in definition.columns) {
       quoteIdentifier(c.name);
       if (c.field.isEmpty || !fields.add(c.field) || !names.add(c.name)) {
         throw ArgumentError('Duplicate column identity');
       }
+      if (c.primaryKey) {
+        primaryKeys++;
+        if (c.nullable) {
+          throw ArgumentError('Primary keys cannot be nullable');
+        }
+      }
+      if (c.identity &&
+          (!c.primaryKey ||
+              c.type != ScalarType.integer ||
+              c.defaultValue != null)) {
+        throw ArgumentError(
+          'Identity requires an integer primary key without a default',
+        );
+      }
+    }
+    if (primaryKeys > 1) {
+      throw ArgumentError('Composite primary keys are unsupported');
     }
   }
 
@@ -258,6 +278,35 @@ final class TableQuery<R> {
   /// Requires an unfiltered scope and RETURNING capability. Omitted database
   /// defaults remain omitted; invalid fields and values fail before SQL.
   Future<R> insert(Map<String, Object?> values) async {
+    final row = await _insert(values);
+    if (row == null) throw StateError('Create must return one row');
+    return row;
+  }
+
+  /// Inserts a row, or returns null when its supplied unique key already exists.
+  /// Other constraint failures propagate. The conflict field must be an
+  /// insertable single-column primary/unique key with a provided non-null value.
+  /// This operation never changes an existing row or executes a prior SELECT.
+  Future<R?> insertIfAbsent(
+    Map<String, Object?> values, {
+    required String conflictField,
+  }) {
+    final column = definition.column(conflictField);
+    if (column.identity ||
+        (!column.primaryKey && !column.unique) ||
+        !values.containsKey(conflictField) ||
+        values[conflictField] == null) {
+      throw ArgumentError(
+        'Conflict target requires a supplied non-null unique key',
+      );
+    }
+    return _insert(values, conflictColumn: column);
+  }
+
+  Future<R?> _insert(
+    Map<String, Object?> values, {
+    ColumnDefinition? conflictColumn,
+  }) async {
     _returning();
     if (_filters.isNotEmpty) {
       throw StateError('Create requires an unfiltered table');
@@ -284,10 +333,14 @@ final class TableQuery<R> {
     final clause = columns.isEmpty
         ? 'DEFAULT VALUES'
         : '(${columns.join(', ')}) VALUES (${parameters.join(', ')})';
+    final conflict = conflictColumn == null
+        ? ''
+        : ' ON CONFLICT (${quoteIdentifier(conflictColumn.name)}) DO NOTHING';
     final result = await session.run(
-      'INSERT INTO $_table $clause RETURNING $_columns',
+      'INSERT INTO $_table $clause$conflict RETURNING $_columns',
       parameters: bindings.values,
     );
+    if (conflictColumn != null && result.rows.isEmpty) return null;
     if (result.rows.length != 1) throw StateError('Create must return one row');
     return decode(result.rows.single);
   }

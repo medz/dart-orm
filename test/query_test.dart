@@ -212,6 +212,70 @@ void main() {
           );
         });
 
+        test('unique claims ignore only the chosen key and leave existing rows unchanged', () async {
+          final db = fixture.db;
+          final first = await db.users.createIfAbsent(
+            .username,
+            username: 'claim',
+            age: 28,
+          );
+          expect(first!.username, 'claim');
+          fixture.events.clear();
+          expect(
+            await db.users.createIfAbsent(
+              .username,
+              username: 'claim',
+              age: 99,
+              nickname: 'new',
+            ),
+            isNull,
+          );
+          expect(fixture.statements, hasLength(1));
+          expect(
+            fixture.statements.single.sql,
+            contains('ON CONFLICT ("username") DO NOTHING RETURNING'),
+          );
+          final existing = (await db.users.get(first.id))!;
+          expect(existing.age, 28);
+          expect(existing.nickname, isNull);
+          final query = TableQuery<List<Object?>>(
+            db.session,
+            frozenSchema.tables.first,
+            (row) => row,
+          );
+          fixture.events.clear();
+          expect(
+            () => query.insertIfAbsent({
+              'username': 'u',
+              'age': 1,
+            }, conflictField: 'age'),
+            throwsArgumentError,
+          );
+          expect(
+            () => query.insertIfAbsent({'age': 1}, conflictField: 'username'),
+            throwsArgumentError,
+          );
+          expect(
+            () => query.insertIfAbsent({
+              'username': null,
+              'age': 1,
+            }, conflictField: 'username'),
+            throwsArgumentError,
+          );
+          expect(fixture.events, isEmpty);
+          await expectLater(
+            db.orders.createIfAbsent(
+              .requestKey,
+              userId: 999,
+              requestKey: 'invalid',
+              requestSignature: '1:1',
+              createdAt: DateTime.now(),
+            ),
+            throwsException,
+          );
+          expect(await db.orders.all(), isEmpty);
+        });
+
         test('numeric overflow never persists an invalid scalar', () async {
           const maxInteger = 9223372036854775807;
           const minInteger = -9223372036854775808;

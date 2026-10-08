@@ -198,17 +198,17 @@ WHERE n.nspname = current_schema() AND c.relname = \$1 AND i.indisunique
     final expectedType = column.type == ScalarType.dateTime
         ? 'TIMESTAMP WITH TIME ZONE'
         : storageType(Engine.postgresql, column.type);
+    final actualDefault = actual['default_value'] as String?;
+    final defaultMatches = column.defaultValue is DateTime
+        ? await _postgresDateDefaultMatches(session, column, actualDefault)
+        : _defaultMatches(Engine.postgresql, column, actualDefault);
     if ((actual['type'] as String).toUpperCase() != expectedType ||
         actual['required'] != !column.nullable ||
         pk != column.primaryKey ||
         actual['identity'] != (column.identity ? 'a' : '') ||
         (uniques.any((c) => c['name'] == column.name) && !pk) !=
             (column.unique && !column.primaryKey) ||
-        !_defaultMatches(
-          Engine.postgresql,
-          column,
-          actual['default_value'] as String?,
-        )) {
+        !defaultMatches) {
       _mismatch(table.name, 'definition of ${column.name}');
     }
     final actualReferences = constraints
@@ -271,14 +271,30 @@ bool _defaultMatches(Engine engine, ColumnDefinition column, String? actual) {
       double.tryParse(_quotedString(expression) ?? expression) == value,
     bool value => expression.toLowerCase() == value.toString(),
     String value => _quotedString(expression) == value,
-    DateTime value =>
-      DateTime.tryParse(_quotedString(expression) ?? '')?.toUtc() ==
-          value.toUtc(),
     Uint8List value =>
       expression.replaceAll('::text', '').replaceAll(' ', '').toLowerCase() ==
           literalSql(engine, value).replaceAll(' ', '').toLowerCase(),
     _ => false,
   };
+}
+
+Future<bool> _postgresDateDefaultMatches(
+  Session session,
+  ColumnDefinition column,
+  String? actual,
+) async {
+  if (actual == null) return false;
+  final literal = _quotedString(
+    actual.replaceFirst(RegExp(r'::timestamp with time zone$'), '').trim(),
+  );
+  if (literal == null) return false;
+  // Let PostgreSQL interpret its own BC, expanded-year and timezone spelling.
+  // Only a quoted literal is accepted; arbitrary default functions stay rejected.
+  final result = await session.run(
+    'SELECT \$1::timestamptz = \$2',
+    parameters: [literal, column.defaultValue],
+  );
+  return result.rows.single.single == true;
 }
 
 String? _quotedString(String expression) {

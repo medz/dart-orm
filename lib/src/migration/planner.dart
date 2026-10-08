@@ -123,8 +123,12 @@ String quoteIdentifier(String value) {
 }
 
 String storageType(Engine engine, ScalarType type) => switch ((engine, type)) {
-  (Engine.sqlite, ScalarType.integer || ScalarType.boolean) => 'INTEGER',
-  (Engine.sqlite, ScalarType.text || ScalarType.dateTime) => 'TEXT',
+  (
+    Engine.sqlite,
+    ScalarType.integer || ScalarType.boolean || ScalarType.dateTime,
+  ) =>
+    'INTEGER',
+  (Engine.sqlite, ScalarType.text) => 'TEXT',
   (Engine.sqlite, ScalarType.real) => 'REAL',
   (Engine.sqlite, ScalarType.bytes) => 'BLOB',
   (Engine.postgresql, ScalarType.integer) => 'BIGINT',
@@ -163,13 +167,25 @@ String literalSql(Engine engine, Object value) => switch (value) {
     engine == Engine.sqlite ? (value ? '1' : '0') : (value ? 'TRUE' : 'FALSE'),
   int value => value.toString(),
   double value when value.isFinite => value.toString(),
-  DateTime value => literalSql(engine, value.toUtc().toIso8601String()),
+  DateTime value =>
+    engine == Engine.sqlite
+        ? value.microsecondsSinceEpoch.toString()
+        : literalSql(engine, _postgresTimestamp(value)),
   Uint8List value =>
     engine == Engine.sqlite
         ? "X'${_hex(value)}'"
         : "decode('${_hex(value)}', 'hex')",
   _ => throw ArgumentError('Unsupported SQL literal ${value.runtimeType}.'),
 };
+
+// PostgreSQL uses unsigned Gregorian years and BC, whereas Dart uses a signed
+// astronomical year with year zero. Expanded positive years have no plus sign.
+String _postgresTimestamp(DateTime value) {
+  final utc = value.toUtc();
+  final year = utc.year <= 0 ? 1 - utc.year : utc.year;
+  final iso = utc.toIso8601String();
+  return '${year.toString().padLeft(4, '0')}${iso.substring(iso.indexOf('-', 1))}${utc.year <= 0 ? ' BC' : ''}';
+}
 
 String _hex(Uint8List value) =>
     value.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();

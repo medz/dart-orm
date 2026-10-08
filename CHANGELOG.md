@@ -10,6 +10,11 @@
   totals, atomic stock updates, idempotent requests and rollback.
 - This is an unreleased breaking rewrite; previous generated clients and
   migration definitions have no compatibility layer.
+- Use Dart 3.13 primary constructors for concise model declarations and typed
+  unique-key claims for idempotent business writes without handwritten SQL.
+- Reject transforming row constructors and unsafe generated-file aliases.
+  Preserve microsecond date ordering using integer timestamps in SQLite.
+- Draft standalone reviewed Dart migrations without copying schema by hand.
 
 ## 6.0.0-beta.7
 
@@ -173,7 +178,7 @@ model/API migration; updating the dependency alone is not sufficient.
 - Add typed selections, explicit relation loading, transactions, query
   subscriptions, SQL inspection and capability-checked execution controls.
 
-See [database and platform boundaries](https://github.com/medz/dart-orm/blob/main/doc/capabilities.md) before adopting the
+See [database and platform boundaries](https://github.com/medz/dart-orm/blob/orm-v6.0.0-beta.1/doc/capabilities.md) before adopting the
 beta. MySQL/MariaDB DDL is non-atomic. Cancellation and streaming depend on the
 selected driver; the default Linux SQLite asset does not expose interruption.
 

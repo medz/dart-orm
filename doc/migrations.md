@@ -28,6 +28,32 @@ retry policy.
 
 ## Preparing a new migration
 
+Draft the initial migration from a generated snapshot:
+
+```sh
+dart run orm migration draft --to lib/models.snapshot.dart --out lib/migrations/v001_initial.dart --version 1 --name initial
+```
+
+For later changes, pass the previous historical definition as `--from`:
+
+```sh
+dart run orm migration draft --from lib/migrations/v001_initial.dart --to lib/models.snapshot.dart --out lib/migrations/v002_add_nickname.dart --version 2 --name add_nickname
+```
+
+The command reads the constant schema without executing either input file. It
+copies the complete frozen schema, engine SQL and a literal fingerprint into one
+standalone Dart draft. It never overwrites an existing file or infers a rename.
+Review its SQL and effects on existing data before committing it, then add one
+static import and one entry to your history. A computed hash records the draft's
+contents; review is still your responsibility.
+
+Draft input needs `const frozenSchema`, or one unambiguous top-level constant
+`SchemaSnapshot` in the file. Literal string, number and boolean defaults are
+supported. An unchanged schema has nothing to draft. Unsupported transitions
+still require an explicitly authored migration.
+
+To author a migration directly:
+
 1. Generate the current engine's `models.snapshot.dart`.
 2. Compare the last historical snapshot with the new snapshot using
    `planSchemaChange(before, after)`.
@@ -76,7 +102,7 @@ final history = MigrationHistory(
 Versions are positive and strictly increasing; gaps are allowed. Do not sort or
 edit old entries to reconcile drift. Fix a deployed schema with a new reviewed
 migration. A fingerprint detects source changes; it does not replace SQL review
-or backups. There is no automatic migration file writer or rename inference.
+or backups. Draft generation never infers renames or applies SQL.
 Never compute an old migration's reviewed hash dynamically at startup, or import
 the current application's snapshot into a historical definition.
 

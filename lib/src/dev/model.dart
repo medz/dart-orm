@@ -12,6 +12,23 @@ final class TableModel {
   final String dartName;
   final List<FieldModel> fields;
   final List<ConstructorParameter> parameters;
+  String get definitionName => '_${getterName}Definition';
+  List<FieldModel> get insertableFields =>
+      fields.where((field) => !field.column.identity).toList();
+  List<FieldModel> get mutableFields =>
+      fields.where((field) => !field.column.primaryKey).toList();
+  List<FieldModel> get numericFields => mutableFields
+      .where(
+        (field) =>
+            !field.column.nullable &&
+            field.column.references == null &&
+            (field.column.type == ScalarType.integer ||
+                field.column.type == ScalarType.real),
+      )
+      .toList();
+  List<FieldModel> get uniqueFields => insertableFields
+      .where((field) => field.column.unique || field.column.primaryKey)
+      .toList();
   FieldModel get primaryKey =>
       fields.singleWhere((field) => field.column.primaryKey);
   String get getterName => name

@@ -12,7 +12,8 @@ import 'package:sqlite3/sqlite3.dart' as sqlite;
 /// use a worker isolate for workloads that must not block a UI event loop.
 ///
 /// Parameters use `?` placeholders. Boolean values bind as 0/1; DateTime values
-/// bind as UTC ISO 8601 text. Result values keep SQLite's native storage types.
+/// bind as exact integer microseconds since the Unix epoch. Result values keep
+/// SQLite's native storage types.
 /// Unsupported parameter objects are rejected before executing SQL.
 final class SqliteDriver implements Driver {
   SqliteDriver._(this._database) {
@@ -178,7 +179,7 @@ bool _writesRows(String sql) {
 Object? _parameter(Object? value) => switch (value) {
   null || int() || String() || double() || Uint8List() => value,
   bool() => value ? 1 : 0,
-  DateTime() => value.toUtc().toIso8601String(),
+  DateTime() => value.microsecondsSinceEpoch,
   _ => throw ArgumentError.value(
     value,
     'parameter',

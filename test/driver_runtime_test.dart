@@ -68,6 +68,27 @@ void main() {
       ]);
     },
   );
+
+  test(
+    'prepared transactions reject before SQL while ordinary PREPARE is allowed',
+    () async {
+      final driver = _Driver();
+      final database = openDatabase(driver);
+      addTearDown(database.close);
+      await database.transaction((session) async {
+        await expectLater(
+          session.run("/* boundary */ PREPARE TRANSACTION 'detached'"),
+          throwsArgumentError,
+        );
+        await session.run('PREPARE statement AS SELECT 1');
+      });
+      expect(driver.statements, [
+        'BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE',
+        'PREPARE statement AS SELECT 1',
+        'COMMIT',
+      ]);
+    },
+  );
 }
 
 final class _Driver implements Driver, Connection {

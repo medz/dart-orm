@@ -494,7 +494,7 @@ void main() {
             .single,
         [
           "O'Reilly",
-          '2026-10-09T00:00:00.000Z',
+          DateTime.utc(2026, 10, 9).microsecondsSinceEpoch,
           [1, 255],
         ],
       );

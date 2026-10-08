@@ -29,6 +29,7 @@ import 'package:orm/query.dart';
 Future<void> valid(AppDatabase db) async {
   User user = await db.users.create(username: 'seven', age: 28, nickname: null);
   User? updated = await db.users.update(user.id, nickname: null);
+  User? claimed = await db.users.createIfAbsent(.username, username: 'seven', age: 28);
   updated = await db.users.update(user.id, age: 29);
   User? row = await db.users.get(user.id);
   List<UserCard> cards = await db.users.where(username: startsWith('sev'), age: gte(18)).orderBy(id: asc).limit(20).select<UserCard>();
@@ -36,7 +37,7 @@ Future<void> valid(AppDatabase db) async {
   int id = cards.first.id;
   Product? product = await db.products.where(stock: gte(2)).decrement(1, stock: 2);
   List<User> streamed = await db.transaction((session) => session.users.stream(fetchSize: 2).toList());
-  print([updated, row, username, id, product, streamed]);
+  print([updated, claimed, row, username, id, product, streamed]);
 }
 void main() {}
 ''');
@@ -73,6 +74,9 @@ void invalid(AppDatabase db) {
   db.products.decrement(1, stock: null);
   db.orders.increment(1, userId: 1);
   db.users.create(username: 'x', age: 1, avatar: [1, 2]);
+  db.users.createIfAbsent(OrderUnique.requestKey, username: 'x', age: 1);
+  db.users.createIfAbsent(.age, username: 'x', age: 1);
+  db.users.createIfAbsent(.username, username: null, age: 1);
 }
 void main() {}
 ''');
@@ -87,7 +91,7 @@ void main() {}
       final errors = invalid.diagnostics
           .where((diagnostic) => diagnostic.severity.name == 'error')
           .toList();
-      expect(errors, hasLength(11), reason: errors.join('\n'));
+      expect(errors, hasLength(14), reason: errors.join('\n'));
       final codes = errors
           .map((diagnostic) => diagnostic.diagnosticCode.lowerCaseName)
           .toSet();

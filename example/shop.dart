@@ -78,16 +78,14 @@ Future<Receipt> checkout(
 
   return db.transaction(
     (tx) async {
-      String bind(int index) =>
-          tx.engine == Engine.postgresql ? '\$$index' : '?';
-      final claim = await tx.run(
-        'INSERT INTO "orders" '
-        '("user_id", "request_key", "request_signature", "created_at") '
-        'VALUES (${bind(1)}, ${bind(2)}, ${bind(3)}, ${bind(4)}) '
-        'ON CONFLICT ("request_key") DO NOTHING RETURNING "id"',
-        parameters: [userId, scopedKey, signature, DateTime.now().toUtc()],
+      final claim = await tx.orders.createIfAbsent(
+        .requestKey,
+        userId: userId,
+        requestKey: scopedKey,
+        requestSignature: signature,
+        createdAt: DateTime.now().toUtc(),
       );
-      if (claim.rows.isEmpty) {
+      if (claim == null) {
         final order =
             (await tx.orders.where(requestKey: eq(scopedKey)).all()).single;
         if (order.userId != userId ||
@@ -101,7 +99,7 @@ Future<Receipt> checkout(
             .all();
         return (order: order, lines: lines, replayed: true);
       }
-      final orderId = decodeValue<int>(claim.rows.single.single);
+      final orderId = claim.id;
       final lines = <OrderLine>[];
       var totalCents = 0;
       for (final id in ids) {

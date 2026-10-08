@@ -307,15 +307,18 @@ void _validateStatement(
     }
   }
   if (const {
-    'BEGIN',
-    'START',
-    'COMMIT',
-    'END',
-    'ROLLBACK',
-    'SAVEPOINT',
-    'RELEASE',
-    'ABORT',
-  }.contains(command)) {
+        'BEGIN',
+        'START',
+        'COMMIT',
+        'END',
+        'ROLLBACK',
+        'SAVEPOINT',
+        'RELEASE',
+        'ABORT',
+      }.contains(command) ||
+      (engine == Engine.postgresql &&
+          command == 'PREPARE' &&
+          words.elementAtOrNull(1) == 'TRANSACTION')) {
     throw ArgumentError('Use Database.transaction for transaction boundaries.');
   }
 }
