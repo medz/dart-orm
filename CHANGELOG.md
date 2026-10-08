@@ -1,17 +1,27 @@
 ## Unreleased
 
-- Describe SQLite/PostgreSQL `ON CONFLICT DO NOTHING` directly on model insert
-  plans. Validate conflict targets before client defaults, preserve typed native
-  RETURNING, and sample fresh defaults at each terminal unless explicitly prepared.
-- Add an order/inventory example with saved SQLite migrations, atomic stock
-  reservations, idempotent requests and named nested receipts.
+- Reimplement the ORM with independent schema, query, database, driver,
+  migration and development modules. Cross-module imports use public entrypoints.
+- Generate typed tables with direct named-record selections, nullable partial
+  updates, guarded arithmetic and explicit transaction sessions.
+- Support native SQLite and PostgreSQL, with engine-specific frozen Dart
+  migration histories and catalog verification.
+- Add a complete shop example covering relationship batching, integer-cent
+  totals, atomic stock updates, idempotent requests and rollback.
+- This is an unreleased breaking rewrite; previous generated clients and
+  migration definitions have no compatibility layer.
+- Use Dart 3.13 primary constructors for concise model declarations and typed
+  unique-key claims for idempotent business writes without handwritten SQL.
+- Reject transforming row constructors and unsafe generated-file aliases.
+  Preserve microsecond date ordering using integer timestamps in SQLite.
+- Draft standalone reviewed Dart migrations without copying schema by hand.
 
 ## 6.0.0-beta.7
 
 Breaking beta API change: regenerate clients and update imports, database setup,
 selections and writes. Keep reviewed migration definitions and fingerprints.
-See the [beta.7 migration guide](doc/upgrade-beta7.md) and
-[API guide](doc/api.md) for the updated workflow.
+See the [tagged beta.7 migration guide](https://github.com/medz/dart-orm/blob/orm-v6.0.0-beta.7/doc/upgrade-beta7.md) and
+[tagged API guide](https://github.com/medz/dart-orm/blob/orm-v6.0.0-beta.7/doc/api.md) for that release's workflow.
 
 - Separate engine-created `SqlDatabase` from the ORM view created with
   `Database.fromSql`. Public entrypoints have explicit ownership; remove the
@@ -168,7 +178,7 @@ model/API migration; updating the dependency alone is not sufficient.
 - Add typed selections, explicit relation loading, transactions, query
   subscriptions, SQL inspection and capability-checked execution controls.
 
-See [database and platform boundaries](https://github.com/medz/dart-orm/blob/main/doc/capabilities.md) before adopting the
+See [database and platform boundaries](https://github.com/medz/dart-orm/blob/orm-v6.0.0-beta.1/doc/capabilities.md) before adopting the
 beta. MySQL/MariaDB DDL is non-atomic. Cancellation and streaming depend on the
 selected driver; the default Linux SQLite asset does not expose interruption.
 

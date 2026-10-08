@@ -1,425 +1,104 @@
 # Contributing
 
-Use Dart 3.13 or newer. From a repository checkout:
+Use Dart 3.13 stable. The product is one package with seven independent modules.
 
-```sh
-dart pub get
-dart analyze
-dart test
-dart run example/main.dart
-dart run example/company/main.dart
-dart run example/queries.dart
-```
-
-The Flutter example is a separate package; run its analysis with the Flutter SDK.
-For browser checks, set `CHROME_EXECUTABLE` and run
-`dart run tool/test_browser.dart`, then add `--wasm` for the WASM build.
-
-## Real database checks
-
-Set `ORM_TEST_POSTGRES`, `ORM_TEST_MYSQL` and `ORM_TEST_MARIADB` to disposable
-database URLs to include those integration suites. Tests create and drop their
-own tables; MySQL/MariaDB migration tests also create isolated databases.
-Use dedicated test servers and accounts with those privileges.
-
-Server TLS defaults to `verifyFull`. Self-signed local fixtures can explicitly
-set `ORM_TEST_MYSQL_TLS=require` and `ORM_TEST_MARIADB_TLS=require`.
-Run `dart test` with the default suite concurrency for the complete native matrix.
-CI runs `dart test --preset core` once for shared behavior and build/CLI workflows,
-and `--preset sqlite`, `postgres`, `mysql` and `mariadb` on separate Linux runners.
-Each server job supplies only its own database URL and service. Chrome JS and
-WASM have separate jobs. Keep database groups tagged with their engine; leave
-shared assertions untagged in mixed files. Entire shared-only suites use `core`,
-entire database-only suites use `database` (or their sole engine), and MySQL-family
-suites also use `mysql-suite`. These suite tags exclude irrelevant files before
-compilation. Presets never lower the runner's default concurrency.
-
-Test command behavior in process with the helpers in `test/support/cli.dart`.
-Use absolute fixture paths and capture output with `IOOverrides`; never change
-the shared VM's working directory or exit code. Keep subprocesses for generated
-consumer compilation, configuration reload, AOT packaging and crash recovery.
-Use package entrypoints (`dart run orm` or `dart run orm_build_fixture:migrate`)
-when a Dart subprocess is necessary so it can reuse compiled code. Exercise
-unchanged generated sources in one consumer instead of compiling each assertion.
-Run subprocess consumers from an independent `BuildFixture` package. This keeps
-native-asset copying and macOS signing away from the test runner's loaded SQLite
-library while retaining parallel suites.
-
-For type-rejection fixtures, prove the same imports and generated entrypoints
-with positive cases first. Require diagnostics at each invalid consumer case and
-reject errors in the fixture setup; an obsolete getter or missing import is not
-evidence of a type boundary. Compiler subprocesses must identify the intended
-consumer error as well as returning nonzero. Check inference-sensitive API
-changes in both the analyzer and actual kernel/AOT consumers.
-
-## Documentation and public APIs
-
-Keep public entrypoints explicit and add `///` comments at the declarations they
-export. Explain result shape, ownership, transaction boundaries and errors where
-those affect callers. Internal modules use ordinary imports and exports; do not
-introduce `part` directives to share private state.
-
-Handwritten user guides live in `doc/`. Explain supported behavior, practical
-examples and compatibility limits. Keep research notes, task progress and test-run
-logs out of public guides; report validation in the relevant pull request.
-Dartdoc categories connect those guides to API navigation. After changing comments,
-exports or category configuration, run:
-
-```sh
-dart doc --validate-links
-```
-
-After moving or renaming APIs, remove the previous generated `doc/api/` directory
-before regenerating so stale pages cannot survive. Broken links, ambiguous
-canonical exports and unresolved symbol references fail documentation generation.
-
-Inspect the generated `doc/api/` pages through a local HTTP server, including
-library/category navigation, symbol links and public signatures. Do not commit
-or publish that generated directory. Run package analysis and the relevant
-examples as well; a formatted code block alone does not verify an example.
-
-## Release checks
-
-Check formatting, run `dart doc --validate-links` and run
-`dart pub publish --dry-run`. Documentation generation is a release check, not
-part of the ordinary test CI. The published package
-includes its Dart sources, documentation, examples and SQLite Web assets;
-development caches and repository test tools stay out of the archive.
-
-`dart run tool/build_sqlite_web.dart --check` verifies committed worker/WASM
-resources. Regenerate them only when their source fingerprint changes.
-Report the tested revision, platforms and meaningful skips in the pull request.
-Do not use a public guide as a development status log.
-
-### Check a release archive as a consumer
-
-Use the exact Dart SDK pinned by CI, including when rebuilding SQLite Web assets
-after a version or lockfile change. Start from a clean commit. Run ordinary
-`dart pub publish --dry-run` first, then create the actual pub archive in a
-separate invocation:
-
-```sh
-dart pub publish --to-archive=/tmp/orm-release.tar.gz
-```
-
-Use pub's package rules, rather than `git archive`. Preserve the version, commit,
-SDK, archive SHA-256 and per-file manifest with the release evidence. Do not rely
-on `--from-archive` to repeat source validation: the publishing SDK can skip
-those checks on that path. Complete source analysis, tests, Dartdoc, asset checks
-and the ordinary dry-run before freezing an archive.
-
-Unpack into a new directory only after rejecting absolute paths, `..` components,
-duplicate names, symlinks, hard links and special files. For example:
-
-```sh
-python3 - /tmp/orm-release.tar.gz /tmp/orm-release-package <<'PY'
-import pathlib, sys, tarfile
-archive, output = sys.argv[1:]
-root = pathlib.Path(output).resolve()
-root.mkdir()  # Refuse an existing destination.
-with tarfile.open(archive, 'r:gz') as package:
-    names = set()
-    entries = package.getmembers()
-    targets = []
-    for entry in entries:
-        path = pathlib.PurePosixPath(entry.name)
-        name = path.as_posix().casefold()
-        if (not path.parts or path.is_absolute() or '\\' in entry.name or
-                ':' in entry.name or
-                any(part.startswith(' ') or part.endswith((' ', '.')) or
-                    pathlib.PureWindowsPath(part).is_reserved()
-                    for part in path.parts) or
-                name in names or not (entry.isfile() or entry.isdir())):
-            raise ValueError(f'Unsafe archive member: {entry.name}')
-        target = root.joinpath(*path.parts).resolve()
-        if not target.is_relative_to(root):
-            raise ValueError(f'Archive destination outside root: {entry.name}')
-        names.add(name)
-        targets.append((entry, target))
-    for entry, target in targets:
-        if entry.isdir():
-            target.mkdir(parents=True, exist_ok=True)
-        else:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(package.extractfile(entry).read())
-PY
-dart run tool/test_package.dart /tmp/orm-release-package /tmp/orm-consumer.json
-```
-
-The consumer check requires real Chrome and cached development dependencies from
-`dart pub get`; native SQLite's build hook may download its verified library.
-It verifies package resolution, CLI initialization and saved migrations, identical
-first-build CLI/build_runner outputs, ordinary/advanced writes, typed overlays,
-nested named results, CTEs, transaction commit/rollback and unchanged exported Web
-assets in native SQLite and Chrome JS/WASM. Temporary consumers and Chrome profiles
-are removed. Server coverage remains in the real-database CI matrix.
-
-After merging, repeat these checks on the final clean main and keep only its
-archive as the candidate for publication. After publishing, install the official
-hosted version in an independent pub cache and validate it separately.
-
-For the beta.6 migration upgrade, safely unpack the official beta.6 archive and
-the candidate archive, then run:
-
-```sh
-dart run tool/test_migration_upgrade.dart /tmp/orm-beta6-package /tmp/orm-release-package /tmp/orm-upgrade.json
-```
-
-This independent SQLite consumer generates and applies history with beta.6,
-preserves the database, changes the dependency and application imports/API, proves
-unpatched historical imports fail, and adds only the required imports to the saved
-migration and registry. Beta.7 `check/status/verify/apply` must preserve compiled
-definitions, recorded/calculated checksums, journal timestamps, data, physical
-schema and database bytes; already applied migrations must not run again.
-
-## Choose regression suites by behavior
-
-All names below refer to files under `test/` with the `_test.dart` suffix.
-
-| Changed behavior | Representative suites |
+| Entrypoint | Implementation responsibility |
 | --- | --- |
-| Model declarations and generated types | `annotated_generation`, `annotated_builder`, `annotated_database`, `model_library`, `record_database`, `generator`, `generator_dialects`, `types`, `generated_database`, `nominal_database` |
-| Build/watch and project commands | `builder`, `cli`, `cli_workflow`, `import_cli`, `migration_plan_cli` |
-| Projections, mapping and query scope | `database`, `selection`, `query_boundary`, `union`, `plan` |
-| Filter groups, text and comparison types | `predicate_groups`, `predicate_groups_database`, `predicate_groups_types`, `comparison_operand`, `text_expression`, `text_expression_types`, and their `mysql_*` database entrypoints |
-| Keys, relationships and batched loading | `relation`, `relation_predicate`, `mysql_relation_predicate`, `many_to_many`, `unconstrained_relation` |
-| Values and custom codecs | `integer`, `custom_codec`, `temporal`, `temporal_precision`, `decimal`, `decimal_division`, `decimal_average` |
-| Defaults, generated values and constraints | `client_default`, `conditional_default_generation`, `identity_default_generation`, `null_default`, `mysql_null_default`, `computed`, `check` |
-| Sessions, transactions and failure recovery | `transaction`, `retry`, `acquisition`, `stream`, `session_connection`, `runtime_lifecycle_review` |
-| Subscriptions and execution observations | `watch`, `observation` |
-| Migration history, catalog and recovery | `migration`, `migration_target`, `migration_recovery`, `backfill`, `schema_version`, `import` |
-| MySQL and MariaDB behavior | `mysql_driver`, `mysql_database`, `mysql_import`, `mysql_transaction_boundary`, `mysql_migration`, `mysql_generated_consumer` |
+| `lib/database.dart` | Sessions, driver contracts, ownership and transactions |
+| `lib/schema.dart` | Model annotations and physical metadata |
+| `lib/query.dart` | Parameterized filters, scope checks and decoding |
+| `lib/sqlite.dart` | Native SQLite connection and configuration |
+| `lib/postgres.dart` | Native PostgreSQL pool and configuration |
+| `lib/migration.dart` | Frozen Dart history, planning and application |
+| `lib/dev.dart` | Static analyzer and generated source emission |
 
-Use real database URLs to enable the server suites. Tests create their own tables
-or schemas; MySQL/MariaDB recovery tests require permission to create isolated
-databases. See [database setup](#real-database-checks) for environment variables and the
-complete native command. Capability-dependent skips must be reported separately
-from passes, especially when the SQLite build cannot interrupt running SQL.
+Keep implementation in `lib/src/<module>/`. Same-module imports are relative;
+cross-module imports must use `package:orm/<module>.dart`. Public entrypoints use
+explicit exports from their own implementation. Never use `part` or `part of`.
+Runtime modules cannot depend on `dev`; no aggregate entrypoint hides ownership.
+`test/module_boundaries_test.dart` enforces these rules and rejects module cycles.
 
-## Verify browser and Flutter behavior
-
-From the repository root:
+## Local checks
 
 ```sh
-dart run tool/test_browser.dart
-dart run tool/test_browser.dart --wasm
-dart run tool/test_flutter_web.dart /absolute/path/to/flutter
+dart pub get --enforce-lockfile
+dart format --output=none --set-exit-if-changed bin lib test tool example/*.dart example/migrations
+dart analyze
+dart run bin/orm.dart generate --schema example/models.dart --out example/models.db.dart --name AppDatabase --engine sqlite --check
+dart test --concurrency=1
+dart run example/main.dart
 ```
 
-Browser checks exercise packaged resource identity, generated queries, memory and
-OPFS storage, reopen/upgrade, constraints, transactions, cursors, subscriptions,
-value transport and explicit rejection of unsupported interruption. They use real
-Chrome and record JS/WASM mode. The Flutter Web runner also verifies release
-packaging, nested routes and configurations with and without isolation headers.
-Each Chrome job also generates a fresh conditional-default consumer, runs native
-and browser SQLite against the same client/saved migrations, and checks original
-DTO/mixin methods plus explicit value/null and omission behavior. Run just this
-consumer with `dart run tool/test_conditional_defaults.dart [--wasm]`.
-
-For Android, follow the [APK upgrade and restart workflow](https://github.com/medz/dart-orm/blob/main/example/flutter/README.md). Browser,
-Android and native server validation are separate: one passing target does not
-establish another. Keep SDK, database, browser/device, source revision and report
-paths with the validation result. Reports are local outputs under `.dart_tool/`.
-
-
-## Measure generation and editor cost
-
-
-From an ORM repository checkout:
+SQLite tests run against native SQLite. PostgreSQL tests skip unless configured.
+Use a disposable PostgreSQL instance and an account allowed to create/drop
+schemas. Fixtures own their isolated schemas and remove them after each test.
 
 ```sh
-dart run tool/benchmark_generation.dart
-dart run tool/benchmark_editor.dart --smoke
-dart run tool/benchmark_editor.dart
+ORM_TEST_POSTGRES_HOST=127.0.0.1 \
+ORM_TEST_POSTGRES_PORT=5432 \
+ORM_TEST_POSTGRES_USER=orm \
+ORM_TEST_POSTGRES_PASSWORD=orm \
+ORM_TEST_POSTGRES_DATABASE=orm_test \
+dart test --concurrency=1
 ```
 
-The generation benchmark creates disposable projects with 10, 100 and 1000
-four-field annotated DTO models. It measures first and unchanged builds, watcher startup,
-field and imported-metadata edits, and analysis. It also checks that an unrelated
-edit leaves output timestamps unchanged. The report is written to
-`.dart_tool/benchmarks/generation.json`; a positional argument chooses another
-report path.
+For a local Unix socket, replace HOST with `ORM_TEST_POSTGRES_SOCKET`; the driver
+tests accept its directory or full `.s.PGSQL.<port>` path. Query/business fixtures
+and migration fixtures use the full socket path. Test TLS is explicitly disabled
+for the local service; application PostgreSQL configuration is independent.
+CI supplies PostgreSQL and exercises the entire suite without database skips.
 
-The editor benchmark drives the installed Dart Analysis Server over stdio LSP.
-It checks completion labels, deliberate type errors with exact diagnostic ranges,
-source edits and a final consumer analysis. Full results go to
-`.dart_tool/benchmarks/editor.json`. `--smoke` uses ten models and two warm samples,
-writing `.dart_tool/benchmarks/editor-smoke.json`; it checks the harness rather
-than establishing performance. `--same-session` retains the server across error
-recovery and rename probes; its separate report includes `-recovery` in the name.
+Test meaningful behavior against real engines: mutation return rows, parameter
+binding, rollback, callback lifetimes, guarded updates, concurrent requests and
+catalog drift. Static type tests need a valid positive consumer before deliberate
+invalid calls. Do not count syntax errors or an obsolete generated API as type
+safety evidence. Keep tests small and reuse passing evidence unless new changes
+or unresolved failures justify more work.
 
-Generation timing includes process startup where applicable, excludes dependency
-downloads, and uses warm shared SDK/pub caches. Editor measurements include protocol
-transport and JSON processing, but exclude GUI rendering and editor extensions.
-Keep startup, analysis readiness, first completion and warm completion separate.
-A successful rename probe does not guarantee every IDE workflow; String-valued index and relation metadata is generation-checked and needs explicit updates after native Dart field renaming. Always regenerate and analyze after refactoring.
+## Documentation and publication
 
-Run these tools independently of other builds with source and SDK versions fixed.
-Read sample counts, conditions and errors in the produced report before comparing
-results. The build/watch regression suites also exercise imported metadata,
-prior-builder output, error recovery and generated-file cleanup.
+Document public behavior, ownership and failure boundaries with Dartdoc.
+Keep `doc/` for public usage and compatibility limits. Research and test-run logs
+belong outside public documentation. Contributor workflows belong here.
 
-## Decimal benchmarks
+Review saved migration SQL and freeze a standalone Dart snapshot before saving
+its literal fingerprint. Use static registration. Never revise deployed history
+or add compatibility with the retired JSON snapshot workflow during beta.
 
-The repository benchmark fetches and decodes 10000 integer-valued Decimal rows,
-with one warmup and three measured runs per case. It includes ordinary reads,
-division, rounding, average and running aggregates. Build before measuring:
+Before a release, also run `dart doc --validate-links` and
+`dart pub publish --dry-run`; generated API pages stay under ignored `doc/api/`.
+Check the package archive for local caches, credentials and unrelated artifacts.
+Use small Conventional Commits. Pushing needs explicit authorization.
+
+## Beta release batches
+
+Merge focused PRs without publishing each one. Publish a new `6.0.0-beta.N` when
+a complete public workflow or a meaningful reliability improvement is ready for
+users: API, generator, both database engines, examples and documentation must
+agree. A serious data correctness fix can justify an immediate beta. Keep the
+published channel beta; use release-candidate quality as the acceptance target.
+
+A release PR updates the version, changelog and upgrade instructions once for
+the batch. Review the final head, resolve review threads, pass CI, and merge that
+exact head. Create the tag and GitHub prerelease from the actual merge commit.
+Run Dartdoc and publication dry-run again for that commit before publishing.
+Record the released version, merge commit, archive hash and verified platforms.
+
+After publication, download the actual pub.dev archive, verify its published
+SHA-256, and run it in an independent consumer against both disposable engines:
 
 ```sh
-dart build cli --target=tool/benchmark_decimal.dart --output=/tmp/orm-decimal-benchmark
-mkdir -p .dart_tool/benchmarks
-/tmp/orm-decimal-benchmark/bundle/bin/benchmark_decimal > .dart_tool/benchmarks/decimal.json
+dart run tool/check_package.dart /path/orm-6.0.0-beta.N.tar.gz
 ```
 
-Set `ORM_TEST_POSTGRES` to a disposable local PostgreSQL URL to include that
-backend. The script disables TLS for this local benchmark, creates a uniquely
-named schema and removes it afterward; the account needs schema-creation
-permission. Without the variable it measures SQLite only.
+The checker extracts only that archive, resolves fresh dependencies, generates
+the client and separate migration drafts, compiles a native consumer, then checks
+typed CRUD, two-query relationships, idempotent checkout, rollback and streaming.
+It requires the same PostgreSQL environment variables as the test suite and
+removes its owned temporary project and database schema. A checkout or Git
+archive is useful before publication, but is not proof of the published artifact.
 
-These are single-client end-to-end samples, including compilation of each query,
-database work, transport and decoding. They are not latency percentiles,
-concurrency measurements or estimates for large coefficients and high scales.
-Run separately from tests and builds. Retain database/SDK versions and each sample
-from the JSON report when comparing revisions.
-
-## Runtime benchmarks
-
-Run the same native SQL and result shapes through the public driver and ORM:
-
-```sh
-ORM_TEST_POSTGRES='postgresql://localhost/orm_bench' dart run tool/benchmark_runtime.dart
-```
-
-The PostgreSQL account needs permission to create/drop its own temporary schema.
-The tool removes that schema and its temporary SQLite WAL file when finished.
-It does not alter the application's tables. `--smoke` uses five timing samples
-and writes `.dart_tool/benchmarks/runtime-smoke.json`; it validates the harness and is not
-a performance result. The normal run writes `.dart_tool/benchmarks/runtime.json`.
-Use `--output <path>` to retain separate runs, for example
-`--output .dart_tool/benchmarks/runtime-after.json`.
-
-### Comparison contract
-
-Both paths use the **same public Driver**: PostgreSQL pooling/protocol/decoding,
-or the native SQLite background isolate and its message transport. The raw path
-calls `driver.run` and `connection.execute` directly, then constructs the same
-Records/lists using the same public codecs. This isolates the query layer above
-the adapter. It is not a comparison against synchronous `package:sqlite3` on the
-main isolate or an independently configured `package:postgres` connection.
-
-The raw path reuses captured, precompiled SQL. Its relationship loader derives
-keys from the returned parent rows, fills the same parameter positions, groups
-children and returns unmodifiable child lists. The fixture has a fixed root/key
-count; this baseline is handwritten for that workload, not a general replacement
-for the ORM query planner. Raw SQL, parameter values, statement count and complete
-business results are checked against the corresponding generated ORM query.
-Independent assertions check root count, per-parent ordering/limits and grouped
-counts. All data belongs to the generated [example schema](https://github.com/medz/dart-orm/blob/main/example/schema.dart).
-
-| Case | Result | Expected SQL result volume |
-| --- | --- | --- |
-| `full_rows` | 100 complete user results; nullable, long Unicode nicknames | 100 rows, one statement |
-| `two_columns` | 100 `(id, email)` Records | 100 rows, one statement |
-| `three_posts` | 100 users with their latest three `(id, title)` posts | 100 parent + 300 child rows, two statements |
-| `aggregate` | Counts for ten score groups | 10 rows, one statement |
-
-The database contains 100 users and 1,000 posts. Field selection reduces returned
-columns; per-parent pagination returns 300 of those posts. This sample does not
-measure arbitrary graph cardinalities, mutation throughput or every codec.
-
-### Timing and transport
-
-Each backend runs in a separate native JIT process. Query objects, schema,
-connections and database caches are warm. Query object construction is outside
-the timing; ORM SQL compilation on each `get()` is inside it. The default hooks,
-VM service and profiler are disabled in the timing processes.
-
-For each case, 20 raw/ORM pairs warm the code before 200 measured pairs. The first
-lane alternates in each measured pair. Both lanes retain their actual duration
-samples, with nearest-rank p50/p95. In the paired timing section, `wallMicros`
-sums measured operation intervals and operations/second is the inverse mean
-duration. It excludes the gaps between those intervals. The separate closed-loop
-concurrency section runs 200 operations per lane across eight clients, and its
-wall time/throughput covers the entire concurrent run. It runs raw then ORM;
-repeat measurements to assess order/load/JIT variability.
-
-SQLite uses one worker connection and a temporary WAL file. PostgreSQL warms all
-four pool slots. These backend configurations serve different purposes; their
-absolute throughputs are not a driver ranking.
-
-Both PostgreSQL timing scenarios use an external loopback TCP relay. One forwards
-immediately. The other schedules each received chunk after 10 milliseconds in
-each direction, preserving order without serially adding a delay for every chunk.
-An independent byte echo measures the relay's actual round-trip latency and checks
-its byte accounting. The report also measures `SELECT 1` through the complete
-driver. That command can involve multiple protocol round trips: a SQL statement
-count is not a TCP round-trip count.
-
-This is controlled transport latency on a local database, not a remote database
-deployment. It does not simulate WAN loss, bandwidth limits, TLS or a remote
-server's CPU/storage. The relay and its counters run in the controller process,
-outside the benchmark process's measured heap.
-
-### Observation and memory scopes
-
-Separate probes preserve SQL/parameters, returned-row counts and UTF-8 JSON byte
-lengths of the driver rows and normalized result. These JSON lengths describe
-logical payload volume, not native heap sizes or SQLite IPC encoding. PostgreSQL
-also records bytes received/sent by its relay during each probe, including
-protocol messages but excluding TCP/IP headers. Connection setup is already done.
-
-A separate instrumented eight-client run records 64 acquisition samples per lane
-and statement durations. These are driver lease times, including setup inside the
-request; they do not isolate the pool implementation's queue time. The ORM probe
-also records synchronous decode/grouping times. These probes do not contribute to
-the default latency samples.
-
-Memory profiling uses fresh local processes after timing. The external controller
-queries the SDK VM service, requests GC, runs three reads retaining the last result,
-then inspects live heap state. Reports include heap/external memory, selected live
-class counts, RSS before/after and process-lifetime maximum RSS. The latter can
-include startup and previous cases; it is not a per-query peak. Live heap statistics
-cover the isolate group, including SQLite's worker, and are not solely result size.
-
-The SDK's protocol describes allocation accumulators, but
-[Dart 3.13.3's implementation](https://github.com/dart-lang/sdk/blob/3.13.3/runtime/vm/class_table.cc#L263)
-emits current counts/sizes for both the accumulated and current fields. This
-benchmark therefore does not subtract `accumulatedSize` values or describe a live
-heap delta as total allocated bytes. The
-[service implementation](https://github.com/dart-lang/sdk/blob/3.13.3/runtime/vm/service.cc#L4443)
-also establishes the isolate-group scope of its GC/profile operation.
-
-Instead, a separate
-[allocation trace](https://github.com/dart-lang/sdk/blob/3.13.3/runtime/vm/service/service.md#getallocationtraces)
-counts observed creations of selected Record, List, Map and selection-plan classes
-in the main query isolate, and records allocation frames. It excludes untraced
-classes, native allocations and the SQLite worker's allocation traces. Buffer and
-stack limits apply; truncated stack counts are retained. These are observed traces,
-not an exact census of every allocation or a measurement of total allocated bytes.
-Tracing can deoptimize code and changes execution cost; no traced durations are
-used as normal throughput results.
-
-### Interpret a comparison
-
-Compare exact SQL, bound parameters, statement counts and complete business
-results before comparing durations. A faster run with fewer returned rows or a
-different transaction boundary is a different workload.
-
-Use absolute overhead, selected bytes, actual statement counts and measured lease
-waits together. A short local query can have a large percentage overhead while
-remaining short in absolute time. With network delay, protocol round trips can
-dominate; selecting fewer columns does not eliminate those round trips. Allocation
-traces can locate intermediate collections, but do not establish retained memory
-or application throughput.
-
-Retain the report's runtime revision, SDK, OS/CPU, database versions, fixture,
-sample counts and harness hashes. Repeat runs to assess load, scheduling and JIT
-variation. If raw-driver timings or calibrated relay latency also change, do not
-attribute the entire difference to the ORM. A native JIT result says nothing about
-AOT, browser or Flutter performance without a corresponding workload there.
-
-Typed selection decodes values into the requested scalar, Record, DTO or dynamic
-Map. Relationship expansion preserves driver-row ownership. Any optimization must
-retain mapping order, decoder failures, transaction boundaries, cursor cleanup
-and observation events. Statement reuse must also preserve protocol disposal and
-connection ownership; omitting cleanup is not a valid cache.
+An RC-quality batch needs predictable API and failure behavior, stable generation,
+real concurrent and migration safety checks, and a working independent package
+consumer. Unsupported features and unverified platforms remain explicit; a long
+feature list is not an acceptance criterion.

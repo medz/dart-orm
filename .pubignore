@@ -4,6 +4,7 @@ build/
 **/.dart_tool/
 **/build/
 **/.gradle/
+**/.idea/
 **/local.properties
 **/.flutter-plugins*
 *.sqlite
@@ -14,11 +15,11 @@ build/
 .env.*
 doc/api/
 
-# Repository maintenance; runtime assets and examples remain included.
+# Contributor files and retired local Flutter artifacts.
 .github/
 AGENTS.md
 netlify.toml
 test/
 tool/
-dart_test.yaml
+example/flutter/
 pubspec.lock
