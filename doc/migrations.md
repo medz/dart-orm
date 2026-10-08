@@ -27,6 +27,8 @@ Each marker insertion must affect one row. When applying new versions, the
 runner reads the complete history back before committing; suppressed, deleted
 or rewritten markers roll back the invocation, including application DDL.
 PostgreSQL flushes deferred constraint triggers before this readback.
+The final catalog check follows marker triggers and also verifies the internal
+history-table structure, so a trigger cannot record success for a changed schema.
 Failures roll back the invocation. Already applied histories are verified;
 modified or missing historical entries fail. PostgreSQL runners take a
 transaction advisory lock. SQLite runners sharing one owned driver use its FIFO

@@ -8,7 +8,7 @@ import '../example/migrations/postgres/history.dart' as postgres;
 import '../example/migrations/sqlite/history.dart' as sqlite;
 import 'support/database.dart';
 
-MigrationHistory _history(Engine engine) {
+MigrationHistory _history(Engine engine, {bool insertUser = false}) {
   final initial = engine == Engine.sqlite ? sqlite.history : postgres.history;
   final migrations = [...initial.migrations];
   var before = initial.migrations.last.snapshot;
@@ -27,7 +27,10 @@ MigrationHistory _history(Engine engine) {
         ]),
       ],
     );
-    final steps = planSchemaChange(before, after).steps;
+    final steps = [
+      ...planSchemaChange(before, after).steps,
+      if (insertUser && version == 3) 'INSERT INTO "users" ("username", "age") VALUES (\'marker integrity\', 20)',
+    ];
     migrations.add(
       Migration(
         version: version,
@@ -68,19 +71,24 @@ Future<void> _installTrigger(Session session, String kind) async {
       'suppress' => 'RETURN NULL;',
       'delete' ||
       'deferred delete' => 'DELETE FROM $marker WHERE version = NEW.version;',
+      'alter table' => 'ALTER TABLE $schema.marker_3 ADD COLUMN surprise TEXT;',
+      'deferred drop table' => 'DROP TABLE $schema.marker_3;',
+      'history shape' =>
+        'ALTER TABLE $marker ALTER COLUMN engine DROP NOT NULL;',
       _ => 'UPDATE $marker SET name = \'tampered\' WHERE version = 1;',
     };
+    final changesHistoryShape = kind == 'history shape';
     await session.run('''
 CREATE FUNCTION $schema.marker_tamper() RETURNS trigger LANGUAGE plpgsql AS \$marker\$
 BEGIN
-  IF NEW.version = 3 THEN $action END IF;
+  ${changesHistoryShape ? action : 'IF NEW.version = 3 THEN $action END IF;'}
   RETURN NEW;
 END
 \$marker\$
 ''');
-    final deferred = kind == 'deferred delete';
+    final deferred = kind.startsWith('deferred ');
     await session.run(
-      'CREATE ${deferred ? 'CONSTRAINT ' : ''}TRIGGER marker_tamper $timing INSERT ON $marker ${deferred ? 'DEFERRABLE INITIALLY DEFERRED ' : ''}FOR EACH ROW EXECUTE FUNCTION $schema.marker_tamper()',
+      'CREATE ${deferred ? 'CONSTRAINT ' : ''}TRIGGER marker_tamper $timing INSERT ON ${changesHistoryShape ? '$schema."users"' : marker} ${deferred ? 'DEFERRABLE INITIALLY DEFERRED ' : ''}FOR EACH ROW EXECUTE FUNCTION $schema.marker_tamper()',
     );
   }
 }
@@ -91,7 +99,12 @@ void main() {
       'suppress',
       'delete',
       'rewrite',
-      if (engine == Engine.postgresql) 'deferred delete',
+      if (engine == Engine.postgresql) ...[
+        'deferred delete',
+        'alter table',
+        'deferred drop table',
+        'history shape',
+      ],
     ]) {
       test(
         '${engine.name} $kind marker trigger rolls back pending migrations and preserves saved history',
@@ -104,7 +117,7 @@ void main() {
           final readHistory =
               'SELECT "version", "name", "engine", "fingerprint" FROM $marker ORDER BY "version"';
           final prefix = (await session.run(readHistory)).rows;
-          final history = _history(engine);
+          final history = _history(engine, insertUser: kind == 'history shape');
           final runner = MigrationRunner(fixture.db.database, history);
           await _installTrigger(session, kind);
           fixture.events.clear();
@@ -116,6 +129,23 @@ void main() {
             kind == 'suppress' ? 1 : 2,
           );
           expect((await session.run(readHistory)).rows, prefix);
+          if (kind == 'history shape') {
+            expect(
+              (await session.run('SELECT COUNT(*) FROM $schema."users"')).rows,
+              [
+                [0],
+              ],
+            );
+            expect(
+              (await session.run(
+                'SELECT is_nullable FROM information_schema.columns WHERE table_schema = \$1 AND table_name = \'_orm_migrations\' AND column_name = \'engine\'',
+                parameters: [session.schema],
+              )).rows,
+              [
+                ['NO'],
+              ],
+            );
+          }
           final pendingTables = engine == Engine.sqlite
               ? await session.run(
                   "SELECT name FROM main.sqlite_schema WHERE type = 'table' AND name IN ('marker_2', 'marker_3')",
@@ -128,7 +158,7 @@ void main() {
           await session.run(
             engine == Engine.sqlite
                 ? 'DROP TRIGGER $schema.marker_tamper'
-                : 'DROP TRIGGER marker_tamper ON $marker',
+                : 'DROP TRIGGER marker_tamper ON ${kind == 'history shape' ? '$schema."users"' : marker}',
           );
           fixture.events.clear();
           expect(await runner.apply(), [2, 3]);

@@ -81,18 +81,21 @@ final class MigrationRunner {
             ),
           );
         }
-        for (final migration in history.migrations.skip(saved.rows.length)) {
+        for (var i = saved.rows.length; i < history.migrations.length; i++) {
+          final migration = history.migrations[i];
           for (final step in migration.steps) {
             await session.run(step);
           }
           final names = migration.snapshot.tables
               .map((t) => physicalIdentity(session.engine, t.name))
               .toSet();
-          await verifyCatalog(
-            session,
-            migration.snapshot,
-            knownTables.difference(names),
-          );
+          if (i < history.migrations.length - 1) {
+            await verifyCatalog(
+              session,
+              migration.snapshot,
+              knownTables.difference(names),
+            );
+          }
           final placeholders = session.engine == Engine.sqlite
               ? '?, ?, ?, ?'
               : '\$1, \$2, \$3, \$4';
@@ -117,6 +120,20 @@ final class MigrationRunner {
             await session.run('SET CONSTRAINTS ALL IMMEDIATE');
           }
           _verifySaved(await session.run(readHistory), complete: true);
+          // Check the final schema after marker triggers have finished.
+          final snapshot = history.migrations.last.snapshot;
+          await verifyCatalog(
+            session,
+            SchemaSnapshot(
+              engine: session.engine,
+              tables: [..._historyTables, ...snapshot.tables],
+            ),
+            knownTables.difference(
+              snapshot.tables
+                  .map((t) => physicalIdentity(session.engine, t.name))
+                  .toSet(),
+            ),
+          );
         }
         return List<int>.unmodifiable(versions);
       },
