@@ -56,9 +56,12 @@ WHERE m.type = 'table' AND m.name = ? COLLATE NOCASE
     _mismatch(table.name, 'column count or missing table');
   }
   final unique = <String>{};
-  for (final index in _records(
+  final indexes = _records(
     await session.run('PRAGMA main.index_list(${quoteIdentifier(table.name)})'),
-  )) {
+  );
+  // Rowid aliases have no separate primary-key index; column-level DESC does.
+  final separatePrimaryKey = indexes.any((index) => index['origin'] == 'pk');
+  for (final index in indexes) {
     if (index['unique'] != 1) continue;
     final indexed = _records(
       await session.run(
@@ -87,7 +90,10 @@ WHERE m.type = 'table' AND m.name = ? COLLATE NOCASE
     final pk = actual['pk'] != 0;
     if ((actual['type'] as String).toUpperCase() !=
             storageType(Engine.sqlite, column.type) ||
-        (actual['notnull'] != 0 || (pk && column.type == ScalarType.integer)) !=
+        (actual['notnull'] != 0 ||
+                (pk &&
+                    column.type == ScalarType.integer &&
+                    !separatePrimaryKey)) !=
             !column.nullable ||
         pk != column.primaryKey ||
         actual['hidden'] != 0 ||
@@ -156,7 +162,13 @@ JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
 WHERE n.nspname = current_schema() AND c.relname = \$1
-  AND c.relkind IN ('r', 'p') AND a.attnum > 0 AND NOT a.attisdropped
+  AND c.relkind IN ('r', 'p') AND c.relpersistence = 'p'
+  AND a.attnum > 0 AND NOT a.attisdropped
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_class shadow
+    WHERE shadow.relnamespace = pg_catalog.pg_my_temp_schema()
+      AND shadow.relname = c.relname
+  )
 ORDER BY a.attnum
 ''',
       parameters: [table.name],

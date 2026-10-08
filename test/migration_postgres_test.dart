@@ -59,6 +59,32 @@ Migration _migration(
 MigrationHistory _history(List<Migration> migrations) =>
     MigrationHistory(engine: Engine.postgresql, migrations: migrations);
 
+PostgresDriver _driver({int maxConnections = 2}) {
+  final environment = Platform.environment;
+  final socket = environment['ORM_TEST_POSTGRES_SOCKET'];
+  return PostgresDriver(
+    Endpoint(
+      host: socket ?? environment['ORM_TEST_POSTGRES_HOST']!,
+      port: int.parse(environment['ORM_TEST_POSTGRES_PORT'] ?? '5432'),
+      database: environment['ORM_TEST_POSTGRES_DATABASE'] ?? 'postgres',
+      username: environment['ORM_TEST_POSTGRES_USER'] ?? 'orm_test',
+      password: environment['ORM_TEST_POSTGRES_PASSWORD'],
+      isUnixSocket: socket != null,
+    ),
+    settings: PoolSettings(
+      sslMode: SslMode.disable,
+      maxConnectionCount: maxConnections,
+    ),
+  );
+}
+
+List<String> _temporaryUsers(String schema, String kind) => [
+  'CREATE TEMP TABLE ${kind == 'table' ? 'users' : 'shadow_users'} (LIKE "$schema".users INCLUDING ALL) ON COMMIT PRESERVE ROWS',
+  if (kind == 'view')
+    'CREATE TEMP VIEW users AS SELECT * FROM pg_temp.shadow_users',
+  "INSERT INTO users (username, age) VALUES ('temporary', 99)",
+];
+
 /// Pins this test's schema on each acquired connection, independent of pool size.
 final class _SchemaDriver implements Driver {
   _SchemaDriver(this.driver, this.schema);
@@ -87,26 +113,20 @@ void main() {
       late Database database;
       late AppDatabase app;
       late String schema;
-      setUp(() async {
-        final driver = PostgresDriver(
-          Endpoint(
-            host: socket ?? host!,
-            port: int.parse(
-              Platform.environment['ORM_TEST_POSTGRES_PORT'] ?? '5432',
-            ),
-            database:
-                Platform.environment['ORM_TEST_POSTGRES_DATABASE'] ??
-                'postgres',
-            username:
-                Platform.environment['ORM_TEST_POSTGRES_USER'] ?? 'orm_test',
-            password: Platform.environment['ORM_TEST_POSTGRES_PASSWORD'],
-            isUnixSocket: socket != null,
-          ),
-          settings: const PoolSettings(
-            sslMode: SslMode.disable,
-            maxConnectionCount: 2,
+      Future<void> useSingleConnection({bool temporarySchema = false}) async {
+        // Keep the owned persistent schema, but fix temp state to one backend.
+        await database.close();
+        app = AppDatabase(
+          _SchemaDriver(
+            _driver(maxConnections: 1),
+            temporarySchema ? 'pg_temp' : schema,
           ),
         );
+        database = app.database;
+      }
+
+      setUp(() async {
+        final driver = _driver();
         schema =
             'orm_migration_${pid}_${DateTime.now().microsecondsSinceEpoch}';
         await driver.withConnection(
@@ -140,6 +160,123 @@ void main() {
               ['users'],
             ],
           );
+        },
+      );
+
+      for (final kind in ['table', 'view']) {
+        test('temporary $kind shadows roll back first migration', () async {
+          await useSingleConnection();
+          final snapshot = SchemaSnapshot(
+            engine: Engine.postgresql,
+            tables: [shop.history.migrations.single.snapshot.tables.first],
+          );
+          final steps = planSchemaChange(
+            const SchemaSnapshot(engine: Engine.postgresql, tables: []),
+            snapshot,
+          ).steps;
+          await expectLater(
+            MigrationRunner(
+              database,
+              _history([
+                _migration(1, snapshot, [
+                  ...steps,
+                  ..._temporaryUsers(schema, kind),
+                ]),
+              ]),
+            ).apply(),
+            throwsStateError,
+          );
+          expect(
+            (await database.session.run(
+              'SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE (n.nspname = \$1 OR n.oid = pg_my_temp_schema()) AND c.relname IN (\'users\', \'shadow_users\', \'_orm_migrations\')',
+              parameters: [schema],
+            )).rows,
+            isEmpty,
+          );
+        });
+
+        test(
+          'temporary $kind shadows reject resumed history and preserve data',
+          () async {
+            await useSingleConnection();
+            final runner = MigrationRunner(database, shop.history);
+            expect(await runner.apply(), [1]);
+            final persistent = await app.users.create(
+              username: 'persistent',
+              age: 28,
+            );
+            final markers = (await database.session.run(
+              'SELECT * FROM "$schema"."_orm_migrations" ORDER BY version',
+            )).rows;
+            for (final sql in _temporaryUsers(schema, kind)) {
+              await database.session.run(sql);
+            }
+            expect((await app.users.get(persistent.id))!.username, 'temporary');
+            expect((await app.users.update(persistent.id, age: 100))!.age, 100);
+            await expectLater(runner.apply(), throwsStateError);
+            expect(
+              (await database.session.run(
+                'SELECT username, age FROM "$schema".users',
+              )).rows,
+              [
+                ['persistent', 28],
+              ],
+            );
+            expect(
+              (await database.session.run(
+                'SELECT * FROM "$schema"."_orm_migrations" ORDER BY version',
+              )).rows,
+              markers,
+            );
+            // A rejected callback may discard its backend and its temp objects.
+            await database.session.run('DROP $kind IF EXISTS pg_temp.users');
+            if (kind == 'view') {
+              await database.session.run(
+                'DROP TABLE IF EXISTS pg_temp.shadow_users',
+              );
+            }
+            expect(await runner.apply(), isEmpty);
+            final restored = await app.users.create(
+              username: 'after_shadow',
+              age: 30,
+            );
+            expect(
+              (await app.users.get(restored.id))!.username,
+              'after_shadow',
+            );
+            expect((await app.users.update(restored.id, age: 31))!.age, 31);
+            expect(await app.users.delete(restored.id), 1);
+            expect((await app.users.get(persistent.id))!.age, 28);
+          },
+        );
+      }
+
+      test(
+        'temporary-only search path rejects internal migration history',
+        () async {
+          await useSingleConnection(temporarySchema: true);
+          await database.session.run('CREATE TEMP TABLE anchor (id BIGINT)');
+          await expectLater(
+            MigrationRunner(database, shop.history).apply(),
+            throwsStateError,
+          );
+          expect(
+            (await database.session.run(
+              'SELECT relname FROM pg_class WHERE relnamespace = pg_my_temp_schema() AND relname = \'_orm_migrations\'',
+            )).rows,
+            isEmpty,
+          );
+          expect(
+            (await database.session.run(
+              'SELECT tablename FROM pg_tables WHERE schemaname = \$1',
+              parameters: [schema],
+            )).rows,
+            isEmpty,
+          );
+          await useSingleConnection();
+          final runner = MigrationRunner(database, shop.history);
+          expect(await runner.apply(), [1]);
+          expect(await runner.apply(), isEmpty);
         },
       );
 
