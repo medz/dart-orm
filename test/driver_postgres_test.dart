@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:orm/database.dart';
 import 'package:orm/postgres.dart';
+import 'package:postgres/postgres.dart' show PgException, QueryMode;
 import 'package:test/test.dart';
 
 void main() {
@@ -16,6 +17,24 @@ void main() {
   final socketPath = socket == null || socket.contains('.s.PGSQL.')
       ? socket
       : '$socket/.s.PGSQL.$port';
+  PostgresDriver singleConnectionDriver({QueryMode? queryMode}) =>
+      PostgresDriver(
+        Endpoint(
+          host: socketPath ?? host!,
+          port: port,
+          database:
+              Platform.environment['ORM_TEST_POSTGRES_DATABASE'] ?? 'postgres',
+          username:
+              Platform.environment['ORM_TEST_POSTGRES_USER'] ?? 'orm_test',
+          password: Platform.environment['ORM_TEST_POSTGRES_PASSWORD'],
+          isUnixSocket: socket != null,
+        ),
+        settings: PoolSettings(
+          sslMode: SslMode.disable,
+          maxConnectionCount: 1,
+          queryMode: queryMode,
+        ),
+      );
   group(
     'real PostgreSQL',
     () {
@@ -175,6 +194,254 @@ void main() {
           expect((await database.session.run('SELECT id FROM "$table"')).rows, [
             [1],
           ]);
+        },
+      );
+
+      test(
+        'clean runtime rollback preserves cause and reuses the backend',
+        () async {
+          final owned = openDatabase(singleConnectionDriver());
+          addTearDown(owned.close);
+          final before = (await owned.session.run(
+            "SELECT pg_backend_pid(), current_setting('application_name')",
+          )).rows.single;
+          final failure = StateError('business rollback');
+          final failureStack = StackTrace.fromString('business rollback stack');
+          late Session escaped;
+          Object? caught;
+          StackTrace? caughtStack;
+          try {
+            await owned.transaction((session) async {
+              escaped = session;
+              expect(
+                (await session.run('SELECT pg_backend_pid()'))
+                    .rows
+                    .single
+                    .single,
+                before[0],
+              );
+              await session.run(
+                "SET SESSION application_name = 'orm_session_in_transaction'",
+              );
+              await session.run(
+                "SET LOCAL application_name = 'orm_business_rollback'",
+              );
+              await session.run('INSERT INTO "$table" VALUES (1)');
+              Error.throwWithStackTrace(failure, failureStack);
+            });
+          } catch (error, stack) {
+            caught = error;
+            caughtStack = stack;
+          }
+          expect(caught, same(failure));
+          expect(caughtStack.toString(), failureStack.toString());
+          await expectLater(escaped.run('SELECT 1'), throwsStateError);
+          expect(
+            (await owned.session.run('SELECT * FROM "$table"')).rows,
+            isEmpty,
+          );
+          expect(
+            (await owned.session.run(
+              "SELECT pg_backend_pid(), current_setting('application_name')",
+            )).rows.single,
+            before,
+          );
+        },
+      );
+
+      test(
+        'failed callbacks discard outside or committed session changes',
+        () async {
+          final driver = singleConnectionDriver();
+          addTearDown(driver.close);
+          for (final mode in ['outside', 'outsideThenRollback', 'committed']) {
+            final before = (await driver.withConnection(
+              (connection) => connection.run(
+                "SELECT pg_backend_pid(), current_setting('application_name')",
+                const [],
+              ),
+            )).rows.single;
+            final failure = StateError('application callback: $mode');
+            await expectLater(
+              driver.withConnection<void>((connection) async {
+                if (mode == 'committed') {
+                  await connection.run('BEGIN', const []);
+                }
+                await connection.run(
+                  "SET SESSION application_name = 'orm_persistent_session'",
+                  const [],
+                );
+                if (mode == 'outsideThenRollback') {
+                  await connection.run('BEGIN', const []);
+                } else if (mode == 'committed') {
+                  await connection.run('COMMIT', const []);
+                }
+                throw failure;
+              }),
+              throwsA(same(failure)),
+            );
+            final after = (await driver.withConnection(
+              (connection) => connection.run(
+                "SELECT pg_backend_pid(), current_setting('application_name')",
+                const [],
+              ),
+            )).rows.single;
+            expect(after[0], isNot(before[0]), reason: mode);
+            expect(after[1], before[1], reason: mode);
+          }
+        },
+      );
+
+      test(
+        'simple pool settings cannot bypass the single-statement boundary',
+        () async {
+          final driver = singleConnectionDriver(queryMode: QueryMode.simple);
+          addTearDown(driver.close);
+          await expectLater(
+            driver.withConnection(
+              (connection) => connection.run(
+                "BEGIN; SET SESSION application_name = 'orm_batch'; COMMIT;",
+                const [],
+              ),
+            ),
+            throwsA(isA<PgException>()),
+          );
+          await driver.withConnection((connection) async {
+            expect((await connection.run(r'SELECT $1', [42])).rows, [
+              [42],
+            ]);
+            expect(
+              (await connection.run(
+                'SHOW application_name',
+                const [],
+              )).rows.single.single,
+              isNot('orm_batch'),
+            );
+          });
+        },
+      );
+
+      test(
+        'prepared transactions are rejected before SQL without poisoning work',
+        () async {
+          final driver = singleConnectionDriver();
+          addTearDown(driver.close);
+          await driver.withConnection((connection) async {
+            await connection.run('BEGIN', const []);
+            await connection.run('INSERT INTO "$table" VALUES (1)', const []);
+            await expectLater(
+              connection.run("PREPARE TRANSACTION 'orm_unsupported'", const []),
+              throwsUnsupportedError,
+            );
+            await connection.run('ROLLBACK', const []);
+          });
+          expect(
+            (await database.session.run('SELECT * FROM "$table"')).rows,
+            isEmpty,
+          );
+        },
+      );
+
+      test(
+        'native SQL failure preserves callback cause and replaces the backend',
+        () async {
+          final owned = openDatabase(singleConnectionDriver());
+          addTearDown(owned.close);
+          final before = (await owned.session.run('SELECT pg_backend_pid()'))
+              .rows
+              .single
+              .single;
+          // A nonfatal PgException would be reusable under newer native pools.
+          final failure = PgException('business cause after SQL failure');
+          final failureStack = StackTrace.fromString(
+            'SQL callback cause stack',
+          );
+          late Object sqlFailure;
+          Object? caught;
+          StackTrace? caughtStack;
+          try {
+            await owned.transaction((session) async {
+              await session.run('INSERT INTO "$table" VALUES (1)');
+              try {
+                await session.run('INSERT INTO "$table" VALUES (1)');
+              } catch (error) {
+                sqlFailure = error;
+              }
+              Error.throwWithStackTrace(failure, failureStack);
+            });
+          } catch (error, stack) {
+            caught = error;
+            caughtStack = stack;
+          }
+          expect(sqlFailure, isA<PgException>());
+          expect(caught, same(failure));
+          expect(caughtStack.toString(), failureStack.toString());
+          expect(
+            (await owned.session.run('SELECT * FROM "$table"')).rows,
+            isEmpty,
+          );
+          expect(
+            (await owned.session.run('SELECT pg_backend_pid()'))
+                .rows
+                .single
+                .single,
+            isNot(before),
+          );
+        },
+      );
+
+      test(
+        'direct callback rollback drains issued SQL and reuses the backend',
+        () async {
+          final driver = singleConnectionDriver();
+          addTearDown(driver.close);
+          final before = (await driver.withConnection(
+            (connection) => connection.run('SELECT pg_backend_pid()', const []),
+          )).rows.single.single;
+          final failure = StateError('direct callback rollback');
+          final failureStack = StackTrace.fromString('direct callback stack');
+          late Connection escaped;
+          late Future<QueryResult> issued;
+          Object? caught;
+          StackTrace? caughtStack;
+          try {
+            await driver.withConnection((connection) async {
+              escaped = connection;
+              await connection.run('BEGIN', const []);
+              issued = connection.run(
+                'INSERT INTO "$table" VALUES (1)',
+                const [],
+              );
+              unawaited(issued);
+              Error.throwWithStackTrace(failure, failureStack);
+            });
+          } catch (error, stack) {
+            caught = error;
+            caughtStack = stack;
+          }
+          expect(caught, same(failure));
+          expect(caughtStack.toString(), failureStack.toString());
+          expect((await issued).affectedRows, 1);
+          await expectLater(
+            escaped.run('SELECT 1', const []),
+            throwsStateError,
+          );
+          expect(
+            (await driver.withConnection(
+              (connection) =>
+                  connection.run('SELECT * FROM "$table"', const []),
+            )).rows,
+            isEmpty,
+          );
+          expect(
+            (await driver.withConnection(
+              (connection) => connection.run(
+                'SELECT pg_backend_pid(), txid_current_if_assigned()',
+                const [],
+              ),
+            )).rows.single,
+            [before, null],
+          );
         },
       );
 

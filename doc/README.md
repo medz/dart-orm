@@ -195,6 +195,13 @@ transactions and manually issued boundaries are rejected. Transaction sessions
 expire after the callback. A database SQL failure poisons the transaction even
 if the application catches it. Await issued work and propagate business
 failures. There are no automatic retries; choose retry policy in the application.
+PostgreSQL reuses the connection after a business failure when all issued SQL
+was inside transactions that only rolled back successfully. SQL or cleanup
+failures, commits and work outside a transaction discard the failed callback's
+connection. The original callback error and stack are preserved.
+Normal callbacks retain PostgreSQL's native session state. Use `SET LOCAL`
+inside a transaction for scoped settings. Session advisory locks remain
+application-owned even across rollback; manage them explicitly.
 
 Default isolation is serializable. PostgreSQL also supports readCommitted and
 repeatableRead; SQLite rejects those levels. `readOnly: true` uses PostgreSQL's
@@ -216,6 +223,9 @@ not a server cursor or a database change subscription.
 
 Raw statements use `Session.run`. Bind every value with `?` for SQLite or `$1`,
 `$2`, ... for PostgreSQL. Decode positional results with `decodeValue<T>`.
+Every call executes one statement. PostgreSQL always uses the extended protocol,
+including when pool settings specify simple mode. Prepared transactions are
+unsupported, including through direct driver connections.
 Writes and raw statements capture parameter lists and byte contents when called,
 before queuing or acquiring a connection. Reusing or changing a byte buffer
 after the call cannot change the submitted statement.

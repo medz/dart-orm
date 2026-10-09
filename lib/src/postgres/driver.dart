@@ -14,6 +14,8 @@ export 'package:postgres/postgres.dart' show Endpoint, PoolSettings, SslMode;
 /// Every isolation level and read-only transaction mode is supported.
 ///
 /// SQL uses PostgreSQL's native `$1`, `$2`, ... placeholders without rewriting.
+/// Each call executes one statement using the extended protocol, regardless of
+/// the pool's queryMode. Prepared transactions are unsupported and rejected.
 /// Parameters support int, String, bool, double, DateTime, Uint8List and null.
 /// Dates are bound as UTC timestamptz; byte arrays use bytea. Unsupported values
 /// fail before SQL execution. Native PostgreSQL result types are preserved.
@@ -51,7 +53,11 @@ final class PostgresDriver implements Driver {
   /// Pins a pooled connection until [action] and its issued statements finish.
   ///
   /// The callback connection expires immediately when [action] settles.
-  /// Failed callbacks cause the native pool to discard that connection.
+  /// Callback errors preserve their cause and stack. After failure, reuse
+  /// requires all issued SQL to be inside transactions that only rolled back.
+  /// SQL/cleanup failures, commits and work outside a transaction discard it.
+  /// Normal callbacks retain PostgreSQL session state. Use SET LOCAL inside a
+  /// transaction for scoped settings; manage session advisory locks explicitly.
   /// Unfinished direct BEGIN/START transactions roll back before reuse. Nested
   /// acquisition is rejected so a callback cannot wait on its own pool slot.
   @override
@@ -66,24 +72,35 @@ final class PostgresDriver implements Driver {
     }
     _active++;
     try {
-      return await _pool.withConnection((native) async {
+      final outcome = await _pool.withConnection((native) async {
         final connection = _PostgresConnection(native);
+        T? value;
+        (Object, StackTrace)? failure;
         try {
-          final value = await runZoned(
+          value = await runZoned(
             () => action(connection),
             zoneValues: {_callbackZone: true},
           );
-          await connection._finish();
-          return value;
         } catch (error, stack) {
-          try {
-            await connection._finish(ignoreFailure: true);
-          } catch (_) {
-            // The pool discards this connection; keep the callback/SQL cause.
-          }
-          Error.throwWithStackTrace(error, stack);
+          failure = (error, stack);
         }
+        try {
+          await connection._finish();
+        } catch (error, stack) {
+          final cause = failure ?? (error, stack);
+          await connection._discard();
+          Error.throwWithStackTrace(cause.$1, cause.$2);
+        }
+        if (failure != null && !connection._canReuseAfterFailure) {
+          await connection._discard();
+          Error.throwWithStackTrace(failure.$1, failure.$2);
+        }
+        return (value: value, failure: failure);
       });
+      if (outcome.failure case final failure?) {
+        Error.throwWithStackTrace(failure.$1, failure.$2);
+      }
+      return outcome.value as T;
     } finally {
       _active--;
       if (_active == 0) {
@@ -130,6 +147,8 @@ final class _PostgresConnection implements Connection {
   final pg.Connection connection;
   bool _active = true;
   bool _transactionOpen = false;
+  bool _outsideTransactionWork = false;
+  bool _rolledBack = false;
   Future<void> _tail = Future.value();
   (Object, StackTrace)? _failure;
 
@@ -143,6 +162,13 @@ final class _PostgresConnection implements Connection {
         ArgumentError('The statement exceeds PostgreSQL limits.'),
       );
     }
+    final words = _transactionWords(sql);
+    if (words.firstOrNull == 'PREPARE' &&
+        words.elementAtOrNull(1) == 'TRANSACTION') {
+      return Future.error(
+        UnsupportedError('Prepared transactions are not supported.'),
+      );
+    }
     final List<pg.TypedValue<Object>> values;
     try {
       values = parameters.map(_parameter).toList(growable: false);
@@ -150,15 +176,25 @@ final class _PostgresConnection implements Connection {
       return Future.error(error, stack);
     }
     final result = _tail.then((_) async {
-      final result = await connection.execute(pg.Sql(sql), parameters: values);
-      final words = _transactionWords(sql);
+      final result = await connection.execute(
+        pg.Sql(sql),
+        parameters: values,
+        queryMode: pg.QueryMode.extended,
+      );
+      if (!_transactionOpen &&
+          words.firstOrNull != 'BEGIN' &&
+          words.firstOrNull != 'START') {
+        _outsideTransactionWork = true;
+      }
       switch (words.firstOrNull) {
         case 'BEGIN' || 'START':
           _transactionOpen = true;
-        case 'COMMIT' || 'END' || 'ABORT':
+        case 'COMMIT' || 'END':
+          _outsideTransactionWork = true;
           _transactionOpen = words.contains('CHAIN') && !words.contains('NO');
-        case 'ROLLBACK':
+        case 'ROLLBACK' || 'ABORT':
           if (!words.skip(1).contains('TO')) {
+            _rolledBack = true;
             _transactionOpen = words.contains('CHAIN') && !words.contains('NO');
           }
       }
@@ -181,17 +217,26 @@ final class _PostgresConnection implements Connection {
     return result;
   }
 
-  Future<void> _finish({bool ignoreFailure = false}) async {
+  Future<void> _finish() async {
     _active = false;
     await _tail;
     if (_transactionOpen) {
-      await connection.execute('ROLLBACK');
+      await connection.execute('ROLLBACK', queryMode: pg.QueryMode.extended);
       _transactionOpen = false;
+      _rolledBack = true;
     }
-    if (!ignoreFailure) {
-      if (_failure case final failure?) {
-        Error.throwWithStackTrace(failure.$1, failure.$2);
-      }
+    if (_failure case final failure?) {
+      Error.throwWithStackTrace(failure.$1, failure.$2);
+    }
+  }
+
+  bool get _canReuseAfterFailure => _rolledBack && !_outsideTransactionWork;
+
+  Future<void> _discard() async {
+    try {
+      await connection.close(force: true);
+    } catch (_) {
+      // The native handle is closing; preserve the original callback/SQL cause.
     }
   }
 }
