@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:orm/database.dart';
 import 'package:orm/postgres.dart';
-import 'package:postgres/postgres.dart' show PgException;
+import 'package:postgres/postgres.dart' show PgException, QueryMode;
 import 'package:test/test.dart';
 
 void main() {
@@ -17,21 +17,24 @@ void main() {
   final socketPath = socket == null || socket.contains('.s.PGSQL.')
       ? socket
       : '$socket/.s.PGSQL.$port';
-  PostgresDriver singleConnectionDriver() => PostgresDriver(
-    Endpoint(
-      host: socketPath ?? host!,
-      port: port,
-      database:
-          Platform.environment['ORM_TEST_POSTGRES_DATABASE'] ?? 'postgres',
-      username: Platform.environment['ORM_TEST_POSTGRES_USER'] ?? 'orm_test',
-      password: Platform.environment['ORM_TEST_POSTGRES_PASSWORD'],
-      isUnixSocket: socket != null,
-    ),
-    settings: const PoolSettings(
-      sslMode: SslMode.disable,
-      maxConnectionCount: 1,
-    ),
-  );
+  PostgresDriver singleConnectionDriver({QueryMode? queryMode}) =>
+      PostgresDriver(
+        Endpoint(
+          host: socketPath ?? host!,
+          port: port,
+          database:
+              Platform.environment['ORM_TEST_POSTGRES_DATABASE'] ?? 'postgres',
+          username:
+              Platform.environment['ORM_TEST_POSTGRES_USER'] ?? 'orm_test',
+          password: Platform.environment['ORM_TEST_POSTGRES_PASSWORD'],
+          isUnixSocket: socket != null,
+        ),
+        settings: PoolSettings(
+          sslMode: SslMode.disable,
+          maxConnectionCount: 1,
+          queryMode: queryMode,
+        ),
+      );
   group(
     'real PostgreSQL',
     () {
@@ -247,32 +250,94 @@ void main() {
       );
 
       test(
-        'clean callback failure keeps application-owned session settings',
+        'failed callbacks discard outside or committed session changes',
         () async {
           final driver = singleConnectionDriver();
           addTearDown(driver.close);
-          final before = (await driver.withConnection(
-            (connection) => connection.run('SELECT pg_backend_pid()', const []),
-          )).rows.single.single;
-          final failure = StateError('application callback');
-          await expectLater(
-            driver.withConnection<void>((connection) async {
-              await connection.run(
-                "SET SESSION application_name = 'orm_persistent_session'",
-                const [],
-              );
-              throw failure;
-            }),
-            throwsA(same(failure)),
-          );
-          expect(
-            (await driver.withConnection(
+          for (final mode in ['outside', 'outsideThenRollback', 'committed']) {
+            final before = (await driver.withConnection(
               (connection) => connection.run(
                 "SELECT pg_backend_pid(), current_setting('application_name')",
                 const [],
               ),
-            )).rows.single,
-            [before, 'orm_persistent_session'],
+            )).rows.single;
+            final failure = StateError('application callback: $mode');
+            await expectLater(
+              driver.withConnection<void>((connection) async {
+                if (mode == 'committed') {
+                  await connection.run('BEGIN', const []);
+                }
+                await connection.run(
+                  "SET SESSION application_name = 'orm_persistent_session'",
+                  const [],
+                );
+                if (mode == 'outsideThenRollback') {
+                  await connection.run('BEGIN', const []);
+                } else if (mode == 'committed') {
+                  await connection.run('COMMIT', const []);
+                }
+                throw failure;
+              }),
+              throwsA(same(failure)),
+            );
+            final after = (await driver.withConnection(
+              (connection) => connection.run(
+                "SELECT pg_backend_pid(), current_setting('application_name')",
+                const [],
+              ),
+            )).rows.single;
+            expect(after[0], isNot(before[0]), reason: mode);
+            expect(after[1], before[1], reason: mode);
+          }
+        },
+      );
+
+      test(
+        'simple pool settings cannot bypass the single-statement boundary',
+        () async {
+          final driver = singleConnectionDriver(queryMode: QueryMode.simple);
+          addTearDown(driver.close);
+          await expectLater(
+            driver.withConnection(
+              (connection) => connection.run(
+                "BEGIN; SET SESSION application_name = 'orm_batch'; COMMIT;",
+                const [],
+              ),
+            ),
+            throwsA(isA<PgException>()),
+          );
+          await driver.withConnection((connection) async {
+            expect((await connection.run(r'SELECT $1', [42])).rows, [
+              [42],
+            ]);
+            expect(
+              (await connection.run(
+                'SHOW application_name',
+                const [],
+              )).rows.single.single,
+              isNot('orm_batch'),
+            );
+          });
+        },
+      );
+
+      test(
+        'prepared transactions are rejected before SQL without poisoning work',
+        () async {
+          final driver = singleConnectionDriver();
+          addTearDown(driver.close);
+          await driver.withConnection((connection) async {
+            await connection.run('BEGIN', const []);
+            await connection.run('INSERT INTO "$table" VALUES (1)', const []);
+            await expectLater(
+              connection.run("PREPARE TRANSACTION 'orm_unsupported'", const []),
+              throwsUnsupportedError,
+            );
+            await connection.run('ROLLBACK', const []);
+          });
+          expect(
+            (await database.session.run('SELECT * FROM "$table"')).rows,
+            isEmpty,
           );
         },
       );

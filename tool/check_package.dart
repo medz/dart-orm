@@ -192,7 +192,7 @@ Future<void> main() async {
       isUnixSocket: socket != null,
     ),
     schema: schema,
-    settings: const PoolSettings(sslMode: SslMode.disable, maxConnectionCount: 1),
+    settings: const PoolSettings(sslMode: SslMode.disable, maxConnectionCount: 1, queryMode: .simple),
   );
   try {
     check(driver.schema == schema, 'Configured PostgreSQL schema');
