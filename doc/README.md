@@ -199,6 +199,11 @@ PostgreSQL reuses the connection after a business failure when all issued SQL
 was inside transactions that only rolled back successfully. SQL or cleanup
 failures, commits and work outside a transaction discard the failed callback's
 connection. The original callback error and stack are preserved.
+The first SQL error and stack also remain primary if automatic rollback fails.
+Configure PostgreSQL `PoolSettings.queryTimeout` and `connectTimeout` for native
+statement and cancellation deadlines. Use `SET LOCAL statement_timeout` for a
+server deadline within a transaction. These limits do not time application work
+inside the callback; `close()` waits for admitted callbacks to finish.
 Normal callbacks retain PostgreSQL's native session state. Use `SET LOCAL`
 inside a transaction for scoped settings. Session advisory locks remain
 application-owned even across rollback; manage them explicitly.

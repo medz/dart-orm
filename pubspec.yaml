@@ -16,7 +16,7 @@ dependencies:
   crypto: ^3.0.7
   dart_style: ^3.1.13
   path: ^1.9.1
-  postgres: ^3.5.12
+  postgres: ^3.5.20
   sqlite3: ^3.6.0
 dev_dependencies:
   lints: ^6.1.0
