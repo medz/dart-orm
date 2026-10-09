@@ -77,7 +77,7 @@ final class TableQuery<R> {
   final Session session;
   final TableDefinition definition;
   final RowDecoder<R> decode;
-  final List<Map<String, Filter<Object?>>> _filters;
+  final List<({Map<String, Filter<Object?>> fields, bool any})> _filters;
   final List<(String, Direction)> _orders;
   final int? _limit;
   final int? _offset;
@@ -148,7 +148,7 @@ final class TableQuery<R> {
       : name;
 
   TableQuery<R> _copy({
-    List<Map<String, Filter<Object?>>>? filters,
+    List<({Map<String, Filter<Object?>> fields, bool any})>? filters,
     List<(String, Direction)>? orders,
     int? limit,
     int? offset,
@@ -162,9 +162,22 @@ final class TableQuery<R> {
     offset ?? _offset,
   );
 
-  /// Adds an AND group of fields within this table. Empty or unknown fields
-  /// throw before SQL. Generated facades expose typed named field arguments.
-  TableQuery<R> whereFields(Map<String, Filter<Object?>> fields) {
+  /// Adds field predicates joined by AND, combined with existing groups by AND.
+  /// Empty or unknown fields throw before SQL. Generated facades expose typed
+  /// named field arguments.
+  TableQuery<R> whereFields(Map<String, Filter<Object?>> fields) =>
+      _whereFields(fields, any: false);
+
+  /// Adds field predicates joined by OR, combined with existing groups by AND.
+  /// Empty or unknown fields throw before SQL. Values retain the same parameter
+  /// binding, type checks and SQL null semantics as [whereFields].
+  TableQuery<R> whereAnyFields(Map<String, Filter<Object?>> fields) =>
+      _whereFields(fields, any: true);
+
+  TableQuery<R> _whereFields(
+    Map<String, Filter<Object?>> fields, {
+    required bool any,
+  }) {
     for (final key in fields.keys) {
       definition.column(key);
     }
@@ -172,7 +185,7 @@ final class TableQuery<R> {
     return _copy(
       filters: List.unmodifiable([
         ..._filters,
-        Map<String, Filter<Object?>>.unmodifiable(fields),
+        (fields: Map<String, Filter<Object?>>.unmodifiable(fields), any: any),
       ]),
     );
   }
@@ -209,21 +222,20 @@ final class TableQuery<R> {
 
   _Bindings _bindings() => _Bindings(session);
   String _where(_Bindings bindings) {
-    final parts = <String>[];
+    final groups = <String>[];
     for (final group in _filters) {
-      for (final e in group.entries) {
+      final parts = <String>[];
+      for (final e in group.fields.entries) {
         final column = definition.column(e.key);
-        parts.add(
-          e.value.compile(quoteIdentifier(column.name), (v) {
-            _checkValue(column, v, filter: true);
-            return bindings.bind(v);
-          }, column.type),
-        );
+        final predicate = e.value.compile(quoteIdentifier(column.name), (v) {
+          _checkValue(column, v, filter: true);
+          return bindings.bind(v);
+        }, column.type);
+        parts.add('($predicate)');
       }
+      groups.add('(${parts.join(group.any ? ' OR ' : ' AND ')})');
     }
-    return parts.isEmpty
-        ? ''
-        : ' WHERE ${parts.map((p) => '($p)').join(' AND ')}';
+    return groups.isEmpty ? '' : ' WHERE ${groups.join(' AND ')}';
   }
 
   String _readSuffix(_Bindings bindings) {

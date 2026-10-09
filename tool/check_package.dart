@@ -225,6 +225,12 @@ Future<void> verify(Driver driver, Migration initial) async {
     check((await db.users.get(seeded.user.id))!.nickname == null, 'Nullable patch');
     final List<UserCard> cards = await searchUsers(db, 'con');
     check(cards.single.username == 'consumer', 'Typed projection');
+    await db.users.update(seeded.user.id, nickname: 'Alias%_!');
+    events.clear();
+    final aliases = await searchUsers(db, 'Alias%_!');
+    check(aliases.single.id == seeded.user.id, 'Typed cross-field literal-prefix search');
+    check(events.where((event) => event.kind == 'statement').length == 1 && events.single.sql.startsWith('SELECT'), 'One cross-field search statement');
+    await db.users.update(seeded.user.id, nickname: null);
     events.clear();
     final related = await usersWithPosts(db);
     check(related.single.posts.single.title == 'Packaged ORM', 'Related projection');
