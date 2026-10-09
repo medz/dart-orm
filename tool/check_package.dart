@@ -219,6 +219,39 @@ Future<void> verify(Driver driver, Migration initial) async {
       final product = await tx.products.create(sku: 'book', name: 'Dart book', priceCents: 4900, stock: 10);
       return (user: user, post: post, product: product);
     });
+    for (final violation in [
+      (unique: true, code: '23505', sqliteCode: SqlExtendedError.SQLITE_CONSTRAINT_UNIQUE),
+      (unique: false, code: '23503', sqliteCode: SqlExtendedError.SQLITE_CONSTRAINT_FOREIGNKEY),
+    ]) {
+      events.clear();
+      var caught = false;
+      try {
+        await db.transaction((tx) async {
+          await tx.users.update(seeded.user.id, age: 99);
+          if (violation.unique) {
+            await tx.users.create(username: 'consumer', age: 30);
+          } else {
+            await tx.posts.create(authorId: seeded.user.id + 1000, title: 'Missing author');
+          }
+        });
+        throw StateError('Expected a native constraint failure');
+      } on ServerException catch (error) {
+        caught = true;
+        final PgException native = error;
+        final Severity severity = native.severity;
+        check(driver.engine == Engine.postgresql && severity == Severity.error, 'Public PostgreSQL failure type');
+        check(error.code == violation.code && error.schemaName == driver.schema, 'Native SQLSTATE and schema');
+        check(violation.unique ? error is UniqueViolationException : error is ForeignKeyViolationException, 'Public PostgreSQL constraint subclass');
+      } on SqliteException catch (error) {
+        caught = true;
+        check(driver.engine == Engine.sqlite && error.resultCode == SqlError.SQLITE_CONSTRAINT, 'Public SQLite failure type');
+        check(error.extendedResultCode == violation.sqliteCode, 'Native SQLite constraint code');
+      }
+      check(caught && events.where((event) => event.kind == 'rollback').length == 1, 'Constraint failure rolls back');
+      final unchanged = (await db.users.get(seeded.user.id))!;
+      check(unchanged.username == 'consumer' && unchanged.age == 28, 'Earlier write rolls back');
+      check(await db.users.count() == 1 && await db.posts.count() == 1, 'Original rows and next root query survive');
+    }
     events.clear();
     await db.users.update(seeded.user.id, nickname: 'Seven');
     check(events.length == 1 && events.single.kind == 'statement' && events.single.sql.contains('${quoteIdentifier(driver.schema)}."users"'), 'One typed statement in the fixed schema');

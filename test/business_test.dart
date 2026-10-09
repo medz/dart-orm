@@ -1,4 +1,6 @@
 import 'package:orm/database.dart';
+import 'package:orm/postgres.dart';
+import 'package:orm/sqlite.dart';
 import 'package:test/test.dart';
 
 import '../example/shop.dart';
@@ -12,6 +14,73 @@ void main() {
         late TestDatabase fixture;
         setUp(() async => fixture = await openTestDatabase(engine));
         tearDown(() => fixture.db.close());
+
+        test(
+          'public native constraint failures preserve transaction rollback',
+          () async {
+            final db = fixture.db;
+            final original = await db.users.create(username: 'seven', age: 28);
+            for (final violation in [
+              (
+                unique: true,
+                code: '23505',
+                sqliteCode: SqlExtendedError.SQLITE_CONSTRAINT_UNIQUE,
+              ),
+              (
+                unique: false,
+                code: '23503',
+                sqliteCode: SqlExtendedError.SQLITE_CONSTRAINT_FOREIGNKEY,
+              ),
+            ]) {
+              fixture.events.clear();
+              var caught = false;
+              try {
+                await db.transaction((tx) async {
+                  await tx.users.update(original.id, age: 99);
+                  if (violation.unique) {
+                    await tx.users.create(username: 'seven', age: 30);
+                  } else {
+                    await tx.posts.create(
+                      authorId: original.id + 1000,
+                      title: 'Missing author',
+                    );
+                  }
+                });
+                fail('Expected a native constraint failure');
+              } on ServerException catch (error) {
+                caught = true;
+                expect(engine, Engine.postgresql);
+                final PgException native = error;
+                final Severity severity = native.severity;
+                expect(severity, Severity.error);
+                expect(error.code, violation.code);
+                expect(error.schemaName, db.session.schema);
+                expect(error.tableName, violation.unique ? 'users' : 'posts');
+                expect(
+                  error,
+                  violation.unique
+                      ? isA<UniqueViolationException>()
+                      : isA<ForeignKeyViolationException>(),
+                );
+              } on SqliteException catch (error) {
+                caught = true;
+                expect(engine, Engine.sqlite);
+                expect(error.resultCode, SqlError.SQLITE_CONSTRAINT);
+                expect(error.extendedResultCode, violation.sqliteCode);
+              }
+              expect(caught, isTrue);
+              expect(
+                fixture.events.where((event) => event.kind == 'rollback'),
+                hasLength(1),
+              );
+              final unchanged = (await db.users.get(original.id))!;
+              expect(unchanged.username, 'seven');
+              expect(unchanged.age, 28);
+              expect(await db.users.count(), 1);
+              expect(await db.posts.count(), 0);
+            }
+          },
+        );
 
         test(
           'relationship loading uses two SELECTs and direct typed fields',

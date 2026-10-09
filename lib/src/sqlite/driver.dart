@@ -4,6 +4,9 @@ import 'dart:typed_data';
 import 'package:orm/database.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 
+export 'package:sqlite3/sqlite3.dart'
+    show SqliteException, SqlError, SqlExtendedError;
+
 /// Owns one native SQLite connection and serializes callback acquisition FIFO.
 ///
 /// All statements and complete transactions share this queue, so independent
@@ -15,6 +18,9 @@ import 'package:sqlite3/sqlite3.dart' as sqlite;
 /// bind as exact integer microseconds since the Unix epoch. Result values keep
 /// SQLite's native storage types.
 /// Unsupported parameter objects are rejected before executing SQL.
+/// SQLite exceptions propagate unchanged as [sqlite.SqliteException]. Compare
+/// primary codes with [sqlite.SqlError] and specific [sqlite.SqlExtendedError]
+/// codes with the exception's extendedResultCode.
 final class SqliteDriver implements Driver {
   SqliteDriver._(this._database) {
     // PRAGMA avoids sqlite3 3.6.0's non-advancing compileOptions iterator.
