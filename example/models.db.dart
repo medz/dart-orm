@@ -255,6 +255,10 @@ final class UserTable {
   /// Fetches all matching full model rows.
   Future<List<models.User>> all() => _query.all();
 
+  /// Counts rows in this scope, including limit and offset, in one SELECT.
+  /// Count the unpaged filter scope to get a total before pagination.
+  Future<int> count() => _query.count();
+
   /// Reads bounded batches within an active transaction scope.
   Stream<models.User> stream({int fetchSize = 500}) =>
       _query.stream(fetchSize: fetchSize);
@@ -620,6 +624,10 @@ final class PostTable {
   /// Fetches all matching full model rows.
   Future<List<models.Post>> all() => _query.all();
 
+  /// Counts rows in this scope, including limit and offset, in one SELECT.
+  /// Count the unpaged filter scope to get a total before pagination.
+  Future<int> count() => _query.count();
+
   /// Reads bounded batches within an active transaction scope.
   Stream<models.Post> stream({int fetchSize = 500}) =>
       _query.stream(fetchSize: fetchSize);
@@ -841,6 +849,10 @@ final class ProductTable {
 
   /// Fetches all matching full model rows.
   Future<List<models.Product>> all() => _query.all();
+
+  /// Counts rows in this scope, including limit and offset, in one SELECT.
+  /// Count the unpaged filter scope to get a total before pagination.
+  Future<int> count() => _query.count();
 
   /// Reads bounded batches within an active transaction scope.
   Stream<models.Product> stream({int fetchSize = 500}) =>
@@ -1188,6 +1200,10 @@ final class OrderTable {
   /// Fetches all matching full model rows.
   Future<List<models.Order>> all() => _query.all();
 
+  /// Counts rows in this scope, including limit and offset, in one SELECT.
+  /// Count the unpaged filter scope to get a total before pagination.
+  Future<int> count() => _query.count();
+
   /// Reads bounded batches within an active transaction scope.
   Stream<models.Order> stream({int fetchSize = 500}) =>
       _query.stream(fetchSize: fetchSize);
@@ -1515,6 +1531,10 @@ final class OrderLineTable {
 
   /// Fetches all matching full model rows.
   Future<List<models.OrderLine>> all() => _query.all();
+
+  /// Counts rows in this scope, including limit and offset, in one SELECT.
+  /// Count the unpaged filter scope to get a total before pagination.
+  Future<int> count() => _query.count();
 
   /// Reads bounded batches within an active transaction scope.
   Stream<models.OrderLine> stream({int fetchSize = 500}) =>

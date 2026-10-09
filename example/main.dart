@@ -24,8 +24,8 @@ Future<void> main() async {
 
     await db.users.update(seeded.user.id, nickname: 'Seven');
     await db.users.update(seeded.user.id, nickname: null);
-    final cards = await searchUsers(db, 'sev');
-    print(cards.first.username);
+    final page = await searchUsers(db, 'sev');
+    print('${page.users.first.username}: ${page.total} matching users');
     final related = await usersWithPosts(db);
     print('${related.first.user.username}: ${related.first.posts.first.title}');
 

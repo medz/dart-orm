@@ -8,14 +8,30 @@ typedef CartItem = ({int productId, int quantity});
 typedef Receipt = ({Order order, List<OrderLine> lines, bool replayed});
 typedef UserWithPosts = ({UserCard user, List<PostCard> posts});
 
-/// Searches active users by username or nickname prefix in one paged SELECT.
-/// Only the selected columns cross the connection.
-Future<List<UserCard>> searchUsers(AppDatabase db, String prefix) => db.users
-    .where(active: eq(true))
-    .whereAny(username: startsWith(prefix), nickname: startsWith(prefix))
-    .orderBy(id: asc)
-    .limit(20)
-    .select<UserCard>();
+/// Reads an active-user page and its total in one read-only snapshot.
+/// Two SELECTs return one count and only the selected page columns.
+Future<({List<UserCard> users, int total})> searchUsers(
+  AppDatabase db,
+  String prefix, {
+  int offset = 0,
+  int limit = 20,
+}) {
+  if (offset < 0 || limit < 1 || limit > 100) {
+    throw ArgumentError('Expected offset >= 0 and limit 1..100');
+  }
+  return db.transaction((tx) async {
+    final matches = tx.users
+        .where(active: eq(true))
+        .whereAny(username: startsWith(prefix), nickname: startsWith(prefix));
+    final total = await matches.count();
+    final users = await matches
+        .orderBy(id: asc)
+        .limit(limit)
+        .offset(offset)
+        .select<UserCard>();
+    return (users: users, total: total);
+  }, readOnly: true);
+}
 
 /// Loads both sides in one read-only snapshot, using exactly two SELECTs.
 /// An empty root page needs only one SELECT. Relationship batching is explicit.
