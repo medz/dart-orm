@@ -65,6 +65,110 @@ void main() {
           },
         );
 
+        if (engine == Engine.postgresql) {
+          test('typed physical tables exclude inherited rows from reads and writes', () async {
+            final db = fixture.db;
+            final live = await db.users.create(
+              username: 'live parent',
+              age: 28,
+              score: 4.5,
+            );
+            final schema = quoteIdentifier(db.session.schema);
+            final inherited = '$schema.${quoteIdentifier('archive " users')}';
+            await db.session.run(
+              'CREATE TABLE $inherited () INHERITS ($schema."users")',
+            );
+            final childOnlyId = live.id + 1000;
+            await db.session.run(
+              'INSERT INTO $inherited (id, username, age, score) VALUES (\$1, \$2, \$3, \$4), (\$5, \$6, \$7, \$8)',
+              parameters: [
+                live.id,
+                'archived duplicate',
+                35,
+                40.0,
+                childOnlyId,
+                'archived only',
+                50,
+                60.0,
+              ],
+            );
+            Future<T> singleStatement<T>(Future<T> Function() action) async {
+              fixture.events.clear();
+              final result = await action();
+              expect(fixture.statements, hasLength(1));
+              return result;
+            }
+
+            final second = await singleStatement(
+              () => db.users.create(username: 'second parent', age: 30),
+            );
+            expect(
+              (await singleStatement(() => db.users.get(live.id)))!.username,
+              live.username,
+            );
+            expect(
+              await singleStatement(() => db.users.get(childOnlyId)),
+              isNull,
+            );
+            expect(
+              (await singleStatement(() => db.users.orderBy(id: asc).all()))
+                  .map((user) => user.username),
+              [live.username, second.username],
+            );
+            expect(
+              (await singleStatement(
+                () => db.users.orderBy(id: asc).select<UserCard>(),
+              )).map((user) => user.username),
+              [live.username, second.username],
+            );
+            expect(await singleStatement(db.users.count), 2);
+            final page = db.users.orderBy(id: asc).limit(1).offset(1);
+            expect(await singleStatement(page.count), 1);
+            expect(
+              (await singleStatement(page.all)).single.username,
+              second.username,
+            );
+            fixture.events.clear();
+            final streamed = await db.transaction(
+              (tx) => tx.users.stream(fetchSize: 1).toList(),
+              readOnly: true,
+            );
+            expect(streamed.map((user) => user.username), [
+              live.username,
+              second.username,
+            ]);
+            expect(fixture.statements.map((event) => event.rows), [1, 1, 0]);
+
+            final updated = await singleStatement(
+              () => db.users.where(active: eq(true)).update(live.id, age: 99),
+            );
+            expect(updated!.age, 99);
+            final incremented = await singleStatement(
+              () => db.users.increment(live.id, age: 2, score: 0.5),
+            );
+            expect((incremented!.age, incremented.score), (101, 5.0));
+            final decremented = await singleStatement(
+              () => db.users.decrement(live.id, age: 3, score: 0.5),
+            );
+            expect((decremented!.age, decremented.score), (98, 4.5));
+            expect(await singleStatement(() => db.users.delete(live.id)), 1);
+            expect(await singleStatement(() => db.users.get(live.id)), isNull);
+            expect(
+              (await db.session.run(
+                'SELECT id, username, age, score FROM ONLY $inherited ORDER BY id',
+              )).rows,
+              [
+                [live.id, 'archived duplicate', 35, 40.0],
+                [childOnlyId, 'archived only', 50, 60.0],
+              ],
+            );
+            expect(
+              (await singleStatement(() => db.users.all())).single.username,
+              second.username,
+            );
+          });
+        }
+
         test(
           'byte filters capture immutable values and remain reusable',
           () async {

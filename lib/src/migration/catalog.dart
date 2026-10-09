@@ -186,6 +186,12 @@ WHERE n.nspname = \$1 AND c.relname IN ($placeholders)
   AND c.relkind = 'r' AND NOT c.relispartition AND c.relpersistence = 'p'
   AND a.attnum > 0 AND NOT a.attisdropped
   AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_inherits inheritance WHERE inheritance.inhrelid = c.oid
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_inherits inheritance WHERE inheritance.inhparent = c.oid
+  )
+  AND NOT EXISTS (
     SELECT 1 FROM pg_catalog.pg_class shadow
     WHERE shadow.relnamespace = pg_catalog.pg_my_temp_schema()
       AND shadow.relname = c.relname

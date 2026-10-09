@@ -49,6 +49,7 @@ T decodeValue<T>(Object? value) {
 /// Immutable query scope used by statically generated field-specific facades.
 /// SQL field names resolve only within this physical table. Mutation return
 /// shapes are decoded from RETURNING; no preparatory SELECT is performed.
+/// PostgreSQL reads, updates and deletes use ONLY to exclude inherited rows.
 /// SQLite column identities fold ASCII case; PostgreSQL quoted names retain it.
 /// PostgreSQL identifiers must fit within 63 UTF-8 bytes. SQLite's `sqlite_`
 /// table prefix and the migration history table are reserved.
@@ -259,6 +260,8 @@ final class TableQuery<R> {
 
   String get _table =>
       '${quoteIdentifier(session.schema)}.${quoteIdentifier(definition.name)}';
+  String get _onlyTable =>
+      session.engine == Engine.postgresql ? 'ONLY $_table' : _table;
   String get _columns =>
       definition.columns.map((c) => quoteIdentifier(c.name)).join(', ');
 
@@ -276,7 +279,7 @@ final class TableQuery<R> {
         .join(', ');
     final bindings = _bindings();
     final result = await session.run(
-      'SELECT $columns FROM $_table${_readSuffix(bindings)}',
+      'SELECT $columns FROM $_onlyTable${_readSuffix(bindings)}',
       parameters: bindings.values,
     );
     return List<T>.unmodifiable(result.rows.map(decoder));
@@ -293,7 +296,7 @@ final class TableQuery<R> {
   /// a total before pagination, count the unpaged immutable filter scope.
   Future<int> count() async {
     final bindings = _bindings();
-    final source = 'FROM $_table${_where(bindings)}';
+    final source = 'FROM $_onlyTable${_where(bindings)}';
     final sql = _limit == null && _offset == null
         ? 'SELECT COUNT(*) $source'
         : 'SELECT COUNT(*) FROM (SELECT 1 $source${_pagination(bindings)}) AS "counted_rows"';
@@ -434,7 +437,7 @@ final class TableQuery<R> {
       assignments.add('${quoteIdentifier(c.name)} = ${bindings.bind(e.value)}');
     }
     final result = await session.run(
-      'UPDATE $_table SET ${assignments.join(', ')}${scoped._where(bindings)} RETURNING $_columns',
+      'UPDATE $_onlyTable SET ${assignments.join(', ')}${scoped._where(bindings)} RETURNING $_columns',
       parameters: bindings.values,
     );
     if (result.rows.length > 1) {
@@ -449,7 +452,7 @@ final class TableQuery<R> {
     final scoped = whereFields({_primary.field: eq<Object?>(id)});
     final bindings = _bindings();
     final result = await session.run(
-      'DELETE FROM $_table${scoped._where(bindings)}',
+      'DELETE FROM $_onlyTable${scoped._where(bindings)}',
       parameters: bindings.values,
     );
     return result.affectedRows;
@@ -516,7 +519,7 @@ final class TableQuery<R> {
         ? ''
         : ' AND ${realBounds.map((bound) => '((${bound.$1} $operator ${bindings.bind(bound.$2)}) BETWEEN ${bindings.bind(-maxReal)} AND ${bindings.bind(maxReal)})').join(' AND ')}';
     final result = await session.run(
-      'UPDATE $_table SET ${assignments.join(', ')}$where$bounds RETURNING $_columns',
+      'UPDATE $_onlyTable SET ${assignments.join(', ')}$where$bounds RETURNING $_columns',
       parameters: bindings.values,
     );
     if (result.rows.length > 1) {
@@ -558,7 +561,7 @@ final class TableQuery<R> {
       }
       final bindings = page._bindings();
       final result = await session.run(
-        'SELECT $_columns FROM $_table${page._readSuffix(bindings)}',
+        'SELECT $_columns FROM $_onlyTable${page._readSuffix(bindings)}',
         parameters: bindings.values,
       );
       for (final cells in result.rows) {
