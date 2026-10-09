@@ -198,6 +198,10 @@ failures. There are no automatic retries; choose retry policy in the application
 PostgreSQL reuses the connection after a business failure when issued work and
 rollback succeed. A database SQL error or failed cleanup discards the connection.
 The original callback error and stack are preserved.
+Application-owned session settings, roles and session locks follow PostgreSQL's
+native persistence rules on both normal return and clean callback failure. A
+callback error does not reset that state. Use `SET LOCAL` inside a transaction
+for scoped settings; manage session advisory locks explicitly.
 
 Default isolation is serializable. PostgreSQL also supports readCommitted and
 repeatableRead; SQLite rejects those levels. `readOnly: true` uses PostgreSQL's

@@ -53,6 +53,9 @@ final class PostgresDriver implements Driver {
   /// The callback connection expires immediately when [action] settles.
   /// Callback errors preserve their cause and stack. The connection is reused
   /// when issued work and rollback succeed; SQL or cleanup failures discard it.
+  /// Session-level settings persist on reuse, including after callback errors.
+  /// Use SET LOCAL inside a transaction for request-scoped settings. Callbacks
+  /// do not reset application-owned roles, configuration or session locks.
   /// Unfinished direct BEGIN/START transactions roll back before reuse. Nested
   /// acquisition is rejected so a callback cannot wait on its own pool slot.
   @override

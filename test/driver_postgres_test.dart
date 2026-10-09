@@ -218,6 +218,9 @@ void main() {
                 before[0],
               );
               await session.run(
+                "SET SESSION application_name = 'orm_session_in_transaction'",
+              );
+              await session.run(
                 "SET LOCAL application_name = 'orm_business_rollback'",
               );
               await session.run('INSERT INTO "$table" VALUES (1)');
@@ -239,6 +242,37 @@ void main() {
               "SELECT pg_backend_pid(), current_setting('application_name')",
             )).rows.single,
             before,
+          );
+        },
+      );
+
+      test(
+        'clean callback failure keeps application-owned session settings',
+        () async {
+          final driver = singleConnectionDriver();
+          addTearDown(driver.close);
+          final before = (await driver.withConnection(
+            (connection) => connection.run('SELECT pg_backend_pid()', const []),
+          )).rows.single.single;
+          final failure = StateError('application callback');
+          await expectLater(
+            driver.withConnection<void>((connection) async {
+              await connection.run(
+                "SET SESSION application_name = 'orm_persistent_session'",
+                const [],
+              );
+              throw failure;
+            }),
+            throwsA(same(failure)),
+          );
+          expect(
+            (await driver.withConnection(
+              (connection) => connection.run(
+                "SELECT pg_backend_pid(), current_setting('application_name')",
+                const [],
+              ),
+            )).rows.single,
+            [before, 'orm_persistent_session'],
           );
         },
       );
