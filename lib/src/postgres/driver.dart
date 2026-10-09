@@ -236,7 +236,7 @@ pg.TypedValue<Object> _parameter(Object? value) => switch (value) {
   bool() => pg.TypedValue(pg.Type.boolean, value),
   double() => pg.TypedValue(pg.Type.double, value),
   DateTime() => pg.TypedValue(pg.Type.timestampTz, value.toUtc()),
-  Uint8List() => pg.TypedValue(pg.Type.byteArray, value),
+  Uint8List() => pg.TypedValue(pg.Type.byteArray, Uint8List.fromList(value)),
   _ => throw ArgumentError.value(
     value,
     'parameter',

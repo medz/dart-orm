@@ -165,6 +165,7 @@ Future<String> _run(
 
 const _consumer = r'''
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:orm/database.dart';
 import 'package:orm/migration.dart';
 import 'package:orm/postgres.dart';
@@ -223,6 +224,21 @@ Future<void> verify(Driver driver, Migration initial) async {
     check(events.length == 1 && events.single.kind == 'statement' && events.single.sql.contains('${quoteIdentifier(driver.schema)}."users"'), 'One typed statement in the fixed schema');
     await db.users.update(seeded.user.id, nickname: null);
     check((await db.users.get(seeded.user.id))!.nickname == null, 'Nullable patch');
+    final bytes = Uint8List.fromList([0, 255]);
+    final pendingBytes = db.users.update(seeded.user.id, avatar: bytes);
+    bytes[0] = 42;
+    check((await pendingBytes)!.avatar![0] == 0, 'Root write captures binary parameters');
+    bytes[0] = 0;
+    final binaryEquality = db.users.where(avatar: eq(bytes));
+    final binaryMembership = db.users.where(avatar: oneOf([bytes]));
+    bytes[0] = 42;
+    check((await binaryEquality.get(seeded.user.id)) != null && (await binaryMembership.get(seeded.user.id)) != null, 'Filters capture immutable binary values');
+    await db.transaction((tx) async {
+      final patch = Uint8List.fromList([1, 255]);
+      final pending = tx.users.update(seeded.user.id, avatar: patch);
+      patch[0] = 42;
+      check((await pending)!.avatar![0] == 1, 'Transaction write captures binary parameters');
+    });
     final List<UserCard> cards = await searchUsers(db, 'con');
     check(cards.single.username == 'consumer', 'Typed projection');
     await db.users.update(seeded.user.id, nickname: 'Alias%_!');

@@ -114,7 +114,8 @@ print(cards.first.username);
 final models = await adults.all(); // List<User>
 ```
 
-Queries are immutable. Fields in one `where` combine with AND; fields in one
+Queries are immutable. Filters capture values when constructed, including byte
+contents and `oneOf` inputs. Fields in one `where` combine with AND; fields in one
 `whereAny` combine with OR. Chained `where` and `whereAny` groups combine with
 AND. Both methods reject an empty group before SQL.
 
@@ -215,6 +216,9 @@ not a server cursor or a database change subscription.
 
 Raw statements use `Session.run`. Bind every value with `?` for SQLite or `$1`,
 `$2`, ... for PostgreSQL. Decode positional results with `decodeValue<T>`.
+Writes and raw statements capture parameter lists and byte contents when called,
+before queuing or acquiring a connection. Reusing or changing a byte buffer
+after the call cannot change the submitted statement.
 Raw SQL is the direct extension point for joins, aggregates and engine-specific
 features; inspect its result shape in application code.
 

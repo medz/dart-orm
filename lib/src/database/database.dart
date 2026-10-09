@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'contracts.dart';
 
@@ -222,7 +223,7 @@ final class _RootSession implements Session {
   }) async {
     database._outsideTransaction();
     _validateStatement(sql, parameters, capabilities, engine);
-    final values = List<Object?>.of(parameters);
+    final values = _snapshotParameters(parameters);
     database._admit();
     try {
       return await database.driver.withConnection(
@@ -261,7 +262,7 @@ final class _TransactionSession implements Session {
     } catch (error, stack) {
       return Future.error(error, stack);
     }
-    final values = List<Object?>.of(parameters);
+    final values = _snapshotParameters(parameters);
     final result = _tail.then(
       (_) => database._run(connection, sql, values, transactionId: id),
     );
@@ -285,6 +286,11 @@ final class _TransactionSession implements Session {
     }
   }
 }
+
+List<Object?> _snapshotParameters(List<Object?> parameters) => [
+  for (final value in parameters)
+    value is Uint8List ? Uint8List.fromList(value) : value,
+];
 
 void _validateStatement(
   String sql,

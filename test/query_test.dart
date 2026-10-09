@@ -7,6 +7,7 @@ import 'package:test/test.dart' hide startsWith;
 import 'package:test/test.dart' as match show startsWith;
 
 import '../example/models.dart';
+import '../example/models.db.dart' show AppSession;
 import '../example/models.snapshot.dart';
 import 'support/database.dart';
 
@@ -63,6 +64,140 @@ void main() {
             );
           },
         );
+
+        test(
+          'byte filters capture immutable values and remain reusable',
+          () async {
+            final db = fixture.db;
+            final first = await db.users.create(
+              username: 'first bytes',
+              age: 1,
+              avatar: Uint8List.fromList([1, 2]),
+            );
+            final second = await db.users.create(
+              username: 'second bytes',
+              age: 2,
+              avatar: Uint8List.fromList([3, 4]),
+            );
+            final absent = await db.users.create(
+              username: 'null bytes',
+              age: 3,
+            );
+            final bytes = Uint8List.fromList([1, 2]);
+            final otherBytes = Uint8List.fromList([3, 4]);
+            final values = <Uint8List?>[bytes, null];
+            final equality = eq<Uint8List?>(bytes);
+            final inequality = ne<Uint8List?>(bytes);
+            final membership = oneOf<Uint8List?>(values);
+            final group =
+                (eq<Uint8List?>(bytes) | eq<Uint8List?>(otherBytes)) &
+                ne<Uint8List?>(null);
+            bytes[0] = 9;
+            otherBytes[0] = 8;
+            values
+              ..clear()
+              ..add(Uint8List.fromList([9, 2]));
+            final checks = [
+              (
+                label: 'eq',
+                query: db.users.where(avatar: equality),
+                ids: [first.id],
+              ),
+              (
+                label: 'ne',
+                query: db.users.where(avatar: inequality),
+                ids: [second.id],
+              ),
+              (
+                label: 'oneOf',
+                query: db.users.where(avatar: membership),
+                ids: [first.id, absent.id],
+              ),
+              (
+                label: 'groups',
+                query: db.users.where(avatar: group),
+                ids: [first.id, second.id],
+              ),
+            ];
+            Future<void> checkQueries() async {
+              for (final check in checks) {
+                expect(
+                  (await check.query.orderBy(id: asc).all()).map(
+                    (row) => row.id,
+                  ),
+                  check.ids,
+                  reason: check.label,
+                );
+              }
+            }
+
+            await checkQueries();
+            bytes[1] = 7;
+            otherBytes[1] = 6;
+            values.clear();
+            await checkQueries();
+            final bound = <Uint8List>[];
+            equality.compile('avatar', (value) {
+              bound.add(value as Uint8List);
+              return '?';
+            }, ScalarType.bytes);
+            expect(() => bound.single[0] = 5, throwsUnsupportedError);
+            expect(
+              () => bound.single.buffer.asUint8List()[0] = 5,
+              throwsUnsupportedError,
+            );
+            expect(bound.single, [1, 2]);
+            await checkQueries();
+          },
+        );
+
+        test('byte writes capture call-time values in root and queued transactions', () async {
+          Future<void> checkWrites(AppSession session, String scope) async {
+            final createdBytes = Uint8List.fromList([0, 255]);
+            final creating = session.users.create(
+              username: '$scope bytes',
+              age: 1,
+              avatar: createdBytes.asUnmodifiableView(),
+            );
+            createdBytes[0] = 40;
+            final row = await creating;
+            expect(row.avatar, [0, 255], reason: '$scope create');
+            expect((await session.users.get(row.id))!.avatar, [0, 255]);
+            final updatedBytes = Uint8List.fromList([1, 254]);
+            final updating = session.users.update(row.id, avatar: updatedBytes);
+            updatedBytes[0] = 41;
+            expect((await updating)!.avatar, [1, 254], reason: '$scope update');
+            expect((await session.users.get(row.id))!.avatar, [1, 254]);
+            final rawBytes = Uint8List.fromList([2, 253]);
+            final parameters = <Object?>[rawBytes, row.id];
+            final value = engine == Engine.sqlite ? '?' : '\$1';
+            final key = engine == Engine.sqlite ? '?' : '\$2';
+            final writing = session.run(
+              'UPDATE ${quoteIdentifier(session.schema)}."users" SET "avatar" = $value WHERE "id" = $key',
+              parameters: parameters,
+            );
+            rawBytes[0] = 42;
+            parameters[0] = Uint8List.fromList([43, 252]);
+            parameters[1] = row.id + 100;
+            await writing;
+            expect((await session.users.get(row.id))!.avatar, [
+              2,
+              253,
+            ], reason: '$scope raw run');
+          }
+
+          await checkWrites(fixture.db.session, 'root');
+          await fixture.db.transaction((tx) => checkWrites(tx, 'transaction'));
+          expect(
+            (await fixture.db.users.orderBy(id: asc).all()).map(
+              (row) => row.avatar,
+            ),
+            [
+              [2, 253],
+              [2, 253],
+            ],
+          );
+        });
 
         if (engine == Engine.sqlite) {
           test('bound strings retain embedded NUL', () async {
