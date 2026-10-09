@@ -155,6 +155,17 @@ void main() {
       late AppDatabase app;
       late String schema;
       final events = <DatabaseEvent>[];
+      Future<bool> requireSuperuser() async {
+        final result = await database.session.run(
+          'SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user',
+        );
+        if (result.rows.single.single == true) return true;
+        markTestSkipped(
+          'Requires a disposable PostgreSQL superuser to change internal constraint triggers or replication role.',
+        );
+        return false;
+      }
+
       Future<void> useSingleConnection({bool resetSearchPath = true}) async {
         // Keep the owned persistent schema, but fix temp state to one backend.
         await database.close();
@@ -766,6 +777,7 @@ void main() {
           test(
             'foreign key $table $mode triggers reject migration markers',
             () async {
+              if (!await requireSuperuser()) return;
               final steps = planSchemaChange(
                 const SchemaSnapshot(engine: Engine.postgresql, tables: []),
                 _relationships,
@@ -812,6 +824,7 @@ void main() {
       }
 
       test('foreign key trigger drift rejects pending DDL and preserves saved history', () async {
+        if (!await requireSuperuser()) return;
         final first = _migration(
           1,
           _relationships,
@@ -890,6 +903,7 @@ void main() {
       });
 
       test('foreign key triggers honor active replication role and accept ALWAYS', () async {
+        if (!await requireSuperuser()) return;
         final steps = planSchemaChange(
           const SchemaSnapshot(engine: Engine.postgresql, tables: []),
           _relationships,
