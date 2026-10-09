@@ -2,17 +2,22 @@
 
 Plain Dart models, generated typed tables and explicit database sessions.
 
-**6.0.0-beta.11** requires Dart 3.13. Native SQLite and PostgreSQL 18 are verified
-on macOS and Linux. From beta.10, update the dependency and regenerate clients to
-use `count()`. Existing generated methods remain usable; reviewed migration
-definitions and fingerprints stay unchanged. PostgreSQL now requires native
-`postgres` 3.5.20 or newer for cancellation and deadline fixes.
+**6.0.0-beta.12** requires Dart 3.13. Native SQLite and PostgreSQL 18 are verified
+on macOS and Linux. From beta.11, update the dependency; generated clients and
+reviewed migration definitions and fingerprints stay unchanged.
 
-Count returns one integer without loading model rows and respects the query's
-limit and offset. Count an unpaged filter scope for the total, then reuse it for
-the selected page in one read-only transaction. The shop's `searchUsers` example
-now returns `(users: ..., total: ...)`; code copied from it reads `.users` and
-`.total`. PostgreSQL preserves the original SQL failure when rollback also fails.
+PostgreSQL typed reads and mutations address their physical table, excluding
+inherited rows. Migration verification rejects disabled or replica-only
+foreign-key checks, unsafe replication settings, partitions and inheritance
+links. Review unsupported topology and enforcement drift before resuming a
+history; see [migration limits](https://github.com/medz/dart-orm/blob/main/doc/migrations.md).
+
+Native exceptions and error-code constants are available through the public
+PostgreSQL and SQLite modules. Catch failures outside the transaction; native
+errors retain their types and metadata without remapping or automatic retries.
+
+From beta.10, regenerate clients to expose `count()`. Code copied from the
+`searchUsers` example reads its returned `.users` and `.total` fields.
 
 From beta.8, regenerate clients to use `whereAny`; keep reviewed migration
 definitions and fingerprints unchanged.
@@ -23,7 +28,7 @@ clients and migration definitions have no compatibility layer; existing database
 require a separately reviewed baseline.
 
 ```sh
-dart pub add orm:6.0.0-beta.11
+dart pub add orm:6.0.0-beta.12
 ```
 
 ```dart
