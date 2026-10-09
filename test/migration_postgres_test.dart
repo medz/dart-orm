@@ -35,6 +35,21 @@ const _relationships = SchemaSnapshot(
   ],
 );
 
+const _standaloneUsers = SchemaSnapshot(
+  engine: Engine.postgresql,
+  tables: [
+    TableDefinition('users', [
+      ColumnDefinition(
+        name: 'id',
+        field: 'id',
+        type: ScalarType.integer,
+        primaryKey: true,
+      ),
+      ColumnDefinition(name: 'label', field: 'label', type: ScalarType.text),
+    ]),
+  ],
+);
+
 Migration _migration(
   int version,
   SchemaSnapshot snapshot,
@@ -1013,6 +1028,169 @@ void main() {
             );
             expect(await runner.apply(), [1]);
             expect(await runner.apply(), isEmpty);
+          },
+        );
+      }
+
+      for (final side in ['parent', 'child']) {
+        test('inheritance $side cannot satisfy a new frozen history', () async {
+          final create = planSchemaChange(
+            const SchemaSnapshot(engine: Engine.postgresql, tables: []),
+            _standaloneUsers,
+          ).steps;
+          final steps = side == 'parent'
+              ? [
+                  ...create,
+                  'CREATE TABLE unmanaged (PRIMARY KEY (id)) INHERITS (users)',
+                ]
+              : [
+                  'CREATE TABLE unmanaged (id BIGINT PRIMARY KEY NOT NULL, label TEXT NOT NULL)',
+                  'CREATE TABLE users (PRIMARY KEY (id)) INHERITS (unmanaged)',
+                ];
+          await expectLater(
+            MigrationRunner(
+              database,
+              _history([
+                _migration(1, _standaloneUsers, [
+                  ...steps,
+                  "INSERT INTO users VALUES (7, 'managed')",
+                  "INSERT INTO unmanaged VALUES (7, 'outside')",
+                ]),
+              ]),
+            ).apply(),
+            throwsStateError,
+          );
+          expect(
+            (await database.session.run(
+              'SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = \$1',
+              parameters: [schema],
+            )).rows,
+            isEmpty,
+          );
+          final runner = MigrationRunner(
+            database,
+            _history([_migration(1, _standaloneUsers, create)]),
+          );
+          expect(await runner.apply(), [1]);
+          expect(await runner.apply(), isEmpty);
+        });
+
+        test(
+          'inheritance $side drift rejects pending DDL without changing either table',
+          () async {
+            final first = _migration(
+              1,
+              _standaloneUsers,
+              planSchemaChange(
+                const SchemaSnapshot(engine: Engine.postgresql, tables: []),
+                _standaloneUsers,
+              ).steps,
+            );
+            expect(await MigrationRunner(database, _history([first])).apply(), [
+              1,
+            ]);
+            await database.session.run(
+              "INSERT INTO users VALUES (7, 'managed')",
+            );
+            await database.session.run(
+              side == 'parent'
+                  ? 'CREATE TABLE unmanaged (PRIMARY KEY (id)) INHERITS (users)'
+                  : 'CREATE TABLE unmanaged (id BIGINT PRIMARY KEY NOT NULL, label TEXT NOT NULL)',
+            );
+            await database.session.run(
+              "INSERT INTO unmanaged VALUES (7, 'outside')",
+            );
+            if (side == 'child') {
+              await database.session.run('ALTER TABLE users INHERIT unmanaged');
+            }
+            final saved = (await database.session.run(
+              'SELECT * FROM "_orm_migrations" ORDER BY version',
+            )).rows;
+            final after = SchemaSnapshot(
+              engine: Engine.postgresql,
+              tables: [
+                ..._standaloneUsers.tables,
+                const TableDefinition('audit', [_id]),
+              ],
+            );
+            final runner = MigrationRunner(
+              database,
+              _history([
+                first,
+                _migration(
+                  2,
+                  after,
+                  planSchemaChange(_standaloneUsers, after).steps,
+                ),
+              ]),
+            );
+            events.clear();
+            await expectLater(runner.apply(), throwsStateError);
+            expect(
+              events.any((event) => event.sql.contains('CREATE TABLE "audit"')),
+              isFalse,
+            );
+            expect(
+              (await database.session.run(
+                'SELECT * FROM "_orm_migrations" ORDER BY version',
+              )).rows,
+              saved,
+            );
+            expect(
+              (await database.session.run(
+                'SELECT to_regclass(\$1)',
+                parameters: ['$schema.audit'],
+              )).rows.single.single,
+              isNull,
+            );
+            expect(
+              (await database.session.run('SELECT id, label FROM ONLY users'))
+                  .rows,
+              [
+                [7, 'managed'],
+              ],
+            );
+            expect(
+              (await database.session.run(
+                'SELECT id, label FROM ONLY unmanaged',
+              )).rows,
+              [
+                [7, 'outside'],
+              ],
+            );
+            await database.session.run(
+              side == 'parent'
+                  ? 'ALTER TABLE unmanaged NO INHERIT users'
+                  : 'ALTER TABLE users NO INHERIT unmanaged',
+            );
+            expect(await runner.apply(), [2]);
+            events.clear();
+            expect(await runner.apply(), isEmpty);
+            expect(
+              events.where((event) => event.kind == 'statement'),
+              hasLength(10),
+            );
+            expect(
+              (await database.session.run(
+                'SELECT * FROM "_orm_migrations" ORDER BY version',
+              )).rows.first,
+              saved.single,
+            );
+            expect(
+              (await database.session.run('SELECT id, label FROM ONLY users'))
+                  .rows,
+              [
+                [7, 'managed'],
+              ],
+            );
+            expect(
+              (await database.session.run(
+                'SELECT id, label FROM ONLY unmanaged',
+              )).rows,
+              [
+                [7, 'outside'],
+              ],
+            );
           },
         );
       }

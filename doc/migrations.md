@@ -136,8 +136,11 @@ Unique indexes must be valid, ready and immediate, so typed unique-key claims ca
 use them.
 Managed tables must be persistent; temporary table or view shadows are rejected
 on the connection applying migrations. PostgreSQL requires permanent logged,
-non-partitioned tables; unlogged tables, partitioned roots and individual
-partitions are unsupported. Primary keys must enforce non-null
+standalone tables. Unlogged tables, partitioned roots, individual partitions and
+either side of classic table inheritance are unsupported, including links to
+tables outside the migration history. Remove inheritance explicitly with
+reviewed `ALTER TABLE ... NO INHERIT` SQL before resuming; keep historical
+definitions and fingerprints unchanged. Primary keys must enforce non-null
 values. SQLite also checks existing foreign-key rows in managed tables, including
 when resuming a history. Those checks inspect data as well as catalog metadata.
 Deferrable unique constraints and unfinished constraint/index builds cannot be

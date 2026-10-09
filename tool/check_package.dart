@@ -252,6 +252,38 @@ Future<void> verify(Driver driver, Migration initial) async {
       check(unchanged.username == 'consumer' && unchanged.age == 28, 'Earlier write rolls back');
       check(await db.users.count() == 1 && await db.posts.count() == 1, 'Original rows and next root query survive');
     }
+    if (driver.engine == Engine.postgresql) {
+      final parent = '${quoteIdentifier(driver.schema)}."users"';
+      final child = '${quoteIdentifier(driver.schema)}."unmanaged_users_child"';
+      final probe = '${quoteIdentifier(driver.schema)}."ownership_pending_probe"';
+      final extra = await db.users.create(username: 'ownership parent', age: 20);
+      await db.session.run('CREATE TABLE $child () INHERITS ($parent)');
+      await db.session.run('INSERT INTO $child ("id", "username", "age") VALUES (\$1, \$2, \$3), (\$4, \$2, \$3)', parameters: [extra.id, 'unmanaged child', 91, extra.id + 1000]);
+      check((await db.users.get(extra.id))!.username == 'ownership parent', 'Typed get owns the physical parent');
+      check(await db.users.count() == 2 && await db.users.limit(10).count() == 2, 'Unpaged and paged counts own the physical parent');
+      check((await db.users.update(extra.id, username: 'changed parent', age: 41))!.age == 41, 'Typed update owns the physical parent');
+      check((await db.users.increment(extra.id, age: 1))!.age == 42, 'Atomic arithmetic owns the physical parent');
+      final physical = await db.transaction((tx) => tx.users.stream(fetchSize: 1).toList(), readOnly: true);
+      check(physical.length == 2 && physical.singleWhere((row) => row.id == extra.id).username == 'changed parent', 'Typed stream excludes inherited rows');
+      check(await db.users.delete(extra.id) == 1 && await db.users.get(extra.id) == null, 'Typed delete owns the physical parent');
+      final retained = (await db.session.run('SELECT "id", "username", "age" FROM $child ORDER BY "id"')).rows;
+      check(retained.length == 2 && retained.first[0] == extra.id && retained.last[0] == extra.id + 1000 && retained.every((row) => row[1] == 'unmanaged child' && row[2] == 91), 'Inherited rows remain unchanged');
+      final steps = ['CREATE TABLE $probe ("id" BIGINT PRIMARY KEY NOT NULL)'];
+      final pending = Migration(
+        version: 2, name: 'ownership probe', engine: driver.engine, steps: steps, snapshot: initial.snapshot,
+        reviewedFingerprint: migrationFingerprint(version: 2, name: 'ownership probe', engine: driver.engine, steps: steps, snapshot: initial.snapshot),
+      );
+      events.clear();
+      var rejected = false;
+      try {
+        await MigrationRunner(db.database, MigrationHistory(engine: driver.engine, migrations: [initial, pending])).apply();
+      } on StateError { rejected = true; }
+      check(rejected && !events.any((event) => event.sql == steps.single), 'Inheritance rejected before pending DDL');
+      check((await db.session.run('SELECT to_regclass(\$1)', parameters: [probe])).rows.single.single == null, 'Pending table was not created');
+      await db.session.run('DROP TABLE $child');
+      check((await runner.apply()).isEmpty, 'Migration history resumes after inheritance repair');
+      check(await db.users.count() == 1 && await db.posts.count() == 1, 'Original seed survives physical ownership checks');
+    }
     events.clear();
     await db.users.update(seeded.user.id, nickname: 'Seven');
     check(events.length == 1 && events.single.kind == 'statement' && events.single.sql.contains('${quoteIdentifier(driver.schema)}."users"'), 'One typed statement in the fixed schema');

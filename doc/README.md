@@ -81,6 +81,9 @@ native connection pool; configure pool limits, TLS and timeouts explicitly.
 Typed queries always qualify tables with the driver's fixed schema: `main` on
 SQLite, or the configured PostgreSQL schema (`public` by default). Temporary
 tables and raw SQL changes to `search_path` do not redirect typed queries.
+PostgreSQL typed reads, updates and deletes use `ONLY` to address that physical
+table, excluding inherited child rows. Raw SQL retains PostgreSQL's native table
+semantics; migration histories reject managed tables with inheritance.
 SQLite runs synchronously on its isolate, so move heavy workloads to a worker
 isolate when a UI needs a responsive event loop.
 
