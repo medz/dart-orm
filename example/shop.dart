@@ -8,9 +8,11 @@ typedef CartItem = ({int productId, int quantity});
 typedef Receipt = ({Order order, List<OrderLine> lines, bool replayed});
 typedef UserWithPosts = ({UserCard user, List<PostCard> posts});
 
-/// A paged, typed projection. Only the selected columns cross the connection.
+/// Searches active users by username or nickname prefix in one paged SELECT.
+/// Only the selected columns cross the connection.
 Future<List<UserCard>> searchUsers(AppDatabase db, String prefix) => db.users
-    .where(username: startsWith(prefix), active: eq(true))
+    .where(active: eq(true))
+    .whereAny(username: startsWith(prefix), nickname: startsWith(prefix))
     .orderBy(id: asc)
     .limit(20)
     .select<UserCard>();

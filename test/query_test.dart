@@ -146,6 +146,111 @@ void main() {
           },
         );
 
+        test(
+          'OR groups retain AND, null semantics and immutable scopes',
+          () async {
+            final db = fixture.db;
+            final adult = await db.users.create(username: 'adult', age: 28);
+            final child = await db.users.create(
+              username: 'child',
+              age: 17,
+              nickname: 'minor',
+            );
+            final senior = await db.users.create(
+              username: 'senior',
+              age: 70,
+              nickname: 'member',
+            );
+            await db.users.create(
+              username: 'elderly',
+              age: 80,
+              nickname: 'member',
+            );
+            await db.users.create(
+              username: 'disabled',
+              age: 28,
+              nickname: 'member',
+              active: false,
+            );
+            await db.users.create(username: 'outsider', age: 28);
+
+            final active = db.users.where(active: eq(true));
+            final members = active.whereAny(
+              username: eq('adult'),
+              nickname: oneOf(['member', 'minor']),
+            );
+            final eligible = members.whereAny(
+              age: (gte(18) & lt(65)) | eq(70),
+              nickname: eq('minor'),
+            );
+            expect(
+              (await eligible.orderBy(id: asc).all()).map((row) => row.id),
+              [adult.id, child.id, senior.id],
+            );
+            expect(
+              (await eligible
+                      .orderBy(id: asc)
+                      .offset(1)
+                      .limit(1)
+                      .select<UserCard>())
+                  .single
+                  .id,
+              child.id,
+            );
+            expect(
+              (await members
+                      .whereAny(nickname: eq(null), age: lt(18))
+                      .orderBy(id: asc)
+                      .all())
+                  .map((row) => row.id),
+              [adult.id, child.id],
+            );
+            expect(await eligible.all(), hasLength(3));
+            expect(await members.all(), hasLength(4));
+            expect(await active.all(), hasLength(5));
+
+            final query = TableQuery<List<Object?>>(
+              db.session,
+              frozenSchema.tables.first,
+              (row) => row,
+            );
+            final fields = <String, Filter<Object?>>{
+              'username': eq<Object?>('adult'),
+              'nickname': eq<Object?>('absent'),
+            };
+            final saved = query.whereAnyFields(fields);
+            fields.clear();
+            expect((await saved.all()).single.first, adult.id);
+          },
+        );
+
+        test('OR scopes retain the primary key and guarded writes', () async {
+          final db = fixture.db;
+          final allowed = await db.users.create(username: 'allowed', age: 28);
+          final inactive = await db.users.create(
+            username: 'inactive',
+            age: 30,
+            nickname: 'team',
+            active: false,
+          );
+          final other = await db.users.create(username: 'other', age: 40);
+          final scope = db.users
+              .whereAny(username: eq('allowed'), nickname: eq('team'))
+              .where(active: eq(true));
+
+          expect((await scope.get(allowed.id))?.id, allowed.id);
+          expect(await scope.get(inactive.id), isNull);
+          expect(await scope.get(other.id), isNull);
+          expect(await scope.update(inactive.id, age: 99), isNull);
+          expect(await scope.update(other.id, age: 99), isNull);
+          expect((await scope.update(allowed.id, age: 29))?.age, 29);
+          expect(await scope.delete(inactive.id), 0);
+          expect(await scope.delete(other.id), 0);
+          expect(await scope.delete(allowed.id), 1);
+          expect((await db.users.get(inactive.id))?.age, 30);
+          expect((await db.users.get(other.id))?.age, 40);
+        });
+
         test('invalid scopes fail before SQL', () async {
           final db = fixture.db;
           final query = TableQuery<List<Object?>>(
@@ -158,12 +263,21 @@ void main() {
             () => query.whereFields({'missing': eq<Object?>(1)}),
             throwsArgumentError,
           );
+          expect(
+            () => query.whereAnyFields({'missing': eq<Object?>(1)}),
+            throwsArgumentError,
+          );
           await expectLater(
             query.selectRows(['missing'], (row) => row),
             throwsArgumentError,
           );
           expect(() => db.users.select<PostCard>(), throwsArgumentError);
           expect(() => db.users.where(), throwsArgumentError);
+          expect(() => db.users.whereAny(), throwsArgumentError);
+          await expectLater(
+            query.whereAnyFields({'age': eq<Object?>('old')}).all(),
+            throwsArgumentError,
+          );
           expect(
             () => db.users.orderBy(age: asc, id: asc),
             throwsArgumentError,
@@ -172,6 +286,16 @@ void main() {
           await expectLater(db.users.limit(1).delete(1), throwsStateError);
           await expectLater(
             db.users.where(id: eq(1)).create(username: 'invalid', age: 1),
+            throwsStateError,
+          );
+          await expectLater(
+            db.users.whereAny(id: eq(1)).create(username: 'invalid', age: 1),
+            throwsStateError,
+          );
+          await expectLater(
+            db.users
+                .whereAny(id: eq(1))
+                .createIfAbsent(.username, username: 'invalid', age: 1),
             throwsStateError,
           );
           await expectLater(
@@ -203,6 +327,7 @@ void main() {
           );
           fixture.events.clear();
           final updated = await fixture.db.products
+              .whereAny(sku: eq('p'), name: eq('Other'))
               .where(stock: gte(2))
               .decrement(product.id, stock: 2);
           expect(updated!.stock, 0);
@@ -212,6 +337,7 @@ void main() {
           expect(fixture.statements.single.sql, contains('RETURNING'));
           expect(
             await fixture.db.products
+                .whereAny(sku: eq('p'), name: eq('Other'))
                 .where(stock: gte(1))
                 .decrement(product.id, stock: 1),
             isNull,
@@ -326,8 +452,12 @@ void main() {
             age: minInteger,
             score: -maxReal,
           );
-          expect(await fixture.db.users.increment(max.id, age: 1), isNull);
-          expect(await fixture.db.users.decrement(min.id, age: 1), isNull);
+          final extremes = fixture.db.users.whereAny(
+            username: eq('max'),
+            age: eq(minInteger),
+          );
+          expect(await extremes.increment(max.id, age: 1), isNull);
+          expect(await extremes.decrement(min.id, age: 1), isNull);
           expect((await fixture.db.users.get(max.id))!.age, maxInteger);
           expect((await fixture.db.users.get(min.id))!.age, minInteger);
           if (engine == Engine.sqlite) {
@@ -472,6 +602,13 @@ void main() {
             await expectLater(
               query.whereFields({
                 'id': oneOf<Object?>([1, 2, 3, 4]),
+              }).all(),
+              throwsUnsupportedError,
+            );
+            await expectLater(
+              query.whereAnyFields({
+                'id': oneOf<Object?>([1, 2]),
+                'username': oneOf<Object?>(['one', 'two']),
               }).all(),
               throwsUnsupportedError,
             );

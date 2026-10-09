@@ -172,6 +172,9 @@ final class ${name}Table {
   Stream<$row> stream({int fetchSize = 500}) => _query.stream(fetchSize: fetchSize);
   /// Adds field predicates joined by AND.
   ${name}Table where({${fields.map((field) => 'Filter<${field.type}>? ${field.name}').join(',')}}) => ${name}Table._(_query.whereFields({${fields.map((field) => "${_literal(field.name)}: ?${field.name}").join(',')}}));
+  /// Adds field predicates joined by OR, combined with earlier filters by AND.
+  /// An empty group fails before SQL. Field types and nullability are retained.
+  ${name}Table whereAny({${fields.map((field) => 'Filter<${field.type}>? ${field.name}').join(',')}}) => ${name}Table._(_query.whereAnyFields({${fields.map((field) => "${_literal(field.name)}: ?${field.name}").join(',')}}));
   /// Adds one ordering field. Chain calls for multiple ordering fields.
   ${name}Table orderBy({${fields.map((field) => 'Direction? ${field.name}').join(',')}}) => ${name}Table._(_query.orderByFields({${fields.map((field) => "${_literal(field.name)}: ?${field.name}").join(',')}}));
   /// Limits result rows; negative limits fail before SQL execution.

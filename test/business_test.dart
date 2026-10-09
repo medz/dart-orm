@@ -41,6 +41,49 @@ void main() {
         );
 
         test(
+          'username or nickname prefix search uses one paged SELECT',
+          () async {
+            final db = fixture.db;
+            final username = await db.users.create(
+              username: 'sev%_!one',
+              age: 28,
+            );
+            final nickname = await db.users.create(
+              username: 'second',
+              age: 30,
+              nickname: 'sev%_!two',
+            );
+            final both = await db.users.create(
+              username: 'sev%_!both',
+              age: 40,
+              nickname: 'sev%_!both',
+            );
+            await db.users.create(
+              username: 'sev%_!disabled',
+              age: 28,
+              nickname: 'sev%_!disabled',
+              active: false,
+            );
+            await db.users.create(
+              username: 'sevXX!one',
+              age: 28,
+              nickname: 'sevXX!two',
+            );
+            fixture.events.clear();
+            final matches = await searchUsers(db, 'sev%_!');
+            expect(matches.map((row) => row.id), [
+              username.id,
+              nickname.id,
+              both.id,
+            ]);
+            expect(fixture.statements, hasLength(1));
+            expect(fixture.statements.single.rows, 3);
+            expect(fixture.statements.single.sql, isNot(contains('"avatar"')));
+            expect(fixture.statements.single.sql, isNot(contains('sev')));
+          },
+        );
+
+        test(
           'checkout freezes cents, merges duplicate items and replays once',
           () async {
             final db = fixture.db;

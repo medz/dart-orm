@@ -282,6 +282,30 @@ final class UserTable {
     }),
   );
 
+  /// Adds field predicates joined by OR, combined with earlier filters by AND.
+  /// An empty group fails before SQL. Field types and nullability are retained.
+  UserTable whereAny({
+    Filter<int>? id,
+    Filter<String>? username,
+    Filter<int>? age,
+    Filter<String?>? nickname,
+    Filter<bool>? active,
+    Filter<double>? score,
+    Filter<DateTime?>? joinedAt,
+    Filter<Uint8List?>? avatar,
+  }) => UserTable._(
+    _query.whereAnyFields({
+      "id": ?id,
+      "username": ?username,
+      "age": ?age,
+      "nickname": ?nickname,
+      "active": ?active,
+      "score": ?score,
+      "joinedAt": ?joinedAt,
+      "avatar": ?avatar,
+    }),
+  );
+
   /// Adds one ordering field. Chain calls for multiple ordering fields.
   UserTable orderBy({
     Direction? id,
@@ -615,6 +639,22 @@ final class PostTable {
     }),
   );
 
+  /// Adds field predicates joined by OR, combined with earlier filters by AND.
+  /// An empty group fails before SQL. Field types and nullability are retained.
+  PostTable whereAny({
+    Filter<int>? id,
+    Filter<int>? authorId,
+    Filter<String>? title,
+    Filter<String?>? body,
+  }) => PostTable._(
+    _query.whereAnyFields({
+      "id": ?id,
+      "authorId": ?authorId,
+      "title": ?title,
+      "body": ?body,
+    }),
+  );
+
   /// Adds one ordering field. Chain calls for multiple ordering fields.
   PostTable orderBy({
     Direction? id,
@@ -815,6 +855,24 @@ final class ProductTable {
     Filter<int>? stock,
   }) => ProductTable._(
     _query.whereFields({
+      "id": ?id,
+      "sku": ?sku,
+      "name": ?name,
+      "priceCents": ?priceCents,
+      "stock": ?stock,
+    }),
+  );
+
+  /// Adds field predicates joined by OR, combined with earlier filters by AND.
+  /// An empty group fails before SQL. Field types and nullability are retained.
+  ProductTable whereAny({
+    Filter<int>? id,
+    Filter<String>? sku,
+    Filter<String>? name,
+    Filter<int>? priceCents,
+    Filter<int>? stock,
+  }) => ProductTable._(
+    _query.whereAnyFields({
       "id": ?id,
       "sku": ?sku,
       "name": ?name,
@@ -1155,6 +1213,28 @@ final class OrderTable {
     }),
   );
 
+  /// Adds field predicates joined by OR, combined with earlier filters by AND.
+  /// An empty group fails before SQL. Field types and nullability are retained.
+  OrderTable whereAny({
+    Filter<int>? id,
+    Filter<int>? userId,
+    Filter<String>? requestKey,
+    Filter<String>? requestSignature,
+    Filter<int>? totalCents,
+    Filter<String>? status,
+    Filter<DateTime>? createdAt,
+  }) => OrderTable._(
+    _query.whereAnyFields({
+      "id": ?id,
+      "userId": ?userId,
+      "requestKey": ?requestKey,
+      "requestSignature": ?requestSignature,
+      "totalCents": ?totalCents,
+      "status": ?status,
+      "createdAt": ?createdAt,
+    }),
+  );
+
   /// Adds one ordering field. Chain calls for multiple ordering fields.
   OrderTable orderBy({
     Direction? id,
@@ -1449,6 +1529,24 @@ final class OrderLineTable {
     Filter<int>? unitPriceCents,
   }) => OrderLineTable._(
     _query.whereFields({
+      "id": ?id,
+      "orderId": ?orderId,
+      "productId": ?productId,
+      "quantity": ?quantity,
+      "unitPriceCents": ?unitPriceCents,
+    }),
+  );
+
+  /// Adds field predicates joined by OR, combined with earlier filters by AND.
+  /// An empty group fails before SQL. Field types and nullability are retained.
+  OrderLineTable whereAny({
+    Filter<int>? id,
+    Filter<int>? orderId,
+    Filter<int>? productId,
+    Filter<int>? quantity,
+    Filter<int>? unitPriceCents,
+  }) => OrderLineTable._(
+    _query.whereAnyFields({
       "id": ?id,
       "orderId": ?orderId,
       "productId": ?productId,

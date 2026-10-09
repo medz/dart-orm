@@ -114,8 +114,22 @@ print(cards.first.username);
 final models = await adults.all(); // List<User>
 ```
 
-Queries are immutable. Fields in one `where` and chained `where` calls combine
-with AND. `&` and `|` combine conditions on the same field. `eq`, `ne`, `gt`,
+Queries are immutable. Fields in one `where` combine with AND; fields in one
+`whereAny` combine with OR. Chained `where` and `whereAny` groups combine with
+AND. Both methods reject an empty group before SQL.
+
+```dart
+final matches = await db.users
+    .where(active: eq(true))
+    .whereAny(username: startsWith(prefix), nickname: startsWith(prefix))
+    .orderBy(id: asc)
+    .limit(20)
+    .select<UserCard>();
+```
+
+This reads active users whose username or nickname starts with `prefix` in one
+SELECT, with ordering and pagination applied by the database.
+`&` and `|` combine conditions on the same field. `eq`, `ne`, `gt`,
 `gte`, `lt`, `lte`, `oneOf`, `startsWith` and `containsText` bind values.
 Text helpers escape SQL wildcard characters and use the engine's LIKE/collation
 rules (SQLite defaults to ASCII case-insensitive LIKE; PostgreSQL defaults to
@@ -232,7 +246,7 @@ needs SQLite 3.35 or newer and is capability-checked. Windows, Web and Flutter
 packaging remain unverified. MySQL and MariaDB are outside this rewrite.
 PostgreSQL verification uses PostgreSQL 18; older server versions remain
 unverified.
-Composite keys, typed joins, cross-field OR, relation DSLs, multiple schemas per client,
+Composite keys, typed joins, relation DSLs, multiple schemas per client,
 client defaults, conflict updates and watchers are
 not currently implemented. Raw SQL and ordinary Dart composition cover the
 complete demonstrated business workflow without adding alternate query APIs.

@@ -32,12 +32,13 @@ Future<void> valid(AppDatabase db) async {
   User? claimed = await db.users.createIfAbsent(.username, username: 'seven', age: 28);
   updated = await db.users.update(user.id, age: 29);
   User? row = await db.users.get(user.id);
-  List<UserCard> cards = await db.users.where(username: startsWith('sev'), age: gte(18)).orderBy(id: asc).limit(20).select<UserCard>();
+  List<UserCard> cards = await db.users.where(active: eq(true)).whereAny(username: startsWith('sev'), nickname: startsWith('sev')).whereAny(age: gte(18) & lt(65), nickname: eq<String?>(null) | startsWith('sev')).orderBy(id: asc).limit(20).select<UserCard>();
+  List<UserProfile> profiles = await db.users.whereAny(nickname: eq(null), active: eq(false)).select<UserProfile>();
   String username = cards.first.username;
   int id = cards.first.id;
   Product? product = await db.products.where(stock: gte(2)).decrement(1, stock: 2);
   List<User> streamed = await db.transaction((session) => session.users.stream(fetchSize: 2).toList());
-  print([updated, claimed, row, username, id, product, streamed]);
+  print([updated, claimed, row, username, id, product, streamed, profiles]);
 }
 void main() {}
 ''');
@@ -70,6 +71,11 @@ void invalid(AppDatabase db) {
   db.users.update(1, missing: true);
   db.users.where(age: startsWith('x'));
   db.users.where(username: eq(12));
+  db.users.whereAny(age: startsWith('x'));
+  db.users.whereAny(username: eq(12));
+  db.users.whereAny(nickname: eq(12));
+  db.users.whereAny(username: eq<String?>(null));
+  db.users.whereAny(missing: eq('x'));
   db.users.get('1');
   db.products.decrement(1, stock: null);
   db.orders.increment(1, userId: 1);
@@ -91,7 +97,7 @@ void main() {}
       final errors = invalid.diagnostics
           .where((diagnostic) => diagnostic.severity.name == 'error')
           .toList();
-      expect(errors, hasLength(14), reason: errors.join('\n'));
+      expect(errors, hasLength(19), reason: errors.join('\n'));
       final codes = errors
           .map((diagnostic) => diagnostic.diagnosticCode.lowerCaseName)
           .toSet();
