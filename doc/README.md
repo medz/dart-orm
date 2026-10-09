@@ -195,6 +195,9 @@ transactions and manually issued boundaries are rejected. Transaction sessions
 expire after the callback. A database SQL failure poisons the transaction even
 if the application catches it. Await issued work and propagate business
 failures. There are no automatic retries; choose retry policy in the application.
+PostgreSQL reuses the connection after a business failure when issued work and
+rollback succeed. A database SQL error or failed cleanup discards the connection.
+The original callback error and stack are preserved.
 
 Default isolation is serializable. PostgreSQL also supports readCommitted and
 repeatableRead; SQLite rejects those levels. `readOnly: true` uses PostgreSQL's

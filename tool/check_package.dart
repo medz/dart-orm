@@ -192,7 +192,7 @@ Future<void> main() async {
       isUnixSocket: socket != null,
     ),
     schema: schema,
-    settings: const PoolSettings(sslMode: SslMode.disable, maxConnectionCount: 2),
+    settings: const PoolSettings(sslMode: SslMode.disable, maxConnectionCount: 1),
   );
   try {
     check(driver.schema == schema, 'Configured PostgreSQL schema');
@@ -256,11 +256,17 @@ Future<void> verify(Driver driver, Migration initial) async {
     final replay = await checkout(db, userId: seeded.user.id, requestKey: 'package', items: items);
     check(receipt.order.totalCents == 9800 && replay.order.id == receipt.order.id && replay.replayed, 'Idempotent checkout');
     check((await db.products.get(seeded.product.id))!.stock == 8, 'One stock debit');
+    final backend = driver.engine == Engine.postgresql
+        ? (await db.session.run('SELECT pg_backend_pid()')).rows.single.single
+        : null;
     var failed = false;
     try {
       await checkout(db, userId: seeded.user.id, requestKey: 'sold-out', items: [(productId: seeded.product.id, quantity: 99)]);
     } on StateError { failed = true; }
     check(failed && (await db.orders.all()).length == 1 && (await db.products.get(seeded.product.id))!.stock == 8, 'Failed checkout rolls back');
+    if (backend != null) {
+      check((await db.session.run('SELECT pg_backend_pid()')).rows.single.single == backend, 'Successful business rollback reuses the PostgreSQL connection');
+    }
     final users = await db.transaction((tx) => tx.users.stream(fetchSize: 1).toList(), readOnly: true);
     check(users.single.username == 'consumer', 'Bounded typed stream');
     check(await db.posts.delete(seeded.post.id) == 1, 'Typed delete count');

@@ -51,7 +51,8 @@ final class PostgresDriver implements Driver {
   /// Pins a pooled connection until [action] and its issued statements finish.
   ///
   /// The callback connection expires immediately when [action] settles.
-  /// Failed callbacks cause the native pool to discard that connection.
+  /// Callback errors preserve their cause and stack. The connection is reused
+  /// when issued work and rollback succeed; SQL or cleanup failures discard it.
   /// Unfinished direct BEGIN/START transactions roll back before reuse. Nested
   /// acquisition is rejected so a callback cannot wait on its own pool slot.
   @override
@@ -66,24 +67,35 @@ final class PostgresDriver implements Driver {
     }
     _active++;
     try {
-      return await _pool.withConnection((native) async {
+      final outcome = await _pool.withConnection((native) async {
         final connection = _PostgresConnection(native);
+        T? value;
+        (Object, StackTrace)? failure;
         try {
-          final value = await runZoned(
+          value = await runZoned(
             () => action(connection),
             zoneValues: {_callbackZone: true},
           );
-          await connection._finish();
-          return value;
         } catch (error, stack) {
-          try {
-            await connection._finish(ignoreFailure: true);
-          } catch (_) {
-            // The pool discards this connection; keep the callback/SQL cause.
-          }
-          Error.throwWithStackTrace(error, stack);
+          failure = (error, stack);
         }
+        try {
+          await connection._finish();
+        } catch (error, stack) {
+          final cause = failure ?? (error, stack);
+          try {
+            await native.close(force: true);
+          } catch (_) {
+            // The native handle is closing; preserve the original cause.
+          }
+          Error.throwWithStackTrace(cause.$1, cause.$2);
+        }
+        return (value: value, failure: failure);
       });
+      if (outcome.failure case final failure?) {
+        Error.throwWithStackTrace(failure.$1, failure.$2);
+      }
+      return outcome.value as T;
     } finally {
       _active--;
       if (_active == 0) {
@@ -181,17 +193,15 @@ final class _PostgresConnection implements Connection {
     return result;
   }
 
-  Future<void> _finish({bool ignoreFailure = false}) async {
+  Future<void> _finish() async {
     _active = false;
     await _tail;
     if (_transactionOpen) {
       await connection.execute('ROLLBACK');
       _transactionOpen = false;
     }
-    if (!ignoreFailure) {
-      if (_failure case final failure?) {
-        Error.throwWithStackTrace(failure.$1, failure.$2);
-      }
+    if (_failure case final failure?) {
+      Error.throwWithStackTrace(failure.$1, failure.$2);
     }
   }
 }
