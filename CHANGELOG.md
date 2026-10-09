@@ -1,3 +1,21 @@
+## 6.0.0-beta.12 (2026-10-09)
+
+- Keep PostgreSQL typed reads, counts, streams, updates, atomic arithmetic and
+  deletes on the selected physical table with ONLY. Inherited rows cannot extend
+  the scope or be modified before a multirow error is reported.
+- Verify both sides of native foreign-key constraint triggers and the active
+  replication role. Reject disabled or replica-only checks before saving or
+  resuming migration history; ordinary and ALWAYS checks remain supported.
+- Reject partitions and either side of table inheritance in frozen PostgreSQL
+  histories, including unmanaged neighbors, before pending DDL. Existing batch
+  query counts remain unchanged; catalog checks do not scan PostgreSQL data.
+- Export native PostgreSQL exceptions and SQLite exceptions plus primary and
+  extended error-code constants through the public driver modules. SQL failures
+  retain their types, codes, metadata and transaction rollback behavior.
+- From beta.11, update the dependency; generated clients and reviewed migration
+  definitions and fingerprints remain unchanged. Review existing topology and
+  enforcement drift before resuming a history. Raw SQL keeps native semantics.
+
 ## 6.0.0-beta.11 (2026-10-09)
 
 - Add typed `count()` to query scopes and generated tables. One SELECT returns
