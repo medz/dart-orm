@@ -11,12 +11,12 @@ Future<void> verifyCatalog(
   SchemaSnapshot snapshot,
   Set<String> removedTables,
 ) async {
-  for (final table in snapshot.tables) {
-    if (session.engine == Engine.sqlite) {
+  if (session.engine == Engine.sqlite) {
+    for (final table in snapshot.tables) {
       await _verifySqlite(session, table);
-    } else {
-      await _verifyPostgresql(session, table);
     }
+  } else {
+    await _verifyPostgresql(session, snapshot.tables);
   }
   for (final table in removedTables) {
     final result = session.engine == Engine.sqlite
@@ -150,18 +150,39 @@ bool _hasSqlKeyword(String sql, String keyword) => RegExp(
   r"""--[^\n]*(?:\n|$)|/\*[\s\S]*?\*/|'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|\[[^\]]*\]|[A-Za-z_][A-Za-z_0-9]*""",
 ).allMatches(sql).any((token) => token.group(0)!.toUpperCase() == keyword);
 
-Future<void> _verifyPostgresql(Session session, TableDefinition table) async {
-  final columns = _records(
-    await session.run(
-      '''
-SELECT a.attname AS name, pg_catalog.format_type(a.atttypid, a.atttypmod) AS type,
+Future<void> _verifyPostgresql(
+  Session session,
+  List<TableDefinition> tables,
+) async {
+  if (tables.isEmpty) return;
+  // The fixed schema uses one parameter in every catalog query.
+  final batchSize = session.capabilities.maxParameters - 1;
+  if (batchSize < 1) {
+    throw ArgumentError('Catalog verification needs at least two parameters.');
+  }
+  for (var offset = 0; offset < tables.length; offset += batchSize) {
+    final end = offset + batchSize < tables.length
+        ? offset + batchSize
+        : tables.length;
+    final batch = tables.sublist(offset, end);
+    final placeholders = List.generate(
+      batch.length,
+      (i) => '\$${i + 2}',
+    ).join(', ');
+    final parameters = <Object?>[
+      session.schema,
+      for (final table in batch) table.name,
+    ];
+    final columns = _tableRecords(
+      await session.run('''
+SELECT c.relname AS table_name, a.attname AS name, pg_catalog.format_type(a.atttypid, a.atttypmod) AS type,
        a.attnotnull AS required, a.attidentity::text AS identity,
        pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS default_value
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-WHERE n.nspname = \$1 AND c.relname = \$2
+WHERE n.nspname = \$1 AND c.relname IN ($placeholders)
   AND c.relkind IN ('r', 'p') AND c.relpersistence = 'p'
   AND a.attnum > 0 AND NOT a.attisdropped
   AND NOT EXISTS (
@@ -170,18 +191,12 @@ WHERE n.nspname = \$1 AND c.relname = \$2
       AND shadow.relname = c.relname
   )
 ORDER BY a.attnum
-''',
-      parameters: [session.schema, table.name],
-    ),
-  );
-  if (columns.length != table.columns.length) {
-    _mismatch(table.name, 'column count or missing table');
-  }
-  // PostgreSQL 18 added conenforced; JSON lookup keeps older catalogs readable.
-  final constraints = _records(
-    await session.run(
-      '''
-SELECT k.contype::text AS kind, a.attname AS name, pg_catalog.cardinality(k.conkey) AS key_count,
+''', parameters: parameters),
+    );
+    // PostgreSQL 18 added conenforced; JSON lookup keeps older catalogs readable.
+    final constraints = _tableRecords(
+      await session.run('''
+SELECT c.relname AS table_name, k.contype::text AS kind, a.attname AS name, pg_catalog.cardinality(k.conkey) AS key_count,
        target.relname AS target_table, referenced.attname AS target_column,
        target_namespace.nspname AS target_schema, k.confdeltype::text AS on_delete,
        k.convalidated AS validated,
@@ -193,32 +208,49 @@ JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.conkey[1]
 LEFT JOIN pg_catalog.pg_class target ON target.oid = k.confrelid
 LEFT JOIN pg_catalog.pg_namespace target_namespace ON target_namespace.oid = target.relnamespace
 LEFT JOIN pg_catalog.pg_attribute referenced ON referenced.attrelid = target.oid AND referenced.attnum = k.confkey[1]
-WHERE n.nspname = \$1 AND c.relname = \$2 AND k.contype IN ('p', 'u', 'f')
-''',
-      parameters: [session.schema, table.name],
-    ),
-  );
-  if (constraints.any((constraint) => constraint['key_count'] != 1)) {
-    _mismatch(
-      table.name,
-      'composite constraints are absent from the frozen schema',
+WHERE n.nspname = \$1 AND c.relname IN ($placeholders) AND k.contype IN ('p', 'u', 'f')
+''', parameters: parameters),
     );
-  }
-  final uniques = _records(
-    await session.run(
-      '''
-SELECT a.attname AS name, i.indnkeyatts AS key_count,
+    final uniques = _tableRecords(
+      await session.run('''
+SELECT c.relname AS table_name, a.attname AS name, i.indnkeyatts AS key_count,
        i.indpred IS NOT NULL AS partial, i.indexprs IS NOT NULL AS expression,
        i.indisvalid AS valid, i.indisready AS ready, i.indimmediate AS immediate
 FROM pg_catalog.pg_index i
 JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum = i.indkey[0]
-WHERE n.nspname = \$1 AND c.relname = \$2 AND i.indisunique
-''',
-      parameters: [session.schema, table.name],
-    ),
-  );
+WHERE n.nspname = \$1 AND c.relname IN ($placeholders) AND i.indisunique
+''', parameters: parameters),
+    );
+    for (final table in batch) {
+      await _verifyPostgresqlTable(
+        session,
+        table,
+        columns[table.name] ?? const [],
+        constraints[table.name] ?? const [],
+        uniques[table.name] ?? const [],
+      );
+    }
+  }
+}
+
+Future<void> _verifyPostgresqlTable(
+  Session session,
+  TableDefinition table,
+  List<Map<String, Object?>> columns,
+  List<Map<String, Object?>> constraints,
+  List<Map<String, Object?>> uniques,
+) async {
+  if (columns.length != table.columns.length) {
+    _mismatch(table.name, 'column count or missing table');
+  }
+  if (constraints.any((constraint) => constraint['key_count'] != 1)) {
+    _mismatch(
+      table.name,
+      'composite constraints are absent from the frozen schema',
+    );
+  }
   if (uniques.any(
     (index) =>
         index['valid'] != true ||
@@ -289,6 +321,14 @@ List<Map<String, Object?>> _records(QueryResult result) => [
   for (final row in result.rows)
     {for (var i = 0; i < result.columns.length; i++) result.columns[i]: row[i]},
 ];
+
+Map<String, List<Map<String, Object?>>> _tableRecords(QueryResult result) {
+  final tables = <String, List<Map<String, Object?>>>{};
+  for (final record in _records(result)) {
+    (tables[record['table_name'] as String] ??= []).add(record);
+  }
+  return tables;
+}
 
 Never _mismatch(String table, String detail) => throw StateError(
   'Migration snapshot differs from database catalog: $table ($detail).',
