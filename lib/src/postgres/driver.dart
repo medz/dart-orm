@@ -56,6 +56,7 @@ final class PostgresDriver implements Driver {
   /// Callback errors preserve their cause and stack. After failure, reuse
   /// requires all issued SQL to be inside transactions that only rolled back.
   /// SQL/cleanup failures, commits and work outside a transaction discard it.
+  /// The first SQL failure stays primary if automatic rollback also fails.
   /// Normal callbacks retain PostgreSQL session state. Use SET LOCAL inside a
   /// transaction for scoped settings; manage session advisory locks explicitly.
   /// Unfinished direct BEGIN/START transactions roll back before reuse. Nested
@@ -221,7 +222,12 @@ final class _PostgresConnection implements Connection {
     _active = false;
     await _tail;
     if (_transactionOpen) {
-      await connection.execute('ROLLBACK', queryMode: pg.QueryMode.extended);
+      try {
+        await connection.execute('ROLLBACK', queryMode: pg.QueryMode.extended);
+      } catch (error, stack) {
+        final cause = _failure ?? (error, stack);
+        Error.throwWithStackTrace(cause.$1, cause.$2);
+      }
       _transactionOpen = false;
       _rolledBack = true;
     }
