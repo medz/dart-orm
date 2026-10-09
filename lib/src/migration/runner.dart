@@ -11,6 +11,9 @@ import 'planner.dart' show quoteIdentifier;
 /// Pending SQL, catalog verification and history markers commit together. A
 /// failure rolls back the whole invocation, including newly created tables.
 /// Already-applied history is verified against both source and the live catalog.
+/// PostgreSQL managed tables must be logged and non-partitioned. Foreign-key
+/// constraint triggers must enforce both ordinary and current session writes;
+/// catalog checks do not scan PostgreSQL rows for historical violations.
 /// An existing internal history table must have the exact required structure;
 /// incompatible tables are rejected before application migration SQL runs.
 /// PostgreSQL callers on the same database/schema serialize through an advisory

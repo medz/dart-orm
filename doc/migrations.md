@@ -127,11 +127,17 @@ The runner manages the tables listed in its snapshots and checks historical
 removed tables. Other tables in the database are outside that history. Catalog
 verification covers columns, storage types, nullability, single-column primary
 keys, identity, single-column unique constraints and foreign keys, and literal
-defaults. PostgreSQL foreign keys must be enforced and validated; unique indexes
-must be valid, ready and immediate, so typed unique-key claims can use them.
+defaults. PostgreSQL foreign keys must be enforced and validated, with their
+internal checks and parent actions enabled for ordinary application sessions
+and the current migration session. Disabled or replica-only constraint triggers
+are rejected. This checks current enforcement configuration; it does not scan
+PostgreSQL rows for violations introduced while checks were previously disabled.
+Unique indexes must be valid, ready and immediate, so typed unique-key claims can
+use them.
 Managed tables must be persistent; temporary table or view shadows are rejected
-on the connection applying migrations. PostgreSQL requires permanent logged
-tables; unlogged managed tables are unsupported. Primary keys must enforce non-null
+on the connection applying migrations. PostgreSQL requires permanent logged,
+non-partitioned tables; unlogged tables, partitioned roots and individual
+partitions are unsupported. Primary keys must enforce non-null
 values. SQLite also checks existing foreign-key rows in managed tables, including
 when resuming a history. Those checks inspect data as well as catalog metadata.
 Deferrable unique constraints and unfinished constraint/index builds cannot be

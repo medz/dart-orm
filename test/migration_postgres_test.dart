@@ -7,7 +7,10 @@ import 'package:orm/postgres.dart';
 import 'package:orm/query.dart';
 import 'package:orm/schema.dart';
 import 'package:postgres/postgres.dart'
-    show ForeignKeyViolationException, UniqueViolationException;
+    show
+        ForeignKeyViolationException,
+        ServerException,
+        UniqueViolationException;
 import 'package:test/test.dart';
 
 import '../example/migrations/postgres/history.dart' as shop;
@@ -85,6 +88,22 @@ List<String> _temporaryUsers(String schema, String kind) => [
     'CREATE TEMP VIEW users AS SELECT * FROM pg_temp.shadow_users',
   "INSERT INTO users (username, age) VALUES ('temporary', 99)",
 ];
+
+String _constraintTriggers(String table, String mode) =>
+    '''
+DO \$triggers\$
+DECLARE constraint_trigger RECORD;
+BEGIN
+  FOR constraint_trigger IN
+    SELECT t.tgname FROM pg_catalog.pg_trigger t
+    JOIN pg_catalog.pg_constraint k ON k.oid = t.tgconstraint
+    WHERE t.tgrelid = '$table'::regclass AND t.tgisinternal AND k.contype = 'f'
+  LOOP
+    EXECUTE format('ALTER TABLE %I $mode TRIGGER %I', '$table', constraint_trigger.tgname);
+  END LOOP;
+END
+\$triggers\$
+''';
 
 /// Pins this test's schema on each acquired connection, independent of pool size.
 final class _SchemaDriver implements Driver {
@@ -741,6 +760,253 @@ void main() {
           expect(await runner.apply(), isEmpty);
         },
       );
+
+      for (final table in ['children', 'parents']) {
+        for (final mode in ['DISABLE', 'ENABLE REPLICA']) {
+          test(
+            'foreign key $table $mode triggers reject migration markers',
+            () async {
+              final steps = planSchemaChange(
+                const SchemaSnapshot(engine: Engine.postgresql, tables: []),
+                _relationships,
+              ).steps;
+              await expectLater(
+                MigrationRunner(
+                  database,
+                  _history([
+                    _migration(1, _relationships, [
+                      ...steps,
+                      _constraintTriggers(table, mode),
+                    ]),
+                  ]),
+                ).apply(),
+                throwsStateError,
+              );
+              expect(
+                (await database.session.run(
+                  'SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = \$1',
+                  parameters: [schema],
+                )).rows,
+                isEmpty,
+              );
+              final runner = MigrationRunner(
+                database,
+                _history([_migration(1, _relationships, steps)]),
+              );
+              expect(await runner.apply(), [1]);
+              events.clear();
+              expect(await runner.apply(), isEmpty);
+              expect(
+                events.where((event) => event.kind == 'statement'),
+                hasLength(10),
+              );
+              await expectLater(
+                database.session.run(
+                  'INSERT INTO children (parent_id) VALUES (999)',
+                ),
+                throwsA(isA<ForeignKeyViolationException>()),
+              );
+            },
+          );
+        }
+      }
+
+      test('foreign key trigger drift rejects pending DDL and preserves saved history', () async {
+        final first = _migration(
+          1,
+          _relationships,
+          planSchemaChange(
+            const SchemaSnapshot(engine: Engine.postgresql, tables: []),
+            _relationships,
+          ).steps,
+        );
+        expect(await MigrationRunner(database, _history([first])).apply(), [1]);
+        final parent = (await database.session.run(
+          'INSERT INTO parents DEFAULT VALUES RETURNING id',
+        )).rows.single.single;
+        await database.session.run(
+          'INSERT INTO children (parent_id) VALUES (\$1)',
+          parameters: [parent],
+        );
+        final saved = (await database.session.run(
+          'SELECT * FROM "_orm_migrations" ORDER BY version',
+        )).rows;
+        final after = SchemaSnapshot(
+          engine: Engine.postgresql,
+          tables: [
+            ..._relationships.tables,
+            const TableDefinition('audit', [_id]),
+          ],
+        );
+        final runner = MigrationRunner(
+          database,
+          _history([
+            first,
+            _migration(2, after, planSchemaChange(_relationships, after).steps),
+          ]),
+        );
+        await database.session.run(_constraintTriggers('parents', 'DISABLE'));
+        events.clear();
+        await expectLater(runner.apply(), throwsStateError);
+        expect(
+          events.any((event) => event.sql.contains('CREATE TABLE "audit"')),
+          isFalse,
+        );
+        expect(
+          (await database.session.run(
+            'SELECT * FROM "_orm_migrations" ORDER BY version',
+          )).rows,
+          saved,
+        );
+        expect(
+          (await database.session.run(
+            'SELECT to_regclass(\$1)',
+            parameters: ['$schema.audit'],
+          )).rows.single.single,
+          isNull,
+        );
+        expect(
+          (await database.session.run('SELECT parent_id FROM children')).rows,
+          [
+            [parent],
+          ],
+        );
+        await database.session.run(_constraintTriggers('parents', 'ENABLE'));
+        expect(await runner.apply(), [2]);
+        expect(await runner.apply(), isEmpty);
+        await expectLater(
+          database.session.run(
+            'DELETE FROM parents WHERE id = \$1',
+            parameters: [parent],
+          ),
+          throwsA(
+            isA<ServerException>().having(
+              (error) => error.code,
+              'SQLSTATE',
+              anyOf('23001', '23503'),
+            ),
+          ),
+        );
+      });
+
+      test('foreign key triggers honor active replication role and accept ALWAYS', () async {
+        final steps = planSchemaChange(
+          const SchemaSnapshot(engine: Engine.postgresql, tables: []),
+          _relationships,
+        ).steps;
+        await expectLater(
+          MigrationRunner(
+            database,
+            _history([
+              _migration(1, _relationships, [
+                ...steps,
+                'SET LOCAL session_replication_role = replica',
+              ]),
+            ]),
+          ).apply(),
+          throwsStateError,
+        );
+        expect(
+          (await database.session.run(
+            'SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = \$1',
+            parameters: [schema],
+          )).rows,
+          isEmpty,
+        );
+        final first = _migration(1, _relationships, [
+          ...steps,
+          'SET LOCAL session_replication_role = local',
+        ]);
+        expect(await MigrationRunner(database, _history([first])).apply(), [1]);
+        final runner = MigrationRunner(
+          database,
+          _history([
+            first,
+            _migration(2, _relationships, [
+              'SET LOCAL session_replication_role = replica',
+              _constraintTriggers('children', 'ENABLE ALWAYS'),
+              _constraintTriggers('parents', 'ENABLE ALWAYS'),
+            ]),
+          ]),
+        );
+        expect(await runner.apply(), [2]);
+        expect(await runner.apply(), isEmpty);
+        expect(
+          (await database.session.run('SHOW session_replication_role')).rows,
+          [
+            ['origin'],
+          ],
+        );
+        final modes = await database.session.run(
+          'SELECT DISTINCT t.tgenabled::text FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_constraint k ON k.oid = t.tgconstraint WHERE k.connamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = \$1) AND k.contype = \'f\'',
+          parameters: [schema],
+        );
+        expect(modes.rows, [
+          ['A'],
+        ]);
+        await expectLater(
+          database.session.run('INSERT INTO children (parent_id) VALUES (999)'),
+          throwsA(isA<ForeignKeyViolationException>()),
+        );
+      });
+
+      for (final partition in ['root', 'leaf']) {
+        test(
+          'partition $partition cannot satisfy an ordinary frozen table',
+          () async {
+            const snapshot = SchemaSnapshot(
+              engine: Engine.postgresql,
+              tables: [
+                TableDefinition('users', [
+                  ColumnDefinition(
+                    name: 'id',
+                    field: 'id',
+                    type: ScalarType.integer,
+                    primaryKey: true,
+                  ),
+                ]),
+              ],
+            );
+            final steps = partition == 'root'
+                ? [
+                    'CREATE TABLE users (id BIGINT PRIMARY KEY NOT NULL) PARTITION BY HASH (id)',
+                  ]
+                : [
+                    'CREATE TABLE unmanaged_root (id BIGINT PRIMARY KEY NOT NULL) PARTITION BY HASH (id)',
+                    'CREATE TABLE users PARTITION OF unmanaged_root FOR VALUES WITH (MODULUS 1, REMAINDER 0)',
+                  ];
+            await expectLater(
+              MigrationRunner(
+                database,
+                _history([_migration(1, snapshot, steps)]),
+              ).apply(),
+              throwsStateError,
+            );
+            expect(
+              (await database.session.run(
+                'SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = \$1',
+                parameters: [schema],
+              )).rows,
+              isEmpty,
+            );
+            final runner = MigrationRunner(
+              database,
+              _history([
+                _migration(
+                  1,
+                  snapshot,
+                  planSchemaChange(
+                    const SchemaSnapshot(engine: Engine.postgresql, tables: []),
+                    snapshot,
+                  ).steps,
+                ),
+              ]),
+            );
+            expect(await runner.apply(), [1]);
+            expect(await runner.apply(), isEmpty);
+          },
+        );
+      }
 
       test(
         'unvalidated foreign keys with orphan rows reject migration markers',
