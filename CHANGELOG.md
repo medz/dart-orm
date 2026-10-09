@@ -1,3 +1,19 @@
+## 6.0.0-beta.10 (2026-10-09)
+
+- Capture byte contents when filters are constructed and statements are called.
+  Reusing caller buffers cannot change existing queries or queued writes.
+- Keep filter-owned byte values read-only, including derived buffer views.
+- Reuse PostgreSQL connections after business failure only when all issued SQL
+  was inside transactions that rolled back without committing. SQL/cleanup
+  failures, commits and work outside a transaction discard the failed callback's
+  connection while preserving the original cause and stack.
+- Normal callbacks retain native session state. Use transaction-scoped settings
+  for request state and manage session advisory locks explicitly.
+- Enforce one PostgreSQL statement per call using the extended protocol,
+  regardless of pool query mode. Reject prepared transactions before execution.
+- From beta.9, update the dependency; generated clients and reviewed migration
+  definitions and fingerprints remain unchanged.
+
 ## 6.0.0-beta.9 (2026-10-09)
 
 - Add generated typed `whereAny` filters: fields within a group use OR, while
