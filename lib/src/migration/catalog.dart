@@ -183,7 +183,7 @@ JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
 WHERE n.nspname = \$1 AND c.relname IN ($placeholders)
-  AND c.relkind IN ('r', 'p') AND c.relpersistence = 'p'
+  AND c.relkind = 'r' AND NOT c.relispartition AND c.relpersistence = 'p'
   AND a.attnum > 0 AND NOT a.attisdropped
   AND NOT EXISTS (
     SELECT 1 FROM pg_catalog.pg_class shadow
@@ -193,14 +193,23 @@ WHERE n.nspname = \$1 AND c.relname IN ($placeholders)
 ORDER BY a.attnum
 ''', parameters: parameters),
     );
-    // PostgreSQL 18 added conenforced; JSON lookup keeps older catalogs readable.
+    // Ordinary FKs have two child checks and two referenced-parent actions.
+    // Partition topology is outside the frozen schema; enabled flags alone do
+    // not prove enforcement. PostgreSQL 18 added conenforced; JSON keeps older
+    // catalogs readable.
     final constraints = _tableRecords(
       await session.run('''
 SELECT c.relname AS table_name, k.contype::text AS kind, a.attname AS name, pg_catalog.cardinality(k.conkey) AS key_count,
        target.relname AS target_table, referenced.attname AS target_column,
        target_namespace.nspname AS target_schema, k.confdeltype::text AS on_delete,
        k.convalidated AS validated,
-       COALESCE((pg_catalog.to_jsonb(k)->>'conenforced')::boolean, true) AS enforced
+       COALESCE((pg_catalog.to_jsonb(k)->>'conenforced')::boolean, true) AS enforced,
+       CASE WHEN k.contype = 'f' THEN (
+         SELECT COUNT(*) = 4 AND BOOL_AND(
+           t.tgenabled = 'A' OR (t.tgenabled = 'O' AND pg_catalog.current_setting('session_replication_role') <> 'replica')
+         )
+         FROM pg_catalog.pg_trigger t WHERE t.tgconstraint = k.oid AND t.tgisinternal
+       ) ELSE true END AS triggers_active
 FROM pg_catalog.pg_constraint k
 JOIN pg_catalog.pg_class c ON c.oid = k.conrelid
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -302,6 +311,7 @@ Future<void> _verifyPostgresqlTable(
         actualReferences.single['key_count'] != 1 ||
         actualReferences.single['validated'] != true ||
         actualReferences.single['enforced'] != true ||
+        actualReferences.single['triggers_active'] != true ||
         actualReferences.single['target_table'] != reference.table ||
         actualReferences.single['target_column'] != reference.column ||
         actualReferences.single['target_schema'] != session.schema ||

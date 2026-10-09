@@ -33,6 +33,12 @@ SQLite tests run against native SQLite. PostgreSQL tests skip unless configured.
 Use a disposable PostgreSQL instance and an account allowed to create/drop
 schemas. Fixtures own their isolated schemas and remove them after each test.
 
+Six migration safety tests change internal constraint triggers or replication
+role. They check `current_user` and explicitly skip unless it is a superuser.
+Ordinary schema-owner accounts run the remaining PostgreSQL tests, including
+partition and catalog checks. CI uses a superuser on its disposable PostgreSQL
+instance to exercise every case.
+
 ```sh
 ORM_TEST_POSTGRES_HOST=127.0.0.1 \
 ORM_TEST_POSTGRES_PORT=5432 \
