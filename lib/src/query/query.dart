@@ -244,6 +244,11 @@ final class TableQuery<R> {
       sql +=
           ' ORDER BY ${_orders.map((o) => '${quoteIdentifier(definition.column(o.$1).name)} ${o.$2 == asc ? 'ASC' : 'DESC'}').join(', ')}';
     }
+    return sql + _pagination(bindings);
+  }
+
+  String _pagination(_Bindings bindings) {
+    var sql = '';
     if (_limit != null) sql += ' LIMIT ${bindings.bind(_limit)}';
     if (_offset != null) {
       if (_limit == null && session.engine == Engine.sqlite) sql += ' LIMIT -1';
@@ -280,6 +285,21 @@ final class TableQuery<R> {
   /// Reads complete rows in this immutable query scope.
   Future<List<R>> all() =>
       selectRows([for (final c in definition.columns) c.field], decode);
+
+  /// Counts matching rows in this scope, including limit and offset.
+  ///
+  /// Executes one SELECT and decodes one integer, without reading model fields.
+  /// Sorting is omitted because it does not change the number of rows. To get
+  /// a total before pagination, count the unpaged immutable filter scope.
+  Future<int> count() async {
+    final bindings = _bindings();
+    final source = 'FROM $_table${_where(bindings)}';
+    final sql = _limit == null && _offset == null
+        ? 'SELECT COUNT(*) $source'
+        : 'SELECT COUNT(*) FROM (SELECT 1 $source${_pagination(bindings)}) AS "counted_rows"';
+    final result = await session.run(sql, parameters: bindings.values);
+    return decodeValue<int>(result.rows.single.single);
+  }
 
   /// Reads one key within the filters, or null. Rejects paging and sorting.
   Future<R?> get(Object id) async {

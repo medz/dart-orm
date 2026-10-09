@@ -140,6 +140,24 @@ comparisons retain SQL's three-valued null behavior.
 
 Each `orderBy` specifies one field; chain calls for sort precedence. Set an
 explicit order for stable paging. Negative limits and offsets fail before SQL.
+`.count()` returns an `int` in one SELECT without reading model fields. It counts
+the current scope, including limit and offset; sorting does not change the count.
+Reuse an unpaged filter scope for a total and page inside one read-only snapshot:
+
+```dart
+final page = await db.transaction((tx) async {
+  final matches = tx.users
+      .where(active: eq(true))
+      .whereAny(username: startsWith(prefix), nickname: startsWith(prefix));
+  final total = await matches.count();
+  final users = await matches.orderBy(id: asc).limit(20).offset(20).select<UserCard>();
+  return (users: users, total: total);
+}, readOnly: true);
+print('${page.total} matching users');
+if (page.users.isNotEmpty) print(page.users.first.username);
+```
+
+These are two observable SELECTs. An empty page can still have a nonzero total.
 Registered selections must have exactly matching field names, types and
 nullability. Unknown selection types fail before SQL. `.all()` returns full
 models; `.select<T>()` fetches only the columns registered for T.

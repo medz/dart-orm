@@ -359,6 +359,91 @@ void main() {
           },
         );
 
+        test(
+          'count retains filters without loading or decoding model rows',
+          () async {
+            final db = fixture.db;
+            await db.users.create(username: 'sev%_!one', age: 28);
+            await db.users.create(
+              username: 'second',
+              age: 18,
+              nickname: 'sev%_!two',
+            );
+            await db.users.create(
+              username: 'sev%_!both',
+              age: 30,
+              nickname: 'sev%_!both',
+            );
+            await db.users.create(username: 'sevXX!lookalike', age: 28);
+            await db.users.create(
+              username: 'sev%_!disabled',
+              age: 28,
+              active: false,
+            );
+            await db.users.create(username: 'sev%_!child', age: 17);
+            final base = db.users.where(active: eq(true), age: gte(18));
+            final matching = base.whereAny(
+              username: startsWith('sev%_!'),
+              nickname: startsWith('sev%_!'),
+            );
+            fixture.events.clear();
+            final int total = await matching.count();
+            expect(total, 3);
+            expect(fixture.statements, hasLength(1));
+            expect(fixture.statements.single.rows, 1);
+            expect(
+              fixture.statements.single.sql,
+              match.startsWith('SELECT COUNT(*)'),
+            );
+            expect(fixture.statements.single.sql, isNot(contains('"avatar"')));
+            expect(fixture.statements.single.sql, isNot(contains('sev')));
+            expect(
+              await matching
+                  .where(nickname: oneOf<String?>([null, 'sev%_!two']))
+                  .count(),
+              2,
+            );
+            expect(await matching.count(), 3);
+            expect(await base.count(), 4);
+
+            final query = TableQuery<Never>(
+              db.session,
+              frozenSchema.tables.firstWhere((table) => table.name == 'users'),
+              (_) => throw StateError('Counting must not decode model rows'),
+            );
+            expect(
+              await query.whereFields({'nickname': eq<Object?>(null)}).count(),
+              4,
+            );
+          },
+        );
+
+        test('count measures the requested page and omits ordering', () async {
+          for (var index = 0; index < 4; index++) {
+            await fixture.db.users.create(username: 'count$index', age: index);
+          }
+          final base = fixture.db.users.orderBy(age: desc);
+          for (final page in [
+            (query: base.limit(2), expected: 2),
+            (query: base.offset(1).limit(2), expected: 2),
+            (query: base.offset(2), expected: 2),
+            (query: base.offset(10), expected: 0),
+            (query: base.limit(0), expected: 0),
+          ]) {
+            fixture.events.clear();
+            final int count = await page.query.count();
+            expect(count, page.expected);
+            expect(fixture.statements, hasLength(1));
+            expect(fixture.statements.single.rows, 1);
+            expect(fixture.statements.single.sql, isNot(contains('ORDER BY')));
+            expect(fixture.statements.single.sql, isNot(contains('"avatar"')));
+          }
+          fixture.events.clear();
+          expect(await base.count(), 4);
+          expect(fixture.statements.single.sql, isNot(contains('ORDER BY')));
+          expect((await base.all()).map((row) => row.age), [3, 2, 1, 0]);
+        });
+
         test('OR scopes retain the primary key and guarded writes', () async {
           final db = fixture.db;
           final allowed = await db.users.create(username: 'allowed', age: 28);
@@ -411,6 +496,10 @@ void main() {
           expect(() => db.users.whereAny(), throwsArgumentError);
           await expectLater(
             query.whereAnyFields({'age': eq<Object?>('old')}).all(),
+            throwsArgumentError,
+          );
+          await expectLater(
+            query.whereAnyFields({'age': eq<Object?>('old')}).count(),
             throwsArgumentError,
           );
           expect(
@@ -745,6 +834,13 @@ void main() {
                 'id': oneOf<Object?>([1, 2]),
                 'username': oneOf<Object?>(['one', 'two']),
               }).all(),
+              throwsUnsupportedError,
+            );
+            await expectLater(
+              query.whereAnyFields({
+                'id': oneOf<Object?>([1, 2]),
+                'username': oneOf<Object?>(['one', 'two']),
+              }).count(),
               throwsUnsupportedError,
             );
             await expectLater(

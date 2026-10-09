@@ -36,12 +36,14 @@ void main() {
               ),
               hasLength(2),
             );
-            expect((await searchUsers(db, 'sev')).single.username, 'seven');
+            final result = await searchUsers(db, 'sev');
+            expect(result.users.single.username, 'seven');
+            expect(result.total, 1);
           },
         );
 
         test(
-          'username or nickname prefix search uses one paged SELECT',
+          'prefix search returns a total and page in two read-only SELECTs',
           () async {
             final db = fixture.db;
             final username = await db.users.create(
@@ -71,15 +73,121 @@ void main() {
             );
             fixture.events.clear();
             final matches = await searchUsers(db, 'sev%_!');
-            expect(matches.map((row) => row.id), [
+            expect(matches.users.map((row) => row.id), [
               username.id,
               nickname.id,
               both.id,
             ]);
-            expect(fixture.statements, hasLength(1));
-            expect(fixture.statements.single.rows, 3);
-            expect(fixture.statements.single.sql, isNot(contains('"avatar"')));
-            expect(fixture.statements.single.sql, isNot(contains('sev')));
+            expect(matches.total, 3);
+            final selects = fixture.statements
+                .where((event) => event.sql.startsWith('SELECT'))
+                .toList();
+            expect(selects, hasLength(2));
+            expect(selects.map((event) => event.rows), [1, 3]);
+            expect(
+              selects.every((event) => !event.sql.contains('"avatar"')),
+              isTrue,
+            );
+            expect(
+              selects.every((event) => !event.sql.contains('sev')),
+              isTrue,
+            );
+            final work = fixture.events
+                .where(
+                  (event) =>
+                      event.kind != 'statement' ||
+                      event.sql.startsWith('SELECT'),
+                )
+                .toList();
+            expect(work.map((event) => event.kind), [
+              'begin',
+              'statement',
+              'statement',
+              'commit',
+            ]);
+            expect(work.map((event) => event.transactionId).toSet(), {
+              work.first.transactionId,
+            });
+            expect(work.first.transactionId, isNotNull);
+            if (engine == Engine.postgresql) {
+              expect(work.first.sql, contains('READ ONLY'));
+            } else {
+              expect(
+                fixture.statements.map((event) => event.sql),
+                contains('PRAGMA query_only = ON'),
+              );
+            }
+          },
+        );
+
+        test(
+          'search paging keeps the filtered total for empty and later pages',
+          () async {
+            final db = fixture.db;
+            final first = await db.users.create(username: 'page one', age: 20);
+            final second = await db.users.create(
+              username: 'second',
+              age: 21,
+              nickname: 'page two',
+            );
+            await db.users.create(
+              username: 'page disabled',
+              age: 22,
+              active: false,
+            );
+            await db.users.create(username: 'outside', age: 23);
+            for (final check in [
+              (prefix: 'page ', offset: 0, total: 2, ids: [first.id]),
+              (prefix: 'page ', offset: 1, total: 2, ids: [second.id]),
+              (prefix: 'page ', offset: 10, total: 2, ids: <int>[]),
+              (prefix: 'absent', offset: 0, total: 0, ids: <int>[]),
+            ]) {
+              fixture.events.clear();
+              final result = await searchUsers(
+                db,
+                check.prefix,
+                offset: check.offset,
+                limit: 1,
+              );
+              expect(result.total, check.total);
+              expect(result.users.map((user) => user.id), check.ids);
+              final selects = fixture.statements.where(
+                (event) => event.sql.startsWith('SELECT'),
+              );
+              expect(selects, hasLength(2));
+              expect(selects.map((event) => event.rows), [1, check.ids.length]);
+              expect(
+                fixture.events.where((event) => event.kind == 'begin'),
+                hasLength(1),
+              );
+              expect(
+                fixture.events.where((event) => event.kind == 'commit'),
+                hasLength(1),
+              );
+            }
+          },
+        );
+
+        test(
+          'invalid search paging fails before a transaction or SQL',
+          () async {
+            fixture.events.clear();
+            for (final page in [
+              (offset: -1, limit: 1),
+              (offset: 0, limit: 0),
+              (offset: 0, limit: 101),
+            ]) {
+              await expectLater(
+                () => searchUsers(
+                  fixture.db,
+                  'prefix',
+                  offset: page.offset,
+                  limit: page.limit,
+                ),
+                throwsArgumentError,
+              );
+            }
+            expect(fixture.events, isEmpty);
           },
         );
 

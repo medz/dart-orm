@@ -168,6 +168,9 @@ final class ${name}Table {
   Future<int> delete(${table.primaryKey.type} id) => _query.deleteById(id);
   /// Fetches all matching full model rows.
   Future<List<$row>> all() => _query.all();
+  /// Counts rows in this scope, including limit and offset, in one SELECT.
+  /// Count the unpaged filter scope to get a total before pagination.
+  Future<int> count() => _query.count();
   /// Reads bounded batches within an active transaction scope.
   Stream<$row> stream({int fetchSize = 500}) => _query.stream(fetchSize: fetchSize);
   /// Adds field predicates joined by AND.
