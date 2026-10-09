@@ -255,6 +255,42 @@ after the call cannot change the submitted statement.
 Raw SQL is the direct extension point for joins, aggregates and engine-specific
 features; inspect its result shape in application code.
 
+Native SQL errors retain their driver types. `package:orm/postgres.dart` exports
+`PgException`, `ServerException`, `UniqueViolationException`,
+`ForeignKeyViolationException` and `Severity`. Server errors expose SQLSTATE in
+`code`, plus schema, table and constraint metadata when supplied by PostgreSQL.
+`package:orm/sqlite.dart` exports `SqliteException`, `SqlError` and
+`SqlExtendedError`. Compare `extendedResultCode` with `SqlExtendedError` constants
+for a specific failure, or `resultCode` with `SqlError` for its broad category.
+SQLite does not expose a structured constraint name. Use `createIfAbsent` with
+an explicit target for expected registration conflicts, rather than parsing
+messages or treating every unique violation as a username conflict.
+Catch SQL failures outside the whole transaction so rollback finishes first:
+
+```dart
+import 'package:orm/postgres.dart';
+import 'package:orm/sqlite.dart';
+
+try {
+  await db.transaction((tx) async {
+    await tx.users.update(userId, age: 29);
+    await tx.posts.create(authorId: missingUserId, title: 'Hello');
+  });
+} on ForeignKeyViolationException catch (error) {
+  print('Missing author (${error.code})');
+} on SqliteException catch (error) {
+  if (error.extendedResultCode != SqlExtendedError.SQLITE_CONSTRAINT_FOREIGNKEY) {
+    rethrow;
+  }
+  print('Missing author (${error.extendedResultCode})');
+}
+```
+
+`TimeoutException` comes from `dart:async`. PostgreSQL cancellation also exposes
+SQLSTATE `57014` through `ServerException`; that code means query cancellation,
+including manual cancellation. Client timeouts are not proof that a write never
+reached the server. The ORM does not automatically retry or remap these errors.
+
 Set `onEvent` on `AppDatabase` to observe SQL text, elapsed time, result counts,
 transaction IDs, and begin/commit/rollback events. Bound values are excluded.
 Observer failures do not change database outcomes. SQLite read-only setup also

@@ -6,11 +6,6 @@ import 'package:orm/migration.dart';
 import 'package:orm/postgres.dart';
 import 'package:orm/query.dart';
 import 'package:orm/schema.dart';
-import 'package:postgres/postgres.dart'
-    show
-        ForeignKeyViolationException,
-        ServerException,
-        UniqueViolationException;
 import 'package:test/test.dart';
 
 import '../example/migrations/postgres/history.dart' as shop;

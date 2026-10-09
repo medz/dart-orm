@@ -5,7 +5,16 @@ import 'dart:typed_data';
 import 'package:orm/database.dart';
 import 'package:postgres/postgres.dart' as pg;
 
-export 'package:postgres/postgres.dart' show Endpoint, PoolSettings, SslMode;
+export 'package:postgres/postgres.dart'
+    show
+        Endpoint,
+        PoolSettings,
+        SslMode,
+        PgException,
+        ServerException,
+        UniqueViolationException,
+        ForeignKeyViolationException,
+        Severity;
 
 /// Owns a native postgres pool; each callback pins one physical connection.
 ///
@@ -19,6 +28,9 @@ export 'package:postgres/postgres.dart' show Endpoint, PoolSettings, SslMode;
 /// Parameters support int, String, bool, double, DateTime, Uint8List and null.
 /// Dates are bound as UTC timestamptz; byte arrays use bytea. Unsupported values
 /// fail before SQL execution. Native PostgreSQL result types are preserved.
+/// Native exceptions propagate unchanged. PostgreSQL server errors retain
+/// [pg.ServerException] codes and constraint metadata. SQLSTATE 23505 and 23503
+/// retain their native unique and foreign-key exception subclasses.
 /// Application SQL follows PostgreSQL session-setting persistence rules. Use
 /// `SET LOCAL` inside [Database.transaction] for scoped configuration.
 final class PostgresDriver implements Driver {
