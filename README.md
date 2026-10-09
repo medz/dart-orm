@@ -2,14 +2,17 @@
 
 Plain Dart models, generated typed tables and explicit database sessions.
 
-**6.0.0-beta.8** is a breaking rewrite requiring Dart 3.13. Native SQLite and
-PostgreSQL 18 are verified on macOS and Linux. When upgrading from earlier betas,
+**6.0.0-beta.9** requires Dart 3.13. Native SQLite and PostgreSQL 18 are verified
+on macOS and Linux. Upgrade from beta.8 by regenerating clients to use
+`whereAny`; keep reviewed migration definitions and fingerprints unchanged.
+
+Beta.8 introduced a breaking rewrite. When upgrading from beta.7 or earlier,
 migrate model declarations and application APIs, then regenerate clients. Earlier
 clients and migration definitions have no compatibility layer; existing databases
 require a separately reviewed baseline.
 
 ```sh
-dart pub add orm:6.0.0-beta.8
+dart pub add orm:6.0.0-beta.9
 ```
 
 ```dart
@@ -28,7 +31,8 @@ await db.users.update(user.id, nickname: 'Seven');
 await db.users.update(user.id, nickname: null);
 
 final cards = await db.users
-    .where(username: startsWith('sev'), age: gte(18))
+    .where(active: eq(true), age: gte(18))
+    .whereAny(username: startsWith('sev'), nickname: startsWith('sev'))
     .orderBy(id: asc)
     .limit(20)
     .select<UserCard>();

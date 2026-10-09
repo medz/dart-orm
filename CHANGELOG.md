@@ -1,3 +1,14 @@
+## 6.0.0-beta.9 (2026-10-09)
+
+- Add generated typed `whereAny` filters: fields within a group use OR, while
+  separate `where` and `whereAny` groups use AND. Empty groups fail before SQL.
+- Search active users by username or nickname prefix in one SELECT with typed
+  projections, database sorting and pagination.
+- Batch PostgreSQL migration catalog reads within the driver parameter limit,
+  retaining all schema, constraint, table identity and migration integrity checks.
+- From beta.8, regenerate clients to use `whereAny`; keep reviewed migration
+  definitions and fingerprints unchanged.
+
 ## 6.0.0-beta.8 (2026-10-09)
 
 - Validate complete generated models against the runtime engine before taking driver ownership; verify pending migration markers and the final catalog after marker triggers before committing DDL.
