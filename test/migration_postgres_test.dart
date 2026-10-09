@@ -106,6 +106,26 @@ final class _SchemaDriver implements Driver {
   Future<void> close() => driver.close();
 }
 
+final class _ParameterLimitDriver implements Driver {
+  _ParameterLimitDriver(this.driver, this.maxParameters);
+  final Driver driver;
+  final int maxParameters;
+  @override
+  String get schema => driver.schema;
+  @override
+  Engine get engine => driver.engine;
+  @override
+  Capabilities get capabilities => Capabilities(
+    returning: driver.capabilities.returning,
+    maxParameters: maxParameters,
+  );
+  @override
+  Future<T> withConnection<T>(Future<T> Function(Connection) action) =>
+      driver.withConnection(action);
+  @override
+  Future<void> close() => driver.close();
+}
+
 void main() {
   final socket = Platform.environment['ORM_TEST_POSTGRES_SOCKET'];
   final host = Platform.environment['ORM_TEST_POSTGRES_HOST'];
@@ -115,24 +135,27 @@ void main() {
       late Database database;
       late AppDatabase app;
       late String schema;
+      final events = <DatabaseEvent>[];
       Future<void> useSingleConnection({bool resetSearchPath = true}) async {
         // Keep the owned persistent schema, but fix temp state to one backend.
         await database.close();
         final driver = _driver(maxConnections: 1, schema: schema);
         app = AppDatabase(
           resetSearchPath ? _SchemaDriver(driver, schema) : driver,
+          onEvent: events.add,
         );
         database = app.database;
       }
 
       setUp(() async {
+        events.clear();
         final driver = _driver();
         schema =
             'orm_migration_${pid}_${DateTime.now().microsecondsSinceEpoch}';
         await driver.withConnection(
           (connection) => connection.run('CREATE SCHEMA "$schema"', []),
         );
-        app = AppDatabase(_SchemaDriver(driver, schema));
+        app = AppDatabase(_SchemaDriver(driver, schema), onEvent: events.add);
         database = app.database;
       });
       tearDown(() async {
@@ -145,7 +168,9 @@ void main() {
         () async {
           final runner = MigrationRunner(database, shop.history);
           expect(await runner.apply(), [1]);
+          events.clear();
           expect(await runner.apply(), isEmpty);
+          expect(events.where((event) => event.kind == 'statement').length, 10);
           expect(
             (await database.session.run(
               'SELECT tablename FROM pg_tables WHERE schemaname = \$1 ORDER BY tablename',
@@ -162,6 +187,145 @@ void main() {
           );
         },
       );
+
+      test('catalog batches preserve table identities and exclude unmanaged tables', () async {
+        await database.close();
+        app = AppDatabase(
+          _ParameterLimitDriver(
+            _SchemaDriver(_driver(schema: schema), schema),
+            4,
+          ),
+          onEvent: events.add,
+        );
+        database = app.database;
+        const snapshot = SchemaSnapshot(
+          engine: Engine.postgresql,
+          tables: [
+            TableDefinition('CaseUsers', [
+              _id,
+              ColumnDefinition(
+                name: 'value',
+                field: 'value',
+                type: ScalarType.text,
+                unique: true,
+                defaultValue: 'upper',
+              ),
+            ]),
+            TableDefinition('caseusers', [
+              _id,
+              ColumnDefinition(
+                name: 'value',
+                field: 'value',
+                type: ScalarType.integer,
+                defaultValue: 7,
+              ),
+            ]),
+            TableDefinition('quoted"users', [
+              _id,
+              ColumnDefinition(
+                name: 'value',
+                field: 'value',
+                type: ScalarType.real,
+                nullable: true,
+                defaultValue: -2.5,
+              ),
+            ]),
+            TableDefinition('CaseLinks', [
+              _id,
+              ColumnDefinition(
+                name: 'value',
+                field: 'value',
+                type: ScalarType.integer,
+                references: ForeignKey('CaseUsers', 'id', onDelete: 'cascade'),
+              ),
+            ]),
+            TableDefinition('caselinks', [
+              _id,
+              ColumnDefinition(
+                name: 'value',
+                field: 'value',
+                type: ScalarType.integer,
+                references: ForeignKey('caseusers', 'id'),
+              ),
+            ]),
+            TableDefinition('tail"users', [
+              _id,
+              ColumnDefinition(
+                name: 'value',
+                field: 'value',
+                type: ScalarType.boolean,
+                defaultValue: false,
+              ),
+            ]),
+          ],
+        );
+        final runner = MigrationRunner(
+          database,
+          _history([
+            _migration(
+              1,
+              snapshot,
+              planSchemaChange(
+                const SchemaSnapshot(engine: Engine.postgresql, tables: []),
+                snapshot,
+              ).steps,
+            ),
+          ]),
+        );
+        expect(await runner.apply(), [1]);
+        events.clear();
+        expect(await runner.apply(), isEmpty);
+        int observedRows() => events
+            .where((event) => event.kind == 'statement')
+            .fold(0, (rows, event) => rows + event.rows);
+        final managedRows = observedRows();
+        await database.session.run(
+          'CREATE TABLE tenant_data (id BIGINT NOT NULL, value TEXT NOT NULL, extra TEXT, PRIMARY KEY (id, value))',
+        );
+        await database.session.run(
+          'INSERT INTO tenant_data VALUES (\$1, \$2, \$3)',
+          parameters: [1, 'tenant', 'preserved'],
+        );
+        events.clear();
+        expect(await runner.apply(), isEmpty);
+        expect(observedRows(), managedRows);
+        await database.session.run(
+          'ALTER TABLE "caseusers" ALTER COLUMN "value" DROP NOT NULL',
+        );
+        await expectLater(
+          runner.apply(),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('caseusers (definition of value)'),
+            ),
+          ),
+        );
+        await database.session.run(
+          'ALTER TABLE "caseusers" ALTER COLUMN "value" SET NOT NULL',
+        );
+        await database.session.run(
+          'ALTER TABLE "tail""users" ADD COLUMN drift TEXT',
+        );
+        await expectLater(
+          runner.apply(),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('tail"users (column count or missing table)'),
+            ),
+          ),
+        );
+        expect(
+          (await database.session.run('SELECT value, extra FROM tenant_data'))
+              .rows,
+          [
+            ['tenant', 'preserved'],
+          ],
+        );
+      });
 
       for (final kind in ['table', 'view']) {
         test('temporary $kind shadows roll back first migration', () async {
