@@ -2,9 +2,17 @@
 
 Plain Dart models, generated typed tables and explicit database sessions.
 
-**6.0.0-beta.9** requires Dart 3.13. Native SQLite and PostgreSQL 18 are verified
-on macOS and Linux. Upgrade from beta.8 by regenerating clients to use
-`whereAny`; keep reviewed migration definitions and fingerprints unchanged.
+**6.0.0-beta.10** requires Dart 3.13. Native SQLite and PostgreSQL 18 are verified
+on macOS and Linux. From beta.9, update the dependency; generated clients and
+reviewed migration definitions remain unchanged. Byte filters capture their
+contents when built, and statements capture parameters when called. PostgreSQL
+reuses connections after business failures when all issued SQL was inside
+transactions that rolled back without committing.
+Reused connections retain application-owned session state; use transaction-scoped
+settings for request state.
+
+From beta.8, regenerate clients to use `whereAny`; keep reviewed migration
+definitions and fingerprints unchanged.
 
 Beta.8 introduced a breaking rewrite. When upgrading from beta.7 or earlier,
 migrate model declarations and application APIs, then regenerate clients. Earlier
@@ -12,7 +20,7 @@ clients and migration definitions have no compatibility layer; existing database
 require a separately reviewed baseline.
 
 ```sh
-dart pub add orm:6.0.0-beta.9
+dart pub add orm:6.0.0-beta.10
 ```
 
 ```dart
