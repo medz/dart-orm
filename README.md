@@ -2,14 +2,17 @@
 
 Plain Dart models, generated typed tables and explicit database sessions.
 
-**6.0.0-beta.10** requires Dart 3.13. Native SQLite and PostgreSQL 18 are verified
-on macOS and Linux. From beta.9, update the dependency; generated clients and
-reviewed migration definitions remain unchanged. Byte filters capture their
-contents when built, and statements capture parameters when called. PostgreSQL
-reuses connections after business failures when all issued SQL was inside
-transactions that rolled back without committing.
-Reused connections retain application-owned session state; use transaction-scoped
-settings for request state.
+**6.0.0-beta.11** requires Dart 3.13. Native SQLite and PostgreSQL 18 are verified
+on macOS and Linux. From beta.10, update the dependency and regenerate clients to
+use `count()`. Existing generated methods remain usable; reviewed migration
+definitions and fingerprints stay unchanged. PostgreSQL now requires native
+`postgres` 3.5.20 or newer for cancellation and deadline fixes.
+
+Count returns one integer without loading model rows and respects the query's
+limit and offset. Count an unpaged filter scope for the total, then reuse it for
+the selected page in one read-only transaction. The shop's `searchUsers` example
+now returns `(users: ..., total: ...)`; code copied from it reads `.users` and
+`.total`. PostgreSQL preserves the original SQL failure when rollback also fails.
 
 From beta.8, regenerate clients to use `whereAny`; keep reviewed migration
 definitions and fingerprints unchanged.
@@ -20,7 +23,7 @@ clients and migration definitions have no compatibility layer; existing database
 require a separately reviewed baseline.
 
 ```sh
-dart pub add orm:6.0.0-beta.10
+dart pub add orm:6.0.0-beta.11
 ```
 
 ```dart

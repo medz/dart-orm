@@ -1,3 +1,20 @@
+## 6.0.0-beta.11 (2026-10-09)
+
+- Add typed `count()` to query scopes and generated tables. One SELECT returns
+  one integer without transferring or decoding model fields. Limit and offset
+  remain inside the counted scope; sorting does not change cardinality.
+- Return a selected user page and filtered total from the same read-only snapshot.
+  Reuse one typed filter definition for two observable SELECTs, including empty
+  pages with a nonzero total. The shop search example returns `users` and `total`.
+- Preserve the first PostgreSQL SQL error and stack when automatic rollback also
+  fails. Broken connections are discarded and subsequent work uses a replacement.
+- Require native `postgres` 3.5.20 or newer for upstream cancellation and timeout
+  fixes. Configure query/connect deadlines explicitly; close waits for admitted
+  application callbacks and does not impose an application-work deadline.
+- From beta.10, update the dependency and regenerate to expose `count()`.
+  Existing generated methods remain usable. Keep reviewed migration definitions
+  and fingerprints unchanged; adapt copied search example code to its record.
+
 ## 6.0.0-beta.10 (2026-10-09)
 
 - Capture byte contents when filters are constructed and statements are called.
