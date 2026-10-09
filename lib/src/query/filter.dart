@@ -1,7 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:orm/schema.dart' show ScalarType;
 
 /// A parameterized SQL condition on one field. Combine with & / | on that field.
 /// SQL null semantics apply; eq(null) and ne(null) use IS NULL / IS NOT NULL.
+/// Conditions capture their values when constructed, including byte contents.
 sealed class Filter<T> {
   const Filter();
   Filter<T> operator &(Filter<T> other) => _Group(this, other, 'AND');
@@ -12,9 +15,9 @@ sealed class Filter<T> {
 }
 
 final class _Compare<T> extends Filter<T> {
-  const _Compare(this.operator, this.value);
+  _Compare(this.operator, T value) : value = _snapshot(value);
   final String operator;
-  final T value;
+  final Object? value;
 
   @override
   String compile(
@@ -37,8 +40,9 @@ final class _Compare<T> extends Filter<T> {
 }
 
 final class _In<T> extends Filter<T> {
-  _In(Iterable<T> values) : values = List<T>.unmodifiable(values);
-  final List<T> values;
+  _In(Iterable<T> values)
+    : values = List<Object?>.unmodifiable(values.map(_snapshot));
+  final List<Object?> values;
   @override
   String compile(
     String column,
@@ -90,6 +94,9 @@ final class _Group<T> extends Filter<T> {
   ) =>
       '(${left.compile(column, bind, type)} $operator ${right.compile(column, bind, type)})';
 }
+
+Object? _snapshot(Object? value) =>
+    value is Uint8List ? Uint8List.fromList(value).asUnmodifiableView() : value;
 
 /// Equality; null becomes IS NULL.
 Filter<T> eq<T>(T value) => _Compare('=', value);

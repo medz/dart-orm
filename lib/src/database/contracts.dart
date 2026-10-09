@@ -25,6 +25,8 @@ final class QueryResult {
 
 /// One acquired physical connection. Ownership belongs to the driver callback.
 abstract interface class Connection {
+  /// Executes with the parameter values supplied at invocation, including bytes.
+  /// The caller may reuse its parameter list and byte buffers after calling.
   Future<QueryResult> run(String sql, List<Object?> parameters);
 }
 
@@ -76,6 +78,8 @@ abstract interface class Session {
   /// functions can intentionally change engine configuration. This API does
   /// not sandbox raw SQL.
   /// Generated table queries validate fields and bind application values.
+  /// The parameter list and byte contents are captured at invocation, before
+  /// acquisition or queuing. Later caller mutations do not change this work.
   Future<QueryResult> run(String sql, {List<Object?> parameters = const []});
 }
 

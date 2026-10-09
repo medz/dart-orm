@@ -109,6 +109,39 @@ void main() {
       );
 
       test(
+        'direct queued statements capture binary parameters at submission',
+        () async {
+          final driver = PostgresDriver(
+            Endpoint(
+              host: socketPath ?? host!,
+              port: port,
+              database:
+                  Platform.environment['ORM_TEST_POSTGRES_DATABASE'] ??
+                  'postgres',
+              username:
+                  Platform.environment['ORM_TEST_POSTGRES_USER'] ?? 'orm_test',
+              password: Platform.environment['ORM_TEST_POSTGRES_PASSWORD'],
+              isUnixSocket: socket != null,
+            ),
+            settings: const PoolSettings(
+              sslMode: SslMode.disable,
+              maxConnectionCount: 1,
+            ),
+          );
+          addTearDown(driver.close);
+          await driver.withConnection((connection) async {
+            final bytes = Uint8List.fromList([0, 255]);
+            final parameters = <Object?>[bytes.asUnmodifiableView()];
+            final pending = connection.run(r'SELECT $1::bytea', parameters);
+            bytes[0] = 42;
+            parameters.clear();
+            expect((await pending).rows.single.single, [0, 255]);
+            expect(bytes, [42, 255]);
+          });
+        },
+      );
+
+      test(
         'commit and rollback stay on the acquired physical connection',
         () async {
           late Session escaped;
